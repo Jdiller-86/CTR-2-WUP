@@ -1,0 +1,121 @@
+CTR2WUP third-party notices and audit status
+==========================================
+
+This file records the current development foundation. The candidate repositories
+were inspected outside the CTR2WUP source tree. A research reference is not a
+statement that its implementation is incorporated into this project.
+
+WUT (Wii U Toolchain / SDK)
+--------------------------
+Source: https://github.com/devkitPro/wut
+Audited source: cc35feb58d3c3bff9af898ab3df6965e6abcf139
+License: zlib, from upstream LICENSE.txt, including the sample tree.
+WUT is used as the external SDK for the native Wii U platform prototype.
+
+Copyright (c) 2015-present devkitPro, wut Authors
+
+This software is provided 'as-is', without any express or implied
+warranty. In no event will the authors be held liable for any damages
+arising from the use of this software.
+
+Permission is granted to anyone to use this software for any purpose,
+including commercial applications, and to alter it and redistribute it
+freely, subject to the following restrictions:
+
+1. The origin of this software must not be misrepresented; you must not
+   claim that you wrote the original software. If you use this software
+   in a product, an acknowledgment in the product documentation would be
+   appreciated but is not required.
+2. Altered source versions must be plainly marked as such, and must not be
+   misrepresented as being the original software.
+3. This notice may not be removed or altered from any source distribution.
+
+Zakuro
+------
+Source: https://github.com/fearkov/zakuro
+Audited source: 76f17bf76cd9ea238a94f37d389fe701ab05a673
+Status: external CPU/HLE port candidate and host instruction-test reference.
+License: MIT; notice reproduced from upstream LICENSE.
+
+MIT License
+
+Copyright (c) 2026 fearkov
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+3dsrecomp
+---------
+Source: https://github.com/fearkov/3dsrecomp
+Audited source: f78cd3777a676a7c02538ab993ca574a6d843416
+Status: pinned external host-lifter candidate; locally built and tested.
+License designation: MIT in upstream Cargo.toml and abi/Cargo.toml.
+The inspected checkout does not contain a complete LICENSE/copyright notice.
+Do not silently invent an upstream copyright grant or copy its ABI header into
+distributed source. Complete the required upstream notice before distributing
+substantial implementation or emitted ABI support code. Local adapter use must
+retain this documented limitation. Upstream generated commercial game code is
+private user-derived output and must never be published with CTR2WUP.
+
+Azahar
+------
+Source: https://github.com/azahar-emu/azahar
+Audited source: d409087405bc299b88ff35dd5b96b6e2698d5929
+Status: semantic research reference; no implementation copied into CTR2WUP.
+Root LICENSE.txt contains GPLv3. Individual core files contain GPLv2-or-later
+and GPLv3-or-later notices, and third-party submodules have separate licenses.
+Any future incorporation requires applicable notice preservation, compatible
+licensing and corresponding source. See docs/foundation-audit.md.
+
+Candidates not incorporated because no license grant was found
+------------------------------------------------------------
+- https://github.com/mtrdrgz/3ds_recompiler
+  600f22cf7bf02a478b6455a971c8e27f7c742860
+- https://github.com/ihaveamac/nuspacker
+  797b84af32e5bb0c353577a7a3f67e236f7b7ee3
+- https://github.com/NicoAICP/CNUS_Packer
+  85c31c1ea6b98afa8037ec429da39a92e09625f4
+
+No source or binaries from those candidates are distributed by CTR2WUP. Their
+public visibility does not supply a redistribution grant. Certificate/key
+templates from the packaging candidates were not copied.
+
+External development tools
+--------------------------
+Rust, Cargo, GCC/devkitPPC, newlib, elf2rpl and optional SDK packages remain
+external toolchain dependencies. This notice does not assert that their
+licenses are identical to WUT's. Redistributing a complete host application or
+toolchain bundle requires a dependency-by-dependency notice and source audit.
+No ROM, commercial game assets, Nintendo SDK, donor title or credential is
+included with this project.
+
+Runtime notices for the diagnostic artifact
+------------------------------------------
+The diagnostic links WUT and GCC/newlib support. Runtime license texts accompany
+the source/artifact distribution in docs/licenses:
+- COPYING.NEWLIB: devkitPro/newlib devkitPPC branch, license-reference commit
+  729f71403f8f3e9941049d0d707def766553f5cb. This collects the individual BSD/MIT
+  and other newlib contributor notices; it is not a claim of identical source
+  revision to every SDK library object.
+- COPYING.RUNTIME and COPYING3: GCC 16.1.0 source commit
+  6afcc4f6da931eb93f3ab001a0dd9650ea71d1ea, GCC Runtime Library Exception 3.1
+  and its referenced GPLv3 text. The exception addresses eligible compiled
+  target-code combinations; the external compiler itself is not bundled.
+
+The full devkitPro SDK/image, external lifter binary and unlicensed packaging
+candidate binaries are not part of the delivered source/diagnostic bundles.
