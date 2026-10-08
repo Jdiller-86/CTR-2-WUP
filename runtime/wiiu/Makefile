@@ -30,6 +30,8 @@ CORE_SOURCES := ../core/ctr_memory.c ../core/ctr_cpu.c ../core/ctr_cpu_selftest.
                 ../core/ctr_hid_fixture.c \
                 ../core/ctr_gsp_fixture.c \
                 ../core/ctr_relay_fixture.c \
+                ../core/ctr_stack_fixture.c \
+                ../../tests/fixtures/stack/stack.generated.c ../../tests/fixtures/stack/stack-image.generated.c \
                 ../../tests/fixtures/relay/relay.generated.c ../../tests/fixtures/relay/relay-image.generated.c \
                 ../../tests/fixtures/gsp/gsp.generated.c ../../tests/fixtures/gsp/gsp-image.generated.c \
                 ../../tests/fixtures/hid/hid.generated.c ../../tests/fixtures/hid/hid-image.generated.c \
@@ -45,7 +47,7 @@ CORE_SOURCES += ../recomp/ctr_recomp.c $(UPSTREAM_DIR)/entries.c $(wildcard $(UP
 endif
 CORE_OBJECTS := $(addprefix $(BUILD)/,$(notdir $(CORE_SOURCES:.c=.o)))
 OBJECTS += $(CORE_OBJECTS)
-vpath %.c ../core ../recomp ../../tests/fixtures/cpu ../../tests/fixtures/guest ../../tests/fixtures/services ../../tests/fixtures/heap ../../tests/fixtures/kernel ../../tests/fixtures/hid ../../tests/fixtures/gsp ../../tests/fixtures/relay $(UPSTREAM_DIR)
+vpath %.c ../core ../recomp ../../tests/fixtures/cpu ../../tests/fixtures/guest ../../tests/fixtures/services ../../tests/fixtures/heap ../../tests/fixtures/kernel ../../tests/fixtures/hid ../../tests/fixtures/gsp ../../tests/fixtures/relay ../../tests/fixtures/stack $(UPSTREAM_DIR)
 .PHONY: all clean
 all: $(OUTPUT)/$(TARGET).rpx $(OUTPUT)/$(TARGET).wuhb
 $(BUILD):

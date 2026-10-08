@@ -26,6 +26,8 @@ Version 0.10.0 adds standard direct GSP framebuffer submission, five format
 decoders and an ARM HID-to-display prototype; see `docs/gsp-display.md`.
 Version 0.11.0 adds shared GSP framebuffer queues, diagnostic VBlank/IRQ delivery
 and an original ARM queued display guest; see `docs/gsp-queues.md`.
+Version 0.12.0 adds checked ARM/Thumb stack and multiple-register transfers,
+BLX calls and an original nested-call diagnostic; see `docs/cpu-stack.md`.
 Commercial ROM-to-WUP conversion is not implemented or claimed.
 
 Read `STATUS.md`, `docs/milestones.md` and `docs/foundation-audit.md` before

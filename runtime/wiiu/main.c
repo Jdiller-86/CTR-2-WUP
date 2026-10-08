@@ -29,6 +29,7 @@
 #include "ctr_hid_fixture.h"
 #include "ctr_gsp_fixture.h"
 #include "ctr_relay_fixture.h"
+#include "ctr_stack_fixture.h"
 
 enum { TOP_W=400, BOTTOM_W=320, GUEST_H=240, AUDIO_SAMPLES=12000 };
 static uint32_t top_image[TOP_W*GUEST_H], bottom_image[BOTTOM_W*GUEST_H];
@@ -47,6 +48,7 @@ static uint32_t hid_snapshot[5];
 static OSTime hid_origin;
 static int gsp_test_result,gsp_ready;
 static int relay_test_result;
+static int stack_test_result;
 static ctr_guest gsp_guest;
 static uint64_t gsp_presented;
 static OSTime gsp_origin;
@@ -235,6 +237,8 @@ static void diagnostic_images(unsigned frame, const VPADStatus *pad,
     image_text(top_image,TOP_W,11,text);
     snprintf(text,sizeof(text),"GSP QUEUE/VBLANK %s CODE %d",relay_test_result?"FAIL":"PASS",relay_test_result);
     image_text(top_image,TOP_W,12,text);
+    snprintf(text,sizeof(text),"ARM/THUMB STACK CALLS %s CODE %d",stack_test_result?"FAIL":"PASS",stack_test_result);
+    image_text(top_image,TOP_W,13,text);
     for (unsigned y=0;y<GUEST_H;++y) for (unsigned x=0;x<BOTTOM_W;++x)
         bottom_image[y*BOTTOM_W+x]=y<92 ? 0x35194fff :
             (((x/20)^(y/20))&1) ? 0x783598ff:0x108797ff;
@@ -282,7 +286,7 @@ int main(int argc, char **argv) {
         log_file=fopen(path,"w");
         if (log_file) WHBAddLogHandler(file_log);
     }
-    WHBLogPrintf("CTR2WUP native diagnostic version=0.11.0 pointer_bits=%u endian=big UDP=%u SD_log=%u",
+    WHBLogPrintf("CTR2WUP native diagnostic version=0.12.0 pointer_bits=%u endian=big UDP=%u SD_log=%u",
                   (unsigned)(8*sizeof(void *)), udp_ready, log_file!=NULL);
     OSTime cpu_start=OSGetTime();
     cpu_test_result=ctr_cpu_selftest();
@@ -310,6 +314,9 @@ int main(int argc, char **argv) {
     relay_test_result=ctr_relay_selftest();
     WHBLogPrintf("gsp_relay_selftest %s result=%d fixture=original_arm_shared_gsp_vblank console_result_required=1",
         relay_test_result?"FAIL":"PASS",relay_test_result);
+    stack_test_result=ctr_stack_selftest();
+    WHBLogPrintf("stack_selftest %s result=%d fixture=original_arm_thumb_nested_calls instructions_per_path=47 console_result_required=1",
+        stack_test_result?"FAIL":"PASS",stack_test_result);
     if (!WHBGfxInit()) { WHBLogPrintf("FAIL WHBGfxInit"); goto cleanup; }
     gfx_ready=1;
     GX2Surface *tv_target=&WHBGfxGetTVColourBuffer()->surface;

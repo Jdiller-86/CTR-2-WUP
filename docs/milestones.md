@@ -32,8 +32,8 @@ All acceptance checkboxes below remain open until their evidence is recorded.
 | Milestone | Verified portion | Remaining acceptance |
 |---|---|---|
 | M1 | Native/original/external-AOT RPX/WUHB built; native diagnostics; original staging and offline encrypted packaging | Physical screens/input/audio/exit and independently installed WUP |
-| M2 | Original CPU/AOT subset plus user CP15 TLS; external generation/checked ABI; 566+34+297+35+1,778+639+858+3,603 integration assertions on GCC/sanitizers/Clang/emulated big-endian PPC; scalar VFP Unicorn match | Complete ARM/VFP semantics, workload memory/fallback costs and actual Espresso timings |
-| M3 | Checked NCCH → AOT/interpreter execution; single-guest SVC/events; shared typed sessions, bounded SRV/CFG startup, checked heap/free/protection/query, typed shared aliases, mutex/semaphore/wait-any/all, standard HID pad/touch rings/events, direct/shared GSP display, VBlank/IRQ relay and original 89/151/148-instruction probes; matching ARM frames/input; RPX/WUHB/self-tests built | Physical guest/service startup evidence; conventional homebrew boot, broader/cross-process memory control, multi-thread kernel and broader IPC/HID motion/GX commands/graphics threads |
+| M2 | Original CPU/AOT subset plus stack/register transfers, BLX and user CP15 TLS; external generation/checked ABI; 566+34+297+35+1,778+639+858+3,603 integration assertions on GCC/sanitizers/Clang/emulated big-endian PPC; scalar VFP Unicorn match | Complete ARM/VFP semantics, workload memory/fallback costs and actual Espresso timings |
+| M3 | Checked NCCH → AOT/interpreter execution; single-guest SVC/events and stack-call frames; shared typed sessions, bounded SRV/CFG startup, checked heap/free/protection/query, typed shared aliases, mutex/semaphore/wait-any/all, standard HID pad/touch rings/events, direct/shared GSP display, VBlank/IRQ relay and original 89/151/148-instruction probes; matching ARM frames/input; RPX/WUHB/self-tests built | Physical guest/service startup evidence; conventional homebrew boot, broader/cross-process memory control, multi-thread kernel and broader IPC/HID motion/GX commands/graphics threads |
 | M4 | Bounded command references, standard direct/shared GSP display and five tested rotated CPU display formats | Actual PICA-to-GX2 features, scene comparisons and console timings |
 | M5 | Mario selected and CIA attachment supplied; transfer exceeds 32 MiB; intake/export helper tested; shared startup/memory development while user is away; upstream requirement leads | Actual smaller private executable export/revision, title-specific runtime/renderer/services/save/audio implementation and console gameplay |
 | M6 | External C generation/static compilation, staging/artwork/intake, original encrypted writer and independent decrypt/FST/file checks with synthetic inputs, atomic output/wheel; Windows workflow prepared | Actual local certificate/key provenance and installer acceptance, full commercial conversion, caches/traces/rebuild, Windows execution and console install checks |
@@ -103,3 +103,16 @@ Validation for v0.11 passes 147 Python tests, 32 full workflow checks and
 11,541 assertions and full three-backend state/pixel parity. Clang/emulated PPC
 reports contain 20 checks each. Required `make check` and `make prototype` pass;
 physical Wii U, clean Windows, commercial gameplay and installation remain open.
+
+Version 0.12.0 advances M2/M3/P3 with user-mode ARM multiple-register transfers,
+Thumb16 stack/register transfers and bounded original-AOT register BLX calls.
+The original nested-call fixture restores its stack and matches three backends
+in 47 instructions/one SVC; six partial-fault and six invalid-Thumb cases are
+checked externally. Independent Unicorn ARM1176 checks cover 220 instruction
+cases and the full original call trace. All Wii U builds embed its self-test.
+No full acceptance milestone is closed by this implementation increment.
+Validation for v0.12 passes 150 Python tests, 33 complete workflow checks,
+160 stack/transfer API assertions normally/sanitized, and all eleven external
+probes. Required `make check` and `make prototype` pass. Compiler/target checks
+and independent reference evidence are recorded in STATUS.md; physical-console,
+clean Windows, commercial gameplay and WUP installation remain open.

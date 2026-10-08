@@ -14,8 +14,11 @@ immediate preindexed LDRH/STRH without writeback (v0.10), word
 LDREX/STREX, user read-only CP15 TLS MRC (Rd other than PC) and observable SVC
 exits; Thumb16 shifts/ALU, high-register operations,
 branch/exchange, selected loads/stores/SP-relative operations and SVC exits.
-Unaligned transfers fault deliberately. Unimplemented/exception-return/VFP,
-Thumb long calls, ARM multiple/other halfword transfers and privileged instructions
+Version 0.12 adds checked user-mode ARM LDM/STM, Thumb16 PUSH/POP/LDMIA/STMIA
+and original-AOT register BLX calls; see `cpu-stack.md` for scope and reference
+evidence. Unaligned transfers fault deliberately. Unimplemented/exception-return/VFP,
+Thumb long calls, ARM user-bank/exception-return multiple forms, other halfword
+transfers and privileged instructions
 are unsupported. The supported subset is research code, not a complete ARM11.
 
 `translator/aot.py` specializes a smaller flat-executable subset into direct C

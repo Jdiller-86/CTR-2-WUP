@@ -1,7 +1,8 @@
-# Next acceptance gate and resume steps (0.11.0)
+# Next acceptance gate and resume steps (0.12.0)
 
 Implementation continued through the verified shared-memory/synchronization,
-standard HID input, direct GSP display and shared GSP/VBlank foundations. Checkpoints are
+standard HID input, direct/shared GSP display, diagnostic VBlank and checked
+ARM/Thumb stack/call foundations. Checkpoints are
 pushed to the requested repository. The next planned acceptance step cannot be
 verified with the resources currently available:
 
@@ -24,11 +25,13 @@ multi-thread scheduling, GX commands, PICA, audio or saves. v0.11 resumed
 ROM-independent development with one local relay/shared framebuffer queue and
 diagnostic VBlank. Missing evidence blocks acceptance and title-specific decisions;
 it does not block further reusable CPU/kernel/services/graphics development.
+v0.12 continues CPU register/stack transfers and nested ARM/Thumb calls with
+independent reference tests; see `cpu-stack.md`.
 No commercial profile or playable Mario build is enabled.
 
 Resume in this order when the evidence is available:
 
-1. Run the v0.11 diagnostic RPX/WUHB and the standard HID/GSP mode per
+1. Run the v0.12 diagnostic RPX/WUHB and the standard HID/GSP mode per
    `console-testing.md`. Record every self-test outcome, corner/channel/rotation
    correctness, touch mapping, input latency, audio/lifecycle, ten-minute stability
    and SD logs, with firmware/homebrew/launcher versions. Fix reproducible console

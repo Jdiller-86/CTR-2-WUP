@@ -140,3 +140,12 @@ LDREX/STREX. It exports four `relay/frame-{1,2}-{top,bottom}.ppm` images.
 `--relay-api` adds timing, ring, lifetime, rejection and resource rollback checks.
 Nine probes plus this API produce 20 compiler/target checks. See `gsp-queues.md`
 for the single-client diagnostic timing and remaining stock startup/GX/PICA gaps.
+
+v0.12 adds `stack` and `stack_reject`, bringing external probes to eleven.
+The original nested ARM/Thumb program takes 47 instructions/one SVC; 352
+assertions compare normal execution and six partial-word fault paths across
+external/original AOT and interpreter. The 48-assertion rejection probe checks
+six empty/unpredictable Thumb forms, including ones the emitter erases.
+`--multiple-api` adds the stack/transfer API suite (24 compiler/target checks
+total). An ARM LDM abort restores an early-emitter writeback; prior successful
+loads remain visible. See `cpu-stack.md` for constraints and independent evidence.

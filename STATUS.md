@@ -8,6 +8,17 @@ title candidate. The target remains an UWUVCI-style Windows GUI: select a
 decrypted game, configure title/artwork, click Inject, install its per-game WUP
 and launch from Wii U Menu. The CLI is the shared engine, not the final product.
 
+**Version 0.12.0 adds checked ARM/Thumb stack and register-transfer operations**.
+An original 47-instruction nested ARM → Thumb → ARM call program preserves
+registers and restores its stack through interpreter/original/external AOT.
+Independent Unicorn ARM1176 checks pass 220 instruction cases and the full trace.
+Partial-fault and unsupported-encoding probes validate the external ABI. All
+Wii U builds embed `ARM/THUMB STACK CALLS`/`stack_selftest`; see `docs/cpu-stack.md`.
+The requested overall estimate is approximately **15% of the final GUI-to-playable
+WUP product**. This is a rough engineering estimate, not a measured percentage or
+milestone tally. The main runtime/renderer/audio/save/gameplay/Windows GUI and
+physical acceptance work remains; all seven full milestone checkboxes stay open.
+
 **Version 0.11.0 adds shared GSP framebuffer queues and a VBlank relay**.
 An original ARM guest now registers/maps the GSP page, queues both RGB565 screens,
 waits for the relay and drains its IRQ ring with exclusive updates. It matches
@@ -35,6 +46,16 @@ Commercial conversion and the Windows GUI remain incomplete. Installer acceptanc
 is unverified; no milestone requiring physical-console evidence is complete.
 
 ## Verified implementation
+
+- User-mode ARM LDM/STM, Thumb16 PUSH/POP/LDMIA/STMIA and original-AOT register
+  BLX calls use checked word access and interworking. Base writeback occurs after
+  successful transfers; partial faults preserve earlier words and the original
+  base. Empty/user-bank/PC-store/unpredictable forms fail visibly. 160 API
+  assertions plus the nested-call self-test pass; the external comparison has
+  352 normal/fault assertions and 48 invalid-Thumb assertions. The independent
+  reference has 220 instruction cases and a 47-instruction full-program trace.
+  Thread scheduling, Thumb long-immediate calls, complete ARM/VFP and actual
+  PowerPC timings remain open.
 
 - GSP relay registration returns a retained read/write shared page and client0.
   Framebuffer updates commit both screens atomically at the diagnostic VBlank;
@@ -176,24 +197,29 @@ is unverified; no milestone requiring physical-console evidence is complete.
   single-guest events/handles/sleep/debug/exit, native diagnostics and structural
   WUP validator remain tested. Commercial `build` still fails without publishing
   a placeholder package. Paths with spaces/Japanese characters work on Linux.
-- **147 Python tests**, 51,202 CPU assertions, 221 original-guest assertions,
-  1,001 service, 307 heap, 197 kernel, 336 HID, 362 direct GSP and 762 relay
-  assertions pass; all C suites also pass ASan/UBSan. The complete v0.11.0 runner
-  passes **32 checks**, including all nine external probes normally/sanitized,
+- **150 Python tests**, 51,202 CPU assertions, 221 original-guest assertions,
+  1,001 service, 307 heap, 197 kernel, 336 HID, 362 direct GSP, 762 relay and 160 stack/transfer
+  assertions pass; all C suites also pass ASan/UBSan. The complete v0.12.0 runner
+  passes **33 checks**, including all eleven external probes normally/sanitized,
   three RPX builds, staging/intake, offline encrypted packaging and installed-wheel
   inspection/execution/packing. Crypto remains an optional external dependency.
 
 ## Reports and deliverables
 
-The v0.11 source, native diagnostic, original/external guest and title-staging
+The v0.12 source, native diagnostic, original/external guest and title-staging
 bundles, wheel and SHA256 manifest are under `artifacts/delivery/` and
 `artifacts/dist/`. The native bundle includes direct and shared display references.
 Diagnostic output is RPX/WUHB, not an installable WUP.
-Delivery/fresh-source verification report: `artifacts/reports/delivery-v11/report.json`.
+Delivery/fresh-source verification report: `artifacts/reports/delivery-v12/report.json`.
 
-Main validation: `artifacts/reports/validation-v1-20261008T193827Z/report.json`.
-New compiler/target checks: `artifacts/reports/relay-clang-corrected-v11/report.json`
-and `artifacts/reports/relay-ppc-v11/report.json` (20 checks each).
+Main validation: `artifacts/reports/validation-v1-20261008T203213Z/report.json`.
+New compiler/target checks: `artifacts/reports/stack-clang-v12/report.json`
+and `artifacts/reports/stack-ppc-v12/report.json` (24 checks each).
+Independent reference: `artifacts/reports/multiple-oracle-final-v12/report.json`
+(220 instruction cases, 47-instruction nested-call trace).
+Earlier v0.11 evidence: `validation-v1-20261008T193827Z/report.json`,
+`relay-clang-corrected-v11/report.json`, `relay-ppc-v11/report.json` under
+`artifacts/reports/`.
 Initial v0.11 failed reports are preserved; stricter monitor comparison exposed
 and then verified a corrected ordinary-store exclusive validity flag.
 Earlier v0.10 evidence: `validation-v1-20261008T172231Z/report.json`,
@@ -207,7 +233,7 @@ See `docs/upstream-integration.md` for commands and precise limits.
 
 Versioned source/native/original-guest/external-guest delivery bundles, wheel,
 checksums and original title-staging output are under `artifacts/`. Earlier
-v0.1.0/v0.2.0/v0.3.0/v0.4.0/v0.5.0/v0.6.0/v0.7.0/v0.8.0/v0.9.0/v0.10.0 reports and bundles are preserved. Source is maintained in the
+v0.1.0/v0.2.0/v0.3.0/v0.4.0/v0.5.0/v0.6.0/v0.7.0/v0.8.0/v0.9.0/v0.10.0/v0.11.0 reports and bundles are preserved. Source is maintained in the
 existing Git checkout; do not reset, force-push or replace user changes.
 
 ## Awaiting user inputs and physical tests
@@ -220,7 +246,7 @@ existing Git checkout; do not reset, force-push or replace user changes.
   work. If it reports encryption, decrypted executable data is still needed.
   No commercial profile is enabled until actual private intake and runtime evidence.
 - **Wii U:** run the delivered RPX/WUHB and return screen/input/audio/exit,
-  TLS/SRV/CFG, heap, shared/sync and HID PASS/FAIL/SD log, live ARM-read
+  TLS/SRV/CFG, heap, shared/sync, stack-call and HID PASS/FAIL/SD log, live ARM-read
   buttons/Circle Pad/touch/snapshot/clean exit, HID/GSP rotated color/corner/touch
   display/stability and exit,
   external-AOT guest frame/touch/restart/stability results and SD logs per

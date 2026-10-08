@@ -81,7 +81,8 @@ static ctr_cpu_result ctr_arm_fixture_at_00001020(ctr_cpu *cpu) {
 
 static ctr_cpu_result ctr_arm_fixture_at_00001024(ctr_cpu *cpu) {
     ++cpu->instructions;
-    ctr_cpu_branch_exchange(cpu, cpu->r[4]);
+    uint32_t target = cpu->r[4];
+    ctr_cpu_branch_exchange(cpu, target);
     return CTR_CPU_OK;
 }
 

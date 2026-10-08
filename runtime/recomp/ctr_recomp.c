@@ -14,6 +14,11 @@ typedef struct {
     ctr_cpu *cpu;
     uint64_t code_generation;
     bool fallback;
+    /* The emitter writes an ARM LDM base before reads. Preserve the checked
+       profile's original base on an abort while retaining earlier loaded words. */
+    bool rollback_base;
+    unsigned base_register;
+    uint32_t base_value;
     jmp_buf escape;
     ctr_cpu_result fault;
 } Engine;
@@ -40,11 +45,13 @@ static void export_cpu(Engine *e) {
 }
 _Noreturn void ctr_recomp_abort(Context *c,ctr_cpu_result result,uint32_t detail) {
     Engine *e=c->user;e->fault=result;
+    if(result==CTR_CPU_MEMORY_FAULT && e->rollback_base)c->r[e->base_register]=e->base_value;
     export_cpu(e);ctr_cpu_stop(e->cpu,result,detail);
     longjmp(e->escape,1);
 }
 int ctr_recomp_instruction(Context *c,uint32_t address,uint32_t opcode) {
     Engine *e=c->user;
+    e->rollback_base=false;
     c->r[15]=address;
     if (!c->budget) { c->exit=EXIT_BUDGET;return 0; }
     if (e->cpu->memory->code_generation!=e->code_generation)
@@ -56,6 +63,25 @@ int ctr_recomp_instruction(Context *c,uint32_t address,uint32_t opcode) {
     /* Non-default FP controls require a correctness implementation first. */
     if (*c->fpscr&0x07ff9f00u) ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,*c->fpscr);
     --c->budget;++e->cpu->instructions;
+    ctr_cpu flags={0};flags.cpsr=((uint32_t)c->n<<31)|((uint32_t)c->z<<30)|
+        ((uint32_t)c->c<<29)|((uint32_t)c->v<<28);
+    if(!c->thumb && (opcode&0x0e000000u)==0x08000000u &&
+        (opcode>>28==15u || ctr_cpu_condition(&flags,opcode>>28))) {
+        unsigned rn=(opcode>>16)&15u;bool load=(opcode&0x100000u)!=0,writeback=(opcode&0x200000u)!=0;
+        if(opcode>>28==15u || (opcode&0x400000u) ||
+            !ctr_cpu_multiple_supported(rn,(uint16_t)opcode,writeback,load,false))
+            ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
+        if(load && writeback) { e->rollback_base=true;e->base_register=rn;e->base_value=c->r[rn]; }
+    }
+    if(c->thumb && ((opcode&0xf600u)==0xb400u || (opcode&0xf000u)==0xc000u)) {
+        bool stack=(opcode&0xf600u)==0xb400u,load=(opcode&0x800u)!=0;
+        unsigned rn=stack?13u:(opcode>>8)&7u;uint16_t list=(uint16_t)(opcode&255u);
+        if(stack && (opcode&0x100u))list|=(uint16_t)(1u<<(load?15:14));
+        bool writeback=stack || !(load && (list&(1u<<rn)));
+        if(!ctr_cpu_multiple_supported(rn,list,writeback,load,true))ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
+    }
+    if((!c->thumb && (opcode&0x0fffffffu)==0x012fff3fu && ctr_cpu_condition(&flags,opcode>>28)) ||
+        (c->thumb && opcode==0x47f8u))ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
     /* The pinned emitter silently removes some CP15 cache operations. This
        profile implements only the user TLS read; reject other executed CP15
        operations until their coherency/privilege behavior is implemented. */
@@ -113,10 +139,12 @@ static const Host callbacks={read8,read16,read32,write8,write16,write32,interpre
 static ctr_cpu_result execute(ctr_cpu *p,void *user,uint64_t budget) {
     Engine *e=user;Context *c=&e->context;e->cpu=p;
     import_cpu(e);c->budget=(int32_t)(budget>INT32_MAX?INT32_MAX:budget);c->exit=EXIT_NONE;c->depth=0;
+    e->rollback_base=false;
     if (setjmp(e->escape)) return e->fault;
     while(c->budget>0) {
         Code code=lookup(c,c->r[15]|c->thumb);
         if(!code) {
+            e->rollback_base=false;
             if(!e->fallback) ctr_recomp_abort(c,CTR_CPU_MISSING_BLOCK,c->r[15]);
             uint32_t op;ctr_mem_result r=ctr_memory_read(p->memory,c->r[15],c->thumb?2:4,CTR_MEM_EXEC,&op);
             if(r!=CTR_MEM_OK){p->memory_fault=r;ctr_recomp_abort(c,CTR_CPU_MEMORY_FAULT,c->r[15]);}

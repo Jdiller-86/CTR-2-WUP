@@ -108,6 +108,31 @@ static uint32_t read_register(const ctr_cpu *cpu, unsigned reg, bool thumb) {
     return cpu->r[reg] + (reg == 15u ? (thumb ? 4u : 8u) : 0u);
 }
 
+bool ctr_cpu_multiple_supported(unsigned base,uint16_t registers,bool writeback,bool load,bool thumb) {
+    if(base>=15 || !registers || (!load && (registers&0x8000u)))return false;
+    if(writeback && (registers&(1u<<base))) {
+        if(load || !thumb || (registers&((1u<<base)-1u)))return false;
+    }
+    return true;
+}
+ctr_cpu_result ctr_cpu_multiple(ctr_cpu *cpu,unsigned rn,uint16_t registers,
+    bool increment,bool before,bool writeback,bool load,bool thumb,uint32_t opcode) {
+    if(!ctr_cpu_multiple_supported(rn,registers,writeback,load,thumb))return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,opcode);
+    unsigned count=0;for(unsigned i=0;i<16;++i)count+=(registers>>i)&1u;
+    uint32_t base=cpu->r[rn],span=count*4u;
+    uint32_t address=increment?base+(before?4u:0u):base-span+(before?0u:4u),target=0;
+    for(unsigned reg=0;reg<16;++reg)if(registers&(1u<<reg)) {
+        uint32_t value=cpu->r[reg];
+        ctr_cpu_result result=load?ctr_cpu_load(cpu,address,4u,&value):ctr_cpu_store(cpu,address,4u,value);
+        if(result!=CTR_CPU_OK)return result;
+        if(load) { if(reg==15)target=value;else cpu->r[reg]=value; }
+        address+=4u;
+    }
+    if(writeback)cpu->r[rn]=increment?base+span:base-span;
+    if(load && (registers&0x8000u))ctr_cpu_branch_exchange(cpu,target);
+    return CTR_CPU_OK;
+}
+
 static ctr_cpu_result arm_step(ctr_cpu *cpu, uint32_t insn) {
     uint32_t pc = cpu->r[15], next = pc + 4u;
     unsigned cond = insn >> 28;
@@ -120,6 +145,7 @@ static ctr_cpu_result arm_step(ctr_cpu *cpu, uint32_t insn) {
     }
     if ((insn & UINT32_C(0x0ffffff0)) == UINT32_C(0x012fff10) ||
         (insn & UINT32_C(0x0ffffff0)) == UINT32_C(0x012fff30)) {
+        if((insn&0x20u) && (insn&15u)==15u)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
         uint32_t target = read_register(cpu, insn & 15u, false);
         if ((insn & 0x20u) != 0u) cpu->r[14] = next;
         ctr_cpu_branch_exchange(cpu, target);
@@ -137,6 +163,14 @@ static ctr_cpu_result arm_step(ctr_cpu *cpu, uint32_t insn) {
         if ((insn & UINT32_C(0x01000000)) != 0u) cpu->r[14] = next;
         cpu->r[15] = pc + 8u + (offset << 2);
         return CTR_CPU_OK;
+    }
+    if((insn&UINT32_C(0x0e000000))==UINT32_C(0x08000000)) {
+        if(insn&UINT32_C(0x00400000))return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
+        bool load=(insn&0x00100000u)!=0;
+        ctr_cpu_result result=ctr_cpu_multiple(cpu,(insn>>16)&15u,(uint16_t)insn,
+            (insn&0x00800000u)!=0,(insn&0x01000000u)!=0,(insn&0x00200000u)!=0,load,false,insn);
+        if(result==CTR_CPU_OK && !(load && (insn&0x8000u)))cpu->r[15]=next;
+        return result;
     }
     /* ARMv6K word exclusives. A single deterministic guest CPU is modeled. */
     if ((insn & UINT32_C(0x0ff00fff)) == UINT32_C(0x01900f9f)) {
@@ -307,6 +341,7 @@ static ctr_cpu_result thumb_step(ctr_cpu *cpu, uint32_t insn) {
         unsigned op = (insn >> 8) & 3u;
         uint32_t right = read_register(cpu, rm, true), left = read_register(cpu, rd, true);
         if (op == 3u) {
+            if((insn&0x80u) && rm==15u)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
             if ((insn & 0x80u) != 0u) cpu->r[14] = next | 1u;
             ctr_cpu_branch_exchange(cpu, right);
             return CTR_CPU_OK;
@@ -337,6 +372,17 @@ static ctr_cpu_result thumb_step(ctr_cpu *cpu, uint32_t insn) {
         cpu->r[(insn >> 8) & 7u] = ((insn & 0x800u) != 0u ? cpu->r[13] : (pc + 4u) & ~UINT32_C(3)) + (insn & 255u) * 4u;
     } else if ((insn & 0xff00u) == 0xb000u) {
         cpu->r[13] = (insn & 128u) != 0u ? cpu->r[13] - (insn & 127u) * 4u : cpu->r[13] + (insn & 127u) * 4u;
+    } else if((insn&0xf600u)==0xb400u) {
+        bool load=(insn&0x800u)!=0;uint16_t list=(uint16_t)(insn&255u);
+        if(insn&0x100u)list|=(uint16_t)(1u<<(load?15:14));
+        ctr_cpu_result result=ctr_cpu_multiple(cpu,13,list,load,!load,true,load,true,insn);
+        if(result!=CTR_CPU_OK)return result;
+        if(load && (list&0x8000u))return result;
+    } else if((insn&0xf000u)==0xc000u) {
+        unsigned rn=(insn>>8)&7u;bool load=(insn&0x800u)!=0;
+        uint16_t list=(uint16_t)(insn&255u);bool writeback=!(load && (list&(1u<<rn)));
+        ctr_cpu_result result=ctr_cpu_multiple(cpu,rn,list,true,false,writeback,load,true,insn);
+        if(result!=CTR_CPU_OK)return result;
     } else if ((insn & 0xf000u) == 0xd000u) {
         unsigned cond = (insn >> 8) & 15u;
         if (cond == 15u) {

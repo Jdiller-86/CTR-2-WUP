@@ -23,6 +23,17 @@ def literal(value: int) -> str:
 def register(index: int, pc: int, thumb: bool = False) -> str:
     return literal(pc + (4 if thumb else 8)) if index == 15 else f"cpu->r[{index}]"
 
+def multiple(rn, registers, increment, before, writeback, load, is_thumb, opcode, next_pc):
+    if rn==15 or not registers or (not load and registers&0x8000):
+        raise ValueError("unsupported multiple-register list/base")
+    if writeback and registers&(1<<rn) and (load or not is_thumb or registers&((1<<rn)-1)):
+        raise ValueError("unpredictable multiple-transfer base/writeback combination")
+    flags=', '.join('true' if flag else 'false' for flag in (increment,before,writeback,load,is_thumb))
+    result=[f"ctr_cpu_result result = ctr_cpu_multiple(cpu, {rn}u, {literal(registers)}, {flags}, {literal(opcode)});",
+            "if (result != CTR_CPU_OK) return result;"]
+    if not load or not registers&0x8000:result.append(f"cpu->r[15] = {literal(next_pc)};")
+    return result+["return CTR_CPU_OK;"]
+
 
 def arm(insn: int, pc: int) -> list[str]:
     cond = insn >> 28
@@ -35,8 +46,11 @@ def arm(insn: int, pc: int) -> list[str]:
     if insn & 0x0fff0fff == 0x0e1d0f70 and (insn >> 12) & 15 != 15:
         return body + [f"cpu->r[{(insn >> 12) & 15}] = cpu->tls_address;",
                        f"cpu->r[15] = {next_pc};", "return CTR_CPU_OK;"]
-    if insn & 0x0ffffff0 == 0x012fff10:
-        body += [f"ctr_cpu_branch_exchange(cpu, {register(insn & 15, pc)});", "return CTR_CPU_OK;"]
+    if insn & 0x0ffffff0 in (0x012fff10,0x012fff30):
+        if insn&0x20 and insn&15==15:raise ValueError("BLX PC operand is unsupported")
+        body += [f"uint32_t target = {register(insn & 15, pc)};"]
+        if insn&0x20:body += [f"cpu->r[14] = {next_pc};"]
+        body += ["ctr_cpu_branch_exchange(cpu, target);", "return CTR_CPU_OK;"]
         return body
     if insn & 0x0f000000 == 0x0f000000:
         return body + [f"ctr_cpu_result result = ctr_cpu_stop(cpu, CTR_CPU_SVC, {literal(insn & 0xffffff)});",
@@ -48,6 +62,10 @@ def arm(insn: int, pc: int) -> list[str]:
         if insn & 0x01000000:
             body += [f"cpu->r[14] = {next_pc};"]
         return body + [f"cpu->r[15] = {literal(pc + 8 + offset * 4)};", "return CTR_CPU_OK;"]
+    if insn&0x0e000000==0x08000000:
+        if insn&0x00400000:raise ValueError("user-bank/exception-return multiple transfers are unsupported")
+        return body+multiple((insn>>16)&15,insn&0xffff,bool(insn&0x00800000),bool(insn&0x01000000),
+            bool(insn&0x00200000),bool(insn&0x00100000),False,insn,pc+4)
     if insn & 0x0ff00fff == 0x01900f9f:
         rn,rd=(insn>>16)&15,(insn>>12)&15
         if rn==15 or rd==15:
@@ -143,8 +161,18 @@ def thumb(insn: int, pc: int) -> list[str]:
             right = imm if op == 2 else f"~{imm}"
             expr = f"ctr_cpu_add(cpu, cpu->r[{rd}], {right}, {0 if op == 2 else 1}u, true)"
             body += [f"{'(void)' if op == 1 else f'cpu->r[{rd}] = '}{expr};"]
-    elif insn & 0xff87 == 0x4700:
-        return body + [f"ctr_cpu_branch_exchange(cpu, {register((insn >> 3) & 15, pc, True)});", "return CTR_CPU_OK;"]
+    elif insn & 0xff07 == 0x4700:
+        rm=(insn>>3)&15
+        if insn&0x80 and rm==15:raise ValueError("Thumb BLX PC operand is unsupported")
+        body += [f"uint32_t target = {register(rm,pc,True)};"]
+        if insn&0x80:body += [f"cpu->r[14] = {literal((pc+2)|1)};"]
+        return body+["ctr_cpu_branch_exchange(cpu, target);","return CTR_CPU_OK;"]
+    elif insn&0xf600==0xb400:
+        load=bool(insn&0x800);registers=(insn&255)|((1<<(15 if load else 14)) if insn&0x100 else 0)
+        return body+multiple(13,registers,load,not load,True,load,True,insn,pc+2)
+    elif insn&0xf000==0xc000:
+        rn=(insn>>8)&7;load=bool(insn&0x800);registers=insn&255
+        return body+multiple(rn,registers,True,False,not(load and registers&(1<<rn)),load,True,insn,pc+2)
     elif insn & 0xff00 == 0xdf00:
         return body + [f"ctr_cpu_result result = ctr_cpu_stop(cpu, CTR_CPU_SVC, {literal(insn & 255)});",
                        f"cpu->r[15] = {literal(pc + 2)};", "cpu->exclusive_valid = false;", "return result;"]

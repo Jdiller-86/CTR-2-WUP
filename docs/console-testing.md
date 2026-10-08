@@ -13,7 +13,7 @@ Record the precise homebrew environment, firmware and launcher versions used.
 These are diagnostic applications, not WUP installation directories. Do not
 attempt to install the RPX/WUHB through a WUP installer.
 
-Current v0.11.0 delivery is `CTR2WUP-diagnostic-0.11.0.zip`; it contains the native
+Current v0.12.0 delivery is `CTR2WUP-diagnostic-0.12.0.zip`; it contains the native
 RPX/WUHB, the instructions and direct/shared display reference PPMs.
 The separate original/external-guest bundles contain the other starting modes.
 
@@ -116,6 +116,12 @@ not stock 3DS graphics, PICA/HID/GSP or commercial compatibility.
 v0.11.0 also adds `GSP QUEUE/VBLANK PASS CODE 0` and
 `gsp_relay_selftest PASS result=0`, checking mapped queues, delayed presentation,
 IRQ delivery and cleanup through the original interpreter/AOT paths.
+
+v0.12.0 adds `ARM/THUMB STACK CALLS PASS CODE 0` and
+`stack_selftest PASS result=0`, checking 47 original instructions, nested ARM/Thumb
+calls, stack/register restoration and cleanup. Include that line in your SD log
+and native-screen results. This is original interpreter/AOT console evidence;
+external and Unicorn results remain separate developer checks.
 
 ## Standard HID/GSP queued guest checks (0.11.0)
 

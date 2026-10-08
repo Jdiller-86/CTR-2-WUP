@@ -44,6 +44,7 @@ def main():
     prototype = ROOT / report["prototype_output"]
     binary_entries = [(prototype / name, name) for name in ("ctr2wup-prototype.rpx", "ctr2wup-prototype.wuhb", "build-report.json", "build.log")]
     binary_entries += [(ROOT / name, name) for name in ("LICENSE", "THIRD_PARTY_NOTICES", "docs/console-testing.md", "docs/compatibility.md")]
+    binary_entries.append((ROOT/'docs/cpu-stack.md','docs/cpu-stack.md'))
     binary_entries += [(path, str(path.relative_to(ROOT))) for path in (ROOT / "docs/licenses").iterdir() if path.is_file()]
     binary_entries.append((latest, "validation-report.json"))
     binary_entries.append((ROOT/report["packaging"]["offline_report"], "offline-packaging-report.json"))

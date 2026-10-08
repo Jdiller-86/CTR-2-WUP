@@ -96,3 +96,9 @@ Version 0.11 source/builds include the shared GSP relay probe and API suite.
 `make check` runs its sanitizer checks; `tools/validate-upstream.py --relay-api`
 runs nine probes and shared queue API checks. Native Windows execution remains
 pending; no local unapproved workflow is published or included in source bundles.
+
+Version 0.12 adds `make -C tests/multiple check` and
+`python tools/validate-upstream.py --multiple-api --output artifacts/windows-stack`.
+All eleven external probes and the API execute on the selected compiler/target.
+The optional `tools/reference-multiple.py` requires pinned Unicorn 2.1.4 and a
+native GCC/shared-library toolchain; no native Windows reference result is claimed.

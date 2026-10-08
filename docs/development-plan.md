@@ -185,3 +185,11 @@ and Mario intake still gate compatibility, not all shared development. Further
 ROM-independent work includes thread scheduling, CPU/barrier correctness, general
 IPC/FS and bounded graphics transfers. Prioritize original reference tests for
 each; title-specific PICA/feature selection still needs actual intake/trace.
+
+v0.12.0 advances the ROM-independent CPU foundation: ordinary ARM/Thumb stack
+frames, multiple-register transfers and register BLX calls. The original 47-step
+nested-call fixture and 220 ARM1176/Unicorn cases check real compiled-function
+prerequisites. External fault/unsupported guards preserve checked behavior even
+where the emitter updates a base early or erases an empty transfer. Thread contexts,
+address arbitration, barriers, FS/APT, GX/PICA, audio/saves and exact Mario intake
+remain priorities; this checkpoint does not change the GUI/WUP product goal.

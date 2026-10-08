@@ -61,6 +61,9 @@ page, diagnostic VBlank and atomic queued presentation; see `gsp-queues.md`.
 The standard display guest now uses this queue. GX commands and PICA remain absent.
 Its guest mode presents completed ARM-written raw framebuffers through the same
 GX2 copying path. It is separate from PICA/GSP emulation; see `guest-fixture.md`.
+Version 0.12 adds checked user-mode ARM/Thumb multiple-register/stack transfers
+and BLX calls, with an embedded original nested-call self-test and independent
+ARM1176 reference checks; see `cpu-stack.md`.
 Compilation proves toolchain integration. Only physical console results can
 prove rendering, input, sound, guest semantics on PowerPC, or performance.
 
