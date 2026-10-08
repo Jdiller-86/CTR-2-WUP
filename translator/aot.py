@@ -48,6 +48,16 @@ def arm(insn: int, pc: int) -> list[str]:
         if insn & 0x01000000:
             body += [f"cpu->r[14] = {next_pc};"]
         return body + [f"cpu->r[15] = {literal(pc + 8 + offset * 4)};", "return CTR_CPU_OK;"]
+    if insn & 0x0e0000f0 == 0x000000b0:
+        rd,rn=(insn>>12)&15,(insn>>16)&15
+        if not insn&0x01000000 or not insn&0x00400000 or insn&0x00200000 or rd==15:
+            raise ValueError("only preindexed immediate halfwords without writeback are supported")
+        offset=((insn>>4)&0xf0)|(insn&15)
+        sign='+' if insn&0x00800000 else '-'
+        action=f"ctr_cpu_load(cpu, address, 2u, &cpu->r[{rd}])" if insn&0x00100000 else f"ctr_cpu_store(cpu, address, 2u, cpu->r[{rd}])"
+        return body+[f"uint32_t address = {register(rn,pc)} {sign} {literal(offset)};",
+                     f"ctr_cpu_result result = {action};","if (result != CTR_CPU_OK) return result;",
+                     f"cpu->r[15] = {next_pc};","return CTR_CPU_OK;"]
     if insn & 0x0c000000 == 0:
         op, rd, rn = (insn >> 21) & 15, (insn >> 12) & 15, (insn >> 16) & 15
         flags, test = bool(insn & 0x100000), 8 <= op <= 11

@@ -27,6 +27,7 @@
 #include "ctr_heap_fixture.h"
 #include "ctr_kernel_fixture.h"
 #include "ctr_hid_fixture.h"
+#include "ctr_gsp_fixture.h"
 
 enum { TOP_W=400, BOTTOM_W=320, GUEST_H=240, AUDIO_SAMPLES=12000 };
 static uint32_t top_image[TOP_W*GUEST_H], bottom_image[BOTTOM_W*GUEST_H];
@@ -43,6 +44,10 @@ static int hid_test_result,hid_ready;
 static ctr_guest hid_guest;
 static uint32_t hid_snapshot[5];
 static OSTime hid_origin;
+static int gsp_test_result,gsp_ready;
+static ctr_guest gsp_guest;
+static uint64_t gsp_presented;
+static OSTime gsp_origin;
 static ctr_guest frame_guest;
 static int guest_ready,guest_mode=CTR_GUEST_DEFAULT;
 static uint32_t presented_frames;
@@ -61,6 +66,10 @@ static void restart_guest(void) {
     frame_guest.debug=guest_debug; frame_guest.cpu.log=guest_trace;
     guest_origin=OSGetTime(); presented_frames=0;
     WHBLogPrintf("guest_open ok=%u profile=ctr2wup-framebuffer-fixture-v1 mode=AOT custom_frame_io=1 GSP_PICA=unavailable",guest_ready);
+    ctr_guest_close(&gsp_guest);gsp_ready=ctr_gsp_fixture_open(&gsp_guest);
+    gsp_guest.debug=guest_debug;gsp_guest.cpu.log=guest_trace;
+    gsp_origin=OSGetTime();gsp_presented=0;
+    WHBLogPrintf("gsp_guest_open ok=%u profile=original_hid_gsp_rgb565 mode=original_AOT PICA=unavailable",gsp_ready);
 }
 
 static int circle_axis(float axis) {
@@ -69,19 +78,18 @@ static int circle_axis(float axis) {
     if (axis<-1) axis=-1;
     return (int)lroundf(axis*156.0f);
 }
-static void update_hid(const VPADStatus *pad,bool inside,uint16_t x,uint16_t y) {
+static void update_input_guest(ctr_guest *guest,int ready,OSTime origin,const VPADStatus *pad,bool inside,uint16_t x,uint16_t y,unsigned budget) {
     static const uint32_t masks[]={VPAD_BUTTON_A,VPAD_BUTTON_B,VPAD_BUTTON_MINUS,VPAD_BUTTON_PLUS,
         VPAD_BUTTON_RIGHT,VPAD_BUTTON_LEFT,VPAD_BUTTON_UP,VPAD_BUTTON_DOWN,VPAD_BUTTON_R,VPAD_BUTTON_L,
         VPAD_BUTTON_X,VPAD_BUTTON_Y};
-    if (!hid_ready || hid_guest.state==CTR_GUEST_FAULTED) return;
+    if (!ready || guest->state==CTR_GUEST_FAULTED || guest->state==CTR_GUEST_EXITED) return;
     uint32_t buttons=0;for(unsigned i=0;i<12;++i)if(pad->hold&masks[i])buttons|=1u<<i;
-    uint64_t now=1+(uint64_t)OSTicksToMicroseconds(OSGetTime()-hid_origin)*1000u;
-    if (!ctr_hid_update(&hid_guest,buttons,circle_axis(pad->leftStick.x),circle_axis(pad->leftStick.y),inside,x,y,now)) {
-        hid_guest.state=CTR_GUEST_FAULTED;hid_guest.fault=CTR_CPU_UNSUPPORTED;
+    uint64_t now=1+(uint64_t)OSTicksToMicroseconds(OSGetTime()-origin)*1000u;
+    if (!ctr_hid_update(guest,buttons,circle_axis(pad->leftStick.x),circle_axis(pad->leftStick.y),inside,x,y,now)) {
+        guest->state=CTR_GUEST_FAULTED;guest->fault=CTR_CPU_UNSUPPORTED;
         WHBLogPrintf("HID live publication FAIL time_ns=%llu",(unsigned long long)now);return;
     }
-    ctr_guest_run(&hid_guest,1000,now,true);
-    ctr_hid_fixture_snapshot(&hid_guest,hid_snapshot);
+    ctr_guest_run(guest,budget,now,true);
 }
 
 static void file_log(const char *message) {
@@ -199,7 +207,7 @@ static void diagnostic_images(unsigned frame, const VPADStatus *pad,
     char text[90];
     for (unsigned y=0;y<GUEST_H;++y) for (unsigned x=0;x<TOP_W;++x) {
         unsigned band=((x+frame/2)/25)%3;
-        top_image[y*TOP_W+x]=y<113 ? 0x162d4fff :
+        top_image[y*TOP_W+x]=y<123 ? 0x162d4fff :
             (x%40==0 || y%24==0) ? 0xffffffff :
             band==0 ? 0x195baaff : band==1 ? 0x25a980ff : 0xb46b20ff;
     }
@@ -212,7 +220,7 @@ static void diagnostic_images(unsigned frame, const VPADStatus *pad,
     image_text(top_image,TOP_W,4,"A: TONE / X: ALLOC TEST / MINUS: EXIT");
     snprintf(text,sizeof(text),"CPU ARM/THUMB AOT SELFTEST %s CODE %d",cpu_test_result?"FAIL":"PASS",cpu_test_result);
     image_text(top_image,TOP_W,5,text);
-    image_text(top_image,TOP_W,6,"Y: ARM GUEST / PLUS: RESTART GUEST");
+    image_text(top_image,TOP_W,6,"Y: CYCLE GUESTS / PLUS: RESTART");
     snprintf(text,sizeof(text),"TLS/SRV/CFG STARTUP %s CODE %d",service_test_result?"FAIL":"PASS",service_test_result);
     image_text(top_image,TOP_W,7,text);
     snprintf(text,sizeof(text),"GUEST HEAP LIFECYCLE %s CODE %d",heap_test_result?"FAIL":"PASS",heap_test_result);
@@ -221,6 +229,8 @@ static void diagnostic_images(unsigned frame, const VPADStatus *pad,
     image_text(top_image,TOP_W,9,text);
     snprintf(text,sizeof(text),"HID ARM CONSUMER %s CODE %d",hid_test_result?"FAIL":"PASS",hid_test_result);
     image_text(top_image,TOP_W,10,text);
+    snprintf(text,sizeof(text),"HID/GSP RGB565 DISPLAY %s CODE %d",gsp_test_result?"FAIL":"PASS",gsp_test_result);
+    image_text(top_image,TOP_W,11,text);
     for (unsigned y=0;y<GUEST_H;++y) for (unsigned x=0;x<BOTTOM_W;++x)
         bottom_image[y*BOTTOM_W+x]=y<92 ? 0x35194fff :
             (((x/20)^(y/20))&1) ? 0x783598ff:0x108797ff;
@@ -268,7 +278,7 @@ int main(int argc, char **argv) {
         log_file=fopen(path,"w");
         if (log_file) WHBAddLogHandler(file_log);
     }
-    WHBLogPrintf("CTR2WUP native diagnostic version=0.9.0 pointer_bits=%u endian=big UDP=%u SD_log=%u",
+    WHBLogPrintf("CTR2WUP native diagnostic version=0.10.0 pointer_bits=%u endian=big UDP=%u SD_log=%u",
                   (unsigned)(8*sizeof(void *)), udp_ready, log_file!=NULL);
     OSTime cpu_start=OSGetTime();
     cpu_test_result=ctr_cpu_selftest();
@@ -290,6 +300,9 @@ int main(int argc, char **argv) {
     hid_ready=ctr_hid_fixture_open(&hid_guest);hid_origin=OSGetTime();
     hid_guest.debug=guest_debug;hid_guest.cpu.log=guest_trace;
     WHBLogPrintf("hid_live_open ok=%u service=hid:USER guest_mapping=readonly motion=unsupported",hid_ready);
+    OSTime gsp_start=OSGetTime();gsp_test_result=ctr_gsp_selftest();
+    WHBLogPrintf("gsp_selftest %s result=%d fixture=original_arm_hid_gsp_rgb565 elapsed_us=%llu console_result_required=1",
+        gsp_test_result?"FAIL":"PASS",gsp_test_result,(unsigned long long)OSTicksToMicroseconds(OSGetTime()-gsp_start));
     if (!WHBGfxInit()) { WHBLogPrintf("FAIL WHBGfxInit"); goto cleanup; }
     gfx_ready=1;
     GX2Surface *tv_target=&WHBGfxGetTVColourBuffer()->surface;
@@ -322,17 +335,36 @@ int main(int argc, char **argv) {
         if (pad.trigger&VPAD_BUTTON_A) play_tone();
         if (pad.trigger&VPAD_BUTTON_X) alloc_ok=allocation_test();
         if (pad.trigger&VPAD_BUTTON_Y) {
-            guest_mode=!guest_mode; presented_frames=0;
-            WHBLogPrintf("display_mode=%s",guest_mode?"guest-fixture":"native");
+            guest_mode=(guest_mode+1)%3;presented_frames=0;
+            WHBLogPrintf("display_mode=%s",guest_mode==2?"standard-hid-gsp":guest_mode==1?"guest-fixture":"native");
         }
         if (pad.trigger&VPAD_BUTTON_PLUS) restart_guest();
         VPADTouchData touch={0}; uint16_t tx=0, ty=0;
         VPADGetTPCalibratedPointEx(VPAD_CHAN_0,VPAD_TP_1280X720,&touch,&pad.tpNormal);
         int inside=touch.touched && touch.validity==VPAD_VALID &&
             ctr_viewport_touch(&drc_view,touch.x,touch.y,1280,720,&tx,&ty);
-        update_hid(&pad,inside!=0,tx,ty);
+        update_input_guest(&hid_guest,hid_ready,hid_origin,&pad,inside!=0,tx,ty,1000);
+        if(hid_ready)ctr_hid_fixture_snapshot(&hid_guest,hid_snapshot);
         if (!guest_mode) diagnostic_images(frame,&pad,error,inside,&touch,tx,ty,frame_us,alloc_ok);
-        else {
+        else if(guest_mode==2) {
+            if(pad.trigger&VPAD_BUTTON_B)ctr_hid_fixture_exit(&gsp_guest);
+            update_input_guest(&gsp_guest,gsp_ready,gsp_origin,&pad,inside!=0,tx,ty,50000);
+            if(!gsp_presented) { memset(top_image,0,sizeof(top_image));memset(bottom_image,0,sizeof(bottom_image)); }
+            if(gsp_ready && gsp_guest.gsp.swaps[0] && gsp_guest.gsp.swaps[0]==gsp_guest.gsp.swaps[1] && gsp_guest.gsp.swaps[0]!=gsp_presented) {
+                ctr_mem_result top=ctr_gsp_pixels(&gsp_guest,0,top_image,TOP_W*GUEST_H);
+                ctr_mem_result bottom=ctr_gsp_pixels(&gsp_guest,1,bottom_image,BOTTOM_W*GUEST_H);
+                if(top!=CTR_MEM_OK || bottom!=CTR_MEM_OK) {
+                    gsp_guest.state=CTR_GUEST_FAULTED;gsp_guest.fault=CTR_CPU_MEMORY_FAULT;
+                    WHBLogPrintf("GSP presentation FAIL top=%s bottom=%s",ctr_mem_result_name(top),ctr_mem_result_name(bottom));
+                }
+                gsp_presented=gsp_guest.gsp.swaps[0];
+            }
+            for(unsigned i=TOP_W*102;i<TOP_W*144;++i)top_image[i]=0x162d4fff;
+            char text[90];image_text(top_image,TOP_W,10,"CTR2WUP STANDARD HID / GSP RGB565");
+            snprintf(text,sizeof(text),"FRAME %llu / STATE %s",(unsigned long long)gsp_presented,ctr_guest_state_name(gsp_guest.state));
+            image_text(top_image,TOP_W,11,text);image_text(top_image,TOP_W,12,"A: GREEN / TOUCH: WHITE / B: EXIT");
+            image_text(top_image,TOP_W,13,"Y: CYCLE / PLUS: RESET / PICA ABSENT");
+        } else {
             if (guest_ready && frame_guest.state!=CTR_GUEST_FAULTED && frame_guest.state!=CTR_GUEST_EXITED) {
                 uint32_t buttons=(pad.hold&VPAD_BUTTON_A)?1u:0u;
                 ctr_frame_input(&frame_guest,buttons,inside!=0,tx,ty);
@@ -387,6 +419,10 @@ int main(int argc, char **argv) {
                 ctr_guest_state_name(hid_guest.state),hid_snapshot[0],hid_snapshot[1],hid_snapshot[2],hid_snapshot[3],hid_snapshot[4],
                 (unsigned long long)hid_guest.hid.samples,(unsigned long long)hid_guest.cpu.instructions,
                 (unsigned long long)hid_guest.cpu.fallback_instructions,ctr_cpu_result_name(hid_guest.fault),hid_guest.fault_detail);
+            WHBLogPrintf("GSP guest state=%s presented=%llu top_swaps=%llu bottom_swaps=%llu instructions=%llu fallback=%llu fault=%s detail=%08x",
+                ctr_guest_state_name(gsp_guest.state),(unsigned long long)gsp_presented,(unsigned long long)gsp_guest.gsp.swaps[0],
+                (unsigned long long)gsp_guest.gsp.swaps[1],(unsigned long long)gsp_guest.cpu.instructions,
+                (unsigned long long)gsp_guest.cpu.fallback_instructions,ctr_cpu_result_name(gsp_guest.fault),gsp_guest.fault_detail);
             log_time=OSGetTime();
         }
         ++frame;
@@ -401,6 +437,12 @@ cleanup:
             (unsigned long long)hid_guest.cpu.fallback_instructions);
     }
     ctr_guest_close(&hid_guest);
+    if(gsp_ready && gsp_guest.state!=CTR_GUEST_FAULTED && gsp_guest.state!=CTR_GUEST_EXITED && ctr_hid_fixture_exit(&gsp_guest)) {
+        ctr_guest_run(&gsp_guest,1000000,gsp_guest.now_ns,true);
+        WHBLogPrintf("gsp_guest_shutdown state=%s fallback=%llu",ctr_guest_state_name(gsp_guest.state),
+            (unsigned long long)gsp_guest.cpu.fallback_instructions);
+    }
+    ctr_guest_close(&gsp_guest);
     if (tone_voice) { AXSetVoiceState(tone_voice,AX_VOICE_STATE_STOPPED); AXFreeVoice(tone_voice); }
     if (AXIsInit()) AXQuit();
     if (gfx_ready) GX2DrawDone();

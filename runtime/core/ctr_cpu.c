@@ -179,6 +179,18 @@ static ctr_cpu_result arm_step(ctr_cpu *cpu, uint32_t insn) {
         cpu->r[15] = next;
         return CTR_CPU_OK;
     }
+    if ((insn & UINT32_C(0x0e0000f0)) == UINT32_C(0x000000b0)) {
+        unsigned rn=(insn>>16)&15u,rd=(insn>>12)&15u;
+        if(!(insn&UINT32_C(0x01000000)) || !(insn&UINT32_C(0x00400000)) ||
+            (insn&UINT32_C(0x00200000)) || rd==15u)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
+        uint32_t offset=((insn>>4)&0xf0u)|(insn&15u),base=read_register(cpu,rn,false);
+        uint32_t address=(insn&UINT32_C(0x00800000))?base+offset:base-offset;
+        bool load=(insn&UINT32_C(0x00100000))!=0;uint32_t value=cpu->r[rd];
+        ctr_cpu_result result=load?ctr_cpu_load(cpu,address,2u,&value):ctr_cpu_store(cpu,address,2u,value);
+        if(result!=CTR_CPU_OK)return result;
+        if(load)cpu->r[rd]=value;
+        cpu->r[15]=next;return CTR_CPU_OK;
+    }
     if ((insn & UINT32_C(0x0c000000)) == UINT32_C(0x04000000)) {
         unsigned rn = (insn >> 16) & 15u, rd = (insn >> 12) & 15u;
         bool load = (insn & UINT32_C(0x00100000)) != 0u;

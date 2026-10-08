@@ -80,6 +80,12 @@ v0.7.0 adds `make -C tests/heap check` and
 artifacts/windows-memory-check`. These exercise allocation/free/protection/query
 and actual external AOT. Native Windows acceptance remains pending.
 
+v0.8/v0.9/v0.10 add `make -C tests/kernel check`, `make -C tests/hid check`,
+`make -C tests/gsp check`, and `python tools/validate-upstream.py --kernel-api
+--hid-api --gsp-api --output artifacts/windows-device-check`. The latter checks
+actual external execution and emits original HID/GSP display reference images.
+Native Windows and physical Wii U results remain pending.
+
 Doctor and clean prototype compile; inspection of NCSD/NCCH and malformed inputs;
 spaces/Unicode on both source and output paths; cancellation terminating compiler
 children; atomic publication and refusal to overwrite outputs; installable-wheel

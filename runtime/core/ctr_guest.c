@@ -124,14 +124,20 @@ void ctr_guest_object_release(ctr_guest *g,ctr_guest_handle_type type,unsigned o
     }
     if (type==CTR_HANDLE_SESSION) {
         ctr_guest_session *s=&g->sessions[object];
-        if (s->references && --s->references==0) memset(s,0,sizeof(*s));
+        if (s->references && --s->references==0) {
+            bool gsp=s->service==CTR_SERVICE_GSP;memset(s,0,sizeof(*s));
+            if(gsp) {
+                bool live=false;for(unsigned i=0;i<16;++i)if(g->sessions[i].active && g->sessions[i].service==CTR_SERVICE_GSP)live=true;
+                if(!live)g->gsp.right=false;
+            }
+        }
         return;
     }
     ctr_guest_event *e=&g->events[object];
     if (e->references && --e->references==0) memset(e,0,sizeof(*e));
 }
 uint32_t ctr_guest_session_open(ctr_guest *g,ctr_guest_service service) {
-    if (service!=CTR_SERVICE_SRV && service!=CTR_SERVICE_CFG && service!=CTR_SERVICE_HID) return 0;
+    if (service!=CTR_SERVICE_SRV && service!=CTR_SERVICE_CFG && service!=CTR_SERVICE_HID && service!=CTR_SERVICE_GSP) return 0;
     for (unsigned i=0;i<16;++i) if (!g->sessions[i].active) {
         g->sessions[i]=(ctr_guest_session){true,false,0,service};
         uint32_t handle=ctr_guest_handle_new(g,CTR_HANDLE_SESSION,i);

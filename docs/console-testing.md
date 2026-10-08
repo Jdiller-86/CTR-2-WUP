@@ -13,8 +13,13 @@ Record the precise homebrew environment, firmware and launcher versions used.
 These are diagnostic applications, not WUP installation directories. Do not
 attempt to install the RPX/WUHB through a WUP installer.
 
+Current v0.10.0 delivery is `CTR2WUP-diagnostic-0.10.0.zip`; it contains the native
+RPX/WUHB, the instructions and four desktop standard-display reference PPMs.
+The separate original/external-guest bundles contain the other starting modes.
+
 Version 0.2.0 also includes `ctr2wup-guest-fixture.rpx`/`.wuhb`, which starts in
-controlled guest mode. Both applications contain both modes; press Y to switch.
+controlled guest mode. All current builds contain three modes; Y cycles native,
+custom-I/O ARM guest, standard HID/GSP ARM guest, then native.
 Use the native mode for the original checks below, then run the guest checks.
 
 Version 0.3.0 also supplies `ctr2wup-upstream-guest.rpx`/`.wuhb`. Run the same
@@ -50,6 +55,12 @@ validity; border touches must remain invalid. SD `HID live` logs must show waiti
 between samples, increasing snapshots, fallback0 and no fault; shutdown should
 report exited. Motion and C-stick are absent. Host Y/Plus/Minus controls are
 reserved for diagnostics. No commercial dump is needed for this test.
+
+v0.10.0 adds `HID/GSP RGB565 DISPLAY PASS CODE 0` and
+`gsp_selftest PASS result=0`. This compares an original ARM standard-HID/GSP
+graphics program through interpreter/original AOT, including rotated RGB565
+pixels and cleanup. The external translator comparison is separate desktop/
+emulated-PPC evidence, even in the external-guest RPX/WUHB build.
 
 ## Requested evidence
 
@@ -93,8 +104,7 @@ needed: this build embeds only the original generated ARM fixture.
    purple and draws a white guest pixel at the touch position. Check corners and
    center; touches in black borders must not enter guest input. Record latency.
 3. Press B: the guest should show exited after completing its current frame;
-   the host remains responsive. Plus restarts it and its frame counter. Y switches
-   back to native diagnostics. Minus exits the entire application.
+   the host remains responsive. Plus restarts it and its frame counter. Y cycles into the standard HID/GSP mode and then native diagnostics. Minus exits the entire application.
 4. Leave guest mode running for ten minutes. Collect both-screen images and SD
    logs with `guest_open`, debug/SVC events, increasing frames/instructions,
    fallback0 and no faults. Include your test duration and firmware/launcher.
@@ -102,6 +112,28 @@ needed: this build embeds only the original generated ARM fixture.
 Guest pixels are ARM-generated; the status overlay is host-generated. Success
 would establish this controlled fixture's PowerPC/input/presentation behavior,
 not stock 3DS graphics, PICA/HID/GSP or commercial compatibility.
+
+## Standard HID/GSP guest checks (0.10.0)
+
+1. Cycle Y until `CTR2WUP STANDARD HID / GSP RGB565` is shown. Completed frame
+   count must increase without faults or fallback. This guest reads HID shared
+   memory/events and submits both RGB565 screens through GSP SetBufferSwap.
+2. Top should be blue, or green while holding A. Check the corner markers:
+   white top-left, red top-right, green bottom-left, blue bottom-right. The host
+   status overlay is in the middle so every corner remains visible.
+3. Bottom should be cyan; valid touch changes it to magenta with a white pixel
+   at the guest touch coordinate. Check center/corners and border rejection.
+   Release must restore cyan. ARM fills run over several bounded host slices,
+   so record visible latency rather than assuming one display-frame response.
+4. B exits this guest; Plus restarts both graphics guests. Cycle all three modes,
+   leave the GSP mode running for ten minutes and test Minus/HOME lifecycle.
+   Return both-screen photos and SD `gsp_selftest`, `GSP guest`,
+   `gsp_guest_shutdown` logs, duration and firmware/launcher environment.
+
+Compare with `standard-display-reference/frame-{1,2}-{top,bottom}.ppm` in the
+native diagnostic bundle: frame1 holds A/touch at 100,80, frame2 releases both.
+These reference images have no host status overlay. Success establishes the
+scoped CPU framebuffer bridge; shared GSP queues, VBlank and PICA remain absent.
 
 ## Packaging prerequisite checks
 

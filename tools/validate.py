@@ -68,6 +68,10 @@ def main():
     hid_results=[json.loads(line) for line in hid_tests.stdout.splitlines() if line.startswith('{"ok":')]
     if len(hid_results)!=2 or any(not item.get("ok") or not item.get("original_arm_hid_consumer") for item in hid_results):
         results[-1]["passed"]=False
+    gsp_tests=run("gsp-tests",["make","-C","tests/gsp","check","sanitize"])
+    gsp_results=[json.loads(line) for line in gsp_tests.stdout.splitlines() if line.startswith('{"ok":')]
+    if len(gsp_results)!=2 or any(not item.get("ok") or not item.get("original_arm_hid_gsp_display") for item in gsp_results):
+        results[-1]["passed"]=False
     run("fixtures", [sys.executable, "-m", "tests.host_fixtures", "artifacts/fixtures"])
     for kind in ("cxi", "3ds"):
         run("inspect-" + kind, [sys.executable, "-m", "host", "inspect", "artifacts/fixtures/synthetic." + kind])
@@ -114,10 +118,10 @@ def main():
             if path.is_file() and "__pycache__" not in path.parts:
                 source_digest.update(str(path.relative_to(ROOT)).encode("utf-8") + b"\0" + path.read_bytes())
     report = {"schema_version": 1, "generated_at_utc": datetime.now(timezone.utc).isoformat(),
-              "workflow": "native/original/external-AOT RPX builds, checked ARM/Thumb/scalar-VFP/TLS, SRV/CFG/HID, heap/shared memory and synchronization, title staging/intake and offline encrypted packaging",
+              "workflow": "native/original/external-AOT RPX builds, checked ARM/Thumb/scalar-VFP/TLS/halfwords, SRV/CFG/HID/GSP direct display, heap/shared memory and synchronization, title staging/intake and offline encrypted packaging",
               "version": __version__,
               "ok": all(result["passed"] for result in results), "python_tests": test_count,
-              "cpu_runs": c_results, "guest_runs":guest_results,"service_runs":service_results,"heap_runs":heap_results,"kernel_runs":kernel_results,"hid_runs":hid_results,"checks": results,
+              "cpu_runs": c_results, "guest_runs":guest_results,"service_runs":service_results,"heap_runs":heap_results,"kernel_runs":kernel_results,"hid_runs":hid_results,"gsp_runs":gsp_results,"checks": results,
               "source_sha256": source_digest.hexdigest(),
               "build_tools": {package: importlib.metadata.version(package) for package in ("setuptools", "wheel", "pip")},
               "prototype_output": str(output.relative_to(ROOT)),

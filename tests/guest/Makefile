@@ -3,7 +3,7 @@ ROOT := ../..
 OUT := $(ROOT)/artifacts/guest-tests
 FLAGS := -std=c11 -O2 -g -Wall -Wextra -Wpedantic -Werror -I$(ROOT)/runtime/core
 SOURCES := test_guest.c $(ROOT)/runtime/core/ctr_cpu.c $(ROOT)/runtime/core/ctr_memory.c \
-           $(ROOT)/runtime/core/ctr_guest.c $(ROOT)/runtime/core/ctr_ipc.c $(ROOT)/runtime/core/ctr_heap.c $(ROOT)/runtime/core/ctr_kernel.c $(ROOT)/runtime/core/ctr_hid.c $(ROOT)/runtime/core/ctr_guest_fixture.c \
+           $(ROOT)/runtime/core/ctr_guest.c $(ROOT)/runtime/core/ctr_ipc.c $(ROOT)/runtime/core/ctr_heap.c $(ROOT)/runtime/core/ctr_kernel.c $(ROOT)/runtime/core/ctr_hid.c $(ROOT)/runtime/core/ctr_gsp.c $(ROOT)/runtime/core/ctr_guest_fixture.c \
            $(ROOT)/tests/fixtures/guest/framebuffer.generated.c $(ROOT)/tests/fixtures/guest/image.generated.c
 .PHONY: check sanitize
 $(OUT):

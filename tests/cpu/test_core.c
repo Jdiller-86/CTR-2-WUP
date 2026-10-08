@@ -174,8 +174,22 @@ static void viewport_tests(void) {
     CHECK(!ctr_viewport_touch(&view,1280,360,1280,720,&x,&y));
     CHECK(!ctr_viewport_fit(&view,0,480,320,240));
 }
+static void halfword_tests(void) {
+    setup(0xe1c100b2);cpu.r[0]=0x1234abcd;cpu.r[1]=0x2000;
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[15]==0x1004 && data[2]==0xcd && data[3]==0xab && !data[4]);
+    setup(0xe15120b2);cpu.r[1]=0x2004;data[2]=0xff;data[3]=0xff;
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[2]==0xffff && cpu.r[1]==0x2004);
+    setup(0x01c100b2);cpu.r[1]=0xdead0000;
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[15]==0x1004 && !logs);
+    setup(0xe1c100b1);cpu.r[1]=0x2000;
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_MEMORY_FAULT && cpu.memory_fault==CTR_MEM_ALIGNMENT && cpu.r[15]==0x1000);
+    setup(0xe1c100b0);cpu.r[1]=0x1000;
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_MEMORY_FAULT && cpu.memory_fault==CTR_MEM_PERMISSION && cpu.r[15]==0x1000);
+    const uint32_t unsupported[]={0xe0c100b0,0xe18100b0,0xe1e100b0,0xe1c1f0b0};
+    for(unsigned i=0;i<4;++i){setup(unsupported[i]);CHECK(ctr_cpu_step(&cpu)==CTR_CPU_UNSUPPORTED && cpu.r[15]==0x1000);}
+}
 int main(void) {
-    memory_tests(); flag_tests(); instruction_tests(); viewport_tests();
+    memory_tests(); flag_tests(); instruction_tests(); viewport_tests();halfword_tests();
     clock_t start=clock();
     for (unsigned i=0;i<1000;++i) CHECK(ctr_cpu_selftest()==0);
     double seconds=(double)(clock()-start)/CLOCKS_PER_SEC;

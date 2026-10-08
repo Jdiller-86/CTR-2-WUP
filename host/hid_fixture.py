@@ -6,8 +6,7 @@ TEXT_ADDRESS = 0x00100000
 DATA_ADDRESS = 0x08000000
 PROGRAM_ID = 0x000400000FF00F07
 
-def hid_code():
-    p=Program()
+def hid_startup(p):
     p.constant(7,DATA_ADDRESS)
     p.emit(0xEE1DAF70)  # TLS -> r10
     p.emit(0xE28AA080)
@@ -28,6 +27,10 @@ def hid_code():
     p.emit(0xE1A00006);p.constant(1,0x10001000);p.constant(2,1);p.constant(3,0x10000000)
     p.emit(0xEF00001F)
     p.constant(9,0x10001000)
+    return word,request
+
+def hid_code():
+    p=Program();hid_startup(p)
     p.label('sample')
     p.emit(0xE1A00008);p.constant(2,0xffffffff);p.constant(3,0xffffffff);p.emit(0xEF000024)
     p.emit(0xE5970100);p.emit(0xE3500000);p.branch('exit',1)

@@ -47,6 +47,10 @@ def main():
     binary_entries += [(path, str(path.relative_to(ROOT))) for path in (ROOT / "docs/licenses").iterdir() if path.is_file()]
     binary_entries.append((latest, "validation-report.json"))
     binary_entries.append((ROOT/report["packaging"]["offline_report"], "offline-packaging-report.json"))
+    display_reference=latest.parent/'upstream-native/gsp'
+    if display_reference.is_dir():
+        binary_entries += [(p,'standard-display-reference/'+p.name) for p in display_reference.glob('frame-*.ppm')]
+        binary_entries.append((ROOT/'docs/gsp-display.md','docs/gsp-display.md'))
     diagnostic_archive = OUT / ("CTR2WUP-diagnostic-"+__version__+".zip")
     archive(diagnostic_archive, binary_entries)
     guest_console=ROOT/report["guest_console_output"]

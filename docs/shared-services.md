@@ -19,7 +19,7 @@ This does not implement thread creation/scheduling or hardware cache maintenance
 | SVC ConnectToPort `2d` | `r1`: checked NUL-terminated `srv:` name | `r0`: result; `r1`: generation-tagged SRV session handle |
 | SVC SendSyncRequest `32` | `r0`: session handle; command at TLS+`80` | Synchronous validated request/reply; SVC result is separate from service result |
 | SRV RegisterClient | Header `00010002`, current-PID descriptor `20`, one placeholder word | Records registration for this session; reply `00010040`/result0 |
-| SRV GetServiceHandle | Header `00050100`, name[8], length, flags0/1 | `cfg:u` and, from v0.9, `hid:USER`; reply `00050042`, result, move descriptor `10`, handle |
+| SRV GetServiceHandle | Header `00050100`, name[8], length, flags0/1 | `cfg:u`, v0.9 `hid:USER`, v0.10 `gsp::Gpu`; reply `00050042`, result, move descriptor `10`, handle |
 | CFG SecureInfoGetRegion | Header `00020000` | Reply `00020080`, result, configured region |
 | CFG GetSystemModel | Header `00050000` | Reply `00050080`, result, configured Old-family model |
 | CFG GetModelNintendo2DS | Header `00060000` | Reply `00060080`, result, 0 for Old2DS and 1 otherwise |
@@ -111,3 +111,5 @@ Hardware equivalence and broader CFG/Mii/save identity behavior await the select
 Mario revision and appropriate reference/console tests. FS/APT/GSP/PICA,
 multi-thread kernel behavior, audio, saves and CROs remain implementation work.
 HID pad/touch support is now defined in `hid-input.md`; motion remains absent.
+The restricted direct GSP display interface is defined in `gsp-display.md`;
+interrupt/command queues, PICA and stock graphics startup remain absent.

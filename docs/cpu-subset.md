@@ -9,12 +9,13 @@ deterministically scheduled guest CPU, and invalidates its monitor on writes;
 it is not a multicore ARM memory-model implementation.
 
 Interpreter subset: ARM conditions, data-processing ALU/shifts/flags, branch and
-link/exchange, MUL/MLA, immediate/shifted-register byte/word transfers, word
+link/exchange, MUL/MLA, immediate/shifted-register byte/word transfers, unsigned
+immediate preindexed LDRH/STRH without writeback (v0.10), word
 LDREX/STREX, user read-only CP15 TLS MRC (Rd other than PC) and observable SVC
 exits; Thumb16 shifts/ALU, high-register operations,
 branch/exchange, selected loads/stores/SP-relative operations and SVC exits.
 Unaligned transfers fault deliberately. Unimplemented/exception-return/VFP,
-Thumb long calls, ARM multiple/halfword transfers and privileged instructions
+Thumb long calls, ARM multiple/other halfword transfers and privileged instructions
 are unsupported. The supported subset is research code, not a complete ARM11.
 
 `translator/aot.py` specializes a smaller flat-executable subset into direct C

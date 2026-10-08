@@ -127,3 +127,9 @@ v0.9.0 adds the standard-HID consumer (185 instructions, 18 SVCs, 858 boundary
 assertions) and `--hid-api` (336 assertions). The validator runs seven probes;
 compiler/target runs with HID API contain 16 checks. See `hid-input.md` for the
 shared-ring contract and live original-AOT Wii U input consumer.
+
+v0.10.0 adds an original standard-HID/GSP RGB565 graphics probe: 1382865
+instructions, 27 SVCs, zero fallback; 3603 assertions including four reference
+PPMs. `--gsp-api` adds 362 format/rights/bounds assertions. All eight probes plus
+that API give 18 compiler/target checks. The original ARM halfword subset is
+exercised in the graphics program. See `gsp-display.md` for exact limits.

@@ -15,7 +15,12 @@ aspect-preserving viewport calculation, and border touch rejection. The native
 Wii U backend has its own compiled display/input implementation; Python results
 do not establish GX2 behavior.
 
-Pending: actual framebuffer display transfers/rotation/coherency, vertex and
+v0.10 implements direct GSP framebuffer submission, rotated portable decoding of
+all five linear display formats, and an original ARM HID-to-RGB565 display guest
+in all Wii U builds. See `gsp-display.md` for scope and desktop reference images.
+Console behavior remains pending. This does not execute PICA draws.
+
+Pending: GPU display transfers/coherency and graphics queues, vertex and
 geometry processing, shaders, textures/ETC/swizzling, lighting, TEV, draw
 submission, caching, trusted reference scene comparisons, and console timings.
 `execute_draw` raises an explicit unsupported error. Milestone 4 is incomplete.

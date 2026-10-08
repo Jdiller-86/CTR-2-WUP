@@ -1,6 +1,7 @@
 /* Original CTR2WUP SRV/CFG transport from documented interface facts. */
 #include "ctr_ipc.h"
 #include "ctr_hid.h"
+#include "ctr_gsp.h"
 #include <string.h>
 
 #define INVALID_HANDLE UINT32_C(0xd8e007f7)
@@ -74,7 +75,7 @@ void ctr_ipc_request(ctr_guest *g) {
     ++g->ipc_requests;g->ipc_header=0;g->ipc_result=0;g->ipc_service[0]=0;g->ipc_target[0]=0;
     ctr_guest_session *session=ctr_guest_session_for(g,g->cpu.r[0]);
     if (!session) { ++g->ipc_failures;g->ipc_result=INVALID_HANDLE;g->cpu.r[0]=INVALID_HANDLE;return; }
-    strcpy(g->ipc_service,session->service==CTR_SERVICE_SRV?"srv:":session->service==CTR_SERVICE_CFG?"cfg:u":"hid:USER");
+    strcpy(g->ipc_service,session->service==CTR_SERVICE_SRV?"srv:":session->service==CTR_SERVICE_CFG?"cfg:u":session->service==CTR_SERVICE_HID?"hid:USER":"gsp::Gpu");
     uint64_t address=(uint64_t)g->cpu.tls_address+CTR_IPC_OFFSET;
     if (address>UINT32_MAX) { memory_ok(g,CTR_MEM_OVERFLOW,g->cpu.tls_address);return; }
     uint32_t base=(uint32_t)address,words[CTR_IPC_WORDS]={0};
@@ -98,12 +99,12 @@ void ctr_ipc_request(ctr_guest *g) {
                 char service[9]={0};
                 if (!session->registered || words[4]>1 || !name(words,service)) { unsupported(g,words[0]);return; }
                 strcpy(g->ipc_target,service);
-                if (strcmp(service,"cfg:u") && strcmp(service,"hid:USER")) {
+                if (strcmp(service,"cfg:u") && strcmp(service,"hid:USER") && strcmp(service,"gsp::Gpu")) {
                     out[0]=0x00050040;out[1]=SERVICE_NOT_FOUND;
                     ++g->ipc_failures;g->ipc_result=SERVICE_NOT_FOUND;
                     reply(g,base,out,2);return;
                 }
-                uint32_t handle=ctr_guest_session_open(g,!strcmp(service,"cfg:u")?CTR_SERVICE_CFG:CTR_SERVICE_HID);
+                uint32_t handle=ctr_guest_session_open(g,!strcmp(service,"cfg:u")?CTR_SERVICE_CFG:!strcmp(service,"hid:USER")?CTR_SERVICE_HID:CTR_SERVICE_GSP);
                 if (!handle) {
                     out[0]=0x00050040;out[1]=NO_MEMORY;
                     ++g->ipc_failures;g->ipc_result=NO_MEMORY;
@@ -123,6 +124,15 @@ void ctr_ipc_request(ctr_guest *g) {
         }
         out[0]=0x000a0047;out[2]=5u<<26; /* Six copied handles. */
         reply(g,base,out,9);return;
+    }
+    if (session->service==CTR_SERVICE_GSP) {
+        unsigned count;
+        if(!ctr_gsp_request(g,words,out,&count)) {
+            if(g->state==CTR_GUEST_FAULTED)++g->ipc_failures;
+            else unsupported(g,words[0]);
+            return;
+        }
+        reply(g,base,out,count);return;
     }
     switch (words[0]) {
         case 0x00020000: out[0]=0x00020080;out[2]=g->configuration.region;break;

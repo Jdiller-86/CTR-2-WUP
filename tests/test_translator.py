@@ -5,6 +5,12 @@ from translator.aot import translate
 
 
 class TranslatorTests(unittest.TestCase):
+    def test_checked_unsigned_halfword_subset(self):
+        for instruction,action in ((0xE1C100B0,'store'),(0xE1D120B2,'load')):
+            s=translate(struct.pack('<I',instruction),0x1000,'halfword',False)
+            self.assertIn('ctr_cpu_'+action+'(cpu, address, 2u,',s)
+        for instruction in (0xE0C100B0,0xE18100B0,0xE1E100B0,0xE1C1F0B0):
+            with self.assertRaises(ValueError):translate(struct.pack('<I',instruction),0x1000,'invalid_halfword',False)
     def test_user_tls_read_is_specialized(self):
         source=translate(struct.pack("<I", 0xEE1D6F70), 0x1000, "tls_probe", False)
         self.assertIn("cpu->r[6] = cpu->tls_address;", source)

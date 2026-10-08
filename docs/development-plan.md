@@ -167,3 +167,12 @@ VPAD input to an original ARM consumer. The external compiler/target comparisons
 remain ROM-independent. Continue next into the standard GSP framebuffer display
 interface, before title-specific PICA/shader work. Console tests and actual Mario
 intake remain required; the GUI still follows demonstrated execution/packaging.
+
+v0.10.0 adds direct GSP framebuffer submission and five rotated format decoders.
+The original ARM standard-HID/GSP guest now reaches the Wii U presentation backend
+in all builds; actual external execution is verified separately on desktop and
+emulated PPC. The next planned acceptance gate needs physical console evidence
+and Mario executable intake. `current-roadblock.md` records that roadblock and
+precise resume order. Generic runtime work remains possible, but broader game
+feature selection and performance claims need the selected revision/reference
+and console results. All commercial/GUI/full milestone gates stay open.

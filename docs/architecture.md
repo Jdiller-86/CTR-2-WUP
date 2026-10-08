@@ -53,6 +53,10 @@ single-thread scope. Its original ARM self-test is also embedded.
 Version 0.9.0 exposes standard read-only HID pad/touch rings and events. An
 independent original ARM consumer in each Wii U build reads live VPAD input
 through that service; `hid-input.md` defines its bounds and absent motion support.
+Version 0.10.0 adds checked direct GSP framebuffer submission and portable
+rotated RGBA8/BGR8/RGB565/RGB5A1/RGBA4 conversion. A separate original ARM guest
+reads HID, writes RGB565 and displays through this interface in all Wii U builds;
+see `gsp-display.md`. Shared command/interrupt queues and PICA remain absent.
 Its guest mode presents completed ARM-written raw framebuffers through the same
 GX2 copying path. It is separate from PICA/GSP emulation; see `guest-fixture.md`.
 Compilation proves toolchain integration. Only physical console results can
@@ -83,7 +87,7 @@ source; no commercial assets are distributed.
 2. Physical RPX screen/input/audio/exit tests and PowerPC CPU results are pending.
 3. The controlled fixture now has real checked loading and a single-guest SVC
    runtime. Console stability and conventional homebrew boot using required CPU,
-   IPC/HID/GSP/shared-memory interfaces are still needed.
+   broader IPC, graphics queues/threads and physical interface evidence are needed.
 4. PICA rendering, required services/modules, filesystem/save/audio semantics,
    and exact-ROM revision profiles must precede a commercial conversion.
 5. License-cleared packing plus locally configured keys and actual install/menu

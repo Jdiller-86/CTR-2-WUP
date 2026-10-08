@@ -22,6 +22,8 @@ Version 0.8.0 adds shared-memory aliases and single-thread synchronization
 objects/waits; see `docs/kernel-objects.md`.
 Version 0.9.0 adds standard HID shared input/events and a live ARM consumer in all
 Wii U diagnostics; see `docs/hid-input.md`.
+Version 0.10.0 adds standard direct GSP framebuffer submission, five format
+decoders and an ARM HID-to-display prototype; see `docs/gsp-display.md`.
 Commercial ROM-to-WUP conversion is not implemented or claimed.
 
 Read `STATUS.md`, `docs/milestones.md` and `docs/foundation-audit.md` before
@@ -69,6 +71,8 @@ checks, `docs/console-testing.md` for the physical-console checklist, and
 `docs/guest-fixture.md` explains the real ARM execution pipeline and its explicit
 input/raw-framebuffer contract. It does not provide HID/GSP/PICA or stock 3DS
 graphical homebrew support. All three Wii U applications await physical execution.
+The separate HID/GSP fixture uses standard input and direct display services;
+GSP interrupt/command queues and PICA rendering are still absent.
 See `docs/upstream-integration.md` for checked ARM/Thumb/scalar-VFP evidence and
 `docs/first-title.md` for the Mario intake. `stage-title` produces original title
 staging, not a WUP. The GUI follows the working conversion/packing pipeline.
