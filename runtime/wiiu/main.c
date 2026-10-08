@@ -25,6 +25,7 @@
 #include "ctr_guest_fixture.h"
 #include "ctr_service_fixture.h"
 #include "ctr_heap_fixture.h"
+#include "ctr_kernel_fixture.h"
 
 enum { TOP_W=400, BOTTOM_W=320, GUEST_H=240, AUDIO_SAMPLES=12000 };
 static uint32_t top_image[TOP_W*GUEST_H], bottom_image[BOTTOM_W*GUEST_H];
@@ -36,6 +37,7 @@ static int audio_ready;
 static int cpu_test_result;
 static int service_test_result;
 static int heap_test_result;
+static int kernel_test_result;
 static ctr_guest frame_guest;
 static int guest_ready,guest_mode=CTR_GUEST_DEFAULT;
 static uint32_t presented_frames;
@@ -171,7 +173,7 @@ static void diagnostic_images(unsigned frame, const VPADStatus *pad,
     char text[90];
     for (unsigned y=0;y<GUEST_H;++y) for (unsigned x=0;x<TOP_W;++x) {
         unsigned band=((x+frame/2)/25)%3;
-        top_image[y*TOP_W+x]=y<93 ? 0x162d4fff :
+        top_image[y*TOP_W+x]=y<103 ? 0x162d4fff :
             (x%40==0 || y%24==0) ? 0xffffffff :
             band==0 ? 0x195baaff : band==1 ? 0x25a980ff : 0xb46b20ff;
     }
@@ -189,6 +191,8 @@ static void diagnostic_images(unsigned frame, const VPADStatus *pad,
     image_text(top_image,TOP_W,7,text);
     snprintf(text,sizeof(text),"GUEST HEAP LIFECYCLE %s CODE %d",heap_test_result?"FAIL":"PASS",heap_test_result);
     image_text(top_image,TOP_W,8,text);
+    snprintf(text,sizeof(text),"SHARED/SYNC LIFECYCLE %s CODE %d",kernel_test_result?"FAIL":"PASS",kernel_test_result);
+    image_text(top_image,TOP_W,9,text);
     for (unsigned y=0;y<GUEST_H;++y) for (unsigned x=0;x<BOTTOM_W;++x)
         bottom_image[y*BOTTOM_W+x]=y<92 ? 0x35194fff :
             (((x/20)^(y/20))&1) ? 0x783598ff:0x108797ff;
@@ -230,7 +234,7 @@ int main(int argc, char **argv) {
         log_file=fopen(path,"w");
         if (log_file) WHBAddLogHandler(file_log);
     }
-    WHBLogPrintf("CTR2WUP native diagnostic version=0.7.0 pointer_bits=%u endian=big UDP=%u SD_log=%u",
+    WHBLogPrintf("CTR2WUP native diagnostic version=0.8.0 pointer_bits=%u endian=big UDP=%u SD_log=%u",
                   (unsigned)(8*sizeof(void *)), udp_ready, log_file!=NULL);
     OSTime cpu_start=OSGetTime();
     cpu_test_result=ctr_cpu_selftest();
@@ -243,6 +247,9 @@ int main(int argc, char **argv) {
     heap_test_result=ctr_heap_selftest();
     WHBLogPrintf("heap_selftest %s result=%d fixture=original_arm_heap_lifecycle console_result_required=1",
                   heap_test_result?"FAIL":"PASS",heap_test_result);
+    kernel_test_result=ctr_kernel_selftest();
+    WHBLogPrintf("kernel_selftest %s result=%d fixture=original_arm_shared_sync console_result_required=1",
+                  kernel_test_result?"FAIL":"PASS",kernel_test_result);
     if (!WHBGfxInit()) { WHBLogPrintf("FAIL WHBGfxInit"); goto cleanup; }
     gfx_ready=1;
     GX2Surface *tv_target=&WHBGfxGetTVColourBuffer()->surface;

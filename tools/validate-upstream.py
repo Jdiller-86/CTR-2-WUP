@@ -19,6 +19,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from host.guest_fixture import fixture_bytes
 from host.service_fixture import fixture_bytes as service_fixture_bytes
 from host.heap_fixture import fixture_bytes as heap_fixture_bytes
+from host.kernel_fixture import fixture_bytes as kernel_fixture_bytes
 from tests.host_fixtures import ncch
 from translator.upstream import generate_into
 ROOT=Path(__file__).resolve().parents[1]
@@ -30,6 +31,7 @@ def main():
     parser.add_argument('--static',action='store_true');parser.add_argument('--sanitize',action='store_true')
     parser.add_argument('--service-api',action='store_true',help='Also execute malformed IPC/handle/resource tests with this compiler/target')
     parser.add_argument('--heap-api',action='store_true',help='Also execute allocation/protection/free/query/resource tests with this compiler/target')
+    parser.add_argument('--kernel-api',action='store_true',help='Also execute shared-memory and synchronization API tests')
     parser.add_argument('--output',required=True)
     args=parser.parse_args();out=Path(args.output).absolute();out.mkdir(parents=True,exist_ok=False)
     results=[]
@@ -44,7 +46,7 @@ def main():
     common=shlex.split(args.cc_prefix)+[args.cc,'-std=c11','-O2','-g','-Wall','-Wextra','-Werror','-ffp-contract=off','-fno-fast-math','-I',str(core),'-I',str(recomp)]
     if args.static:common+=['-static','-mcpu=750']
     if args.sanitize:common+=['-O1','-fno-omit-frame-pointer','-fsanitize=address,undefined']
-    for name in ('frame','abi','services','cp15','heap'):
+    for name in ('frame','abi','services','cp15','heap','kernel'):
         folder=out/name;folder.mkdir()
         code=(ROOT/'tests/recomp/abi.arm.bin').read_bytes() if name=='abi' else struct.pack('<6I',0x1e070f9a,0xee070f9a,0xf57ff05f,0xf57ff04f,0xf57ff06f,0xef000003) if name=='cp15' else None
         rom=folder/'original.cxi'
@@ -53,9 +55,9 @@ def main():
             struct.pack_into('<I',container,0x218,len(code))
             container[0x160:0x180]=hashlib.sha256(container[0x200:0x600]).digest()
             rom.write_bytes(container)
-        else: rom.write_bytes(service_fixture_bytes() if name=='services' else heap_fixture_bytes() if name=='heap' else fixture_bytes())
+        else: rom.write_bytes(service_fixture_bytes() if name=='services' else heap_fixture_bytes() if name=='heap' else kernel_fixture_bytes() if name=='kernel' else fixture_bytes())
         generation=generate_into(rom,folder/'aot')
-        sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c')]+[recomp/'ctr_recomp.c']
+        sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c')]+[recomp/'ctr_recomp.c']
         flags=[]
         if name=='frame':
             flags=['-DCTR_EXTERNAL_AOT'];sources += [core/'ctr_guest_fixture.c',ROOT/'tests/fixtures/guest/image.generated.c']
@@ -63,6 +65,8 @@ def main():
             sources += [core/'ctr_service_fixture.c',ROOT/'tests/fixtures/services/boot-image.generated.c',ROOT/'tests/fixtures/services/boot.generated.c']
         elif name=='heap':
             sources += [core/'ctr_heap_fixture.c',ROOT/'tests/fixtures/heap/heap-image.generated.c',ROOT/'tests/fixtures/heap/heap.generated.c']
+        elif name=='kernel':
+            sources += [core/'ctr_kernel_fixture.c',ROOT/'tests/fixtures/kernel/kernel-image.generated.c',ROOT/'tests/fixtures/kernel/kernel.generated.c']
         else:
             (folder/'abi_image.h').write_text('#define ABI_CODE_SIZE '+str(len(code))+'\nstatic const unsigned char abi_code[4096]={'+','.join(str(b) for b in code)+'};\n')
         binary=folder/(name+('.exe' if os.name=='nt' else ''))
@@ -71,16 +75,22 @@ def main():
         run(name+'-execute',shlex.split(args.run_prefix)+[str(binary)])
     if args.service_api:
         binary=out/('service-api'+('.exe' if os.name=='nt' else ''))
-        sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_service_fixture.c')]
+        sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_service_fixture.c')]
         sources += [ROOT/'tests/services/test_services.c',ROOT/'tests/fixtures/services/boot-image.generated.c',ROOT/'tests/fixtures/services/boot.generated.c']
         run('service-api-compile',common+[*map(str,sources),'-o',str(binary)])
         run('service-api-execute',shlex.split(args.run_prefix)+[str(binary)])
     if args.heap_api:
         binary=out/('heap-api'+('.exe' if os.name=='nt' else ''))
-        sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_heap_fixture.c')]
+        sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_heap_fixture.c')]
         sources += [ROOT/'tests/heap/test_heap.c',ROOT/'tests/fixtures/heap/heap-image.generated.c',ROOT/'tests/fixtures/heap/heap.generated.c']
         run('heap-api-compile',common+[*map(str,sources),'-o',str(binary)])
         run('heap-api-execute',shlex.split(args.run_prefix)+[str(binary)])
+    if args.kernel_api:
+        binary=out/('kernel-api'+('.exe' if os.name=='nt' else ''))
+        sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_kernel_fixture.c')]
+        sources += [ROOT/'tests/kernel/test_kernel.c',ROOT/'tests/fixtures/kernel/kernel-image.generated.c',ROOT/'tests/fixtures/kernel/kernel.generated.c']
+        run('kernel-api-compile',common+[*map(str,sources),'-o',str(binary)])
+        run('kernel-api-execute',shlex.split(args.run_prefix)+[str(binary)])
     (out/'report.json').write_text(json.dumps({'ok':True,'checks':results,'console_verified':False,'powerpc_execution':'emulated Linux' if args.static else None},indent=2)+'\n')
     return 0
 if __name__=='__main__':raise SystemExit(main())

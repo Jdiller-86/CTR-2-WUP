@@ -47,6 +47,9 @@ All diagnostic builds also contain the original TLS/SRV/CFG startup self-test
 with a visible result and SD log. Unsupported cache operations fail visibly
 instead of inheriting the external emitter's no-op behavior.
 All builds also embed the original ARM heap lifecycle self-test and its SD log.
+Version 0.8.0 adds shared/mutex/semaphore objects and wait-any/all, with mapping/
+wait ownership independent of handles. `kernel-objects.md` defines its
+single-thread scope. Its original ARM self-test is also embedded.
 Its guest mode presents completed ARM-written raw framebuffers through the same
 GX2 copying path. It is separate from PICA/GSP emulation; see `guest-fixture.md`.
 Compilation proves toolchain integration. Only physical console results can

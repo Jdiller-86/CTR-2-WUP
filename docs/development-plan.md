@@ -156,3 +156,8 @@ and resource limits. Its original ARM lifecycle probe preserves AOT while
 matching all three execution paths. This advances M3/P3; the physical tests,
 shared-memory/thread/kernel work and title-specific requirements remain open.
 GPU/DSP physical-address translation is not supplied by the linear allocation.
+
+The user requested continued execution through concrete roadblocks. v0.8.0
+adds shared-memory ownership, mutex/semaphore objects and wait-any/all as common
+HID/GSP prerequisites. Continue into real input/service integration while
+console/title-specific gates remain open. These are tested single-thread interfaces.

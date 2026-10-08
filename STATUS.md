@@ -8,12 +8,16 @@ title candidate. The target remains an UWUVCI-style Windows GUI: select a
 decrypted game, configure title/artwork, click Inject, install its per-game WUP
 and launch from Wii U Menu. The CLI is the shared engine, not the final product.
 
-**Version 0.7.0 advances M3 with checked guest memory management**: owned heap/
-linear CPU allocation, partial free, enforced permissions and region queries.
-The original 151-instruction ARM lifecycle probe preserves AOT execution and
-matches all three backends; its interpreter/AOT self-test is embedded in all
-Wii U builds. See `docs/guest-memory.md`. This continues ROM-independent work
-without activating a commercial profile.
+**Version 0.8.0 adds shared-memory ownership and synchronization**: typed shared
+blocks/aliases, pinned backing, mutexes/semaphores and wait-any/all. The original
+148-instruction ARM probe executes 27 SVCs through all three backends and its
+interpreter/AOT self-test is embedded in all Wii U builds. See
+`docs/kernel-objects.md`. This is single-process/single-thread shared runtime work.
+The user requested continuing execution until a concrete roadblock; HID input
+service integration is the next independent step.
+
+Version 0.7.0 added the checked heap/linear CPU backing lifecycle; see
+`docs/guest-memory.md`.
 
 Version 0.6.0 added shared TLS/SRV/CFG startup and its original ARM self-test;
 see `docs/shared-services.md`.
@@ -30,13 +34,26 @@ is unverified; no milestone requiring physical-console evidence is complete.
 
 ## Verified implementation
 
+- Shared/mutex/semaphore handles share the generation-tagged table. Mappings and
+  waits retain objects independently of handles. Heap-backed shared objects pin
+  their source allocation; aliases enforce rights and report Shared state.
+  Shared backing shares the 64 MiB budget. Wait-any selects the first ready
+  object; wait-all consumes nothing until every distinct object is ready.
+  Close/stale/invalid/timeout/resource failures are checked. This does not
+  implement cross-process ownership, priority inheritance or multi-thread scheduling.
+- The original 148-instruction ARM shared/sync probe matches state/memory across
+  interpreter/original/external AOT with 639 boundary assertions and zero fallback.
+  The 197 kernel API assertions and probe pass GCC, sanitizers, Clang and emulated
+  PPC Linux. All three RPX/WUHB builds embed its original `SHARED/SYNC LIFECYCLE`
+  and `kernel_selftest` result. Console/native Windows acceptance remains pending.
+
 - ControlMemory/QueryMemory enforce page bounds, ownership and permissions,
   with zero-filled first-fit heap/Old-family linear CPU backing. Partial free/
   protection preflight mappings and capacity atomically. Loader image/stack/TLS
   cannot be freed or reprotected. Guard/write-only permissions, holes, resource
   limits and retained-backing release are tested. Limits are 16 allocations,
   32 fragments and 64 MiB total retained backing. Linear GPU/DSP physical-address
-  translation and shared-memory aliases remain absent.
+  translation remains absent; local shared aliases are now implemented.
 - The original heap probe executes 151 instructions, 14 memory SVCs and exit.
   External/original AOT and interpreter CPU/mapping/backing match at 1/7/23
   budgets; 1,778 assertions cover lifecycle and protected/freed guest-store fault
@@ -94,7 +111,7 @@ is unverified; no milestone requiring physical-console evidence is complete.
   double arithmetic, flags, stack transfers, state switching and one-instruction
   resume. Its registers/VFP words match Unicorn 2.1.4 independently.
 - External integration passes **566 boundary/frame assertions +34 ABI probe
-  +297 service-startup assertions +35 CP15 assertions +1,778 heap assertions**
+  +297 service-startup assertions +35 CP15 assertions +1,778 heap assertions +639 shared/sync assertions**
   under GCC, ASan/UBSan, Clang and emulated 32-bit big-endian PowerPC
   Linux/QEMU 750. Emulation does not establish Wii U behavior or useful speed.
 - Real devkitPPC/WUT builds produce native, original-AOT guest and external-AOT
@@ -124,18 +141,18 @@ is unverified; no milestone requiring physical-console evidence is complete.
   single-guest events/handles/sleep/debug/exit, native diagnostics and structural
   WUP validator remain tested. Commercial `build` still fails without publishing
   a placeholder package. Paths with spaces/Japanese characters work on Linux.
-- **137 Python tests**, 51,175 CPU assertions, 221 original-guest assertions,
-  1,001 service assertions and 307 heap assertions pass; all C suites also pass ASan/UBSan. The complete
-  v0.7.0 runner passes **28 checks**, including external generation/execution,
+- **139 Python tests**, 51,175 CPU assertions, 221 original-guest assertions,
+  1,001 service, 307 heap and 197 kernel assertions pass; all C suites also pass ASan/UBSan. The complete
+  v0.8.0 runner passes **29 checks**, including external generation/execution,
   all three RPX builds,
   original staging/intake, offline encrypted packaging and installed-wheel
   inspection/execution/packing. Crypto remains an optional external dependency.
 
 ## Reports and deliverables
 
-Main validation: `artifacts/reports/validation-v1-20261008T152628Z/report.json`.
-New compiler/target checks: `artifacts/reports/heap-clang-final-v7/report.json`
-and `artifacts/reports/heap-ppc-final-v7/report.json` (14 checks each).
+Main validation: `artifacts/reports/validation-v1-20261008T164924Z/report.json`.
+New compiler/target checks: `artifacts/reports/kernel-clang-v8/report.json`
+and `artifacts/reports/kernel-ppc-v8/report.json` (14 checks each).
 Helper evidence: `artifacts/reports/cia-helper-final/report.json` (13 checks).
 Earlier checks: `artifacts/reports/upstream-ppc-final/`,
 `upstream-clang-final/`, and the Unicorn reference report under
@@ -145,7 +162,7 @@ See `docs/upstream-integration.md` for commands and precise limits.
 
 Versioned source/native/original-guest/external-guest delivery bundles, wheel,
 checksums and original title-staging output are under `artifacts/`. Earlier
-v0.1.0/v0.2.0/v0.3.0/v0.4.0/v0.5.0/v0.6.0 reports and bundles are preserved. Source is maintained in the
+v0.1.0/v0.2.0/v0.3.0/v0.4.0/v0.5.0/v0.6.0/v0.7.0 reports and bundles are preserved. Source is maintained in the
 existing Git checkout; do not reset, force-push or replace user changes.
 
 ## Awaiting user inputs and physical tests
@@ -158,7 +175,7 @@ existing Git checkout; do not reset, force-push or replace user changes.
   work. If it reports encryption, decrypted executable data is still needed.
   No commercial profile is enabled until actual private intake and runtime evidence.
 - **Wii U:** run the delivered RPX/WUHB and return screen/input/audio/exit,
-  TLS/SRV/CFG startup and new heap lifecycle PASS/FAIL/SD log,
+  TLS/SRV/CFG, heap and shared/sync lifecycle PASS/FAIL/SD log,
   external-AOT guest frame/touch/restart/stability results and SD logs per
   `docs/console-testing.md`. Record firmware and homebrew/launcher environment.
   No commercial dump or encryption key is needed for these diagnostic builds.
@@ -183,7 +200,7 @@ template was copied. Full hashed/shared/update/disc formats remain unsupported.
 
 P2/P3: inspect the supplied Mario revision, then expand the kernel/IPC and
 CP15/thread context beyond the tested shared startup subset. Implement memory
-control beyond the checked owned-heap subset, shared-memory aliases,
+control beyond the checked owned-heap/shared-object subsets, cross-process maps,
 multi-thread scheduling, PICA/GX2 state/shaders/textures/coherency,
 DSP/audio, RomFS/saves and module behavior. CFG user/Mii/console-unique identity
 and broader configuration blocks remain pending. Complete CPU/FP correctness and

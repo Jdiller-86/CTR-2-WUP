@@ -6,6 +6,7 @@ check:
 	$(MAKE) -C tests/guest check sanitize
 	$(MAKE) -C tests/services check sanitize
 	$(MAKE) -C tests/heap check sanitize
+	$(MAKE) -C tests/kernel check sanitize
 prototype:
 	$(MAKE) -C runtime/wiiu -j 3
 doctor:
@@ -19,3 +20,4 @@ regenerate:
 	$(PYTHON) tools/generate-guest.py
 	$(PYTHON) tools/generate-service-fixture.py
 	$(PYTHON) tools/generate-heap-fixture.py
+	$(PYTHON) tools/generate-kernel-fixture.py

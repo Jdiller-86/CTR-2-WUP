@@ -117,3 +117,8 @@ python3 tools/validate-upstream.py --cc powerpc-linux-gnu-gcc --cc-prefix 'bash 
 Source `tests/recomp/abi.s` generated `abi.arm.bin` with Clang 19's
 `--target=arm-none-eabi -mcpu=arm1176jzf-s -mfpu=vfp -mfloat-abi=softfp` and
 `llvm-objcopy -O binary --only-section=.text`; the object has no relocations.
+
+v0.8.0 adds the 148-instruction original shared/sync probe (639 assertions)
+and `--kernel-api` (197 assertions). All six probes pass GCC/sanitizers, Clang
+and emulated PPC; the compiler/target runs include the kernel API (14 checks).
+See `kernel-objects.md` for single-thread scope and exact lifetime rules.

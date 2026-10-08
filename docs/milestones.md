@@ -32,8 +32,8 @@ All acceptance checkboxes below remain open until their evidence is recorded.
 | Milestone | Verified portion | Remaining acceptance |
 |---|---|---|
 | M1 | Native/original/external-AOT RPX/WUHB built; native diagnostics; original staging and offline encrypted packaging | Physical screens/input/audio/exit and independently installed WUP |
-| M2 | Original CPU/AOT subset plus user CP15 TLS; external generation/checked ABI; 566+34+297+35+1,778 integration assertions on GCC/sanitizers/Clang/emulated big-endian PPC; scalar VFP Unicorn match | Complete ARM/VFP semantics, workload memory/fallback costs and actual Espresso timings |
-| M3 | Checked NCCH → AOT/interpreter execution; single-guest SVC/events; shared typed sessions, bounded SRV/CFG startup, checked heap/free/protection/query, original 89/151-instruction three-backend probes; matching ARM frames/input; RPX/WUHB/self-tests built | Physical guest/service startup evidence; conventional homebrew boot, broader memory/shared-memory control, multi-thread kernel and broader IPC/HID/GSP services |
+| M2 | Original CPU/AOT subset plus user CP15 TLS; external generation/checked ABI; 566+34+297+35+1,778+639 integration assertions on GCC/sanitizers/Clang/emulated big-endian PPC; scalar VFP Unicorn match | Complete ARM/VFP semantics, workload memory/fallback costs and actual Espresso timings |
+| M3 | Checked NCCH → AOT/interpreter execution; single-guest SVC/events; shared typed sessions, bounded SRV/CFG startup, checked heap/free/protection/query, typed shared aliases, mutex/semaphore/wait-any/all and original 89/151/148-instruction probes; matching ARM frames/input; RPX/WUHB/self-tests built | Physical guest/service startup evidence; conventional homebrew boot, broader/cross-process memory control, multi-thread kernel and broader IPC/HID/GSP services |
 | M4 | Tested bounded command/format/viewport references | Actual PICA-to-GX2 features, scene comparisons and console timings |
 | M5 | Mario selected and CIA attachment supplied; transfer exceeds 32 MiB; intake/export helper tested; shared startup/memory development while user is away; upstream requirement leads | Actual smaller private executable export/revision, title-specific runtime/renderer/services/save/audio implementation and console gameplay |
 | M6 | External C generation/static compilation, staging/artwork/intake, original encrypted writer and independent decrypt/FST/file checks with synthetic inputs, atomic output/wheel; Windows workflow prepared | Actual local certificate/key provenance and installer acceptance, full commercial conversion, caches/traces/rebuild, Windows execution and console install checks |
@@ -56,14 +56,16 @@ Version 0.7.0 advances M3/P3 with owned heap/linear CPU allocation, atomic free/
 protection and region queries (`guest-memory.md`). Its original ARM lifecycle
 self-test is embedded in all three Wii U builds; physical behavior remains
 pending. No commercial profile, GUI or full milestone is enabled.
-Validation passes 137 Python tests, 51,175 CPU
+v0.8.0 adds checked shared-memory/synchronization and its embedded original
+148-instruction ARM self-test (`kernel-objects.md`), with single-thread scope.
+Validation passes 139 Python tests, 51,175 CPU
 assertions, 221 original-guest assertions, 1,001 service assertions and 307 heap
-assertions in each normal/sanitized C run, 566+34+297+35+1,778 external integration
-assertions and 28 complete workflow checks, including
+assertions plus 197 kernel assertions in each normal/sanitized C run, 566+34+297+35+1,778+639 external integration
+assertions and 29 complete workflow checks, including
 real-RPX offline packaging and installed-wheel packing.
 Physical-console and clean Windows acceptance remain pending.
-Clang and emulated PowerPC also pass the service/heap suites; each v0.7 final
-compiler/target report records 14 checks. Native Wii U service/memory behavior/timings
+Clang and emulated PowerPC also pass the shared/sync probe/API suite; each v0.8
+compiler/target report records 14 checks. Native Wii U service/memory/synchronization behavior/timings
 are pending even though the original self-test is embedded in all diagnostic builds.
 
 ## Deferred features

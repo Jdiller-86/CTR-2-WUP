@@ -23,9 +23,11 @@ LDFLAGS := -mcpu=750 -meabi -mhard-float -specs="$(WUT)/share/wut.specs" \
 SOURCES := main.c viewport.c diagnostic_font.c
 OBJECTS := $(addprefix $(BUILD)/,$(SOURCES:.c=.o))
 CORE_SOURCES := ../core/ctr_memory.c ../core/ctr_cpu.c ../core/ctr_cpu_selftest.c \
-                ../core/ctr_guest.c ../core/ctr_ipc.c ../core/ctr_heap.c ../core/ctr_guest_fixture.c \
+                ../core/ctr_guest.c ../core/ctr_ipc.c ../core/ctr_heap.c ../core/ctr_kernel.c ../core/ctr_guest_fixture.c \
                 ../core/ctr_service_fixture.c \
                 ../core/ctr_heap_fixture.c \
+                ../core/ctr_kernel_fixture.c \
+                ../../tests/fixtures/kernel/kernel.generated.c ../../tests/fixtures/kernel/kernel-image.generated.c \
                 ../../tests/fixtures/heap/heap.generated.c ../../tests/fixtures/heap/heap-image.generated.c \
                 ../../tests/fixtures/services/boot.generated.c ../../tests/fixtures/services/boot-image.generated.c \
                 ../../tests/fixtures/cpu/arithmetic.generated.c ../../tests/fixtures/cpu/exit.generated.c \
@@ -37,7 +39,7 @@ CORE_SOURCES += ../recomp/ctr_recomp.c $(UPSTREAM_DIR)/entries.c $(wildcard $(UP
 endif
 CORE_OBJECTS := $(addprefix $(BUILD)/,$(notdir $(CORE_SOURCES:.c=.o)))
 OBJECTS += $(CORE_OBJECTS)
-vpath %.c ../core ../recomp ../../tests/fixtures/cpu ../../tests/fixtures/guest ../../tests/fixtures/services ../../tests/fixtures/heap $(UPSTREAM_DIR)
+vpath %.c ../core ../recomp ../../tests/fixtures/cpu ../../tests/fixtures/guest ../../tests/fixtures/services ../../tests/fixtures/heap ../../tests/fixtures/kernel $(UPSTREAM_DIR)
 .PHONY: all clean
 all: $(OUTPUT)/$(TARGET).rpx $(OUTPUT)/$(TARGET).wuhb
 $(BUILD):

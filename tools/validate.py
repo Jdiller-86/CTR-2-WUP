@@ -60,6 +60,10 @@ def main():
     if len(heap_results)!=2 or any(not item.get("ok") or not item.get("arm_heap_allocation_lifecycle") for item in heap_results):
         results[-1]["passed"]=False
     run("doctor", [sys.executable, "-m", "host", "doctor"])
+    kernel_tests=run("kernel-tests",["make","-C","tests/kernel","check","sanitize"])
+    kernel_results=[json.loads(line) for line in kernel_tests.stdout.splitlines() if line.startswith('{"ok":')]
+    if len(kernel_results)!=2 or any(not item.get("ok") or not item.get("original_arm_kernel_probe") for item in kernel_results):
+        results[-1]["passed"]=False
     run("fixtures", [sys.executable, "-m", "tests.host_fixtures", "artifacts/fixtures"])
     for kind in ("cxi", "3ds"):
         run("inspect-" + kind, [sys.executable, "-m", "host", "inspect", "artifacts/fixtures/synthetic." + kind])
@@ -109,7 +113,7 @@ def main():
               "workflow": "native/original/external-AOT RPX builds, checked ARM/Thumb/scalar-VFP/TLS, SRV/CFG startup and heap-memory lifecycle, title staging/intake and offline encrypted packaging",
               "version": __version__,
               "ok": all(result["passed"] for result in results), "python_tests": test_count,
-              "cpu_runs": c_results, "guest_runs":guest_results,"service_runs":service_results,"heap_runs":heap_results,"checks": results,
+              "cpu_runs": c_results, "guest_runs":guest_results,"service_runs":service_results,"heap_runs":heap_results,"kernel_runs":kernel_results,"checks": results,
               "source_sha256": source_digest.hexdigest(),
               "build_tools": {package: importlib.metadata.version(package) for package in ("setuptools", "wheel", "pip")},
               "prototype_output": str(output.relative_to(ROOT)),

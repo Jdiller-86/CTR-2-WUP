@@ -36,6 +36,11 @@ Record `GUEST HEAP LIFECYCLE PASS CODE 0` in native mode and
 queries, protection, partial free/hole reuse and complete release. No ROM is
 required. GPU/DSP physical memory and commercial startup remain untested.
 
+v0.8.0 embeds the shared-memory/synchronization probe. Record
+`SHARED/SYNC LIFECYCLE PASS CODE 0` and `kernel_selftest PASS result=0`, or FAIL
+codes. Its 148 ARM instructions/27 SVCs check aliases, mutex/semaphore/event
+waits and ownership release; multi-thread behavior remains pending.
+
 ## Requested evidence
 
 1. Launch and photograph both independent screens together. TV shows moving

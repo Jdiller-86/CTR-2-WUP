@@ -1,4 +1,5 @@
 #include "ctr_heap.h"
+#include "ctr_kernel.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -28,7 +29,8 @@ static bool owned_range(const ctr_guest *g,uint32_t address,uint32_t size) {
     uint64_t at=address,end=at+size;
     while (at<end) {
         const ctr_mapping *m=mapping_at(&g->memory,(uint32_t)at);
-        if (!m || !owner(g,m)) return false;
+        const ctr_guest_allocation *a=m?owner(g,m):NULL;
+        if (!a || a->pins) return false;
         uint64_t next=(uint64_t)m->base+m->size;at=next<end?next:end;
     }
     return true;
@@ -58,6 +60,7 @@ static uint32_t allocate(ctr_guest *g,uint32_t *address,uint32_t size,unsigned p
         if (g->allocations[i].storage) bytes+=g->allocations[i].size;
         else if (slot==CTR_GUEST_MAX_ALLOCATIONS) slot=i;
     }
+    for (unsigned i=0;i<8;++i) if (g->shared[i].owned) bytes+=g->shared[i].size;
     if (bytes>CTR_GUEST_MAX_BYTES || slot==CTR_GUEST_MAX_ALLOCATIONS ||
         g->memory.count==CTR_MEMORY_MAX_MAPS) return OUT_OF_MEMORY;
     uint8_t *storage=calloc(1,size);if (!storage) return OUT_OF_MEMORY;
@@ -65,7 +68,7 @@ static uint32_t allocate(ctr_guest *g,uint32_t *address,uint32_t size,unsigned p
     ctr_mem_result result=ctr_memory_map(&next,base,size,permissions?permissions:CTR_MEM_READ,storage,size);
     if (result==CTR_MEM_OK && !permissions) result=ctr_memory_change_range(&next,base,size,0,false);
     if (result!=CTR_MEM_OK) { free(storage);return result==CTR_MEM_CAPACITY?OUT_OF_MEMORY:INVALID_STATE; }
-    g->allocations[slot]=(ctr_guest_allocation){base,size,storage,linear};
+    g->allocations[slot]=(ctr_guest_allocation){base,size,storage,linear,0};
     g->memory=next;*address=base;return 0;
 }
 static void reap(ctr_guest *g) {
@@ -109,6 +112,7 @@ void ctr_heap_control(ctr_guest *g) {
 }
 static unsigned state_of(const ctr_guest *g,const ctr_mapping *m) {
     const ctr_guest_allocation *a=owner(g,m);
+    if (ctr_shared_mapping(g,m)) return 6u;
     if (a) return a->linear?7u:5u; /* Continuous / Private. */
     for (unsigned i=0;i<5;++i) if (g->storage[i] && m->storage==g->storage[i])
         return i<2?4u:i>=3?11u:5u; /* Code / Locked stack and TLS / Private data. */

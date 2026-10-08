@@ -64,8 +64,7 @@ AOT. Dynamic heap management therefore preserves normal translated execution.
 Linear backing is contiguous for checked **CPU** accesses only. FCRAM physical
 addresses, GPU/DSP allocation, cache/coherency support and the GX2 memory bridge
 are absent. MAP/UNMAP aliases, RESERVE, system/base regions, New-family linear
-windows and unknown flags stop visibly as unsupported. Shared-memory blocks,
-image reprotection, multi-thread ownership, physical accounting and broader
+windows and unknown flags stop visibly as unsupported. Image reprotection, multi-thread ownership, physical accounting and broader
 kernel behavior remain unfinished.
 
 ## Original execution evidence
@@ -90,3 +89,7 @@ displays `GUEST HEAP LIFECYCLE PASS CODE 0`; SD logs record
 is a desktop/emulated-PPC test, separate from the console guest program.
 Physical behavior/timings, native Windows and conventional 3DS homebrew boot
 remain pending. STATUS.md records current report paths.
+
+v0.8.0 pins source allocations used by shared-memory objects; FREE/PROT rejects
+those allocations until final release. Owned shared backing uses the combined
+budget. See `kernel-objects.md`.

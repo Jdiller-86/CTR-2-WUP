@@ -1,6 +1,7 @@
 #include "ctr_guest.h"
 #include "ctr_ipc.h"
 #include "ctr_heap.h"
+#include "ctr_kernel.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -18,6 +19,7 @@ void ctr_guest_close(ctr_guest *guest) {
     if (guest->executor_close) guest->executor_close(guest->executor_context);
     for (unsigned i=0;i<5;++i) free(guest->storage[i]);
     for (unsigned i=0;i<CTR_GUEST_MAX_ALLOCATIONS;++i) free(guest->allocations[i].storage);
+    for (unsigned i=0;i<8;++i) if (guest->shared[i].owned) free(guest->shared[i].storage);
     memset(guest,0,sizeof(*guest)); guest->state=CTR_GUEST_EXITED;
 }
 static bool region(ctr_guest *g,unsigned index,uint32_t address,uint32_t size,unsigned permissions,
@@ -72,29 +74,54 @@ bool ctr_guest_open(ctr_guest *g,const ctr_guest_image *image,const ctr_block *b
 failure:
     ctr_guest_close(g); g->state=CTR_GUEST_FAULTED; g->fault=CTR_CPU_MEMORY_FAULT; return false;
 }
-static ctr_guest_handle *resolve_handle(ctr_guest *g,uint32_t handle) {
+ctr_guest_handle *ctr_guest_handle_for(ctr_guest *g,uint32_t handle) {
     unsigned slot=(handle&255u);
     if (!slot || slot>64) return NULL;
     ctr_guest_handle *h=&g->handles[slot-1];
     return h->active && h->generation==(handle>>8)?h:NULL;
 }
 static int object_for(ctr_guest *g,uint32_t handle) {
-    ctr_guest_handle *h=resolve_handle(g,handle);
+    ctr_guest_handle *h=ctr_guest_handle_for(g,handle);
     return h && h->type==CTR_HANDLE_EVENT?(int)h->object:-1;
 }
-static uint32_t new_handle(ctr_guest *g,ctr_guest_handle_type type,unsigned object) {
+void ctr_guest_object_retain(ctr_guest *g,ctr_guest_handle_type type,unsigned object) {
+    if (type==CTR_HANDLE_EVENT) ++g->events[object].references;
+    else if (type==CTR_HANDLE_SESSION) ++g->sessions[object].references;
+    else if (type==CTR_HANDLE_SHARED) ++g->shared[object].references;
+    else if (type==CTR_HANDLE_MUTEX) ++g->mutexes[object].references;
+    else if (type==CTR_HANDLE_SEMAPHORE) ++g->semaphores[object].references;
+}
+uint32_t ctr_guest_handle_new(ctr_guest *g,ctr_guest_handle_type type,unsigned object) {
     for (unsigned i=0;i<64;++i) {
         ctr_guest_handle *h=&g->handles[i];
         if (!h->active && h->generation<0x00ffffffu) {
             ++h->generation; h->active=true; h->object=object;h->type=type;
-            if (type==CTR_HANDLE_EVENT) ++g->events[object].references;
-            else ++g->sessions[object].references;
+            ctr_guest_object_retain(g,type,object);
             return (h->generation<<8)|(i+1);
         }
     }
     return 0;
 }
-static void release_object(ctr_guest *g,ctr_guest_handle_type type,unsigned object) {
+void ctr_guest_object_release(ctr_guest *g,ctr_guest_handle_type type,unsigned object) {
+    if (type==CTR_HANDLE_SHARED) {
+        ctr_guest_shared *s=&g->shared[object];
+        if (s->references && --s->references==0) {
+            if (s->owned) free(s->storage);
+            else if (g->allocations[s->allocation].pins) --g->allocations[s->allocation].pins;
+            memset(s,0,sizeof(*s));
+        }
+        return;
+    }
+    if (type==CTR_HANDLE_MUTEX) {
+        ctr_guest_mutex *m=&g->mutexes[object];
+        if (m->references && --m->references==0) memset(m,0,sizeof(*m));
+        return;
+    }
+    if (type==CTR_HANDLE_SEMAPHORE) {
+        ctr_guest_semaphore *s=&g->semaphores[object];
+        if (s->references && --s->references==0) memset(s,0,sizeof(*s));
+        return;
+    }
     if (type==CTR_HANDLE_SESSION) {
         ctr_guest_session *s=&g->sessions[object];
         if (s->references && --s->references==0) memset(s,0,sizeof(*s));
@@ -103,22 +130,18 @@ static void release_object(ctr_guest *g,ctr_guest_handle_type type,unsigned obje
     ctr_guest_event *e=&g->events[object];
     if (e->references && --e->references==0) memset(e,0,sizeof(*e));
 }
-static void complete_wait(ctr_guest *g,uint32_t result) {
-    g->cpu.r[0]=result; g->state=CTR_GUEST_READY;
-    release_object(g,CTR_HANDLE_EVENT,g->wait_object);
-}
 uint32_t ctr_guest_session_open(ctr_guest *g,ctr_guest_service service) {
     if (service!=CTR_SERVICE_SRV && service!=CTR_SERVICE_CFG) return 0;
     for (unsigned i=0;i<16;++i) if (!g->sessions[i].active) {
         g->sessions[i]=(ctr_guest_session){true,false,0,service};
-        uint32_t handle=new_handle(g,CTR_HANDLE_SESSION,i);
+        uint32_t handle=ctr_guest_handle_new(g,CTR_HANDLE_SESSION,i);
         if (!handle) memset(&g->sessions[i],0,sizeof(g->sessions[i]));
         return handle;
     }
     return 0;
 }
 ctr_guest_session *ctr_guest_session_for(ctr_guest *g,uint32_t handle) {
-    ctr_guest_handle *h=resolve_handle(g,handle);
+    ctr_guest_handle *h=ctr_guest_handle_for(g,handle);
     return h && h->type==CTR_HANDLE_SESSION?&g->sessions[h->object]:NULL;
 }
 bool ctr_guest_configure(ctr_guest *g,ctr_guest_configuration configuration) {
@@ -134,10 +157,7 @@ bool ctr_guest_signal(ctr_guest *g,uint32_t handle) {
     if (object<0) return false;
     ctr_guest_event *e=&g->events[object];
     e->signaled=true;
-    if (g->state==CTR_GUEST_WAITING && g->wait_object==(unsigned)object) {
-        if (e->reset==0) e->signaled=false;
-        complete_wait(g,0);
-    }
+    ctr_sync_poll(g);
     return true;
 }
 static ctr_guest_state unsupported(ctr_guest *g,uint32_t number) {
@@ -150,6 +170,9 @@ ctr_guest_state ctr_guest_svc(ctr_guest *g,uint32_t number) {
     switch (number) {
         case 0x01: ctr_heap_control(g);break;
         case 0x02: ctr_heap_query(g);break;
+        case 0x13: case 0x14: case 0x15: case 0x16: case 0x24: case 0x25:
+            ctr_sync_svc(g,number);break;
+        case 0x1e: case 0x1f: case 0x20: ctr_shared_svc(g,number);break;
         case 0x03: g->state=CTR_GUEST_EXITED; break;
         case 0x0a: {
             uint64_t nanos=(uint64_t)r[0]|((uint64_t)r[1]<<32);
@@ -164,7 +187,7 @@ ctr_guest_state ctr_guest_svc(ctr_guest *g,uint32_t number) {
             uint32_t handle=0;
             if (object<32) {
                 g->events[object]=(ctr_guest_event){true,false,r[1],0};
-                handle=new_handle(g,CTR_HANDLE_EVENT,object);
+                handle=ctr_guest_handle_new(g,CTR_HANDLE_EVENT,object);
                 if (!handle) memset(&g->events[object],0,sizeof(g->events[object]));
             }
             r[0]=handle?0:RESULT_NO_MEMORY; r[1]=handle; break;
@@ -176,25 +199,13 @@ ctr_guest_state ctr_guest_svc(ctr_guest *g,uint32_t number) {
             r[0]=object>=0?0:RESULT_INVALID_HANDLE; break;
         }
         case 0x23: {
-            ctr_guest_handle *h=resolve_handle(g,r[0]);
-            if (h) { h->active=false;release_object(g,h->type,h->object); }
+            ctr_guest_handle *h=ctr_guest_handle_for(g,r[0]);
+            if (h) { h->active=false;ctr_guest_object_release(g,h->type,h->object); }
             r[0]=h?0:RESULT_INVALID_HANDLE; break;
         }
-        case 0x24: {
-            int object=object_for(g,r[0]);
-            if (object<0) { r[0]=RESULT_INVALID_HANDLE; break; }
-            ctr_guest_event *e=&g->events[object];
-            if (e->signaled) { if (!e->reset) e->signaled=false; r[0]=0; break; }
-            uint64_t nanos=(uint64_t)r[2]|((uint64_t)r[3]<<32);
-            if (!nanos) { r[0]=RESULT_TIMEOUT; break; }
-            g->infinite_wait=(nanos>>63)!=0;
-            if (!g->infinite_wait && UINT64_MAX-g->now_ns<nanos) return unsupported(g,number);
-            g->deadline_ns=g->now_ns+nanos; g->wait_object=(unsigned)object;
-            ++e->references; g->state=CTR_GUEST_WAITING; break;
-        }
         case 0x27: {
-            ctr_guest_handle *h=resolve_handle(g,r[1]);
-            uint32_t handle=h?new_handle(g,h->type,h->object):0;
+            ctr_guest_handle *h=ctr_guest_handle_for(g,r[1]);
+            uint32_t handle=h?ctr_guest_handle_new(g,h->type,h->object):0;
             r[0]=!h?RESULT_INVALID_HANDLE:handle?0:RESULT_NO_MEMORY; r[1]=handle; break;
         }
         case 0x28: {
@@ -232,8 +243,7 @@ ctr_guest_state ctr_guest_run(ctr_guest *g,uint64_t budget,uint64_t now_ns,bool 
         g->state=CTR_GUEST_READY;
     }
     if (g->state==CTR_GUEST_WAITING) {
-        if (g->infinite_wait || now_ns<g->deadline_ns) return g->state;
-        complete_wait(g,RESULT_TIMEOUT);
+        ctr_sync_poll(g);if (g->state==CTR_GUEST_WAITING) return g->state;
     }
     if (g->state==CTR_GUEST_YIELDED) g->state=CTR_GUEST_READY;
     uint64_t start=g->cpu.instructions;
