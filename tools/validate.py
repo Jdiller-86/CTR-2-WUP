@@ -55,6 +55,10 @@ def main():
     service_results=[json.loads(line) for line in service_tests.stdout.splitlines() if line.startswith('{"ok":')]
     if len(service_results)!=2 or any(not item.get("ok") or not item.get("arm_tls_srv_cfg_startup") for item in service_results):
         results[-1]["passed"]=False
+    heap_tests=run("heap-tests",["make","-C","tests/heap","check","sanitize"])
+    heap_results=[json.loads(line) for line in heap_tests.stdout.splitlines() if line.startswith('{"ok":')]
+    if len(heap_results)!=2 or any(not item.get("ok") or not item.get("arm_heap_allocation_lifecycle") for item in heap_results):
+        results[-1]["passed"]=False
     run("doctor", [sys.executable, "-m", "host", "doctor"])
     run("fixtures", [sys.executable, "-m", "tests.host_fixtures", "artifacts/fixtures"])
     for kind in ("cxi", "3ds"):
@@ -102,10 +106,10 @@ def main():
             if path.is_file() and "__pycache__" not in path.parts:
                 source_digest.update(str(path.relative_to(ROOT)).encode("utf-8") + b"\0" + path.read_bytes())
     report = {"schema_version": 1, "generated_at_utc": datetime.now(timezone.utc).isoformat(),
-              "workflow": "native/original/external-AOT RPX builds, checked ARM/Thumb/scalar-VFP/TLS and SRV/CFG startup, title staging/intake and offline encrypted packaging",
+              "workflow": "native/original/external-AOT RPX builds, checked ARM/Thumb/scalar-VFP/TLS, SRV/CFG startup and heap-memory lifecycle, title staging/intake and offline encrypted packaging",
               "version": __version__,
               "ok": all(result["passed"] for result in results), "python_tests": test_count,
-              "cpu_runs": c_results, "guest_runs":guest_results,"service_runs":service_results,"checks": results,
+              "cpu_runs": c_results, "guest_runs":guest_results,"service_runs":service_results,"heap_runs":heap_results,"checks": results,
               "source_sha256": source_digest.hexdigest(),
               "build_tools": {package: importlib.metadata.version(package) for package in ("setuptools", "wheel", "pip")},
               "prototype_output": str(output.relative_to(ROOT)),

@@ -149,3 +149,10 @@ interfaces through interpreter/original/external AOT, without title-specific cod
 The console diagnostics embed its original interpreter/AOT self-test. This does
 not activate Mario or close any physical-console milestone; its exact revision,
 broader kernel/services/GPU/audio/saves and installer acceptance remain pending.
+
+The next ROM-independent increment, v0.7.0, implements checked ControlMemory and
+QueryMemory: owned heap/linear CPU backing, atomic partial free/protection, bounds
+and resource limits. Its original ARM lifecycle probe preserves AOT while
+matching all three execution paths. This advances M3/P3; the physical tests,
+shared-memory/thread/kernel work and title-specific requirements remain open.
+GPU/DSP physical-address translation is not supplied by the linear allocation.

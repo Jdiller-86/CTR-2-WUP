@@ -34,6 +34,11 @@ The original translator also specializes this TLS read. v0.6.0's separate
 89-instruction original startup probe matches interpreter/original/external AOT
 state and memory through actual SRV/CFG SVCs; see `shared-services.md`.
 Other CP15/cache operations remain unsupported, including emitter no-ops.
+v0.7.0's 151-instruction heap lifecycle probe executes allocation, permissions,
+partial free and queries through all three backends with zero fallback. Data
+mapping changes preserve AOT; executable mapping/protection and alias writes
+still invalidate it. Protected/unmapped stores preserve the exact fault PC
+across backends; see `guest-memory.md`.
 
 The original fixture has ten ARM and three Thumb instructions. A loop computes
 10, stores/reloads it through guest memory, branches to Thumb, computes 8 and

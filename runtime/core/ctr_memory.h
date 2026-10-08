@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #define CTR_MEMORY_MAX_MAPS 32u
 enum { CTR_MEM_READ = 1u, CTR_MEM_WRITE = 2u, CTR_MEM_EXEC = 4u };
@@ -39,6 +40,10 @@ ctr_mem_result ctr_memory_write(ctr_memory *memory, uint32_t address,
    guest mappings are allowed; permissions/overflow are checked without writes. */
 ctr_mem_result ctr_memory_check_range(const ctr_memory *memory, uint32_t address,
                                      uint32_t size, unsigned permissions);
+/* Atomically split a fully mapped range to change permissions or remove it.
+   Zero permissions create a guard mapping. A hole/capacity failure changes nothing. */
+ctr_mem_result ctr_memory_change_range(ctr_memory *memory, uint32_t address,
+                                      uint32_t size, unsigned permissions, bool remove);
 const char *ctr_mem_result_name(ctr_mem_result result);
 
 #endif

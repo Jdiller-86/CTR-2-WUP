@@ -69,3 +69,9 @@ used, finish/save, exit and relaunch, then rebuild the same title ID and confirm
 save continuity. Record firmware, homebrew environment, installer, screen/audio
 behavior, frame/instruction timings and fault/fallback logs. This route is not
 claimed to have been executed.
+
+While private executable intake is pending, v0.7.0 adds shared heap/linear CPU
+allocation, free/protection/query and an original three-backend ARM probe. These
+are reusable startup interfaces, not an inferred Mario patch/profile. Its actual
+memory needs, thread/shared-memory behavior and GPU/DSP mappings still require
+the supplied revision and runtime evidence. See `guest-memory.md`.

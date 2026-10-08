@@ -16,6 +16,8 @@ console helper for exporting small private executable analysis data. The supplie
 Mario CIA exceeds the workspace's 32 MiB transfer limit; see `docs/cia-intake.md`.
 Version 0.6.0 adds shared CP15 TLS/SRV/CFG startup support and an original ARM
 service probe embedded in the Wii U diagnostics; see `docs/shared-services.md`.
+Version 0.7.0 adds checked heap/linear allocation, partial free, permissions and
+queries, with an original ARM lifecycle self-test; see `docs/guest-memory.md`.
 Commercial ROM-to-WUP conversion is not implemented or claimed.
 
 Read `STATUS.md`, `docs/milestones.md` and `docs/foundation-audit.md` before
@@ -62,7 +64,7 @@ checks, `docs/console-testing.md` for the physical-console checklist, and
 `THIRD_PARTY_NOTICES` for dependency and licensing boundaries.
 `docs/guest-fixture.md` explains the real ARM execution pipeline and its explicit
 input/raw-framebuffer contract. It does not provide HID/GSP/PICA or stock 3DS
-graphical homebrew support. Both Wii U applications await physical execution.
+graphical homebrew support. All three Wii U applications await physical execution.
 See `docs/upstream-integration.md` for checked ARM/Thumb/scalar-VFP evidence and
 `docs/first-title.md` for the Mario intake. `stage-title` produces original title
 staging, not a WUP. The GUI follows the working conversion/packing pipeline.

@@ -30,6 +30,10 @@ Version 0.6.0 adds user read-only CP15 TLS access, typed/refcounted session hand
 checked TLS IPC transport and restricted SRV/CFG startup commands. Its original
 ARM probe reads configured region/model/language through all three execution
 paths; see `shared-services.md`. This is shared runtime code, not a game patch.
+Version 0.7.0 adds owned heap/linear CPU allocation, atomic partial free/protection
+and queries; `guest-memory.md` defines the bounded contract. Ordinary heap
+changes preserve AOT snapshots; executable writes/aliases and execute protection
+still invalidate them. GPU/DSP physical memory and shared-memory remain pending.
 The original ARM fixture writes both framebuffers and responds to input through
 an explicit harness contract. Neither implements complete ARM11/VFP, a full
 3DS kernel, general IPC or game HLE. The pinned external lifter now generates C through
@@ -42,6 +46,7 @@ input, sound, process lifecycle, timing, and CPU self-test instrumentation.
 All diagnostic builds also contain the original TLS/SRV/CFG startup self-test
 with a visible result and SD log. Unsupported cache operations fail visibly
 instead of inheriting the external emitter's no-op behavior.
+All builds also embed the original ARM heap lifecycle self-test and its SD log.
 Its guest mode presents completed ARM-written raw framebuffers through the same
 GX2 copying path. It is separate from PICA/GSP emulation; see `guest-fixture.md`.
 Compilation proves toolchain integration. Only physical console results can

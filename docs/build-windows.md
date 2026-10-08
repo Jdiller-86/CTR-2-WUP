@@ -75,6 +75,11 @@ v0.6.0 adds the portable TLS/SRV/CFG startup suite. With native GCC/Make, run
 emulated PowerPC evidence; no native Windows result is claimed. The separate
 v0.5.0 CIA intake helper remains the unchanged ROM-export utility.
 
+v0.7.0 adds `make -C tests/heap check` and
+`python tools/validate-upstream.py --heap-api --service-api --output
+artifacts/windows-memory-check`. These exercise allocation/free/protection/query
+and actual external AOT. Native Windows acceptance remains pending.
+
 Doctor and clean prototype compile; inspection of NCSD/NCCH and malformed inputs;
 spaces/Unicode on both source and output paths; cancellation terminating compiler
 children; atomic publication and refusal to overwrite outputs; installable-wheel

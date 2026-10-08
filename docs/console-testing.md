@@ -29,6 +29,13 @@ In native mode, record `TLS/SRV/CFG STARTUP PASS CODE 0` and the corresponding
 89-instruction ARM service sequence in interpreter/original AOT, without a ROM.
 The separate external-AOT service probe has desktop/emulated PPC evidence only.
 
+Version 0.7.0 embeds the original ARM heap lifecycle probe in all builds.
+Record `GUEST HEAP LIFECYCLE PASS CODE 0` in native mode and
+`heap_selftest PASS result=0` in the SD log, or the exact FAIL code. It compares
+151 instructions across interpreter/original AOT: heap/linear CPU allocation,
+queries, protection, partial free/hole reuse and complete release. No ROM is
+required. GPU/DSP physical memory and commercial startup remain untested.
+
 ## Requested evidence
 
 1. Launch and photograph both independent screens together. TV shows moving

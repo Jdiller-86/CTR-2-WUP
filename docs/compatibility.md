@@ -6,6 +6,7 @@
 | Synthetic ARM/Thumb fixture | Desktop verified bounded subset | Interpreter/generated-C state matches; linked into diagnostic RPX, console run pending |
 | Original framebuffer NCCH fixture | Desktop execution verified; awaiting Wii U | Checked loader, sleep/event SVC runtime, ARM-written frames/input/exit, AOT/interpreter matches; console RPX/WUHB built; explicit harness I/O, not HID/GSP/PICA |
 | Original TLS/SRV/CFG ARM startup probe | Desktop verified; awaiting Wii U | Standard TLS and restricted service commands; interpreter/original/external AOT match; original self-test embedded in diagnostics |
+| Original ARM heap lifecycle probe | Desktop verified; awaiting Wii U | Heap/linear CPU allocation, free/protection/query; three-backend match; embedded self-test; GPU/DSP physical mapping absent |
 | Decrypted base-application CIA | Intake supported | Checked index-0 NCCH, metadata/bitmap/content hashes and loader offsets; small executable export supported |
 | Decrypted NCCH v2 `.cxi` | Inspection supported | Bounds, sections/ExeFS hashes, code decompression and metadata tested with original fixtures |
 | Decrypted NCSD `.3ds` | Inspection supported | Cartridge partition bounds and all present NCCH partitions checked; no NAND loader |
@@ -20,7 +21,8 @@ This is preparation for future caches/profiles, not a currently usable save syst
 
 Only `ctr2wup-framebuffer-fixture-v1`, containing original code and an exact layout,
 is enabled by the guest CLI. The separate original startup probe is executed by
-developer tests and embedded diagnostics. No commercial title profile is enabled. Profiles must match an exact
+developer tests and embedded diagnostics, alongside the heap lifecycle probe.
+No commercial title profile is enabled. Profiles must match an exact
 executable/module revision and recorded console evidence. Upstream authors'
 desktop compatibility reports never set CTR2WUP's console-verified status.
 

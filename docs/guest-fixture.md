@@ -124,3 +124,9 @@ The separate executable revision is
 Kernel/loader tests cover faults, events, sleeps, ticks and actual interpreter/AOT
 guest state/memory matches, both normally and under ASan/UBSan. All hardware,
 stock 3DS homebrew, commercial gameplay, saves and WUP claims remain open.
+
+The separate v0.7.0 original heap lifecycle probe exercises real memory SVCs
+without extending this framebuffer harness contract. All three RPXs embed its
+original interpreter/AOT self-test; external AOT is also verified on desktop and
+emulated PPC. See `guest-memory.md` and collect the additional native-mode result
+per `console-testing.md`. GPU/DSP physical memory and broader boot remain pending.

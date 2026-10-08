@@ -49,6 +49,14 @@ compiler/target run. All four integration probes pass on GCC/sanitizers, Clang
 and emulated big-endian PPC Linux. See `shared-services.md` for exact interfaces
 and limits; this does not provide a complete guest kernel or commercial profile.
 
+v0.7.0 adds the original 151-instruction heap lifecycle probe. All three backends
+match CPU/mapping/backing state at 1/7/23 instruction budgets, with zero fallback
+and unchanged executable generations. Guest stores fault identically on
+protected/freed pages. The 1,778 boundary assertions and 307 heap API assertions
+pass GCC/sanitizers, Clang and emulated PPC Linux. `--heap-api` adds the latter
+suite; combine it with `--service-api` for a 14-check run of all five probes and
+both API suites. See `guest-memory.md` for exact supported memory semantics.
+
 - Registers and guest addresses are `uint32_t`; page pointers remain unused.
   Every memory access takes the checked little-endian callback path; span
   bypasses are disabled. No 4 GiB host address reservation is required.
@@ -62,7 +70,8 @@ and limits; this does not provide a complete guest kernel or commercial profile.
   retain earlier transfers if a later access faults. The external instruction
   counter includes an attempted faulting instruction; successful execution
   matches the interpreter's count.
-- Mapping/code writes, including writable aliases, invalidate the snapshot.
+- Executable mapping/protection changes and code writes, including writable
+  aliases, invalidate the snapshot. Ordinary data mappings preserve it.
   Guest writes clear the single-guest exclusive monitor. Multi-core/multi-thread
   exclusive semantics are not implemented.
 - Missing blocks and emitted interpreter requests fail visibly by default.

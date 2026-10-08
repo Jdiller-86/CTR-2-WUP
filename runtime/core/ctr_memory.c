@@ -23,7 +23,7 @@ ctr_mem_result ctr_memory_map(ctr_memory *memory, uint32_t base, uint32_t size,
     if (memory->count == CTR_MEMORY_MAX_MAPS) return CTR_MEM_CAPACITY;
     memory->maps[memory->count++] = (ctr_mapping){base, size, permissions, storage};
     ++memory->generation;
-    ++memory->code_generation;
+    if (permissions & CTR_MEM_EXEC) ++memory->code_generation;
     return CTR_MEM_OK;
 }
 
@@ -95,6 +95,49 @@ ctr_mem_result ctr_memory_check_range(const ctr_memory *memory, uint32_t address
         if ((found->permissions&permissions)!=permissions) return CTR_MEM_PERMISSION;
         uint64_t next=(uint64_t)found->base+found->size;
         at=next<end?next:end;
+    }
+    return CTR_MEM_OK;
+}
+
+ctr_mem_result ctr_memory_change_range(ctr_memory *memory, uint32_t address,
+                                      uint32_t size, unsigned permissions, bool remove) {
+    uint64_t end=(uint64_t)address+size, at=address;
+    if (!size || end>UINT64_C(0x100000000)) return CTR_MEM_OVERFLOW;
+    if (permissions&~7u) return CTR_MEM_PERMISSION;
+    while (at<end) {
+        const ctr_mapping *found=NULL;
+        for (size_t i=0;i<memory->count;++i) {
+            const ctr_mapping *m=&memory->maps[i];
+            if (at>=m->base && at<(uint64_t)m->base+m->size) { found=m;break; }
+        }
+        if (!found) return CTR_MEM_UNMAPPED;
+        uint64_t next=(uint64_t)found->base+found->size;
+        at=next<end?next:end;
+    }
+    ctr_mapping next[CTR_MEMORY_MAX_MAPS];size_t count=0;
+    bool changed=false, code_changed=false;
+    for (size_t i=0;i<memory->count;++i) {
+        ctr_mapping m=memory->maps[i], pieces[3];unsigned n=0;
+        uint64_t old_end=(uint64_t)m.base+m.size;
+        if (old_end<=address || m.base>=end || (!remove && m.permissions==permissions)) {
+            pieces[n++]=m;
+        } else {
+            uint32_t begin=m.base>address?m.base:address;
+            uint64_t stop=old_end<end?old_end:end;
+            if (begin>m.base) pieces[n++]=(ctr_mapping){m.base,begin-m.base,m.permissions,m.storage};
+            if (!remove) pieces[n++]=(ctr_mapping){begin,(uint32_t)(stop-begin),permissions,m.storage+(begin-m.base)};
+            if (stop<old_end) pieces[n++]=(ctr_mapping){(uint32_t)stop,(uint32_t)(old_end-stop),m.permissions,m.storage+(stop-m.base)};
+            changed=true;
+            if ((m.permissions|(remove?0:permissions))&CTR_MEM_EXEC) code_changed=true;
+        }
+        if (count+n>CTR_MEMORY_MAX_MAPS) return CTR_MEM_CAPACITY;
+        for (unsigned p=0;p<n;++p) next[count++]=pieces[p];
+    }
+    if (changed) {
+        memset(memory->maps,0,sizeof(memory->maps));
+        memcpy(memory->maps,next,count*sizeof(next[0]));memory->count=count;
+        ++memory->generation;
+        if (code_changed) ++memory->code_generation;
     }
     return CTR_MEM_OK;
 }

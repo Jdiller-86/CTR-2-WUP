@@ -1,5 +1,6 @@
 #include "ctr_guest.h"
 #include "ctr_ipc.h"
+#include "ctr_heap.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -16,6 +17,7 @@ const char *ctr_guest_state_name(ctr_guest_state state) {
 void ctr_guest_close(ctr_guest *guest) {
     if (guest->executor_close) guest->executor_close(guest->executor_context);
     for (unsigned i=0;i<5;++i) free(guest->storage[i]);
+    for (unsigned i=0;i<CTR_GUEST_MAX_ALLOCATIONS;++i) free(guest->allocations[i].storage);
     memset(guest,0,sizeof(*guest)); guest->state=CTR_GUEST_EXITED;
 }
 static bool region(ctr_guest *g,unsigned index,uint32_t address,uint32_t size,unsigned permissions,
@@ -146,6 +148,8 @@ static ctr_guest_state unsupported(ctr_guest *g,uint32_t number) {
 ctr_guest_state ctr_guest_svc(ctr_guest *g,uint32_t number) {
     uint32_t *r=g->cpu.r; ++g->svc_count;
     switch (number) {
+        case 0x01: ctr_heap_control(g);break;
+        case 0x02: ctr_heap_query(g);break;
         case 0x03: g->state=CTR_GUEST_EXITED; break;
         case 0x0a: {
             uint64_t nanos=(uint64_t)r[0]|((uint64_t)r[1]<<32);

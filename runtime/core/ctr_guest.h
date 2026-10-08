@@ -21,6 +21,8 @@ typedef struct { uint32_t generation; unsigned object; bool active; ctr_guest_ha
 typedef struct { bool active, registered; unsigned references; ctr_guest_service service; } ctr_guest_session;
 enum { CTR_GUEST_MODEL_3DS=0, CTR_GUEST_MODEL_3DSXL=1, CTR_GUEST_MODEL_2DS=3 };
 typedef struct { uint8_t region, language, model; } ctr_guest_configuration;
+#define CTR_GUEST_MAX_ALLOCATIONS 16u
+typedef struct { uint32_t base, size; uint8_t *storage; bool linear; } ctr_guest_allocation;
 typedef struct {
     ctr_memory memory;
     ctr_cpu cpu;
@@ -38,6 +40,9 @@ typedef struct {
     ctr_guest_handle handles[64];
     ctr_guest_session sessions[16];
     ctr_guest_configuration configuration;
+    ctr_guest_allocation allocations[CTR_GUEST_MAX_ALLOCATIONS];
+    uint64_t memory_requests, memory_failures;
+    uint32_t memory_operation, memory_result, memory_address;
     uint64_t ipc_requests, ipc_failures;
     uint32_t ipc_header, ipc_result;
     char ipc_service[9];
