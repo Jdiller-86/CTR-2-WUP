@@ -48,7 +48,7 @@ other ARM halfword forms remain unsupported in the bounded original backends.
 
 `make -C tests/gsp check sanitize` runs 362 API assertions and the original
 interpreter/AOT display self-test. `tools/validate-upstream.py --gsp-api --output
-artifacts/my-display-checks` executes all eight external probes and writes
+artifacts/my-display-checks` executes all nine external probes and writes
 `gsp/frame-{1,2}-{top,bottom}.ppm` reference images. The external display test has
 3603 assertions when writing all four images. Host, sanitizer, Clang and emulated
 PPC results establish portable behavior, not Wii U execution or usable speed.
@@ -56,7 +56,8 @@ PPC results establish portable behavior, not Wii U execution or usable speed.
 All three Wii U builds embed `gsp_selftest`; native mode displays
 `HID/GSP RGB565 DISPLAY PASS CODE 0`. Y cycles native → original custom-I/O ARM
 fixture → standard HID/GSP fixture. The GSP fixture uses original AOT in all
-builds; the existing external-AOT build still uses the actual external lifter
+builds; v0.11 replaces the live direct guest with the shared-queue variant
+described in `gsp-queues.md`. The existing external-AOT build still uses the actual external lifter
 for its custom-I/O fixture. External HID/GSP execution is separately tested on
 desktop/emulated PPC. The GSP status overlay is in the middle of the top image,
 leaving all four corner markers visible. Plus resets both graphics guests, B
@@ -67,8 +68,9 @@ frame fills. SD logs contain swaps, state, fallback, fault and shutdown outcomes
 Interface facts were checked against libctru
 `9b55eda44cf80b971503991e0c78f9bc8fe50425`, `gspgpu.h`, `gspgpu.c`, `gfx.c`,
 and the audited Zakuro display/format descriptions. No upstream implementation
-was copied. Interrupt relay registration, shared framebuffer queues, VBlank,
-GX command queues, DMA/display transfers, VRAM/physical-address translation,
+was copied. Version 0.11 adds interrupt relay registration, shared framebuffer
+queues and diagnostic VBlank; see `gsp-queues.md`. GX command queues,
+DMA/display transfers, VRAM/physical-address translation,
 PICA registers/draws/shaders/textures/TEV and graphics thread scheduling are
 absent. Stock libctru graphics initialization needs several of these and is not
 claimed to boot. This bridge is a reusable display foundation for the injector.

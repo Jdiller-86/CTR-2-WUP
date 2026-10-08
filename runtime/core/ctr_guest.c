@@ -2,6 +2,7 @@
 #include "ctr_ipc.h"
 #include "ctr_heap.h"
 #include "ctr_kernel.h"
+#include "ctr_gsp.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -127,6 +128,7 @@ void ctr_guest_object_release(ctr_guest *g,ctr_guest_handle_type type,unsigned o
         if (s->references && --s->references==0) {
             bool gsp=s->service==CTR_SERVICE_GSP;memset(s,0,sizeof(*s));
             if(gsp) {
+                ctr_gsp_session_closed(g,object);
                 bool live=false;for(unsigned i=0;i<16;++i)if(g->sessions[i].active && g->sessions[i].service==CTR_SERVICE_GSP)live=true;
                 if(!live)g->gsp.right=false;
             }
@@ -250,6 +252,7 @@ ctr_guest_state ctr_guest_run(ctr_guest *g,uint64_t budget,uint64_t now_ns,bool 
     if (g->state==CTR_GUEST_EXITED || g->state==CTR_GUEST_FAULTED) return g->state;
     if (now_ns<g->now_ns) return unsupported(g,0xffffffffu);
     g->now_ns=now_ns;
+    if(!ctr_gsp_poll(g,now_ns))return g->state;
     if (g->state==CTR_GUEST_SLEEPING) {
         if (now_ns<g->deadline_ns) return g->state;
         g->state=CTR_GUEST_READY;

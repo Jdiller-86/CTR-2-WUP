@@ -133,3 +133,10 @@ instructions, 27 SVCs, zero fallback; 3603 assertions including four reference
 PPMs. `--gsp-api` adds 362 format/rights/bounds assertions. All eight probes plus
 that API give 18 compiler/target checks. The original ARM halfword subset is
 exercised in the graphics program. See `gsp-display.md` for exact limits.
+
+v0.11.0 adds the ninth external probe, `relay`: 1,383,167 instructions and 34
+SVCs per path, zero fallback, full-state/pixel parity including a VBlank between
+LDREX/STREX. It exports four `relay/frame-{1,2}-{top,bottom}.ppm` images.
+`--relay-api` adds timing, ring, lifetime, rejection and resource rollback checks.
+Nine probes plus this API produce 20 compiler/target checks. See `gsp-queues.md`
+for the single-client diagnostic timing and remaining stock startup/GX/PICA gaps.

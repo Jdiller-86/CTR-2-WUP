@@ -8,15 +8,15 @@ title candidate. The target remains an UWUVCI-style Windows GUI: select a
 decrypted game, configure title/artwork, click Inject, install its per-game WUP
 and launch from Wii U Menu. The CLI is the shared engine, not the final product.
 
-**Version 0.10.0 adds standard GSP framebuffer display**: checked direct
-submission, all five rotated display formats and an original ARM guest using
-standard HID input → RGB565 CPU framebuffers → GSP IPC → Wii U presentation.
-Two frames and cleanup match interpreter/original/external AOT (1,382,865
-instructions, 27 SVCs, zero fallback). See `docs/gsp-display.md`.
-The user requested continuing until a concrete roadblock; implementation advanced
-through shared/synchronization (v0.8), live standard HID (v0.9) and this display
-bridge. The next planned acceptance gate requires physical Wii U results and
-actual Mario executable intake; see `docs/current-roadblock.md`.
+**Version 0.11.0 adds shared GSP framebuffer queues and a VBlank relay**.
+An original ARM guest now registers/maps the GSP page, queues both RGB565 screens,
+waits for the relay and drains its IRQ ring with exclusive updates. It matches
+interpreter/original/external AOT even when a host VBlank interrupts LDREX/STREX.
+See `docs/gsp-queues.md`. The queued guest replaces direct submission in the
+standard HID/GSP diagnostic mode; direct-display tests and all five decoders remain.
+The earlier pause was an acceptance-evidence gate, not a block on all development.
+Shared runtime work resumed without the ROM. Physical Wii U results and actual
+Mario executable intake are still required; see `docs/current-roadblock.md`.
 
 Version 0.7.0 added the checked heap/linear CPU backing lifecycle; see
 `docs/guest-memory.md`.
@@ -36,6 +36,15 @@ is unverified; no milestone requiring physical-console evidence is complete.
 
 ## Verified implementation
 
+- GSP relay registration returns a retained read/write shared page and client0.
+  Framebuffer updates commit both screens atomically at the diagnostic VBlank;
+  IRQ2/3 wrap/full/coalesced cases, exclusive invalidation, source faults and
+  typed resource/lifetime rollback are checked. All Wii U builds embed the relay
+  self-test and queued original-AOT display guest. 762 API assertions and the original self-test pass normally and with sanitizers.
+  The external comparison has 11,541 assertions, 1,383,167 instructions and
+  34 SVCs per path, zero fallback and four reference images; GCC/sanitizers,
+  Clang and emulated PPC pass. No stock libctru startup,
+  real interrupt timing, physical execution, GX commands or PICA is claimed.
 - Standard direct GSP acquire/release/force-black/SetBufferSwap checks rights,
   modes and readable source extents before state changes. Presentation handles
   rotated RGBA8/BGR8/RGB565/RGB5A1/RGBA4, padding and adjacent mappings; invalid
@@ -43,8 +52,8 @@ is unverified; no milestone requiring physical-console evidence is complete.
   HID/GSP graphics self-test pass normally and under sanitizers. The external
   display comparison has 3,603 assertions including four reference PPMs, and
   passes Clang/emulated PPC. All Wii U builds embed the self-test and original
-  AOT display guest. GSP interrupt/shared/GX queues, VBlank, physical/VRAM
-  translation, PICA and stock graphical startup remain absent. No console run
+  AOT display guest. GX commands, physical/VRAM translation, PICA and stock
+  graphical startup remain absent. No console run
   or gameplay is claimed.
 - Checked unsigned immediate preindexed ARM LDRH/STRH without writeback works
   in interpreter/original AOT and is exercised by the external graphics probe.
@@ -137,7 +146,7 @@ is unverified; no milestone requiring physical-console evidence is complete.
   double arithmetic, flags, stack transfers, state switching and one-instruction
   resume. Its registers/VFP words match Unicorn 2.1.4 independently.
 - External integration passes **566 boundary/frame assertions +34 ABI probe
-  +297 service-startup assertions +35 CP15 assertions +1,778 heap assertions +639 shared/sync +858 HID +3,603 HID/GSP display assertions**
+  +297 service-startup assertions +35 CP15 assertions +1,778 heap assertions +639 shared/sync +858 HID +3,603 direct HID/GSP display assertions**, plus the v0.11 relay probe
   under GCC, ASan/UBSan, Clang and emulated 32-bit big-endian PowerPC
   Linux/QEMU 750. Emulation does not establish Wii U behavior or useful speed.
 - Real devkitPPC/WUT builds produce native, original-AOT guest and external-AOT
@@ -167,18 +176,28 @@ is unverified; no milestone requiring physical-console evidence is complete.
   single-guest events/handles/sleep/debug/exit, native diagnostics and structural
   WUP validator remain tested. Commercial `build` still fails without publishing
   a placeholder package. Paths with spaces/Japanese characters work on Linux.
-- **144 Python tests**, 51,202 CPU assertions, 221 original-guest assertions,
-  1,001 service, 307 heap 197 kernel, 336 HID and 362 GSP assertions pass; all C suites also pass ASan/UBSan. The complete
-  v0.10.0 runner passes **31 checks**, including external generation/execution,
-  all three RPX builds,
-  original staging/intake, offline encrypted packaging and installed-wheel
+- **147 Python tests**, 51,202 CPU assertions, 221 original-guest assertions,
+  1,001 service, 307 heap, 197 kernel, 336 HID, 362 direct GSP and 762 relay
+  assertions pass; all C suites also pass ASan/UBSan. The complete v0.11.0 runner
+  passes **32 checks**, including all nine external probes normally/sanitized,
+  three RPX builds, staging/intake, offline encrypted packaging and installed-wheel
   inspection/execution/packing. Crypto remains an optional external dependency.
 
 ## Reports and deliverables
 
-Main validation: `artifacts/reports/validation-v1-20261008T172231Z/report.json`.
-New compiler/target checks: `artifacts/reports/gsp-clang-v10/report.json`
-and `artifacts/reports/gsp-ppc-v10/report.json` (18 checks each).
+The v0.11 source, native diagnostic, original/external guest and title-staging
+bundles, wheel and SHA256 manifest are under `artifacts/delivery/` and
+`artifacts/dist/`. The native bundle includes direct and shared display references.
+Diagnostic output is RPX/WUHB, not an installable WUP.
+Delivery/fresh-source verification report: `artifacts/reports/delivery-v11/report.json`.
+
+Main validation: `artifacts/reports/validation-v1-20261008T193827Z/report.json`.
+New compiler/target checks: `artifacts/reports/relay-clang-corrected-v11/report.json`
+and `artifacts/reports/relay-ppc-v11/report.json` (20 checks each).
+Initial v0.11 failed reports are preserved; stricter monitor comparison exposed
+and then verified a corrected ordinary-store exclusive validity flag.
+Earlier v0.10 evidence: `validation-v1-20261008T172231Z/report.json`,
+`gsp-clang-v10/report.json`, `gsp-ppc-v10/report.json` under `artifacts/reports/`.
 Helper evidence: `artifacts/reports/cia-helper-final/report.json` (13 checks).
 Earlier checks: `artifacts/reports/upstream-ppc-final/`,
 `upstream-clang-final/`, and the Unicorn reference report under
@@ -188,7 +207,7 @@ See `docs/upstream-integration.md` for commands and precise limits.
 
 Versioned source/native/original-guest/external-guest delivery bundles, wheel,
 checksums and original title-staging output are under `artifacts/`. Earlier
-v0.1.0/v0.2.0/v0.3.0/v0.4.0/v0.5.0/v0.6.0/v0.7.0/v0.8.0/v0.9.0 reports and bundles are preserved. Source is maintained in the
+v0.1.0/v0.2.0/v0.3.0/v0.4.0/v0.5.0/v0.6.0/v0.7.0/v0.8.0/v0.9.0/v0.10.0 reports and bundles are preserved. Source is maintained in the
 existing Git checkout; do not reset, force-push or replace user changes.
 
 ## Awaiting user inputs and physical tests
@@ -233,8 +252,8 @@ multi-thread scheduling, PICA/GX2 state/shaders/textures/coherency,
 DSP/audio, RomFS/saves and module behavior. CFG user/Mii/console-unique identity
 and broader configuration blocks remain pending. Complete CPU/FP correctness and
 measure real console costs. The original framebuffer harness uses custom I/O; the separate standard-HID
-consumer and direct HID/GSP graphics guest supply standard-interface evidence.
-GSP queues/threads/PICA and conventional 3DS homebrew boot remain unimplemented. No commercial profile is enabled.
+consumer and direct/queued HID/GSP graphics guests supply standard-interface evidence.
+GSP GX commands, threads/PICA and conventional 3DS homebrew boot remain unimplemented. No commercial profile is enabled.
 
 P4/P5: automate the verified Windows conversion engine, caching/rebuild/trace and
 save/title identity, then implement/package the responsive WPF GUI injector.

@@ -9,6 +9,7 @@ check:
 	$(MAKE) -C tests/kernel check sanitize
 	$(MAKE) -C tests/hid check sanitize
 	$(MAKE) -C tests/gsp check sanitize
+	$(MAKE) -C tests/relay check sanitize
 prototype:
 	$(MAKE) -C runtime/wiiu -j 3
 doctor:
@@ -25,3 +26,4 @@ regenerate:
 	$(PYTHON) tools/generate-kernel-fixture.py
 	$(PYTHON) tools/generate-hid-fixture.py
 	$(PYTHON) tools/generate-gsp-fixture.py
+	$(PYTHON) tools/generate-relay-fixture.py

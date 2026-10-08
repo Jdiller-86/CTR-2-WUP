@@ -10,12 +10,17 @@ BOTTOM_ADDRESS=TOP_ADDRESS+400*240*2
 BSS_SIZE=(400+320)*240*2
 PROGRAM_ID=0x000400000FF00F08
 
-def gsp_code():
+def gsp_code(shared=False):
     p=Program();word,request=hid_startup(p)
     word(0,0x50100);word(1,0x3a707367);word(2,0x7570473a);word(3,8);word(4,1);request(4)
     p.emit(0xE59AC00C)
     word(0,0x160042);word(1,0);word(2,0);word(3,0xffff8001);request(12)
     word(0,0xb0040);word(1,0);request(12)
+    if shared:
+        p.constant(1,0);p.emit(0xEF000017);p.emit(0xE1A0B001)
+        word(0,0x130042);word(1,1);word(2,0);p.emit(0xE58AB00C);request(12)
+        p.emit(0xE59A0010);p.emit(0xE5870220);p.constant(1,0x10002000)
+        p.constant(2,3);p.constant(3,3);p.emit(0xEF00001F);p.constant(6,0x10002000)
     p.label('frame')
     p.emit(0xE1A00008);p.constant(2,0xffffffff);p.constant(3,0xffffffff);p.emit(0xEF000024)
     p.emit(0xE5970100);p.emit(0xE3500000);p.branch('exit',1)
@@ -41,10 +46,41 @@ def gsp_code():
     p.constant(0,0xffff);p.emit(0xE1C100B0)
     p.label('submit')
     for screen,base in ((0,TOP_ADDRESS),(1,BOTTOM_ADDRESS)):
-        for i,v in enumerate((0x50200,screen,0,base,base,480,(0x142 if screen==0 else 0x102),0,0)):word(i,v)
-        request(12)
+        if not shared:
+            for i,v in enumerate((0x50200,screen,0,base,base,480,(0x142 if screen==0 else 0x102),0,0)):word(i,v)
+            request(12)
+        else:
+            p.constant(2,0x10002200+screen*0x40);p.emit(0xE5923000);p.emit(0xE2033001)
+            p.emit(0xE2633001);p.emit(0xE0821283);p.emit(0xE0411103);p.emit(0xE2811004)
+            for i,v in enumerate((0,base,base,480,0x142 if screen==0 else 0x102,0,0)):
+                p.constant(0,v);p.emit(0xE5810000+i*4)
+            p.emit(0xE3833C01);p.label(f'publish_{screen}')
+            p.emit(0xE1920F9F);p.emit(0xE1821F93);p.emit(0xE3510000);p.branch(f'publish_{screen}',1)
+    if shared:
+        p.label('relay_wait');p.emit(0xE5970100);p.emit(0xE3500000);p.branch('exit',1)
+        p.emit(0xE1A0000B);p.emit(0xEF000019)
+        p.emit(0xE1A0000B);p.constant(2,0xffffffff);p.constant(3,0xffffffff);p.emit(0xEF000024)
+        p.emit(0xE5970100);p.emit(0xE3500000);p.branch('exit',1)
+        p.label('pop');p.emit(0xE1961F9F);p.emit(0xE1A03421);p.emit(0xE20330FF)
+        p.emit(0xE3530000);p.branch('drained',0)
+        p.emit(0xE20120FF);p.emit(0xE0860002);p.emit(0xE5D0E00C)
+        p.emit(0xE2822001);p.emit(0xE3520034);p.constant(0,0);p.emit(0x01A02000)
+        p.emit(0xE2433001);p.emit(0xE1823403);p.emit(0xE1860F93)
+        p.emit(0xE3500000);p.branch('pop',1)
+        p.emit(0xE5970018);p.emit(0xE2800001);p.emit(0xE5870018)
+        p.emit(0xE587E020);p.emit(0xE5973024)
+        p.emit(0xE35E0002);p.emit(0x03833004);p.emit(0xE35E0003);p.emit(0x03833008)
+        p.emit(0xE5873024);p.branch('pop')
+        p.label('drained');p.emit(0xE5960200);p.emit(0xE5961240);p.emit(0xE1800001)
+        p.emit(0xE3100C01);p.branch('relay_wait',1)
     p.emit(0xE5970010);p.emit(0xE2800001);p.emit(0xE5870010);p.branch('frame')
-    p.label('exit');word(0,0x170000);request(12);p.emit(0xE1A0000C);p.emit(0xEF000023)
+    p.label('exit')
+    if shared:
+        word(0,0x140000);request(12)
+        p.emit(0xE5970220);p.emit(0xE1A01006);p.emit(0xEF000020)
+        p.emit(0xE5970220);p.emit(0xEF000023);p.emit(0xE1A0000B);p.emit(0xEF000023)
+        p.emit(0xE5976200)
+    word(0,0x170000);request(12);p.emit(0xE1A0000C);p.emit(0xEF000023)
     p.emit(0xE1A00006);p.emit(0xE1A01009);p.emit(0xEF000020);p.constant(11,0)
     p.label('close');p.emit(0xE087010B);p.emit(0xE5900200);p.emit(0xEF000023)
     p.emit(0xE28BB001);p.emit(0xE35B0006);p.branch('close',1)

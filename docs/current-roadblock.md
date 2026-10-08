@@ -1,7 +1,7 @@
-# Next acceptance gate and resume steps (0.10.0)
+# Next acceptance gate and resume steps (0.11.0)
 
 Implementation continued through the verified shared-memory/synchronization,
-standard HID input and standard direct GSP display foundations. Checkpoints are
+standard HID input, direct GSP display and shared GSP/VBlank foundations. Checkpoints are
 pushed to the requested repository. The next planned acceptance step cannot be
 verified with the resources currently available:
 
@@ -20,16 +20,21 @@ More generic kernel/graphics code can be written independently, but it does not
 replace the missing acceptance evidence or determine which game-specific shaders,
 services, modules and reference scenes the next title implementation requires.
 The current direct display subset does not supply stock libctru startup,
-multi-thread scheduling, GSP relay/shared/GX queues, VBlank, PICA, audio or saves.
+multi-thread scheduling, GX commands, PICA, audio or saves. v0.11 resumed
+ROM-independent development with one local relay/shared framebuffer queue and
+diagnostic VBlank. Missing evidence blocks acceptance and title-specific decisions;
+it does not block further reusable CPU/kernel/services/graphics development.
 No commercial profile or playable Mario build is enabled.
 
 Resume in this order when the evidence is available:
 
-1. Run the v0.10 diagnostic RPX/WUHB and the standard HID/GSP mode per
+1. Run the v0.11 diagnostic RPX/WUHB and the standard HID/GSP mode per
    `console-testing.md`. Record every self-test outcome, corner/channel/rotation
    correctness, touch mapping, input latency, audio/lifecycle, ten-minute stability
    and SD logs, with firmware/homebrew/launcher versions. Fix reproducible console
-   failures before expanding the runtime or drawing performance conclusions.
+   failures before drawing performance conclusions. Common runtime implementation
+   can proceed independently; it must retain explicit unsupported states and
+   original fixtures rather than guess the selected game's requirements.
 2. Use `CTR2WUP-CIA-Intake` with the original local CIA and privately return its
    small `CTR2WUP-intake.zip` per `cia-intake.md`. Analyze actual hashes/segments/
    allowlists and pinned-lifter coverage; establish the exact Mario revision.

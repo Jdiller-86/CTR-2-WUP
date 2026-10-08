@@ -20,6 +20,9 @@ are unsupported. The supported subset is research code, not a complete ARM11.
 
 `translator/aot.py` specializes a smaller flat-executable subset into direct C
 instruction blocks. It fails with guest PC/opcode context for unsupported code.
+Version 0.11.0 also specializes word LDREX/STREX directly, with the same bounded
+monitor/generation/fault behavior as the interpreter. The queued GSP probe checks
+successful updates and a device publication forcing retry across execution paths.
 Each block is instruction-budgeted. The dispatcher keys address plus ARM/Thumb
 state, records missing blocks with module hash and PC, and permits explicit
 interpreter fallback. Invalidated code cannot execute a stale translated block.

@@ -48,6 +48,24 @@ def arm(insn: int, pc: int) -> list[str]:
         if insn & 0x01000000:
             body += [f"cpu->r[14] = {next_pc};"]
         return body + [f"cpu->r[15] = {literal(pc + 8 + offset * 4)};", "return CTR_CPU_OK;"]
+    if insn & 0x0ff00fff == 0x01900f9f:
+        rn,rd=(insn>>16)&15,(insn>>12)&15
+        if rn==15 or rd==15:
+            raise ValueError("exclusive PC operand is unsupported")
+        return body+[f"uint32_t address = cpu->r[{rn}];",
+                     f"ctr_cpu_result result = ctr_cpu_load(cpu, address, 4u, &cpu->r[{rd}]);",
+                     "if (result != CTR_CPU_OK) return result;", "cpu->exclusive_valid = true;",
+                     "cpu->exclusive_address = address;", "cpu->exclusive_generation = cpu->memory->generation;",
+                     f"cpu->r[15] = {next_pc};", "return CTR_CPU_OK;"]
+    if insn & 0x0ff00ff0 == 0x01800f90:
+        rn,rd,rm=(insn>>16)&15,(insn>>12)&15,insn&15
+        if 15 in (rn,rd,rm) or rd in (rn,rm):
+            raise ValueError("invalid exclusive register combination")
+        return body+[f"bool valid = cpu->exclusive_valid && cpu->exclusive_address == cpu->r[{rn}] && cpu->exclusive_generation == cpu->memory->generation;",
+                     "cpu->exclusive_valid = false;", "if (valid) {",
+                     f"    ctr_cpu_result result = ctr_cpu_store(cpu, cpu->r[{rn}], 4u, cpu->r[{rm}]);",
+                     "    if (result != CTR_CPU_OK) return result;", "}", f"cpu->r[{rd}] = valid ? 0u : 1u;",
+                     f"cpu->r[15] = {next_pc};", "return CTR_CPU_OK;"]
     if insn & 0x0e0000f0 == 0x000000b0:
         rd,rn=(insn>>12)&15,(insn>>16)&15
         if not insn&0x01000000 or not insn&0x00400000 or insn&0x00200000 or rd==15:

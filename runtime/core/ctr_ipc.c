@@ -127,11 +127,12 @@ void ctr_ipc_request(ctr_guest *g) {
     }
     if (session->service==CTR_SERVICE_GSP) {
         unsigned count;
-        if(!ctr_gsp_request(g,words,out,&count)) {
+        if(!ctr_gsp_request(g,(unsigned)(session-g->sessions),words,out,&count)) {
             if(g->state==CTR_GUEST_FAULTED)++g->ipc_failures;
             else unsupported(g,words[0]);
             return;
         }
+        if(out[1]) { ++g->ipc_failures;g->ipc_result=out[1]; }
         reply(g,base,out,count);return;
     }
     switch (words[0]) {

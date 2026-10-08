@@ -13,8 +13,8 @@ Record the precise homebrew environment, firmware and launcher versions used.
 These are diagnostic applications, not WUP installation directories. Do not
 attempt to install the RPX/WUHB through a WUP installer.
 
-Current v0.10.0 delivery is `CTR2WUP-diagnostic-0.10.0.zip`; it contains the native
-RPX/WUHB, the instructions and four desktop standard-display reference PPMs.
+Current v0.11.0 delivery is `CTR2WUP-diagnostic-0.11.0.zip`; it contains the native
+RPX/WUHB, the instructions and direct/shared display reference PPMs.
 The separate original/external-guest bundles contain the other starting modes.
 
 Version 0.2.0 also includes `ctr2wup-guest-fixture.rpx`/`.wuhb`, which starts in
@@ -113,11 +113,16 @@ Guest pixels are ARM-generated; the status overlay is host-generated. Success
 would establish this controlled fixture's PowerPC/input/presentation behavior,
 not stock 3DS graphics, PICA/HID/GSP or commercial compatibility.
 
-## Standard HID/GSP guest checks (0.10.0)
+v0.11.0 also adds `GSP QUEUE/VBLANK PASS CODE 0` and
+`gsp_relay_selftest PASS result=0`, checking mapped queues, delayed presentation,
+IRQ delivery and cleanup through the original interpreter/AOT paths.
 
-1. Cycle Y until `CTR2WUP STANDARD HID / GSP RGB565` is shown. Completed frame
+## Standard HID/GSP queued guest checks (0.11.0)
+
+1. Cycle Y until `CTR2WUP HID / GSP QUEUE / VBLANK` is shown. Completed frame
    count must increase without faults or fallback. This guest reads HID shared
-   memory/events and submits both RGB565 screens through GSP SetBufferSwap.
+   memory/events and submits both RGB565 screens through the GSP shared queue,
+   then waits for VBlank and drains IRQs.
 2. Top should be blue, or green while holding A. Check the corner markers:
    white top-left, red top-right, green bottom-left, blue bottom-right. The host
    status overlay is in the middle so every corner remains visible.
@@ -127,13 +132,18 @@ not stock 3DS graphics, PICA/HID/GSP or commercial compatibility.
    so record visible latency rather than assuming one display-frame response.
 4. B exits this guest; Plus restarts both graphics guests. Cycle all three modes,
    leave the GSP mode running for ten minutes and test Minus/HOME lifecycle.
-   Return both-screen photos and SD `gsp_selftest`, `GSP guest`,
+   Return both-screen photos and SD `gsp_selftest`, `gsp_relay_selftest`,
+   `GSP relay`, `GSP guest`,
    `gsp_guest_shutdown` logs, duration and firmware/launcher environment.
 
-Compare with `standard-display-reference/frame-{1,2}-{top,bottom}.ppm` in the
+Compare with `shared-display-reference/frame-{1,2}-{top,bottom}.ppm` in the
 native diagnostic bundle: frame1 holds A/touch at 100,80, frame2 releases both.
 These reference images have no host status overlay. Success establishes the
-scoped CPU framebuffer bridge; shared GSP queues, VBlank and PICA remain absent.
+scoped CPU/shared framebuffer bridge and relay on the diagnostic clock.
+It does not establish stock libctru initialization, real 3DS timing or PICA.
+Check registered=1 while running, increasing VBlank and swap counters, no device
+faults or dropped IRQs, and registered=0/clean exit after B. Record coalesced
+intervals and input latency; slow CPU fills can legitimately coalesce host ticks.
 
 ## Packaging prerequisite checks
 

@@ -91,3 +91,8 @@ spaces/Unicode on both source and output paths; cancellation terminating compile
 children; atomic publication and refusal to overwrite outputs; installable-wheel
 commands; interpreter/AOT guest-frame matches; and console RPX launch. The WPF GUI is deferred until execution and
 packing gates are demonstrated, as required by the brief.
+
+Version 0.11 source/builds include the shared GSP relay probe and API suite.
+`make check` runs its sanitizer checks; `tools/validate-upstream.py --relay-api`
+runs nine probes and shared queue API checks. Native Windows execution remains
+pending; no local unapproved workflow is published or included in source bundles.

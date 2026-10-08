@@ -22,6 +22,7 @@ from host.heap_fixture import fixture_bytes as heap_fixture_bytes
 from host.kernel_fixture import fixture_bytes as kernel_fixture_bytes
 from host.hid_fixture import fixture_bytes as hid_fixture_bytes
 from host.gsp_fixture import fixture_bytes as gsp_fixture_bytes
+from host.relay_fixture import fixture_bytes as relay_fixture_bytes
 from tests.host_fixtures import ncch
 from translator.upstream import generate_into
 ROOT=Path(__file__).resolve().parents[1]
@@ -36,6 +37,7 @@ def main():
     parser.add_argument('--kernel-api',action='store_true',help='Also execute shared-memory and synchronization API tests')
     parser.add_argument('--hid-api',action='store_true',help='Also execute HID wire-layout, input and lifetime API tests')
     parser.add_argument('--gsp-api',action='store_true',help='Also execute GSP display format/rights/bounds API tests')
+    parser.add_argument('--relay-api',action='store_true',help='Also execute GSP relay/shared queue/timing/lifetime API tests')
     parser.add_argument('--output',required=True)
     args=parser.parse_args();out=Path(args.output).absolute();out.mkdir(parents=True,exist_ok=False)
     results=[]
@@ -50,7 +52,7 @@ def main():
     common=shlex.split(args.cc_prefix)+[args.cc,'-std=c11','-O2','-g','-Wall','-Wextra','-Werror','-ffp-contract=off','-fno-fast-math','-I',str(core),'-I',str(recomp)]
     if args.static:common+=['-static','-mcpu=750']
     if args.sanitize:common+=['-O1','-fno-omit-frame-pointer','-fsanitize=address,undefined']
-    for name in ('frame','abi','services','cp15','heap','kernel','hid','gsp'):
+    for name in ('frame','abi','services','cp15','heap','kernel','hid','gsp','relay'):
         folder=out/name;folder.mkdir()
         code=(ROOT/'tests/recomp/abi.arm.bin').read_bytes() if name=='abi' else struct.pack('<6I',0x1e070f9a,0xee070f9a,0xf57ff05f,0xf57ff04f,0xf57ff06f,0xef000003) if name=='cp15' else None
         rom=folder/'original.cxi'
@@ -59,7 +61,7 @@ def main():
             struct.pack_into('<I',container,0x218,len(code))
             container[0x160:0x180]=hashlib.sha256(container[0x200:0x600]).digest()
             rom.write_bytes(container)
-        else: rom.write_bytes(service_fixture_bytes() if name=='services' else heap_fixture_bytes() if name=='heap' else kernel_fixture_bytes() if name=='kernel' else hid_fixture_bytes() if name=='hid' else gsp_fixture_bytes() if name=='gsp' else fixture_bytes())
+        else: rom.write_bytes(service_fixture_bytes() if name=='services' else heap_fixture_bytes() if name=='heap' else kernel_fixture_bytes() if name=='kernel' else hid_fixture_bytes() if name=='hid' else gsp_fixture_bytes() if name=='gsp' else relay_fixture_bytes() if name=='relay' else fixture_bytes())
         generation=generate_into(rom,folder/'aot')
         sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c')]+[recomp/'ctr_recomp.c']
         flags=[]
@@ -75,12 +77,14 @@ def main():
             sources += [core/'ctr_hid_fixture.c',ROOT/'tests/fixtures/hid/hid-image.generated.c',ROOT/'tests/fixtures/hid/hid.generated.c']
         elif name=='gsp':
             sources += [core/'ctr_gsp_fixture.c',core/'ctr_hid_fixture.c',ROOT/'tests/fixtures/hid/hid-image.generated.c',ROOT/'tests/fixtures/hid/hid.generated.c',ROOT/'tests/fixtures/gsp/gsp-image.generated.c',ROOT/'tests/fixtures/gsp/gsp.generated.c']
+        elif name=='relay':
+            sources += [core/'ctr_relay_fixture.c',core/'ctr_hid_fixture.c',ROOT/'tests/fixtures/hid/hid-image.generated.c',ROOT/'tests/fixtures/hid/hid.generated.c',ROOT/'tests/fixtures/relay/relay-image.generated.c',ROOT/'tests/fixtures/relay/relay.generated.c']
         else:
             (folder/'abi_image.h').write_text('#define ABI_CODE_SIZE '+str(len(code))+'\nstatic const unsigned char abi_code[4096]={'+','.join(str(b) for b in code)+'};\n')
         binary=folder/(name+('.exe' if os.name=='nt' else ''))
         sources+=[ROOT/'tests/recomp'/('test_'+name+'.c')]+[folder/'aot'/n for n in generation['sources']]
         run(name+'-compile',common+flags+['-I',str(folder),'-I',str(folder/'aot'),*map(str,sources),'-lm','-o',str(binary)])
-        run(name+'-execute',shlex.split(args.run_prefix)+[str(binary)]+([str(folder)] if name=='gsp' else []))
+        run(name+'-execute',shlex.split(args.run_prefix)+[str(binary)]+([str(folder)] if name in ('gsp','relay') else []))
     if args.service_api:
         binary=out/('service-api'+('.exe' if os.name=='nt' else ''))
         sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c','ctr_service_fixture.c')]
@@ -111,6 +115,12 @@ def main():
         sources += [ROOT/'tests/gsp/test_gsp.c',ROOT/'tests/fixtures/hid/hid-image.generated.c',ROOT/'tests/fixtures/hid/hid.generated.c',ROOT/'tests/fixtures/gsp/gsp-image.generated.c',ROOT/'tests/fixtures/gsp/gsp.generated.c']
         run('gsp-api-compile',common+[*map(str,sources),'-o',str(binary)])
         run('gsp-api-execute',shlex.split(args.run_prefix)+[str(binary)])
+    if args.relay_api:
+        binary=out/('relay-api'+('.exe' if os.name=='nt' else ''))
+        sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c','ctr_hid_fixture.c','ctr_relay_fixture.c')]
+        sources += [ROOT/'tests/relay/test_relay.c',ROOT/'tests/fixtures/hid/hid-image.generated.c',ROOT/'tests/fixtures/hid/hid.generated.c',ROOT/'tests/fixtures/relay/relay-image.generated.c',ROOT/'tests/fixtures/relay/relay.generated.c']
+        run('relay-api-compile',common+[*map(str,sources),'-o',str(binary)])
+        run('relay-api-execute',shlex.split(args.run_prefix)+[str(binary)])
     (out/'report.json').write_text(json.dumps({'ok':True,'checks':results,'console_verified':False,'powerpc_execution':'emulated Linux' if args.static else None},indent=2)+'\n')
     return 0
 if __name__=='__main__':raise SystemExit(main())

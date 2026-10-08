@@ -41,6 +41,9 @@ typedef struct {
     bool right, black, active[2];
     uint32_t info[2][7];
     uint64_t swaps[2];
+    bool registered;
+    unsigned relay_owner, relay_shared, relay_event;
+    uint64_t next_vblank_ns, vblanks, coalesced_vblanks, dropped_interrupts, failures;
 } ctr_guest_gsp;
 typedef struct {
     ctr_memory memory;

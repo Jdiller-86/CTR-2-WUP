@@ -99,7 +99,7 @@ ctr_cpu_result ctr_cpu_load(ctr_cpu *cpu, uint32_t address, unsigned width, uint
 
 ctr_cpu_result ctr_cpu_store(ctr_cpu *cpu, uint32_t address, unsigned width, uint32_t value) {
     ctr_mem_result result = ctr_memory_write(cpu->memory, address, width, value);
-    if (result == CTR_MEM_OK) return CTR_CPU_OK;
+    if (result == CTR_MEM_OK) { cpu->exclusive_valid=false;return CTR_CPU_OK; }
     cpu->memory_fault = result;
     return ctr_cpu_stop(cpu, CTR_CPU_MEMORY_FAULT, address);
 }

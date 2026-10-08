@@ -28,6 +28,7 @@
 #include "ctr_kernel_fixture.h"
 #include "ctr_hid_fixture.h"
 #include "ctr_gsp_fixture.h"
+#include "ctr_relay_fixture.h"
 
 enum { TOP_W=400, BOTTOM_W=320, GUEST_H=240, AUDIO_SAMPLES=12000 };
 static uint32_t top_image[TOP_W*GUEST_H], bottom_image[BOTTOM_W*GUEST_H];
@@ -45,6 +46,7 @@ static ctr_guest hid_guest;
 static uint32_t hid_snapshot[5];
 static OSTime hid_origin;
 static int gsp_test_result,gsp_ready;
+static int relay_test_result;
 static ctr_guest gsp_guest;
 static uint64_t gsp_presented;
 static OSTime gsp_origin;
@@ -66,10 +68,10 @@ static void restart_guest(void) {
     frame_guest.debug=guest_debug; frame_guest.cpu.log=guest_trace;
     guest_origin=OSGetTime(); presented_frames=0;
     WHBLogPrintf("guest_open ok=%u profile=ctr2wup-framebuffer-fixture-v1 mode=AOT custom_frame_io=1 GSP_PICA=unavailable",guest_ready);
-    ctr_guest_close(&gsp_guest);gsp_ready=ctr_gsp_fixture_open(&gsp_guest);
+    ctr_guest_close(&gsp_guest);gsp_ready=ctr_relay_fixture_open(&gsp_guest);
     gsp_guest.debug=guest_debug;gsp_guest.cpu.log=guest_trace;
     gsp_origin=OSGetTime();gsp_presented=0;
-    WHBLogPrintf("gsp_guest_open ok=%u profile=original_hid_gsp_rgb565 mode=original_AOT PICA=unavailable",gsp_ready);
+    WHBLogPrintf("gsp_guest_open ok=%u profile=original_hid_gsp_shared_relay_rgb565 mode=original_AOT PICA=unavailable",gsp_ready);
 }
 
 static int circle_axis(float axis) {
@@ -231,6 +233,8 @@ static void diagnostic_images(unsigned frame, const VPADStatus *pad,
     image_text(top_image,TOP_W,10,text);
     snprintf(text,sizeof(text),"HID/GSP RGB565 DISPLAY %s CODE %d",gsp_test_result?"FAIL":"PASS",gsp_test_result);
     image_text(top_image,TOP_W,11,text);
+    snprintf(text,sizeof(text),"GSP QUEUE/VBLANK %s CODE %d",relay_test_result?"FAIL":"PASS",relay_test_result);
+    image_text(top_image,TOP_W,12,text);
     for (unsigned y=0;y<GUEST_H;++y) for (unsigned x=0;x<BOTTOM_W;++x)
         bottom_image[y*BOTTOM_W+x]=y<92 ? 0x35194fff :
             (((x/20)^(y/20))&1) ? 0x783598ff:0x108797ff;
@@ -278,7 +282,7 @@ int main(int argc, char **argv) {
         log_file=fopen(path,"w");
         if (log_file) WHBAddLogHandler(file_log);
     }
-    WHBLogPrintf("CTR2WUP native diagnostic version=0.10.0 pointer_bits=%u endian=big UDP=%u SD_log=%u",
+    WHBLogPrintf("CTR2WUP native diagnostic version=0.11.0 pointer_bits=%u endian=big UDP=%u SD_log=%u",
                   (unsigned)(8*sizeof(void *)), udp_ready, log_file!=NULL);
     OSTime cpu_start=OSGetTime();
     cpu_test_result=ctr_cpu_selftest();
@@ -303,6 +307,9 @@ int main(int argc, char **argv) {
     OSTime gsp_start=OSGetTime();gsp_test_result=ctr_gsp_selftest();
     WHBLogPrintf("gsp_selftest %s result=%d fixture=original_arm_hid_gsp_rgb565 elapsed_us=%llu console_result_required=1",
         gsp_test_result?"FAIL":"PASS",gsp_test_result,(unsigned long long)OSTicksToMicroseconds(OSGetTime()-gsp_start));
+    relay_test_result=ctr_relay_selftest();
+    WHBLogPrintf("gsp_relay_selftest %s result=%d fixture=original_arm_shared_gsp_vblank console_result_required=1",
+        relay_test_result?"FAIL":"PASS",relay_test_result);
     if (!WHBGfxInit()) { WHBLogPrintf("FAIL WHBGfxInit"); goto cleanup; }
     gfx_ready=1;
     GX2Surface *tv_target=&WHBGfxGetTVColourBuffer()->surface;
@@ -347,7 +354,7 @@ int main(int argc, char **argv) {
         if(hid_ready)ctr_hid_fixture_snapshot(&hid_guest,hid_snapshot);
         if (!guest_mode) diagnostic_images(frame,&pad,error,inside,&touch,tx,ty,frame_us,alloc_ok);
         else if(guest_mode==2) {
-            if(pad.trigger&VPAD_BUTTON_B)ctr_hid_fixture_exit(&gsp_guest);
+            if(pad.trigger&VPAD_BUTTON_B)ctr_relay_fixture_exit(&gsp_guest);
             update_input_guest(&gsp_guest,gsp_ready,gsp_origin,&pad,inside!=0,tx,ty,50000);
             if(!gsp_presented) { memset(top_image,0,sizeof(top_image));memset(bottom_image,0,sizeof(bottom_image)); }
             if(gsp_ready && gsp_guest.gsp.swaps[0] && gsp_guest.gsp.swaps[0]==gsp_guest.gsp.swaps[1] && gsp_guest.gsp.swaps[0]!=gsp_presented) {
@@ -360,7 +367,7 @@ int main(int argc, char **argv) {
                 gsp_presented=gsp_guest.gsp.swaps[0];
             }
             for(unsigned i=TOP_W*102;i<TOP_W*144;++i)top_image[i]=0x162d4fff;
-            char text[90];image_text(top_image,TOP_W,10,"CTR2WUP STANDARD HID / GSP RGB565");
+            char text[90];image_text(top_image,TOP_W,10,"CTR2WUP HID / GSP QUEUE / VBLANK");
             snprintf(text,sizeof(text),"FRAME %llu / STATE %s",(unsigned long long)gsp_presented,ctr_guest_state_name(gsp_guest.state));
             image_text(top_image,TOP_W,11,text);image_text(top_image,TOP_W,12,"A: GREEN / TOUCH: WHITE / B: EXIT");
             image_text(top_image,TOP_W,13,"Y: CYCLE / PLUS: RESET / PICA ABSENT");
@@ -423,6 +430,10 @@ int main(int argc, char **argv) {
                 ctr_guest_state_name(gsp_guest.state),(unsigned long long)gsp_presented,(unsigned long long)gsp_guest.gsp.swaps[0],
                 (unsigned long long)gsp_guest.gsp.swaps[1],(unsigned long long)gsp_guest.cpu.instructions,
                 (unsigned long long)gsp_guest.cpu.fallback_instructions,ctr_cpu_result_name(gsp_guest.fault),gsp_guest.fault_detail);
+            WHBLogPrintf("GSP relay registered=%u vblanks=%llu coalesced=%llu dropped_irqs=%llu device_failures=%llu",
+                gsp_guest.gsp.registered,(unsigned long long)gsp_guest.gsp.vblanks,
+                (unsigned long long)gsp_guest.gsp.coalesced_vblanks,(unsigned long long)gsp_guest.gsp.dropped_interrupts,
+                (unsigned long long)gsp_guest.gsp.failures);
             log_time=OSGetTime();
         }
         ++frame;
@@ -437,7 +448,7 @@ cleanup:
             (unsigned long long)hid_guest.cpu.fallback_instructions);
     }
     ctr_guest_close(&hid_guest);
-    if(gsp_ready && gsp_guest.state!=CTR_GUEST_FAULTED && gsp_guest.state!=CTR_GUEST_EXITED && ctr_hid_fixture_exit(&gsp_guest)) {
+    if(gsp_ready && gsp_guest.state!=CTR_GUEST_FAULTED && gsp_guest.state!=CTR_GUEST_EXITED && ctr_relay_fixture_exit(&gsp_guest)) {
         ctr_guest_run(&gsp_guest,1000000,gsp_guest.now_ns,true);
         WHBLogPrintf("gsp_guest_shutdown state=%s fallback=%llu",ctr_guest_state_name(gsp_guest.state),
             (unsigned long long)gsp_guest.cpu.fallback_instructions);

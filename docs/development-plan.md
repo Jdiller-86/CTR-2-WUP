@@ -176,3 +176,12 @@ and Mario executable intake. `current-roadblock.md` records that roadblock and
 precise resume order. Generic runtime work remains possible, but broader game
 feature selection and performance claims need the selected revision/reference
 and console results. All commercial/GUI/full milestone gates stay open.
+
+The user asked whether further development was possible. v0.11.0 resumes shared
+GSP framebuffer queues and a diagnostic VBlank/IRQ relay without a ROM. The ARM
+probe uses LDREX/STREX and tests a device write forcing retry across three
+execution paths. The queued guest is embedded in Wii U builds. Physical acceptance
+and Mario intake still gate compatibility, not all shared development. Further
+ROM-independent work includes thread scheduling, CPU/barrier correctness, general
+IPC/FS and bounded graphics transfers. Prioritize original reference tests for
+each; title-specific PICA/feature selection still needs actual intake/trace.

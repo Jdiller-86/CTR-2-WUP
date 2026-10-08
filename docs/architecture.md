@@ -56,7 +56,9 @@ through that service; `hid-input.md` defines its bounds and absent motion suppor
 Version 0.10.0 adds checked direct GSP framebuffer submission and portable
 rotated RGBA8/BGR8/RGB565/RGB5A1/RGBA4 conversion. A separate original ARM guest
 reads HID, writes RGB565 and displays through this interface in all Wii U builds;
-see `gsp-display.md`. Shared command/interrupt queues and PICA remain absent.
+see `gsp-display.md`. Version 0.11.0 adds one local GSP relay/shared framebuffer
+page, diagnostic VBlank and atomic queued presentation; see `gsp-queues.md`.
+The standard display guest now uses this queue. GX commands and PICA remain absent.
 Its guest mode presents completed ARM-written raw framebuffers through the same
 GX2 copying path. It is separate from PICA/GSP emulation; see `guest-fixture.md`.
 Compilation proves toolchain integration. Only physical console results can

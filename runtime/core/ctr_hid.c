@@ -48,12 +48,7 @@ bool ctr_hid_update(ctr_guest *g,uint32_t buttons,int cx,int cy,bool touched,uin
     put(next,pad,4,buttons);put(next,pad+4,4,buttons&~g->hid.held);put(next,pad+8,4,g->hid.held&~buttons);
     put(next,pad+12,2,(uint16_t)cx);put(next,pad+14,2,(uint16_t)cy);
     put(next,touch,2,touched?x:0);put(next,touch+2,2,touched?y:0);put(next,touch+4,4,touched?1:0);
-    memcpy(s->storage,next,sizeof(next));++g->memory.generation;g->cpu.exclusive_valid=false;
-    for (size_t i=0;i<g->memory.count;++i) {
-        const ctr_mapping *m=&g->memory.maps[i];
-        if ((m->permissions&CTR_MEM_EXEC) && (uintptr_t)m->storage<(uintptr_t)s->storage+s->size &&
-            (uintptr_t)s->storage<(uintptr_t)m->storage+m->size) { ++g->memory.code_generation;break; }
-    }
+    ctr_shared_publish(g,h->object,next);
     g->hid.index=index;g->hid.held=buttons;g->hid.published=true;g->hid.last_ns=now;++g->hid.samples;
     ctr_guest_signal(g,g->hid.handles[1]);ctr_guest_signal(g,g->hid.handles[2]);return true;
 }

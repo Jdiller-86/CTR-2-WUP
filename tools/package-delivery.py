@@ -11,7 +11,7 @@ sys.path.insert(0,str(ROOT))
 from host import __version__
 from host.guest_fixture import fixture_bytes
 OUT = ROOT / "artifacts" / "delivery"
-SOURCE_FOLDERS = (".github", "docs", "host", "translator", "runtime", "renderer", "packaging", "profiles", "tests", "tools")
+SOURCE_FOLDERS = ("docs", "host", "translator", "runtime", "renderer", "packaging", "profiles", "tests", "tools")
 SOURCE_FILES = (".gitignore", "AGENTS.md", "LICENSE", "Makefile", "README.md", "STATUS.md", "THIRD_PARTY_NOTICES", "pyproject.toml")
 FORBIDDEN = {".3ds", ".cxi", ".cia", ".3dsx", ".sav", ".keys", ".key", ".cert", ".app", ".h3", ".tik", ".tmd", ".pyc", ".log"}
 
@@ -51,6 +51,10 @@ def main():
     if display_reference.is_dir():
         binary_entries += [(p,'standard-display-reference/'+p.name) for p in display_reference.glob('frame-*.ppm')]
         binary_entries.append((ROOT/'docs/gsp-display.md','docs/gsp-display.md'))
+    relay_reference=latest.parent/'upstream-native/relay'
+    if relay_reference.is_dir():
+        binary_entries += [(p,'shared-display-reference/'+p.name) for p in relay_reference.glob('frame-*.ppm')]
+        binary_entries.append((ROOT/'docs/gsp-queues.md','docs/gsp-queues.md'))
     diagnostic_archive = OUT / ("CTR2WUP-diagnostic-"+__version__+".zip")
     archive(diagnostic_archive, binary_entries)
     guest_console=ROOT/report["guest_console_output"]

@@ -30,6 +30,15 @@ uint32_t ctr_shared_create(ctr_guest *g,uint32_t size,unsigned permissions) {
     if (!handle) { free(storage);memset(s,0,sizeof(*s)); }
     return handle;
 }
+void ctr_shared_publish(ctr_guest *g,unsigned object,const uint8_t *bytes) {
+    ctr_guest_shared *s=&g->shared[object];memcpy(s->storage,bytes,s->size);
+    ++g->memory.generation;g->cpu.exclusive_valid=false;
+    for(size_t i=0;i<g->memory.count;++i) {
+        const ctr_mapping *m=&g->memory.maps[i];
+        if((m->permissions&CTR_MEM_EXEC) && (uintptr_t)m->storage<(uintptr_t)s->storage+s->size &&
+            (uintptr_t)s->storage<(uintptr_t)m->storage+m->size) { ++g->memory.code_generation;break; }
+    }
+}
 const ctr_guest_shared *ctr_shared_mapping(const ctr_guest *g,const ctr_mapping *m) {
     for (unsigned i=0;i<8;++i) {
         const ctr_guest_shared *s=&g->shared[i];
