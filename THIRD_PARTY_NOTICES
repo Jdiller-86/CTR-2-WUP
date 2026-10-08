@@ -97,6 +97,15 @@ templates from the packaging candidates were not copied.
 
 External development tools
 --------------------------
+The separate CTR2WUP-CIA-Intake Windows x64 utility bundles Microsoft's .NET
+10.0.12 runtime and apphost under MIT plus the preserved third-party notices
+from the exact restored runtime/host packages. Their LICENSE.TXT and
+THIRD-PARTY-NOTICES.TXT are identical for those packages and accompany the helper
+distribution as LICENSE-DOTNET.txt and THIRD-PARTY-NOTICES-DOTNET.txt. Copies are
+also at docs/licenses/dotnet-runtime-*.txt. This limited console helper is
+original intake code, not the final GUI/injector; no SDK, user game or credential
+is bundled. Runtime source: https://github.com/dotnet/runtime, v10.0.12.
+
 Encrypted packaging optionally calls the external Python package cryptography
 50.0.0, https://github.com/pyca/cryptography. Its Apache-2.0 OR BSD-3-Clause
 license permits the BSD-3-Clause grant selected here; the full notice is

@@ -36,7 +36,7 @@ def analyze_title(path,output,*,lifter=False):
                         'Inspect RomFS/CRO inventory and generated-code coverage/memory cost',
                         'Implement required kernel/IPC/HID/GSP/filesystem/APT/CFG/DSP behavior',
                         'Validate PICA rendering, GPU readback/coherency, audio and save/reload on console',
-                        'Complete encrypted WUP construction and installation/Menu launch'],
+                        'Validate local packaging inputs, installer acceptance and Menu launch'],
                 'inspection':inspection}
         (stage/'requirements-report.json').write_text(json.dumps(report,indent=2)+'\n')
         publish_directory(stage,output);return {**report,'output':str(output)}

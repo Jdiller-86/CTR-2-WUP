@@ -1,5 +1,10 @@
 # Build on Windows
 
+The v0.5.0 `CTR2WUP-CIA-Intake` console utility has a separate self-contained
+Windows x64 bundle requiring no Python/SDK/runtime installation. It exports
+private analysis data and is not the final GUI/injector. See `cia-intake.md` for
+use, build/runtime pins and the unverified native-Windows acceptance check.
+
 The source CLI targets Python 3.12+ and uses the standard library, argument-list
 subprocesses, Windows process-group cancellation and Unicode paths. It has been
 executed on Linux, including a checkout/output path with spaces and Japanese

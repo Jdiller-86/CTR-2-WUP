@@ -1,7 +1,11 @@
 # First supported-title candidate: Super Mario 3D Land
 
-Selected by the user on 2026-10-08 UTC. The exact user-owned dump, region and
-revision have not been supplied. No commercial profile is enabled, and there is
+Selected by the user on 2026-10-08 UTC. A CIA attachment was subsequently supplied
+on October 7 (America/New_York), but exceeds the workspace's 32 MiB transfer
+limit. Its filename suggests USA title `0004000000054000`, `CTR-P-AREE`,
+`v0.3.0`; these are unverified filename claims. Its bytes/encryption/hash/revision
+have not been inspected. `cia-intake.md` supplies a small local executable export
+helper for this transfer constraint. No commercial profile is enabled, and there is
 no reproduced CTR2WUP boot/gameplay/save or Wii U performance result.
 The MVP is still the Windows GUI's Inject → per-game WUP → Wii U Menu workflow.
 
@@ -38,7 +42,7 @@ copied into CTR2WUP.
 
 ## Private intake
 
-Keep a fully decrypted `.3ds` or `.cxi` under ignored `private/`; no keys are
+Keep a fully decrypted `.cia`, `.3ds` or `.cxi` under ignored `private/`; no keys are
 needed for already decrypted input. Avoid update/DLC merging for the first exact
 revision. The following produces metadata and declared capabilities, not a
 supported or playable conversion:
@@ -51,7 +55,8 @@ The report preserves exact hashes, segment/stack/BSS layout, declared service
 access and section inventory. The external lifter analysis remains private.
 Do not infer implemented/observed IPC from the service allowlist. Later extraction
 and module/shader analysis will use this revision to prioritize concrete runtime
-work. The synthetic intake command is verified; commercial intake is pending.
+work. The synthetic intake commands and CIA/executable-export fixtures are
+verified; actual commercial intake remains pending the smaller private export.
 
 Proposed manual route, to agree after identifying the dump: cold boot, title
 menu, start a new save, enter/play the first course, test movement/jump/touch as

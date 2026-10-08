@@ -11,6 +11,9 @@ the external lifter's generated C to an original checked ABI and static PowerPC
 build. Version 0.4.0 adds an original encrypted homebrew package writer and
 independent decrypting/FST/file verification, tested with synthetic local inputs.
 It also retains original title staging and private title intake.
+Version 0.5.0 adds decrypted CIA intake and a separate self-contained Windows
+console helper for exporting small private executable analysis data. The supplied
+Mario CIA exceeds the workspace's 32 MiB transfer limit; see `docs/cia-intake.md`.
 Commercial ROM-to-WUP conversion is not implemented or claimed.
 
 Read `STATUS.md`, `docs/milestones.md` and `docs/foundation-audit.md` before

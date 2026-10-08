@@ -8,8 +8,17 @@ The host CLI is Python 3.12; inspection/runtime tooling uses the standard librar
 and encrypted packaging optionally uses cryptography. It uses the
 same argument-list subprocess interface on Windows and Linux. Container parsing,
 inspection, build reports, and package inspection are separate from execution.
-Executable artifacts are the original native diagnostic and controlled guest RPXs.
+Executable artifacts are the original native diagnostic and controlled guest RPXs,
+plus the separate .NET CIA intake console utility cross-published for Windows x64.
 An RPX is not an installable WUP directory.
+
+The CIA intake path uses bounded signature-layout/TMD/bitmap/content checks and
+selects index-0 application NCCH with checked absolute file offsets. Its derived
+CXI view preserves ExeFS/exheader code identity while explicitly removing RomFS
+and header signature. The standalone .NET helper validates stored hashes; the
+shared Python engine also validates BLZ/decompressed revision. This private view
+supports analysis through a 32 MiB attachment constraint, not game execution or
+asset staging. See `cia-intake.md` for supported profile and limitations.
 
 The portable C core stores guest addresses as 32-bit integers and accesses bytes
 through checked mappings. Guest memory is explicitly little-endian on every

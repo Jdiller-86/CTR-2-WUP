@@ -23,7 +23,7 @@ def parser():
     result.add_argument("--version", action="version", version=__version__)
     commands = result.add_subparsers(dest="command", required=True)
     commands.add_parser("doctor", help="Discover real compiler and WUT prerequisites")
-    inspection = commands.add_parser("inspect", help="Strictly inspect a fully decrypted .3ds/.cxi")
+    inspection = commands.add_parser("inspect", help="Strictly inspect a fully decrypted .cia/.3ds/.cxi")
     inspection.add_argument("path")
     fixture = commands.add_parser("make-fixture", help="Generate the original redistributable NCCH runtime fixture")
     fixture.add_argument("--output", required=True)
@@ -42,6 +42,8 @@ def parser():
     translation.add_argument("--output",required=True)
     intake=commands.add_parser("analyze-title",help="Write private revision/capability intake; no profile is enabled")
     intake.add_argument("path");intake.add_argument("--output",required=True);intake.add_argument("--lifter",action="store_true")
+    small=commands.add_parser("prepare-intake",help="Create a private small executable view or encryption report; not a full ROM or supported conversion")
+    small.add_argument("path");small.add_argument("--output",required=True)
     compile_command = commands.add_parser("build", help="Compile the native diagnostic RPX or check a ROM support gate")
     compile_command.add_argument("path", nargs="?")
     compile_command.add_argument("--target", choices=("prototype", "guest-fixture", "commercial"), default="commercial")
@@ -87,6 +89,9 @@ def execute(args):
     if args.command == "analyze-title":
         from .title_analysis import analyze_title
         return analyze_title(args.path,args.output,lifter=args.lifter)
+    if args.command == "prepare-intake":
+        from .intake_export import export_intake
+        return export_intake(args.path,args.output)
     if args.command == "build":
         if args.target == "prototype":
             if args.path:

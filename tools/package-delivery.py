@@ -30,7 +30,7 @@ def main():
     entries = [(ROOT / name, "CTR2WUP/" + name) for name in SOURCE_FILES]
     for folder in SOURCE_FOLDERS:
         for source in (ROOT / folder).rglob("*"):
-            if not source.is_file() or "__pycache__" in source.parts:
+            if not source.is_file() or any(part in source.parts for part in ("__pycache__", "obj", "bin")):
                 continue
             if source.is_symlink() or source.suffix.lower() in FORBIDDEN:
                 raise RuntimeError(f"Refusing sensitive/generated input: {source}")

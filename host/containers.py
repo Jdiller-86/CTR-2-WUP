@@ -1,4 +1,4 @@
-"""Strict read-only NCSD/NCCH inspection. No decryption or signature authentication.
+"""Strict read-only CIA/NCSD/NCCH inspection. No decryption or signature authentication.
 
 Offsets, sizes and guest integers are explicitly little endian. ExeFS file data
 is hashed as stored; .code is independently hashed after backwards-LZ expansion.
@@ -303,6 +303,7 @@ def inspect(path: str | Path):
                 fail("truncated_header", "Input requires a 512-byte NCSD/NCCH header")
             header = reader.read(0, 0x200, "container header")
             magic = header[0x100:0x104]
+            cia = None
             if magic == b"NCCH":
                 partitions = [_ncch(reader, 0, reader.size, partition=0)]
                 kind = "NCCH"
@@ -331,8 +332,17 @@ def inspect(path: str | Path):
                 if not slots or slots[0][0] != 0:
                     fail("missing_main_partition", "NCSD has no main executable partition 0")
                 partitions = [_ncch(reader, offset, length, partition=index) for index, offset, length in slots]
+            elif u32(header, 0) == 0x2020:
+                from .cia import read_cia, main_content
+                cia = read_cia(reader)
+                content = main_content(cia)
+                kind = "CIA"
+                capacity = reader.size
+                partitions = [_ncch(reader, content["offset"], content["size"], partition=0)]
+                if partitions[0]["size"] != content["size"] or partitions[0]["program_id"] != cia["title_id"]:
+                    fail("cia_ncch_identity_mismatch", "CIA TMD and executable NCCH size/program identity differ")
             else:
-                fail("unsupported_format", "Input is not NCSD or NCCH; renamed files and .3dsx are not supported")
+                fail("unsupported_format", "Input is not CIA, NCSD or NCCH; renamed files and .3dsx are not supported")
             main = partitions[0]
             if not main["executable"]:
                 fail("not_executable", "The primary NCCH is not application executable content")
@@ -349,7 +359,7 @@ def inspect(path: str | Path):
                     "executable_revision": main["executable_revision"],
                     "compatibility": {"state": "untested", "profile": None,
                                       "reason": "No commercial revision has been console verified"},
-                    "partitions": partitions,
+                    "partitions": partitions, "cia": cia,
                     "integrity": {"section_hashes_verified": True,
                                   "signature_authenticity_verified": False,
                                   "romfs_filesystem_verified": False}}

@@ -5,6 +5,8 @@
 /private/
 /output/
 **/build/
+**/obj/
+**/bin/
 __pycache__/
 *.py[cod]
 *.egg-info/

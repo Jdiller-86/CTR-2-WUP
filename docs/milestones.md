@@ -35,7 +35,7 @@ All acceptance checkboxes below remain open until their evidence is recorded.
 | M2 | Original CPU/AOT subset; external generation/checked ABI; 566+34 integration assertions on GCC/sanitizers/Clang/emulated big-endian PPC; scalar VFP Unicorn match | Complete ARM/VFP semantics, workload memory/fallback costs and actual Espresso timings |
 | M3 | Original executable NCCH → checked loader → AOT/interpreter execution; bounded single-guest SVC/events; matching ARM-written frames/input; guest RPX/WUHB built | Physical guest frames/input/exit/stability; conventional homebrew boot, multi-thread kernel and required IPC/HID/GSP services |
 | M4 | Tested bounded command/format/viewport references | Actual PICA-to-GX2 features, scene comparisons and console timings |
-| M5 | User selected Super Mario 3D Land; private hash/service intake; Mii/save-identity and GPU-readback source leads | User ROM/revision, runtime/renderer/services/save/audio implementation and console gameplay |
+| M5 | Mario selected and CIA attachment supplied; transfer exceeds 32 MiB; bounded CIA intake/small executable export helper implemented/tested; upstream requirement leads | Actual smaller private executable export/revision, runtime/renderer/services/save/audio implementation and console gameplay |
 | M6 | External C generation/static compilation, staging/artwork/intake, original encrypted writer and independent decrypt/FST/file checks with synthetic inputs, atomic output/wheel; Windows workflow prepared | Actual local certificate/key provenance and installer acceptance, full commercial conversion, caches/traces/rebuild, Windows execution and console install checks |
 | M7 | Deliberately deferred | Proven pipeline before responsive Windows GUI implementation |
 
@@ -45,7 +45,10 @@ is satisfied by source/build/test artifacts alone.
 Version 0.3.0 connects the audited lifter to the runtime; `upstream-integration.md`
 records its checks and limits. Version 0.4.0 adds scoped encrypted packing and a
 separate decrypting verifier; all offline test credentials are synthetic.
-Validation passes 115 Python tests, 51,147 CPU
+Version 0.5.0 adds CIA intake/export (16 Python cases) and a self-contained Windows
+console helper (13 Linux .NET cases; native Windows unverified). The attached
+commercial CIA is not inspected because of the 32 MiB transfer limit.
+Validation passes 131 Python tests, 51,147 CPU
 assertions and 221 original-guest assertions in each normal/sanitized C run,
 566+34 external integration assertions and 26 complete workflow checks, including
 real-RPX offline packaging and installed-wheel packing.

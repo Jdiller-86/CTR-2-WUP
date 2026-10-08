@@ -133,3 +133,10 @@ The user selected **Super Mario 3D Land** for P2. `first-title.md` records concr
 upstream source leads and intake commands. Its exact dump/revision is pending;
 profile activation and title-specific implementation follow that evidence.
 `STATUS.md` and `milestones.md` track implemented, verified and pending work.
+
+P2 update, October 7 (America/New_York): the user supplied a CIA, but the
+workspace transfer tool rejects it above 32 MiB. v0.5.0 implements direct
+decrypted-CIA intake and a separate self-contained Windows console helper that
+exports a small private executable view or encryption report. Actual game
+inspection awaits that export; filename region/version claims remain unverified.
+The original CIA can remain local for assets. This helper is not the GUI injector.

@@ -18,6 +18,44 @@ def align(value, size=0x200):
     return (value + size - 1) // size * size
 
 
+def cia(contents=None, *, encrypted=False, title_id=PROGRAM_ID, version=48):
+    """Original unsigned CIA fixture, never an installable game or credential."""
+    contents = contents or [(0, bytes(ncch(program_id=title_id)))]
+    tmd = bytearray(0xB04 + len(contents) * 48)
+    struct.pack_into(">I", tmd, 0, 0x10004)
+    tmd[0x180] = 1
+    struct.pack_into(">Q", tmd, 0x18C, title_id)
+    struct.pack_into(">HH", tmd, 0x1DC, version, len(contents))
+    for number, (index, data) in enumerate(contents):
+        offset = 0xB04 + number * 48
+        struct.pack_into(">IHHQ", tmd, offset, number + 1, index, int(encrypted and index == 0), len(data))
+        tmd[offset + 16:offset + 48] = hashlib.sha256(data).digest()
+    struct.pack_into(">HH", tmd, 0x204, 0, len(contents))
+    tmd[0x208:0x228] = hashlib.sha256(tmd[0xB04:]).digest()
+    tmd[0x1E4:0x204] = hashlib.sha256(tmd[0x204:0xB04]).digest()
+    ticket = bytearray(0x350)
+    struct.pack_into(">I", ticket, 0, 0x10004)
+    struct.pack_into(">Q", ticket, 0x1DC, title_id)
+    cert = b"Original test certificate placeholder"
+    start = 0x2040
+    cert_at = start
+    ticket_at = align(cert_at + len(cert), 64)
+    tmd_at = align(ticket_at + len(ticket), 64)
+    content_at = align(tmd_at + len(tmd), 64)
+    payload = bytearray()
+    for _, data in contents:
+        payload += bytes((-len(payload)) % 64)
+        payload += data
+    result = bytearray(content_at + len(payload))
+    struct.pack_into("<IHHIIIIQ", result, 0, 0x2020, 0, 0, len(cert), len(ticket), len(tmd), 0, len(payload))
+    for index, _ in contents:result[0x20 + index // 8] |= 0x80 >> (index % 8)
+    result[cert_at:cert_at + len(cert)] = cert
+    result[ticket_at:ticket_at + len(ticket)] = ticket
+    result[tmd_at:tmd_at + len(tmd)] = tmd
+    result[content_at:] = payload
+    return result
+
+
 def blz_repeat():
     # Three A literals, then distance-three runs of eighteen and fifteen bytes.
     # Decodes to 36 A bytes and exercises references to overlapping output.
