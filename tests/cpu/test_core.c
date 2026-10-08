@@ -39,6 +39,16 @@ static void memory_tests(void) {
     CHECK(ctr_memory_write(&memory,0x1000,4,1)==CTR_MEM_PERMISSION);
     CHECK(ctr_memory_read(&memory,0x2000,4,CTR_MEM_EXEC,&value)==CTR_MEM_PERMISSION);
     CHECK(ctr_memory_read(&memory,UINT32_MAX,4,CTR_MEM_READ,&value)==CTR_MEM_OVERFLOW);
+    CHECK(ctr_memory_check_range(&memory,0x2001,63,CTR_MEM_READ|CTR_MEM_WRITE)==CTR_MEM_OK);
+    CHECK(ctr_memory_check_range(&memory,0x203f,2,CTR_MEM_READ)==CTR_MEM_UNMAPPED);
+    CHECK(ctr_memory_check_range(&memory,0x1000,64,CTR_MEM_WRITE)==CTR_MEM_PERMISSION);
+    CHECK(ctr_memory_check_range(&memory,UINT32_MAX-3,8,CTR_MEM_READ)==CTR_MEM_OVERFLOW);
+    CHECK(ctr_memory_check_range(&memory,0x2000,4,0)==CTR_MEM_PERMISSION);
+    CHECK(ctr_memory_map(&memory,0x2040,4,CTR_MEM_READ,data,4)==CTR_MEM_OK);
+    CHECK(ctr_memory_check_range(&memory,0x203e,6,CTR_MEM_READ)==CTR_MEM_OK);
+    CHECK(ctr_memory_check_range(&memory,0x203e,6,CTR_MEM_WRITE)==CTR_MEM_PERMISSION);
+    CHECK(ctr_memory_map(&memory,0x2048,4,CTR_MEM_READ,data,4)==CTR_MEM_OK);
+    CHECK(ctr_memory_check_range(&memory,0x2040,12,CTR_MEM_READ)==CTR_MEM_UNMAPPED);
     CHECK(ctr_memory_map(&memory,0x2008,8,CTR_MEM_READ,data,8)==CTR_MEM_OVERLAP);
     CHECK(ctr_memory_map(&memory,UINT32_MAX-3,8,CTR_MEM_READ,data,8)==CTR_MEM_OVERFLOW);
     CHECK(ctr_memory_map(&memory,0x4000,8,0,data,8)==CTR_MEM_PERMISSION);
@@ -104,6 +114,15 @@ static void flag_tests(void) {
     CHECK(ctr_cpu_condition(&cpu,14) && !ctr_cpu_condition(&cpu,15));
 }
 static void instruction_tests(void) {
+    setup(0xee1d0f70);cpu.tls_address=0x1ff82000;cpu.cpsr=0xa0000010;
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[0]==0x1ff82000 && cpu.r[15]==0x1004 && cpu.cpsr==0xa0000010);
+    setup(0x0e1d6f70);cpu.tls_address=0x1ff82200;cpu.cpsr=CTR_FLAG_Z;
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[6]==0x1ff82200);
+    setup(0x0e1d6f70);cpu.tls_address=0x1ff82200;
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[6]==0 && cpu.r[15]==0x1004);
+    setup(0xee1dff70);CHECK(ctr_cpu_step(&cpu)==CTR_CPU_UNSUPPORTED && cpu.r[15]==0x1000);
+    setup(0xee0d0f70);CHECK(ctr_cpu_step(&cpu)==CTR_CPU_UNSUPPORTED);
+    setup(0xee070f9a);CHECK(ctr_cpu_step(&cpu)==CTR_CPU_UNSUPPORTED);
     setup(0xe3a0002a); CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[0]==42 && cpu.r[15]==0x1004);
     setup(0x03a0002a); CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[0]==0 && cpu.r[15]==0x1004);
     setup(0xe2800001); cpu.r[0]=41; CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[0]==42);

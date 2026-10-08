@@ -79,3 +79,22 @@ const char *ctr_mem_result_name(ctr_mem_result result) {
     static const char *const names[] = {"ok", "unmapped", "permission", "alignment", "overflow", "overlap", "capacity"};
     return (unsigned)result < sizeof(names) / sizeof(names[0]) ? names[result] : "unknown";
 }
+
+ctr_mem_result ctr_memory_check_range(const ctr_memory *memory, uint32_t address,
+                                     uint32_t size, unsigned permissions) {
+    uint64_t at=address, end=at+size;
+    if (end>UINT64_C(0x100000000)) return CTR_MEM_OVERFLOW;
+    if (!permissions || (permissions&~7u)) return CTR_MEM_PERMISSION;
+    while (at<end) {
+        const ctr_mapping *found=NULL;
+        for (size_t i=0;i<memory->count;++i) {
+            const ctr_mapping *map=&memory->maps[i];
+            if (at>=map->base && at<(uint64_t)map->base+map->size) { found=map;break; }
+        }
+        if (!found) return CTR_MEM_UNMAPPED;
+        if ((found->permissions&permissions)!=permissions) return CTR_MEM_PERMISSION;
+        uint64_t next=(uint64_t)found->base+found->size;
+        at=next<end?next:end;
+    }
+    return CTR_MEM_OK;
+}

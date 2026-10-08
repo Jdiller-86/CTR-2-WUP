@@ -25,6 +25,8 @@ Source/header/driver changes require rebuilding or regeneration. Configure
 provenance checking, not cryptographic authentication of an untrusted tool.
 For a source archive extracted elsewhere, `CTR2WUP_LIFTER_SOURCE` selects the
 clean pinned checkout and `CTR2WUP_GENERATOR` selects the existing external driver.
+For external analysis from that location, `CTR2WUP_LIFTER` selects the audited
+`3dsrecomp` executable.
 
 The driver calls upstream public discovery/generation APIs and exposes every
 discovered instruction as a resume point. It discards the emitted upstream
@@ -36,6 +38,16 @@ The lifter executable/source are external and are not bundled. Its missing
 complete permission/copyright notice still blocks bundling its implementation.
 
 ## Runtime contract
+
+v0.6.0 refreshes user read-only TLS from the CPU context on every execution entry.
+Its original 89-instruction SRV/CFG startup probe matches interpreter/original/
+external AOT state and memory (297 boundary assertions). It also rejects
+unsupported CP15 cache operations and DMB/DSB/ISB, including emitter no-ops;
+35 dedicated assertions cover executed faults and condition skips.
+`--service-api` adds the 1,001-assertion malformed IPC/handle/resource suite to a
+compiler/target run. All four integration probes pass on GCC/sanitizers, Clang
+and emulated big-endian PPC Linux. See `shared-services.md` for exact interfaces
+and limits; this does not provide a complete guest kernel or commercial profile.
 
 - Registers and guest addresses are `uint32_t`; page pointers remain unused.
   Every memory access takes the checked little-endian callback path; span

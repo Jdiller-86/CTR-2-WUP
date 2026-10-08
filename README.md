@@ -14,6 +14,8 @@ It also retains original title staging and private title intake.
 Version 0.5.0 adds decrypted CIA intake and a separate self-contained Windows
 console helper for exporting small private executable analysis data. The supplied
 Mario CIA exceeds the workspace's 32 MiB transfer limit; see `docs/cia-intake.md`.
+Version 0.6.0 adds shared CP15 TLS/SRV/CFG startup support and an original ARM
+service probe embedded in the Wii U diagnostics; see `docs/shared-services.md`.
 Commercial ROM-to-WUP conversion is not implemented or claimed.
 
 Read `STATUS.md`, `docs/milestones.md` and `docs/foundation-audit.md` before

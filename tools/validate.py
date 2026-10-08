@@ -51,6 +51,10 @@ def main():
     guest_results=[json.loads(line) for line in guest_tests.stdout.splitlines() if line.startswith('{"ok":')]
     if len(guest_results)!=2 or any(not item.get("ok") or not item.get("aot_interpreter_memory_match") for item in guest_results):
         results[-1]["passed"]=False
+    service_tests=run("service-tests",["make","-C","tests/services","check","sanitize"])
+    service_results=[json.loads(line) for line in service_tests.stdout.splitlines() if line.startswith('{"ok":')]
+    if len(service_results)!=2 or any(not item.get("ok") or not item.get("arm_tls_srv_cfg_startup") for item in service_results):
+        results[-1]["passed"]=False
     run("doctor", [sys.executable, "-m", "host", "doctor"])
     run("fixtures", [sys.executable, "-m", "tests.host_fixtures", "artifacts/fixtures"])
     for kind in ("cxi", "3ds"):
@@ -98,10 +102,10 @@ def main():
             if path.is_file() and "__pycache__" not in path.parts:
                 source_digest.update(str(path.relative_to(ROOT)).encode("utf-8") + b"\0" + path.read_bytes())
     report = {"schema_version": 1, "generated_at_utc": datetime.now(timezone.utc).isoformat(),
-              "workflow": "native/original/external-AOT RPX builds, checked ARM/Thumb/scalar-VFP, title staging/intake and offline encrypted packaging",
+              "workflow": "native/original/external-AOT RPX builds, checked ARM/Thumb/scalar-VFP/TLS and SRV/CFG startup, title staging/intake and offline encrypted packaging",
               "version": __version__,
               "ok": all(result["passed"] for result in results), "python_tests": test_count,
-              "cpu_runs": c_results, "guest_runs":guest_results,"checks": results,
+              "cpu_runs": c_results, "guest_runs":guest_results,"service_runs":service_results,"checks": results,
               "source_sha256": source_digest.hexdigest(),
               "build_tools": {package: importlib.metadata.version(package) for package in ("setuptools", "wheel", "pip")},
               "prototype_output": str(output.relative_to(ROOT)),
@@ -112,7 +116,7 @@ def main():
               "upstream_desktop_output":str(upstream_desktop.relative_to(ROOT)),
               "title_staging_output":str(title_stage.relative_to(ROOT)),
               "unverified": ["physical Wii U execution, input/audio/exit", "PowerPC correctness/timings", "clean Windows execution", "commercial ROM execution", "WUP installation"],
-              "unimplemented": ["complete ARM/VFP", "multi-thread kernel and IPC/HID/GSP/other services", "PICA-to-GX2 rendering", "game saves/audio/CRO", "commercial conversion pipeline", "Windows GUI"],
+              "unimplemented": ["complete ARM/VFP", "multi-thread kernel and general IPC/HID/GSP/other services", "PICA-to-GX2 rendering", "game saves/audio/CRO", "commercial conversion pipeline", "Windows GUI"],
               "packaging": {"writer": "original scoped encrypted profile", "offline_report": str((report_root/"offline-packaging/report.json").relative_to(ROOT)), "synthetic_credentials_only": True, "installer_acceptance": "unverified"},
               "configuration": {"draft_persistence": "see STATUS.md", "publication": "not_checked_by_runner", "fresh_task_restore": "not_checked_by_runner"}}
     destination = report_root / "report.json"

@@ -113,6 +113,11 @@ static ctr_cpu_result arm_step(ctr_cpu *cpu, uint32_t insn) {
     unsigned cond = insn >> 28;
     if (cond == 15u) return ctr_cpu_stop(cpu, CTR_CPU_UNSUPPORTED, insn);
     if (!ctr_cpu_condition(cpu, cond)) { cpu->r[15] = next; return CTR_CPU_OK; }
+    if ((insn&UINT32_C(0x0fff0fff))==UINT32_C(0x0e1d0f70) && ((insn>>12)&15u)!=15u) {
+        cpu->r[(insn>>12)&15u]=cpu->tls_address;
+        cpu->r[15]=next;
+        return CTR_CPU_OK;
+    }
     if ((insn & UINT32_C(0x0ffffff0)) == UINT32_C(0x012fff10) ||
         (insn & UINT32_C(0x0ffffff0)) == UINT32_C(0x012fff30)) {
         uint32_t target = read_register(cpu, insn & 15u, false);

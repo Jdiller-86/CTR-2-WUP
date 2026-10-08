@@ -26,15 +26,22 @@ host. The initial interpreter and direct generated-C backend are bounded CPU
 subsets with explicit unsupported exits. `host/loader.py` extracts inspected NCCH
 segments; the portable loader allocates checked permissions/stack/TLS/BSS. A
 single-guest runtime implements bounded SVC sleep/events/handles/ticks/debug/exit.
+Version 0.6.0 adds user read-only CP15 TLS access, typed/refcounted session handles,
+checked TLS IPC transport and restricted SRV/CFG startup commands. Its original
+ARM probe reads configured region/model/language through all three execution
+paths; see `shared-services.md`. This is shared runtime code, not a game patch.
 The original ARM fixture writes both framebuffers and responds to input through
 an explicit harness contract. Neither implements complete ARM11/VFP, a full
-3DS kernel, IPC or game HLE. The pinned external lifter now generates C through
+3DS kernel, general IPC or game HLE. The pinned external lifter now generates C through
 an original host driver. An original ABI 4 implementation statically executes
 that code using checked little-endian callbacks and per-instruction state;
 see `upstream-integration.md`. Its desktop runtime is not a Wii U dependency.
 
 The native WUT backend provides independent TV and GamePad diagnostic output,
 input, sound, process lifecycle, timing, and CPU self-test instrumentation.
+All diagnostic builds also contain the original TLS/SRV/CFG startup self-test
+with a visible result and SD log. Unsupported cache operations fail visibly
+instead of inheriting the external emitter's no-op behavior.
 Its guest mode presents completed ARM-written raw framebuffers through the same
 GX2 copying path. It is separate from PICA/GSP emulation; see `guest-fixture.md`.
 Compilation proves toolchain integration. Only physical console results can

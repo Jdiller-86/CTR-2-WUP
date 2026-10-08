@@ -32,10 +32,10 @@ All acceptance checkboxes below remain open until their evidence is recorded.
 | Milestone | Verified portion | Remaining acceptance |
 |---|---|---|
 | M1 | Native/original/external-AOT RPX/WUHB built; native diagnostics; original staging and offline encrypted packaging | Physical screens/input/audio/exit and independently installed WUP |
-| M2 | Original CPU/AOT subset; external generation/checked ABI; 566+34 integration assertions on GCC/sanitizers/Clang/emulated big-endian PPC; scalar VFP Unicorn match | Complete ARM/VFP semantics, workload memory/fallback costs and actual Espresso timings |
-| M3 | Original executable NCCH → checked loader → AOT/interpreter execution; bounded single-guest SVC/events; matching ARM-written frames/input; guest RPX/WUHB built | Physical guest frames/input/exit/stability; conventional homebrew boot, multi-thread kernel and required IPC/HID/GSP services |
+| M2 | Original CPU/AOT subset plus user CP15 TLS; external generation/checked ABI; 566+34+297+35 integration assertions on GCC/sanitizers/Clang/emulated big-endian PPC; scalar VFP Unicorn match | Complete ARM/VFP semantics, workload memory/fallback costs and actual Espresso timings |
+| M3 | Checked NCCH → AOT/interpreter execution; single-guest SVC/events; shared typed sessions, bounded SRV/CFG startup, original 89-instruction three-backend probe; matching ARM frames/input; RPX/WUHB/self-tests built | Physical guest/service startup evidence; conventional homebrew boot, memory control, multi-thread kernel and broader IPC/HID/GSP services |
 | M4 | Tested bounded command/format/viewport references | Actual PICA-to-GX2 features, scene comparisons and console timings |
-| M5 | Mario selected and CIA attachment supplied; transfer exceeds 32 MiB; bounded CIA intake/small executable export helper implemented/tested; upstream requirement leads | Actual smaller private executable export/revision, runtime/renderer/services/save/audio implementation and console gameplay |
+| M5 | Mario selected and CIA attachment supplied; transfer exceeds 32 MiB; intake/export helper tested; shared startup development while user is away; upstream requirement leads | Actual smaller private executable export/revision, title-specific runtime/renderer/services/save/audio implementation and console gameplay |
 | M6 | External C generation/static compilation, staging/artwork/intake, original encrypted writer and independent decrypt/FST/file checks with synthetic inputs, atomic output/wheel; Windows workflow prepared | Actual local certificate/key provenance and installer acceptance, full commercial conversion, caches/traces/rebuild, Windows execution and console install checks |
 | M7 | Deliberately deferred | Proven pipeline before responsive Windows GUI implementation |
 
@@ -48,11 +48,18 @@ separate decrypting verifier; all offline test credentials are synthetic.
 Version 0.5.0 adds CIA intake/export (16 Python cases) and a self-contained Windows
 console helper (13 Linux .NET cases; native Windows unverified). The attached
 commercial CIA is not inspected because of the 32 MiB transfer limit.
-Validation passes 131 Python tests, 51,147 CPU
-assertions and 221 original-guest assertions in each normal/sanitized C run,
-566+34 external integration assertions and 26 complete workflow checks, including
+Version 0.6.0 adds the ROM-independent TLS/SRV/CFG startup foundation and original
+ARM probe/self-test, with documented supported commands and visible unsupported
+states (`shared-services.md`). This is partial shared-runtime implementation;
+no commercial title profile or console milestone is enabled.
+Validation passes 135 Python tests, 51,175 CPU
+assertions, 221 original-guest assertions and 1,001 service assertions in each
+normal/sanitized C run, 566+34+297+35 external integration assertions and 27 complete workflow checks, including
 real-RPX offline packaging and installed-wheel packing.
 Physical-console and clean Windows acceptance remain pending.
+Clang and emulated PowerPC also pass the full service suite; each v0.6 final
+compiler/target report records 10 checks. Native Wii U service behavior/timings
+are pending even though the original self-test is embedded in all diagnostic builds.
 
 ## Deferred features
 

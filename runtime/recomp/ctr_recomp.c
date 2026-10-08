@@ -27,6 +27,7 @@ static void import_cpu(Engine *e) {
     c->q=(p->cpsr>>27)&1;c->ge=(p->cpsr>>16)&15;c->thumb=(p->cpsr&CTR_FLAG_T)!=0;
     c->exclusive=p->exclusive_valid && p->exclusive_generation==p->memory->generation;
     c->exclusive_address=p->exclusive_address;
+    c->tls=p->tls_address;
 }
 static void export_cpu(Engine *e) {
     Context *c=&e->context;ctr_cpu *p=e->cpu;
@@ -55,6 +56,20 @@ int ctr_recomp_instruction(Context *c,uint32_t address,uint32_t opcode) {
     /* Non-default FP controls require a correctness implementation first. */
     if (*c->fpscr&0x07ff9f00u) ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,*c->fpscr);
     --c->budget;++e->cpu->instructions;
+    /* The pinned emitter silently removes some CP15 cache operations. This
+       profile implements only the user TLS read; reject other executed CP15
+       operations until their coherency/privilege behavior is implemented. */
+    if (!c->thumb && ((opcode&0xfffffff0u)==0xf57ff040u ||
+        (opcode&0xfffffff0u)==0xf57ff050u || (opcode&0xfffffff0u)==0xf57ff060u))
+        ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
+    if (!c->thumb && (opcode&0x0f000f10u)==0x0e000f10u &&
+        ((opcode>>28)==15u || (opcode&0x0fff0fffu)!=0x0e1d0f70u || ((opcode>>12)&15u)==15u)) {
+        ctr_cpu flags={0};
+        flags.cpsr=((uint32_t)c->n<<31)|((uint32_t)c->z<<30)|
+                   ((uint32_t)c->c<<29)|((uint32_t)c->v<<28);
+        if (opcode>>28==15u || ctr_cpu_condition(&flags,opcode>>28))
+            ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
+    }
     return 1;
 }
 static uint32_t read_value(Context *c,uint32_t a,unsigned width) {
@@ -135,7 +150,6 @@ bool ctr_recomp_attach(ctr_guest *g,bool fallback) {
     Engine *e=calloc(1,sizeof(*e));if(!e)return false;
     e->cpu=&g->cpu;e->fallback=fallback;e->code_generation=g->memory.code_generation;
     e->context.vfp=e->vfp;e->context.fpscr=&e->fpscr;e->context.host=&callbacks;e->context.user=e;
-    e->context.tls=g->tls_address;
     g->executor=execute;g->executor_context=e;g->executor_close=free;return true;
 }
 bool ctr_recomp_vfp(const ctr_guest *g,unsigned word,uint32_t *value) {

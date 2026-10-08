@@ -1,4 +1,5 @@
 #include "ctr_guest.h"
+#include "ctr_ipc.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -63,34 +64,68 @@ bool ctr_guest_open(ctr_guest *g,const ctr_guest_image *image,const ctr_block *b
     g->cpu.r[13]=STACK_TOP; g->cpu.r[15]=image->text.address; g->cpu.cpsr=0x10; /* User ARM mode. */
     g->program=(ctr_program){blocks,block_count,image->module_hash,g->memory.code_generation};
     g->tls_address=TLS_ADDRESS; g->state=CTR_GUEST_READY; g->fault=CTR_CPU_OK;
+    g->cpu.tls_address=TLS_ADDRESS;
+    g->configuration=(ctr_guest_configuration){1,1,0}; /* Explicit diagnostic defaults: USA, English, Old 3DS. */
     return true;
 failure:
     ctr_guest_close(g); g->state=CTR_GUEST_FAULTED; g->fault=CTR_CPU_MEMORY_FAULT; return false;
 }
-static int object_for(ctr_guest *g,uint32_t handle) {
+static ctr_guest_handle *resolve_handle(ctr_guest *g,uint32_t handle) {
     unsigned slot=(handle&255u);
-    if (!slot || slot>64) return -1;
+    if (!slot || slot>64) return NULL;
     ctr_guest_handle *h=&g->handles[slot-1];
-    return h->active && h->generation==(handle>>8)?(int)h->object:-1;
+    return h->active && h->generation==(handle>>8)?h:NULL;
 }
-static uint32_t new_handle(ctr_guest *g,unsigned object) {
+static int object_for(ctr_guest *g,uint32_t handle) {
+    ctr_guest_handle *h=resolve_handle(g,handle);
+    return h && h->type==CTR_HANDLE_EVENT?(int)h->object:-1;
+}
+static uint32_t new_handle(ctr_guest *g,ctr_guest_handle_type type,unsigned object) {
     for (unsigned i=0;i<64;++i) {
         ctr_guest_handle *h=&g->handles[i];
         if (!h->active && h->generation<0x00ffffffu) {
-            ++h->generation; h->active=true; h->object=object;
-            ++g->events[object].references;
+            ++h->generation; h->active=true; h->object=object;h->type=type;
+            if (type==CTR_HANDLE_EVENT) ++g->events[object].references;
+            else ++g->sessions[object].references;
             return (h->generation<<8)|(i+1);
         }
     }
     return 0;
 }
-static void release_object(ctr_guest *g,unsigned object) {
+static void release_object(ctr_guest *g,ctr_guest_handle_type type,unsigned object) {
+    if (type==CTR_HANDLE_SESSION) {
+        ctr_guest_session *s=&g->sessions[object];
+        if (s->references && --s->references==0) memset(s,0,sizeof(*s));
+        return;
+    }
     ctr_guest_event *e=&g->events[object];
     if (e->references && --e->references==0) memset(e,0,sizeof(*e));
 }
 static void complete_wait(ctr_guest *g,uint32_t result) {
     g->cpu.r[0]=result; g->state=CTR_GUEST_READY;
-    release_object(g,g->wait_object);
+    release_object(g,CTR_HANDLE_EVENT,g->wait_object);
+}
+uint32_t ctr_guest_session_open(ctr_guest *g,ctr_guest_service service) {
+    if (service!=CTR_SERVICE_SRV && service!=CTR_SERVICE_CFG) return 0;
+    for (unsigned i=0;i<16;++i) if (!g->sessions[i].active) {
+        g->sessions[i]=(ctr_guest_session){true,false,0,service};
+        uint32_t handle=new_handle(g,CTR_HANDLE_SESSION,i);
+        if (!handle) memset(&g->sessions[i],0,sizeof(g->sessions[i]));
+        return handle;
+    }
+    return 0;
+}
+ctr_guest_session *ctr_guest_session_for(ctr_guest *g,uint32_t handle) {
+    ctr_guest_handle *h=resolve_handle(g,handle);
+    return h && h->type==CTR_HANDLE_SESSION?&g->sessions[h->object]:NULL;
+}
+bool ctr_guest_configure(ctr_guest *g,ctr_guest_configuration configuration) {
+    if (g->state!=CTR_GUEST_READY || g->svc_count || g->cpu.instructions ||
+        configuration.region>6 || configuration.language>11 ||
+        (configuration.model!=CTR_GUEST_MODEL_3DS && configuration.model!=CTR_GUEST_MODEL_3DSXL &&
+         configuration.model!=CTR_GUEST_MODEL_2DS)) return false;
+    for (unsigned i=0;i<16;++i) if (g->sessions[i].active) return false;
+    g->configuration=configuration;return true;
 }
 bool ctr_guest_signal(ctr_guest *g,uint32_t handle) {
     int object=object_for(g,handle);
@@ -125,7 +160,7 @@ ctr_guest_state ctr_guest_svc(ctr_guest *g,uint32_t number) {
             uint32_t handle=0;
             if (object<32) {
                 g->events[object]=(ctr_guest_event){true,false,r[1],0};
-                handle=new_handle(g,object);
+                handle=new_handle(g,CTR_HANDLE_EVENT,object);
                 if (!handle) memset(&g->events[object],0,sizeof(g->events[object]));
             }
             r[0]=handle?0:RESULT_NO_MEMORY; r[1]=handle; break;
@@ -137,9 +172,9 @@ ctr_guest_state ctr_guest_svc(ctr_guest *g,uint32_t number) {
             r[0]=object>=0?0:RESULT_INVALID_HANDLE; break;
         }
         case 0x23: {
-            int object=object_for(g,r[0]);
-            if (object>=0) { g->handles[(r[0]&255u)-1].active=false; release_object(g,(unsigned)object); }
-            r[0]=object>=0?0:RESULT_INVALID_HANDLE; break;
+            ctr_guest_handle *h=resolve_handle(g,r[0]);
+            if (h) { h->active=false;release_object(g,h->type,h->object); }
+            r[0]=h?0:RESULT_INVALID_HANDLE; break;
         }
         case 0x24: {
             int object=object_for(g,r[0]);
@@ -154,15 +189,17 @@ ctr_guest_state ctr_guest_svc(ctr_guest *g,uint32_t number) {
             ++e->references; g->state=CTR_GUEST_WAITING; break;
         }
         case 0x27: {
-            int object=object_for(g,r[1]);
-            uint32_t handle=object>=0?new_handle(g,(unsigned)object):0;
-            r[0]=object<0?RESULT_INVALID_HANDLE:handle?0:RESULT_NO_MEMORY; r[1]=handle; break;
+            ctr_guest_handle *h=resolve_handle(g,r[1]);
+            uint32_t handle=h?new_handle(g,h->type,h->object):0;
+            r[0]=!h?RESULT_INVALID_HANDLE:handle?0:RESULT_NO_MEMORY; r[1]=handle; break;
         }
         case 0x28: {
             uint64_t ticks=(g->now_ns/1000000000u)*UINT64_C(268111856)+
                            ((g->now_ns%1000000000u)*UINT64_C(268111856))/1000000000u;
             r[0]=(uint32_t)ticks; r[1]=(uint32_t)(ticks>>32); break;
         }
+        case 0x2d: ctr_ipc_connect(g);break;
+        case 0x32: ctr_ipc_request(g);break;
         case 0x3d: {
             char message[257];
             if (r[1]>256 || (uint64_t)r[0]+r[1]>UINT64_C(0x100000000)) return unsupported(g,number);

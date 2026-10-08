@@ -1,6 +1,6 @@
 # CTR2WUP status
 
-Updated October 7, 2026 (America/New_York); report filenames use UTC.
+Updated October 8, 2026 (America/New_York); report filenames use UTC.
 Requirements: `docs/project-brief.md`; product plan:
 `docs/development-plan.md`; GUI workflow: `docs/gui-workflow.md`.
 The user resumed implementation and selected **Super Mario 3D Land** as the first
@@ -8,8 +8,13 @@ title candidate. The target remains an UWUVCI-style Windows GUI: select a
 decrypted game, configure title/artwork, click Inject, install its per-game WUP
 and launch from Wii U Menu. The CLI is the shared engine, not the final product.
 
-**Version 0.5.0 adds CIA intake and a self-contained Windows executable export
-helper.** The user supplied the Mario CIA, but its attachment exceeds the
+**Version 0.6.0 adds shared TLS/SRV/CFG startup support**, continuing the user's
+request for work while away from the CIA's computer. It includes an original
+ARM startup probe and embedded Wii U self-test; see `docs/shared-services.md`.
+This advances the reusable runtime without a game-specific patch or profile.
+
+Version 0.5.0 adds CIA intake and a self-contained Windows executable export
+helper. The user supplied the Mario CIA, but its attachment exceeds the
 workspace's 32 MiB transfer limit; no commercial bytes were inspected.
 `docs/cia-intake.md` explains the small private export workaround.
 Version 0.4.0 adds original encrypted homebrew packaging and independent
@@ -19,6 +24,22 @@ Commercial conversion and the Windows GUI remain incomplete. Installer acceptanc
 is unverified; no milestone requiring physical-console evidence is complete.
 
 ## Verified implementation
+
+- ARM user read-only CP15 TLS access works in interpreter/original/external AOT.
+  The external ABI refreshes TLS on execution entry and rejects unsupported
+  cache/barrier operations even when the pinned emitter would erase them.
+- Typed, reference-counted service sessions share the generation-tagged handle
+  table. Checked ConnectToPort/SendSyncRequest supports SRV registration/CFG
+  lookup and configured region/model/language reads. It rejects malformed
+  messages, unsupported commands, wrong handles and invalid/aliased output.
+  The Old2DS model ID is verified against libctru (3; New3DS2 is rejected).
+- The original 89-instruction ARM startup probe executes five IPC requests/nine
+  SVCs with matching state/memory through all three backends. 297 external
+  boundary assertions include TLS changed after attach; 35 CP15 assertions cover
+  conditional skips and explicit cache/DMB/DSB/ISB failures. These and the 1,001
+  service API assertions pass on Clang and emulated big-endian PPC Linux/QEMU.
+  All three RPX/WUHB builds embed the original interpreter/AOT service self-test
+  and native-mode/SD-log result. Physical service execution remains unverified.
 
 - Original bounded CIA parsing verifies metadata tables, ticket/TMD identity,
   sparse bitmap/content extents and plaintext hashes; selects executable index 0
@@ -52,7 +73,8 @@ is unverified; no milestone requiring physical-console evidence is complete.
   double arithmetic, flags, stack transfers, state switching and one-instruction
   resume. Its registers/VFP words match Unicorn 2.1.4 independently.
 - External integration passes **566 boundary/frame assertions +34 ABI probe
-  assertions** under GCC, ASan/UBSan, Clang and emulated 32-bit big-endian PowerPC
+  +297 service-startup assertions +35 CP15 assertions**
+  under GCC, ASan/UBSan, Clang and emulated 32-bit big-endian PowerPC
   Linux/QEMU 750. Emulation does not establish Wii U behavior or useful speed.
 - Real devkitPPC/WUT builds produce native, original-AOT guest and external-AOT
   guest RPX/WUHB artifacts. The new external build starts in guest mode and uses
@@ -81,17 +103,20 @@ is unverified; no milestone requiring physical-console evidence is complete.
   single-guest events/handles/sleep/debug/exit, native diagnostics and structural
   WUP validator remain tested. Commercial `build` still fails without publishing
   a placeholder package. Paths with spaces/Japanese characters work on Linux.
-- **131 Python tests**, 51,147 CPU assertions and 221 original-guest assertions
-  pass; both C suites also pass ASan/UBSan. The complete v0.5.0 runner passes
-  **26 checks**, including external generation/execution, all three RPX builds,
+- **135 Python tests**, 51,175 CPU assertions, 221 original-guest assertions and
+  1,001 service assertions pass; all C suites also pass ASan/UBSan. The complete
+  v0.6.0 runner passes **27 checks**, including external generation/execution,
+  all three RPX builds,
   original staging/intake, offline encrypted packaging and installed-wheel
   inspection/execution/packing. Crypto remains an optional external dependency.
 
 ## Reports and deliverables
 
-Main validation: `artifacts/reports/validation-v1-20261008T015329Z/report.json`.
+Main validation: `artifacts/reports/validation-v1-20261008T135953Z/report.json`.
+New compiler/target checks: `artifacts/reports/services-clang-final-v6/report.json`
+and `artifacts/reports/services-ppc-final-v6/report.json` (10 checks each).
 Helper evidence: `artifacts/reports/cia-helper-final/report.json` (13 checks).
-Additional checks: `artifacts/reports/upstream-ppc-final/`,
+Earlier checks: `artifacts/reports/upstream-ppc-final/`,
 `upstream-clang-final/`, and the Unicorn reference report under
 `upstream-native-v5/`. `python3 tools/validate.py` regenerates the complete checks;
 `tools/validate-upstream.py` supports GCC/sanitizers/container compiler/QEMU runs.
@@ -99,7 +124,7 @@ See `docs/upstream-integration.md` for commands and precise limits.
 
 Versioned source/native/original-guest/external-guest delivery bundles, wheel,
 checksums and original title-staging output are under `artifacts/`. Earlier
-v0.1.0/v0.2.0/v0.3.0/v0.4.0 reports and bundles are preserved. Source is maintained in the
+v0.1.0/v0.2.0/v0.3.0/v0.4.0/v0.5.0 reports and bundles are preserved. Source is maintained in the
 existing Git checkout; do not reset, force-push or replace user changes.
 
 ## Awaiting user inputs and physical tests
@@ -112,6 +137,7 @@ existing Git checkout; do not reset, force-push or replace user changes.
   work. If it reports encryption, decrypted executable data is still needed.
   No commercial profile is enabled until actual private intake and runtime evidence.
 - **Wii U:** run the delivered RPX/WUHB and return screen/input/audio/exit,
+  new TLS/SRV/CFG startup PASS/FAIL and SD log,
   external-AOT guest frame/touch/restart/stability results and SD logs per
   `docs/console-testing.md`. Record firmware and homebrew/launcher environment.
   No commercial dump or encryption key is needed for these diagnostic builds.
@@ -134,9 +160,11 @@ policy before expanding the profile or claiming installation. The MIT-root
 makefst candidate was not incorporated or run; no packer code or credential
 template was copied. Full hashed/shared/update/disc formats remain unsupported.
 
-P2/P3: inspect the supplied Mario revision, then implement required kernel/IPC,
-CP15/TLS, multi-thread scheduling, PICA/GX2 state/shaders/textures/coherency,
-DSP/audio, RomFS/saves and module behavior. Complete CPU/FP correctness and
+P2/P3: inspect the supplied Mario revision, then expand the kernel/IPC and
+CP15/thread context beyond the tested shared startup subset. Implement memory
+control, multi-thread scheduling, PICA/GX2 state/shaders/textures/coherency,
+DSP/audio, RomFS/saves and module behavior. CFG user/Mii/console-unique identity
+and broader configuration blocks remain pending. Complete CPU/FP correctness and
 measure real console costs. Existing raw framebuffer harness I/O does not supply
 HID/GSP/PICA or conventional 3DS homebrew boot. No commercial profile is enabled.
 

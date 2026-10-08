@@ -140,3 +140,12 @@ decrypted-CIA intake and a separate self-contained Windows console helper that
 exports a small private executable view or encryption report. Actual game
 inspection awaits that export; filename region/version claims remain unverified.
 The original CIA can remain local for assets. This helper is not the GUI injector.
+
+October 8 (America/New_York): the user is away from the CIA's computer and asked
+for independent implementation. v0.6.0 advances P3's shared startup foundation:
+checked CP15 TLS access, typed service sessions, bounded SendSyncRequest and
+restricted SRV/CFG reads. An original 89-instruction ARM program exercises those
+interfaces through interpreter/original/external AOT, without title-specific code.
+The console diagnostics embed its original interpreter/AOT self-test. This does
+not activate Mario or close any physical-console milestone; its exact revision,
+broader kernel/services/GPU/audio/saves and installer acceptance remain pending.

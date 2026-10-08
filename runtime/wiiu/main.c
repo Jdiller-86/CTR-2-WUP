@@ -23,6 +23,7 @@
 #include "viewport.h"
 #include "ctr_cpu.h"
 #include "ctr_guest_fixture.h"
+#include "ctr_service_fixture.h"
 
 enum { TOP_W=400, BOTTOM_W=320, GUEST_H=240, AUDIO_SAMPLES=12000 };
 static uint32_t top_image[TOP_W*GUEST_H], bottom_image[BOTTOM_W*GUEST_H];
@@ -32,6 +33,7 @@ static AXVoice *tone_voice;
 static unsigned tone_count;
 static int audio_ready;
 static int cpu_test_result;
+static int service_test_result;
 static ctr_guest frame_guest;
 static int guest_ready,guest_mode=CTR_GUEST_DEFAULT;
 static uint32_t presented_frames;
@@ -181,6 +183,8 @@ static void diagnostic_images(unsigned frame, const VPADStatus *pad,
     snprintf(text,sizeof(text),"CPU ARM/THUMB AOT SELFTEST %s CODE %d",cpu_test_result?"FAIL":"PASS",cpu_test_result);
     image_text(top_image,TOP_W,5,text);
     image_text(top_image,TOP_W,6,"Y: ARM GUEST / PLUS: RESTART GUEST");
+    snprintf(text,sizeof(text),"TLS/SRV/CFG STARTUP %s CODE %d",service_test_result?"FAIL":"PASS",service_test_result);
+    image_text(top_image,TOP_W,7,text);
     for (unsigned y=0;y<GUEST_H;++y) for (unsigned x=0;x<BOTTOM_W;++x)
         bottom_image[y*BOTTOM_W+x]=y<92 ? 0x35194fff :
             (((x/20)^(y/20))&1) ? 0x783598ff:0x108797ff;
@@ -222,13 +226,16 @@ int main(int argc, char **argv) {
         log_file=fopen(path,"w");
         if (log_file) WHBAddLogHandler(file_log);
     }
-    WHBLogPrintf("CTR2WUP native diagnostic version=0.2.0 pointer_bits=%u endian=big UDP=%u SD_log=%u",
+    WHBLogPrintf("CTR2WUP native diagnostic version=0.6.0 pointer_bits=%u endian=big UDP=%u SD_log=%u",
                   (unsigned)(8*sizeof(void *)), udp_ready, log_file!=NULL);
     OSTime cpu_start=OSGetTime();
     cpu_test_result=ctr_cpu_selftest();
     WHBLogPrintf("CPU_selftest %s result=%d elapsed_us=%llu guest_instructions_per_path=40 fallback=0 fixture=original_arm_thumb",
                   cpu_test_result?"FAIL":"PASS",cpu_test_result,
                   (unsigned long long)OSTicksToMicroseconds(OSGetTime()-cpu_start));
+    service_test_result=ctr_service_selftest();
+    WHBLogPrintf("service_selftest %s result=%d fixture=original_arm_tls_srv_cfg console_result_required=1",
+                  service_test_result?"FAIL":"PASS",service_test_result);
     if (!WHBGfxInit()) { WHBLogPrintf("FAIL WHBGfxInit"); goto cleanup; }
     gfx_ready=1;
     GX2Surface *tv_target=&WHBGfxGetTVColourBuffer()->surface;
@@ -317,6 +324,10 @@ int main(int argc, char **argv) {
                 ctr_guest_state_name(frame_guest.state),presented_frames,(unsigned long long)frame_guest.cpu.instructions,
                 (unsigned long long)frame_guest.cpu.fallback_instructions,(unsigned long long)frame_guest.svc_count,
                 ctr_cpu_result_name(frame_guest.fault),frame_guest.fault_detail);
+            WHBLogPrintf("IPC requests=%llu failures=%llu service=%s target=%s header=%08x result=%08x",
+                (unsigned long long)frame_guest.ipc_requests,(unsigned long long)frame_guest.ipc_failures,
+                frame_guest.ipc_service[0]?frame_guest.ipc_service:"none",frame_guest.ipc_target[0]?frame_guest.ipc_target:"none",
+                frame_guest.ipc_header,frame_guest.ipc_result);
             log_time=OSGetTime();
         }
         ++frame;

@@ -1,5 +1,10 @@
 # First supported-title candidate: Super Mario 3D Land
 
+October 8 (America/New_York): the user is away from the CIA's computer. Development
+continues on shared ROM-independent TLS/SRV/CFG startup support and original
+fixtures (`shared-services.md`). These are general startup interfaces, not
+requirements observed in the inaccessible Mario executable or a Mario patch.
+
 Selected by the user on 2026-10-08 UTC. A CIA attachment was subsequently supplied
 on October 7 (America/New_York), but exceeds the workspace's 32 MiB transfer
 limit. Its filename suggests USA title `0004000000054000`, `CTR-P-AREE`,

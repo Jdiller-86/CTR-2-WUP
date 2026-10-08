@@ -32,6 +32,9 @@ def arm(insn: int, pc: int) -> list[str]:
     body = ["++cpu->instructions;"]
     if cond != 14:
         body += [f"if (!ctr_cpu_condition(cpu, {cond}u)) {{ cpu->r[15] = {next_pc}; return CTR_CPU_OK; }}"]
+    if insn & 0x0fff0fff == 0x0e1d0f70 and (insn >> 12) & 15 != 15:
+        return body + [f"cpu->r[{(insn >> 12) & 15}] = cpu->tls_address;",
+                       f"cpu->r[15] = {next_pc};", "return CTR_CPU_OK;"]
     if insn & 0x0ffffff0 == 0x012fff10:
         body += [f"ctr_cpu_branch_exchange(cpu, {register(insn & 15, pc)});", "return CTR_CPU_OK;"]
         return body

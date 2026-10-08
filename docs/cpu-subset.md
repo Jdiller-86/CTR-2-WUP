@@ -10,7 +10,8 @@ it is not a multicore ARM memory-model implementation.
 
 Interpreter subset: ARM conditions, data-processing ALU/shifts/flags, branch and
 link/exchange, MUL/MLA, immediate/shifted-register byte/word transfers, word
-LDREX/STREX and observable SVC exits; Thumb16 shifts/ALU, high-register operations,
+LDREX/STREX, user read-only CP15 TLS MRC (Rd other than PC) and observable SVC
+exits; Thumb16 shifts/ALU, high-register operations,
 branch/exchange, selected loads/stores/SP-relative operations and SVC exits.
 Unaligned transfers fault deliberately. Unimplemented/exception-return/VFP,
 Thumb long calls, ARM multiple/halfword transfers and privileged instructions
@@ -29,6 +30,10 @@ integer carry/overflow against widened arithmetic, permissions/faults/aliases,
 exclusive monitoring, branching, condition skips, SVC state/logging, budget,
 fallback and invalidation. ASan/UBSan are enabled for a separate run. Python tests
 verify generator reproducibility and rejection behavior.
+The original translator also specializes this TLS read. v0.6.0's separate
+89-instruction original startup probe matches interpreter/original/external AOT
+state and memory through actual SRV/CFG SVCs; see `shared-services.md`.
+Other CP15/cache operations remain unsupported, including emitter no-ops.
 
 The original fixture has ten ARM and three Thumb instructions. A loop computes
 10, stores/reloads it through guest memory, branches to Thumb, computes 8 and

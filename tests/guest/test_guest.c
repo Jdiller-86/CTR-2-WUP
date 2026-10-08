@@ -64,7 +64,7 @@ static void kernel_tests(void) {
     g.cpu.r[0]=g.cpu.r[1]=0; ctr_guest_svc(&g,0x0a); CHECK(g.state==CTR_GUEST_YIELDED);
     CHECK(ctr_guest_run(&g,0,2000000000,false)==CTR_GUEST_READY);
     ctr_guest_svc(&g,0x28); CHECK(g.cpu.r[0]==536223712u && g.cpu.r[1]==0);
-    CHECK(ctr_guest_svc(&g,0x32)==CTR_GUEST_FAULTED && g.fault_detail==0x32);
+    CHECK(ctr_guest_svc(&g,0x33)==CTR_GUEST_FAULTED && g.fault_detail==0x33);
     ctr_guest_close(&g);
     CHECK(ctr_frame_open(&g)); g.cpu.r[1]=2;
     CHECK(ctr_guest_svc(&g,0x17)==CTR_GUEST_FAULTED); ctr_guest_close(&g);

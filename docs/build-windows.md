@@ -69,6 +69,12 @@ installs the crypto dependency and runs its original offline unit tests too.
 
 ## Windows checks still required
 
+v0.6.0 adds the portable TLS/SRV/CFG startup suite. With native GCC/Make, run
+`make -C tests/services check` and `python tools/validate-upstream.py --service-api
+--output artifacts/windows-startup-check`. These source checks have Linux and
+emulated PowerPC evidence; no native Windows result is claimed. The separate
+v0.5.0 CIA intake helper remains the unchanged ROM-export utility.
+
 Doctor and clean prototype compile; inspection of NCSD/NCCH and malformed inputs;
 spaces/Unicode on both source and output paths; cancellation terminating compiler
 children; atomic publication and refusal to overwrite outputs; installable-wheel

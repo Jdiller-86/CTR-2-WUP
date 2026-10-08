@@ -23,6 +23,12 @@ through the checked portable ABI. The embedded CPU self-test remains the origina
 bounded test; collect the guest instruction/frame/fault logs for this adapter.
 Neither the RPX/WUHB nor the separate title-staging ZIP is an installable WUP.
 
+Version 0.6.0 embeds the original TLS/SRV/CFG startup probe in all three builds.
+In native mode, record `TLS/SRV/CFG STARTUP PASS CODE 0` and the corresponding
+`service_selftest PASS result=0` SD log, or the exact FAIL code. This compares an
+89-instruction ARM service sequence in interpreter/original AOT, without a ROM.
+The separate external-AOT service probe has desktop/emulated PPC evidence only.
+
 ## Requested evidence
 
 1. Launch and photograph both independent screens together. TV shows moving

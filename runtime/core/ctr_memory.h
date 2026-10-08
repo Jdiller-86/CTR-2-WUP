@@ -35,6 +35,10 @@ ctr_mem_result ctr_memory_read(const ctr_memory *memory, uint32_t address,
                               unsigned width, unsigned permission, uint32_t *value);
 ctr_mem_result ctr_memory_write(ctr_memory *memory, uint32_t address,
                                unsigned width, uint32_t value);
+/* Validate an entire byte range before a service publishes any output. Adjacent
+   guest mappings are allowed; permissions/overflow are checked without writes. */
+ctr_mem_result ctr_memory_check_range(const ctr_memory *memory, uint32_t address,
+                                     uint32_t size, unsigned permissions);
 const char *ctr_mem_result_name(ctr_mem_result result);
 
 #endif

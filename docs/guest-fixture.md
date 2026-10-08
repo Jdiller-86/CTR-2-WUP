@@ -41,7 +41,9 @@ at `0x1ff82000` are zeroed. Initial SP is `0x10000000`; entry uses user ARM mode
 No guest pointer becomes a host pointer. Allocation is bounded to 64 MiB; page
 alignment, descriptor sizes, permissions, overlaps and wraparound are checked.
 Non-page-aligned data/BSS layouts are explicitly rejected for now. The TLS page
-exists, but CP15 TLS access is not implemented.
+exists; v0.6.0 implements its user read-only CP15 access and a separate original
+SRV/CFG startup probe. See `shared-services.md`; the framebuffer contract below
+still uses harness input and is not HID/GSP.
 
 | Data-page offset | Harness/guest meaning |
 |---|---|
@@ -74,12 +76,16 @@ virtual time in nanoseconds. No host thread is created for a guest thread.
 | `24` WaitSynchronization1 | Handle `r0`, timeout `r2:r3`; zero polls, positive times out, negative waits indefinitely |
 | `27` DuplicateHandle | Input handle `r1`, result `r0`, new handle `r1` |
 | `28` GetSystemTick | Virtual time scaled to 268,111,856 Hz; low/high `r0:r1` |
+| `2d` ConnectToPort | Bounded `srv:` name at `r1`; result/typed session handle `r0`/`r1` |
+| `32` SendSyncRequest | Checked TLS IPC; restricted SRV registration/CFG configuration reads |
 | `3d` OutputDebugString | Checked pointer `r0`, length `r1`, maximum 256 bytes; success result `r0=0` |
 
 There are 32 event objects and 64 generation-tagged handles. Stale/closed handles,
-timeouts and exhaustion return explicit results. Unknown SVCs, including IPC
-SendSyncRequest, fault visibly. Multi-thread scheduling, timers, memory-control
-SVCs, IPC and FS/APT/CFG/HID/GSP services remain unimplemented. Interface facts
+timeouts and exhaustion return explicit results. Unknown SVCs fault visibly.
+v0.6.0 adds 16 session objects sharing the handle table; event/session operations
+are type checked. Multi-thread scheduling, timers, memory-control SVCs, general
+IPC and FS/APT/HID/GSP remain unimplemented. Only the CFG reads in
+`shared-services.md` are implemented. Interface facts
 were checked against audited research sources and the public libctru SVC header;
 their implementation was not copied.
 
