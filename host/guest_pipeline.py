@@ -73,7 +73,7 @@ def run_fixture(path, output, *, frames=2, buttons=0, touch=False, x=0, y=0, tra
         build_log=logs/(stage.name+"-compile.log")
         execution_log=logs/(stage.name+"-execute.log")
         core = repo / "runtime/core"
-        sources = [repo / "runtime/desktop/guest_runner.c"] + [core / name for name in ("ctr_memory.c", "ctr_cpu.c", "ctr_guest.c", "ctr_ipc.c", "ctr_heap.c", "ctr_kernel.c", "ctr_guest_fixture.c")]
+        sources = [repo / "runtime/desktop/guest_runner.c"] + [core / name for name in ("ctr_memory.c", "ctr_cpu.c", "ctr_guest.c", "ctr_ipc.c", "ctr_heap.c", "ctr_kernel.c", "ctr_hid.c", "ctr_guest_fixture.c")]
         flags=[];generation=None
         if backend=="upstream":
             from translator.upstream import generate_into

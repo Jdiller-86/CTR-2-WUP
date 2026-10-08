@@ -131,7 +131,7 @@ void ctr_guest_object_release(ctr_guest *g,ctr_guest_handle_type type,unsigned o
     if (e->references && --e->references==0) memset(e,0,sizeof(*e));
 }
 uint32_t ctr_guest_session_open(ctr_guest *g,ctr_guest_service service) {
-    if (service!=CTR_SERVICE_SRV && service!=CTR_SERVICE_CFG) return 0;
+    if (service!=CTR_SERVICE_SRV && service!=CTR_SERVICE_CFG && service!=CTR_SERVICE_HID) return 0;
     for (unsigned i=0;i<16;++i) if (!g->sessions[i].active) {
         g->sessions[i]=(ctr_guest_session){true,false,0,service};
         uint32_t handle=ctr_guest_handle_new(g,CTR_HANDLE_SESSION,i);
@@ -139,6 +139,21 @@ uint32_t ctr_guest_session_open(ctr_guest *g,ctr_guest_service service) {
         return handle;
     }
     return 0;
+}
+uint32_t ctr_guest_event_create(ctr_guest *g,unsigned reset) {
+    if (reset>1) return 0;
+    for (unsigned i=0;i<32;++i) if (!g->events[i].active) {
+        g->events[i]=(ctr_guest_event){true,false,reset,0};
+        uint32_t handle=ctr_guest_handle_new(g,CTR_HANDLE_EVENT,i);
+        if (!handle) memset(&g->events[i],0,sizeof(g->events[i]));
+        return handle;
+    }
+    return 0;
+}
+bool ctr_guest_handle_close(ctr_guest *g,uint32_t handle) {
+    ctr_guest_handle *h=ctr_guest_handle_for(g,handle);
+    if (!h) return false;
+    h->active=false;ctr_guest_object_release(g,h->type,h->object);return true;
 }
 ctr_guest_session *ctr_guest_session_for(ctr_guest *g,uint32_t handle) {
     ctr_guest_handle *h=ctr_guest_handle_for(g,handle);
@@ -182,14 +197,7 @@ ctr_guest_state ctr_guest_svc(ctr_guest *g,uint32_t number) {
         }
         case 0x17: {
             if (r[1]>1) return unsupported(g,number); /* Pulse/multiple waiters not yet supported. */
-            unsigned object=32;
-            for (unsigned i=0;i<32;++i) if (!g->events[i].active) { object=i; break; }
-            uint32_t handle=0;
-            if (object<32) {
-                g->events[object]=(ctr_guest_event){true,false,r[1],0};
-                handle=ctr_guest_handle_new(g,CTR_HANDLE_EVENT,object);
-                if (!handle) memset(&g->events[object],0,sizeof(g->events[object]));
-            }
+            uint32_t handle=ctr_guest_event_create(g,r[1]);
             r[0]=handle?0:RESULT_NO_MEMORY; r[1]=handle; break;
         }
         case 0x18: r[0]=ctr_guest_signal(g,r[0])?0:RESULT_INVALID_HANDLE; break;
@@ -199,9 +207,7 @@ ctr_guest_state ctr_guest_svc(ctr_guest *g,uint32_t number) {
             r[0]=object>=0?0:RESULT_INVALID_HANDLE; break;
         }
         case 0x23: {
-            ctr_guest_handle *h=ctr_guest_handle_for(g,r[0]);
-            if (h) { h->active=false;ctr_guest_object_release(g,h->type,h->object); }
-            r[0]=h?0:RESULT_INVALID_HANDLE; break;
+            r[0]=ctr_guest_handle_close(g,r[0])?0:RESULT_INVALID_HANDLE;break;
         }
         case 0x27: {
             ctr_guest_handle *h=ctr_guest_handle_for(g,r[1]);

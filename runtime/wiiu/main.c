@@ -26,6 +26,7 @@
 #include "ctr_service_fixture.h"
 #include "ctr_heap_fixture.h"
 #include "ctr_kernel_fixture.h"
+#include "ctr_hid_fixture.h"
 
 enum { TOP_W=400, BOTTOM_W=320, GUEST_H=240, AUDIO_SAMPLES=12000 };
 static uint32_t top_image[TOP_W*GUEST_H], bottom_image[BOTTOM_W*GUEST_H];
@@ -38,6 +39,10 @@ static int cpu_test_result;
 static int service_test_result;
 static int heap_test_result;
 static int kernel_test_result;
+static int hid_test_result,hid_ready;
+static ctr_guest hid_guest;
+static uint32_t hid_snapshot[5];
+static OSTime hid_origin;
 static ctr_guest frame_guest;
 static int guest_ready,guest_mode=CTR_GUEST_DEFAULT;
 static uint32_t presented_frames;
@@ -55,7 +60,28 @@ static void restart_guest(void) {
     guest_ready=ctr_frame_open(&frame_guest);
     frame_guest.debug=guest_debug; frame_guest.cpu.log=guest_trace;
     guest_origin=OSGetTime(); presented_frames=0;
-    WHBLogPrintf("guest_open ok=%u profile=ctr2wup-framebuffer-fixture-v1 mode=AOT HID_GSP_PICA=unavailable",guest_ready);
+    WHBLogPrintf("guest_open ok=%u profile=ctr2wup-framebuffer-fixture-v1 mode=AOT custom_frame_io=1 GSP_PICA=unavailable",guest_ready);
+}
+
+static int circle_axis(float axis) {
+    if (!isfinite(axis)) return 0;
+    if (axis>1) axis=1;
+    if (axis<-1) axis=-1;
+    return (int)lroundf(axis*156.0f);
+}
+static void update_hid(const VPADStatus *pad,bool inside,uint16_t x,uint16_t y) {
+    static const uint32_t masks[]={VPAD_BUTTON_A,VPAD_BUTTON_B,VPAD_BUTTON_MINUS,VPAD_BUTTON_PLUS,
+        VPAD_BUTTON_RIGHT,VPAD_BUTTON_LEFT,VPAD_BUTTON_UP,VPAD_BUTTON_DOWN,VPAD_BUTTON_R,VPAD_BUTTON_L,
+        VPAD_BUTTON_X,VPAD_BUTTON_Y};
+    if (!hid_ready || hid_guest.state==CTR_GUEST_FAULTED) return;
+    uint32_t buttons=0;for(unsigned i=0;i<12;++i)if(pad->hold&masks[i])buttons|=1u<<i;
+    uint64_t now=1+(uint64_t)OSTicksToMicroseconds(OSGetTime()-hid_origin)*1000u;
+    if (!ctr_hid_update(&hid_guest,buttons,circle_axis(pad->leftStick.x),circle_axis(pad->leftStick.y),inside,x,y,now)) {
+        hid_guest.state=CTR_GUEST_FAULTED;hid_guest.fault=CTR_CPU_UNSUPPORTED;
+        WHBLogPrintf("HID live publication FAIL time_ns=%llu",(unsigned long long)now);return;
+    }
+    ctr_guest_run(&hid_guest,1000,now,true);
+    ctr_hid_fixture_snapshot(&hid_guest,hid_snapshot);
 }
 
 static void file_log(const char *message) {
@@ -173,7 +199,7 @@ static void diagnostic_images(unsigned frame, const VPADStatus *pad,
     char text[90];
     for (unsigned y=0;y<GUEST_H;++y) for (unsigned x=0;x<TOP_W;++x) {
         unsigned band=((x+frame/2)/25)%3;
-        top_image[y*TOP_W+x]=y<103 ? 0x162d4fff :
+        top_image[y*TOP_W+x]=y<113 ? 0x162d4fff :
             (x%40==0 || y%24==0) ? 0xffffffff :
             band==0 ? 0x195baaff : band==1 ? 0x25a980ff : 0xb46b20ff;
     }
@@ -193,6 +219,8 @@ static void diagnostic_images(unsigned frame, const VPADStatus *pad,
     image_text(top_image,TOP_W,8,text);
     snprintf(text,sizeof(text),"SHARED/SYNC LIFECYCLE %s CODE %d",kernel_test_result?"FAIL":"PASS",kernel_test_result);
     image_text(top_image,TOP_W,9,text);
+    snprintf(text,sizeof(text),"HID ARM CONSUMER %s CODE %d",hid_test_result?"FAIL":"PASS",hid_test_result);
+    image_text(top_image,TOP_W,10,text);
     for (unsigned y=0;y<GUEST_H;++y) for (unsigned x=0;x<BOTTOM_W;++x)
         bottom_image[y*BOTTOM_W+x]=y<92 ? 0x35194fff :
             (((x/20)^(y/20))&1) ? 0x783598ff:0x108797ff;
@@ -210,6 +238,12 @@ static void diagnostic_images(unsigned frame, const VPADStatus *pad,
     snprintf(text,sizeof(text),"TONE COUNT %u / A: PLAY",tone_count);
     image_text(bottom_image,BOTTOM_W,6,text);
     image_text(bottom_image,BOTTOM_W,7,"TOUCH BORDERS MUST BE IGNORED");
+    snprintf(text,sizeof(text),"ARM HID %08X / SAMPLES %u",hid_snapshot[0],hid_snapshot[4]);
+    image_text(bottom_image,BOTTOM_W,8,text);
+    snprintf(text,sizeof(text),"ARM CIRCLE %08X / TOUCH %08X V%u",hid_snapshot[1],hid_snapshot[2],hid_snapshot[3]);
+    image_text(bottom_image,BOTTOM_W,9,text);
+    snprintf(text,sizeof(text),"HID STATE %s",hid_ready?ctr_guest_state_name(hid_guest.state):"LOADER FAILED");
+    image_text(bottom_image,BOTTOM_W,10,text);
     if (touch_inside) for (int d=-7;d<=7;++d) {
         int xx=(int)tx+d, yy=(int)ty+d;
         if (xx>=0 && xx<BOTTOM_W) bottom_image[(unsigned)ty*BOTTOM_W+(unsigned)xx]=0xffffffff;
@@ -234,7 +268,7 @@ int main(int argc, char **argv) {
         log_file=fopen(path,"w");
         if (log_file) WHBAddLogHandler(file_log);
     }
-    WHBLogPrintf("CTR2WUP native diagnostic version=0.8.0 pointer_bits=%u endian=big UDP=%u SD_log=%u",
+    WHBLogPrintf("CTR2WUP native diagnostic version=0.9.0 pointer_bits=%u endian=big UDP=%u SD_log=%u",
                   (unsigned)(8*sizeof(void *)), udp_ready, log_file!=NULL);
     OSTime cpu_start=OSGetTime();
     cpu_test_result=ctr_cpu_selftest();
@@ -250,6 +284,12 @@ int main(int argc, char **argv) {
     kernel_test_result=ctr_kernel_selftest();
     WHBLogPrintf("kernel_selftest %s result=%d fixture=original_arm_shared_sync console_result_required=1",
                   kernel_test_result?"FAIL":"PASS",kernel_test_result);
+    hid_test_result=ctr_hid_selftest();
+    WHBLogPrintf("hid_selftest %s result=%d fixture=original_arm_standard_hid console_result_required=1",
+                  hid_test_result?"FAIL":"PASS",hid_test_result);
+    hid_ready=ctr_hid_fixture_open(&hid_guest);hid_origin=OSGetTime();
+    hid_guest.debug=guest_debug;hid_guest.cpu.log=guest_trace;
+    WHBLogPrintf("hid_live_open ok=%u service=hid:USER guest_mapping=readonly motion=unsupported",hid_ready);
     if (!WHBGfxInit()) { WHBLogPrintf("FAIL WHBGfxInit"); goto cleanup; }
     gfx_ready=1;
     GX2Surface *tv_target=&WHBGfxGetTVColourBuffer()->surface;
@@ -290,6 +330,7 @@ int main(int argc, char **argv) {
         VPADGetTPCalibratedPointEx(VPAD_CHAN_0,VPAD_TP_1280X720,&touch,&pad.tpNormal);
         int inside=touch.touched && touch.validity==VPAD_VALID &&
             ctr_viewport_touch(&drc_view,touch.x,touch.y,1280,720,&tx,&ty);
+        update_hid(&pad,inside!=0,tx,ty);
         if (!guest_mode) diagnostic_images(frame,&pad,error,inside,&touch,tx,ty,frame_us,alloc_ok);
         else {
             if (guest_ready && frame_guest.state!=CTR_GUEST_FAULTED && frame_guest.state!=CTR_GUEST_EXITED) {
@@ -342,6 +383,10 @@ int main(int argc, char **argv) {
                 (unsigned long long)frame_guest.ipc_requests,(unsigned long long)frame_guest.ipc_failures,
                 frame_guest.ipc_service[0]?frame_guest.ipc_service:"none",frame_guest.ipc_target[0]?frame_guest.ipc_target:"none",
                 frame_guest.ipc_header,frame_guest.ipc_result);
+            WHBLogPrintf("HID live state=%s buttons=%08x circle=%08x touch=%08x valid=%u snapshots=%u published=%llu instructions=%llu fallback=%llu fault=%s detail=%08x",
+                ctr_guest_state_name(hid_guest.state),hid_snapshot[0],hid_snapshot[1],hid_snapshot[2],hid_snapshot[3],hid_snapshot[4],
+                (unsigned long long)hid_guest.hid.samples,(unsigned long long)hid_guest.cpu.instructions,
+                (unsigned long long)hid_guest.cpu.fallback_instructions,ctr_cpu_result_name(hid_guest.fault),hid_guest.fault_detail);
             log_time=OSGetTime();
         }
         ++frame;
@@ -350,6 +395,12 @@ int main(int argc, char **argv) {
 cleanup:
     WHBLogPrintf("shutdown begin result=%d",result);
     ctr_guest_close(&frame_guest);
+    if (hid_ready && hid_guest.state!=CTR_GUEST_FAULTED && ctr_hid_fixture_exit(&hid_guest)) {
+        ctr_guest_run(&hid_guest,1000,hid_guest.now_ns,true);
+        WHBLogPrintf("hid_live_shutdown state=%s fallback=%llu",ctr_guest_state_name(hid_guest.state),
+            (unsigned long long)hid_guest.cpu.fallback_instructions);
+    }
+    ctr_guest_close(&hid_guest);
     if (tone_voice) { AXSetVoiceState(tone_voice,AX_VOICE_STATE_STOPPED); AXFreeVoice(tone_voice); }
     if (AXIsInit()) AXQuit();
     if (gfx_ready) GX2DrawDone();

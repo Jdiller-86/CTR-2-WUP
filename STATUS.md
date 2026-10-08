@@ -8,13 +8,12 @@ title candidate. The target remains an UWUVCI-style Windows GUI: select a
 decrypted game, configure title/artwork, click Inject, install its per-game WUP
 and launch from Wii U Menu. The CLI is the shared engine, not the final product.
 
-**Version 0.8.0 adds shared-memory ownership and synchronization**: typed shared
-blocks/aliases, pinned backing, mutexes/semaphores and wait-any/all. The original
-148-instruction ARM probe executes 27 SVCs through all three backends and its
-interpreter/AOT self-test is embedded in all Wii U builds. See
-`docs/kernel-objects.md`. This is single-process/single-thread shared runtime work.
-The user requested continuing execution until a concrete roadblock; HID input
-service integration is the next independent step.
+**Version 0.9.0 adds standard HID input/events**: read-only pad/touch rings,
+independent copied handles and a live original ARM consumer in all Wii U builds.
+Two input samples and cleanup match through interpreter/original/external AOT
+(185 instructions, 18 SVCs, zero fallback). See `docs/hid-input.md`.
+The user requested continuing until a concrete roadblock; standard GSP framebuffer
+presentation is the next independent step. Shared/sync support from v0.8 remains.
 
 Version 0.7.0 added the checked heap/linear CPU backing lifecycle; see
 `docs/guest-memory.md`.
@@ -33,6 +32,15 @@ Commercial conversion and the Windows GUI remain incomplete. Installer acceptanc
 is unverified; no milestone requiring physical-console evidence is complete.
 
 ## Verified implementation
+
+- HID GetHandles returns checked shared/event copies; shared input is guest
+  read-only. The original ARM consumer maps, waits, reads pad/circle/touch and
+  unmaps/closes/exits through standard interfaces. 858 external boundary and 336
+  API assertions cover state/bytes/lifetimes, transitions, wrap timestamps,
+  invalid input and capacity rollback. GCC/sanitizers, Clang and emulated PPC
+  checks pass. All Wii U builds embed its self-test and a live original-AOT
+  VPAD-to-ARM consumer. Physical input, timing and shutdown remain unverified;
+  motion/New-family controls and conventional homebrew boot remain absent.
 
 - Shared/mutex/semaphore handles share the generation-tagged table. Mappings and
   waits retain objects independently of handles. Heap-backed shared objects pin
@@ -141,18 +149,18 @@ is unverified; no milestone requiring physical-console evidence is complete.
   single-guest events/handles/sleep/debug/exit, native diagnostics and structural
   WUP validator remain tested. Commercial `build` still fails without publishing
   a placeholder package. Paths with spaces/Japanese characters work on Linux.
-- **139 Python tests**, 51,175 CPU assertions, 221 original-guest assertions,
-  1,001 service, 307 heap and 197 kernel assertions pass; all C suites also pass ASan/UBSan. The complete
-  v0.8.0 runner passes **29 checks**, including external generation/execution,
+- **141 Python tests**, 51,175 CPU assertions, 221 original-guest assertions,
+  1,001 service, 307 heap 197 kernel and 336 HID assertions pass; all C suites also pass ASan/UBSan. The complete
+  v0.9.0 runner passes **30 checks**, including external generation/execution,
   all three RPX builds,
   original staging/intake, offline encrypted packaging and installed-wheel
   inspection/execution/packing. Crypto remains an optional external dependency.
 
 ## Reports and deliverables
 
-Main validation: `artifacts/reports/validation-v1-20261008T164924Z/report.json`.
-New compiler/target checks: `artifacts/reports/kernel-clang-v8/report.json`
-and `artifacts/reports/kernel-ppc-v8/report.json` (14 checks each).
+Main validation: `artifacts/reports/validation-v1-20261008T170836Z/report.json`.
+New compiler/target checks: `artifacts/reports/hid-clang-v9/report.json`
+and `artifacts/reports/hid-ppc-v9/report.json` (16 checks each).
 Helper evidence: `artifacts/reports/cia-helper-final/report.json` (13 checks).
 Earlier checks: `artifacts/reports/upstream-ppc-final/`,
 `upstream-clang-final/`, and the Unicorn reference report under
@@ -162,7 +170,7 @@ See `docs/upstream-integration.md` for commands and precise limits.
 
 Versioned source/native/original-guest/external-guest delivery bundles, wheel,
 checksums and original title-staging output are under `artifacts/`. Earlier
-v0.1.0/v0.2.0/v0.3.0/v0.4.0/v0.5.0/v0.6.0/v0.7.0 reports and bundles are preserved. Source is maintained in the
+v0.1.0/v0.2.0/v0.3.0/v0.4.0/v0.5.0/v0.6.0/v0.7.0/v0.8.0 reports and bundles are preserved. Source is maintained in the
 existing Git checkout; do not reset, force-push or replace user changes.
 
 ## Awaiting user inputs and physical tests
@@ -175,7 +183,8 @@ existing Git checkout; do not reset, force-push or replace user changes.
   work. If it reports encryption, decrypted executable data is still needed.
   No commercial profile is enabled until actual private intake and runtime evidence.
 - **Wii U:** run the delivered RPX/WUHB and return screen/input/audio/exit,
-  TLS/SRV/CFG, heap and shared/sync lifecycle PASS/FAIL/SD log,
+  TLS/SRV/CFG, heap, shared/sync and HID PASS/FAIL/SD log, live ARM-read
+  buttons/Circle Pad/touch/snapshot/clean exit,
   external-AOT guest frame/touch/restart/stability results and SD logs per
   `docs/console-testing.md`. Record firmware and homebrew/launcher environment.
   No commercial dump or encryption key is needed for these diagnostic builds.
@@ -204,8 +213,9 @@ control beyond the checked owned-heap/shared-object subsets, cross-process maps,
 multi-thread scheduling, PICA/GX2 state/shaders/textures/coherency,
 DSP/audio, RomFS/saves and module behavior. CFG user/Mii/console-unique identity
 and broader configuration blocks remain pending. Complete CPU/FP correctness and
-measure real console costs. Existing raw framebuffer harness I/O does not supply
-HID/GSP/PICA or conventional 3DS homebrew boot. No commercial profile is enabled.
+measure real console costs. The original framebuffer harness uses custom I/O; the separate standard-HID
+consumer now supplies input-service evidence. GSP/PICA and conventional 3DS
+homebrew boot remain unimplemented. No commercial profile is enabled.
 
 P4/P5: automate the verified Windows conversion engine, caching/rebuild/trace and
 save/title identity, then implement/package the responsive WPF GUI injector.

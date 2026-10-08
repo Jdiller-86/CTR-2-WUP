@@ -41,6 +41,16 @@ v0.8.0 embeds the shared-memory/synchronization probe. Record
 codes. Its 148 ARM instructions/27 SVCs check aliases, mutex/semaphore/event
 waits and ownership release; multi-thread behavior remains pending.
 
+v0.9.0 adds `HID ARM CONSUMER PASS CODE 0` / `hid_selftest PASS result=0`.
+Native GamePad rows show ARM-read HID buttons, packed signed Circle Pad XY,
+packed touch XY/validity and an increasing snapshot count. Compare these with
+the native VPAD rows while holding/releasing A/B/L/R/directions, moving the left
+stick and touching corners/center/borders. Touch release must clear position and
+validity; border touches must remain invalid. SD `HID live` logs must show waiting
+between samples, increasing snapshots, fallback0 and no fault; shutdown should
+report exited. Motion and C-stick are absent. Host Y/Plus/Minus controls are
+reserved for diagnostics. No commercial dump is needed for this test.
+
 ## Requested evidence
 
 1. Launch and photograph both independent screens together. TV shows moving

@@ -33,7 +33,7 @@ paths; see `shared-services.md`. This is shared runtime code, not a game patch.
 Version 0.7.0 adds owned heap/linear CPU allocation, atomic partial free/protection
 and queries; `guest-memory.md` defines the bounded contract. Ordinary heap
 changes preserve AOT snapshots; executable writes/aliases and execute protection
-still invalidate them. GPU/DSP physical memory and shared-memory remain pending.
+still invalidate them. GPU/DSP physical memory remains pending.
 The original ARM fixture writes both framebuffers and responds to input through
 an explicit harness contract. Neither implements complete ARM11/VFP, a full
 3DS kernel, general IPC or game HLE. The pinned external lifter now generates C through
@@ -50,6 +50,9 @@ All builds also embed the original ARM heap lifecycle self-test and its SD log.
 Version 0.8.0 adds shared/mutex/semaphore objects and wait-any/all, with mapping/
 wait ownership independent of handles. `kernel-objects.md` defines its
 single-thread scope. Its original ARM self-test is also embedded.
+Version 0.9.0 exposes standard read-only HID pad/touch rings and events. An
+independent original ARM consumer in each Wii U build reads live VPAD input
+through that service; `hid-input.md` defines its bounds and absent motion support.
 Its guest mode presents completed ARM-written raw framebuffers through the same
 GX2 copying path. It is separate from PICA/GSP emulation; see `guest-fixture.md`.
 Compilation proves toolchain integration. Only physical console results can

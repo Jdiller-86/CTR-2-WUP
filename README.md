@@ -20,6 +20,8 @@ Version 0.7.0 adds checked heap/linear allocation, partial free, permissions and
 queries, with an original ARM lifecycle self-test; see `docs/guest-memory.md`.
 Version 0.8.0 adds shared-memory aliases and single-thread synchronization
 objects/waits; see `docs/kernel-objects.md`.
+Version 0.9.0 adds standard HID shared input/events and a live ARM consumer in all
+Wii U diagnostics; see `docs/hid-input.md`.
 Commercial ROM-to-WUP conversion is not implemented or claimed.
 
 Read `STATUS.md`, `docs/milestones.md` and `docs/foundation-audit.md` before

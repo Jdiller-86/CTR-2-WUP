@@ -32,8 +32,8 @@ All acceptance checkboxes below remain open until their evidence is recorded.
 | Milestone | Verified portion | Remaining acceptance |
 |---|---|---|
 | M1 | Native/original/external-AOT RPX/WUHB built; native diagnostics; original staging and offline encrypted packaging | Physical screens/input/audio/exit and independently installed WUP |
-| M2 | Original CPU/AOT subset plus user CP15 TLS; external generation/checked ABI; 566+34+297+35+1,778+639 integration assertions on GCC/sanitizers/Clang/emulated big-endian PPC; scalar VFP Unicorn match | Complete ARM/VFP semantics, workload memory/fallback costs and actual Espresso timings |
-| M3 | Checked NCCH → AOT/interpreter execution; single-guest SVC/events; shared typed sessions, bounded SRV/CFG startup, checked heap/free/protection/query, typed shared aliases, mutex/semaphore/wait-any/all and original 89/151/148-instruction probes; matching ARM frames/input; RPX/WUHB/self-tests built | Physical guest/service startup evidence; conventional homebrew boot, broader/cross-process memory control, multi-thread kernel and broader IPC/HID/GSP services |
+| M2 | Original CPU/AOT subset plus user CP15 TLS; external generation/checked ABI; 566+34+297+35+1,778+639+858 integration assertions on GCC/sanitizers/Clang/emulated big-endian PPC; scalar VFP Unicorn match | Complete ARM/VFP semantics, workload memory/fallback costs and actual Espresso timings |
+| M3 | Checked NCCH → AOT/interpreter execution; single-guest SVC/events; shared typed sessions, bounded SRV/CFG startup, checked heap/free/protection/query, typed shared aliases, mutex/semaphore/wait-any/all, standard HID pad/touch rings/events and original 89/151/148-instruction probes; matching ARM frames/input; RPX/WUHB/self-tests built | Physical guest/service startup evidence; conventional homebrew boot, broader/cross-process memory control, multi-thread kernel and broader IPC/HID motion/GSP services |
 | M4 | Tested bounded command/format/viewport references | Actual PICA-to-GX2 features, scene comparisons and console timings |
 | M5 | Mario selected and CIA attachment supplied; transfer exceeds 32 MiB; intake/export helper tested; shared startup/memory development while user is away; upstream requirement leads | Actual smaller private executable export/revision, title-specific runtime/renderer/services/save/audio implementation and console gameplay |
 | M6 | External C generation/static compilation, staging/artwork/intake, original encrypted writer and independent decrypt/FST/file checks with synthetic inputs, atomic output/wheel; Windows workflow prepared | Actual local certificate/key provenance and installer acceptance, full commercial conversion, caches/traces/rebuild, Windows execution and console install checks |
@@ -73,3 +73,11 @@ are pending even though the original self-test is embedded in all diagnostic bui
 New 3DS exclusives, stereo TV, online services, cameras, microphone, DLC/update
 merging, save import/export, and arbitrary-ROM compatibility are unsupported.
 Titles requiring any of these need separate evidence and implementation.
+
+Version 0.9.0 adds shared standard HID pad/touch input and an original ARM
+consumer, including live VPAD-to-ARM diagnostics in all three Wii U builds.
+The complete runner passes 141 Python tests and 30 checks; HID API has 336
+normal/sanitized assertions, and external HID comparison has 858 assertions
+(185 instructions/18 SVCs). Clang and emulated PPC reports have 16 checks each.
+Motion, real-console input/timing, standard graphics boot and all full milestone
+acceptance remain pending. Continue into standard GSP framebuffer presentation.

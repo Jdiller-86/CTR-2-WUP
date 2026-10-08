@@ -122,3 +122,8 @@ v0.8.0 adds the 148-instruction original shared/sync probe (639 assertions)
 and `--kernel-api` (197 assertions). All six probes pass GCC/sanitizers, Clang
 and emulated PPC; the compiler/target runs include the kernel API (14 checks).
 See `kernel-objects.md` for single-thread scope and exact lifetime rules.
+
+v0.9.0 adds the standard-HID consumer (185 instructions, 18 SVCs, 858 boundary
+assertions) and `--hid-api` (336 assertions). The validator runs seven probes;
+compiler/target runs with HID API contain 16 checks. See `hid-input.md` for the
+shared-ring contract and live original-AOT Wii U input consumer.

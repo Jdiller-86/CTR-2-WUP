@@ -161,3 +161,9 @@ The user requested continued execution through concrete roadblocks. v0.8.0
 adds shared-memory ownership, mutex/semaphore objects and wait-any/all as common
 HID/GSP prerequisites. Continue into real input/service integration while
 console/title-specific gates remain open. These are tested single-thread interfaces.
+
+v0.9.0 implements the standard HID shared page/events and connects live Wii U
+VPAD input to an original ARM consumer. The external compiler/target comparisons
+remain ROM-independent. Continue next into the standard GSP framebuffer display
+interface, before title-specific PICA/shader work. Console tests and actual Mario
+intake remain required; the GUI still follows demonstrated execution/packaging.
