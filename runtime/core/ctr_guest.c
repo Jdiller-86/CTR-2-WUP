@@ -13,6 +13,7 @@ const char *ctr_guest_state_name(ctr_guest_state state) {
     return (unsigned)state<sizeof(names)/sizeof(names[0])?names[state]:"unknown";
 }
 void ctr_guest_close(ctr_guest *guest) {
+    if (guest->executor_close) guest->executor_close(guest->executor_context);
     for (unsigned i=0;i<5;++i) free(guest->storage[i]);
     memset(guest,0,sizeof(*guest)); guest->state=CTR_GUEST_EXITED;
 }
@@ -197,7 +198,8 @@ ctr_guest_state ctr_guest_run(ctr_guest *g,uint64_t budget,uint64_t now_ns,bool 
     uint64_t start=g->cpu.instructions;
     while (g->cpu.instructions-start<budget) {
         uint64_t remaining=budget-(g->cpu.instructions-start);
-        ctr_cpu_result result=translated?ctr_cpu_dispatch(&g->cpu,&g->program,remaining,false):ctr_cpu_run(&g->cpu,remaining);
+        ctr_cpu_result result=translated?(g->executor?g->executor(&g->cpu,g->executor_context,remaining):
+            ctr_cpu_dispatch(&g->cpu,&g->program,remaining,false)):ctr_cpu_run(&g->cpu,remaining);
         if (result==CTR_CPU_LIMIT) return g->state;
         if (result!=CTR_CPU_SVC) {
             g->fault=result; g->fault_detail=g->cpu.r[15]; g->state=CTR_GUEST_FAULTED; return g->state;

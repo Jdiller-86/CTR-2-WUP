@@ -37,3 +37,15 @@ if [[ -n $(git -C "$ctr_source" status --porcelain --untracked-files=no) ]]; the
 fi
 cargo +1.95.0 build --manifest-path "$ctr_source/Cargo.toml" --locked --release
 cargo +1.95.0 test --manifest-path "$ctr_source/Cargo.toml" --locked --release --workspace
+rustc +1.95.0 --edition=2021 -O "$ctr_repo_root/translator/generate.rs" \
+    --extern "recomp3ds=$CARGO_TARGET_DIR/release/librecomp3ds.rlib" \
+    -L "dependency=$CARGO_TARGET_DIR/release/deps" \
+    -o "$ctr_tools_root/ctr2wup-generate"
+python3 - "$ctr_repo_root/translator/generate.rs" "$ctr_tools_root/ctr2wup-generate" "$ctr_source_commit" <<'PY'
+import hashlib,json,sys
+from pathlib import Path
+driver,binary,commit=Path(sys.argv[1]),Path(sys.argv[2]),sys.argv[3]
+binary.with_suffix('.json').write_text(json.dumps({'source_commit':commit,
+    'driver_sha256':hashlib.sha256(driver.read_bytes()).hexdigest(),
+    'binary_sha256':hashlib.sha256(binary.read_bytes()).hexdigest()},indent=2)+'\n')
+PY

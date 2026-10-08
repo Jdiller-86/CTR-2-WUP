@@ -67,6 +67,18 @@ def main():
     run("guest-rpx-build",[sys.executable,"-m","host","build",str(fixture/"ctr2wup-guest.cxi"),"--target","guest-fixture","--output",str(guest_output)])
     guest_desktop=ROOT/"artifacts"/("guest-desktop-"+stamp)
     run("guest-desktop-execute",[sys.executable,"-m","host","run-fixture",str(fixture/"ctr2wup-guest.cxi"),"--output",str(guest_desktop),"--touch","--touch-x","100","--touch-y","80","--buttons","1"])
+    upstream_console=ROOT/"artifacts"/("upstream-console-"+stamp)
+    upstream_desktop=ROOT/"artifacts"/("upstream-desktop-"+stamp)
+    run("external-abi-tests",[sys.executable,"tools/validate-upstream.py","--output",str(report_root/"upstream-native")])
+    run("external-abi-sanitizers",[sys.executable,"tools/validate-upstream.py","--sanitize","--output",str(report_root/"upstream-sanitized")])
+    run("external-desktop-execute",[sys.executable,"-m","host","run-fixture",str(fixture/"ctr2wup-guest.cxi"),"--output",str(upstream_desktop),"--backend","upstream","--touch","--touch-x","100","--touch-y","80","--buttons","1"])
+    if (upstream_desktop/"top.ppm").is_file():
+        same=all((upstream_desktop/name).read_bytes()==(guest_desktop/name).read_bytes() for name in ("top.ppm","bottom.ppm"))
+        results.append({"name":"external-original-frame-parity","passed":same})
+    run("external-rpx-build",[sys.executable,"-m","host","build",str(fixture/"ctr2wup-guest.cxi"),"--target","guest-fixture","--backend","upstream","--output",str(upstream_console)])
+    title_stage=ROOT/"artifacts"/("title-staging-"+stamp)
+    run("original-title-staging",[sys.executable,"-m","host","stage-title",str(upstream_console/"ctr2wup-upstream-guest.rpx"),"--output",str(title_stage),"--title-id","00050000cf520001","--name","CTR2WUP AOT Prototype"])
+    run("private-title-intake",[sys.executable,"-m","host","analyze-title",str(fixture/"ctr2wup-guest.cxi"),"--output",str(report_root/"intake-smoke"),"--lifter"])
     run("wheel-build", [sys.executable, "-m", "pip", "wheel", "--no-deps", "--no-build-isolation", "--wheel-dir", "artifacts/dist", "."], env=dict(os.environ, PIP_CACHE_DIR=str(ROOT / "artifacts/pip-cache")))
     wheel = ROOT / ("artifacts/dist/ctr2wup-"+__version__+"-py3-none-any.whl")
     if wheel.exists():
@@ -82,7 +94,7 @@ def main():
             if path.is_file() and "__pycache__" not in path.parts:
                 source_digest.update(str(path.relative_to(ROOT)).encode("utf-8") + b"\0" + path.read_bytes())
     report = {"schema_version": 1, "generated_at_utc": datetime.now(timezone.utc).isoformat(),
-              "workflow": "native and guest-fixture Wii U RPX builds plus controlled desktop NCCH/AOT execution",
+              "workflow": "native/original/external-AOT RPX builds, checked ARM/Thumb/scalar-VFP, title staging and intake",
               "version": __version__,
               "ok": all(result["passed"] for result in results), "python_tests": test_count,
               "cpu_runs": c_results, "guest_runs":guest_results,"checks": results,
@@ -92,8 +104,11 @@ def main():
               "guest_console_output":str(guest_output.relative_to(ROOT)),
               "guest_desktop_output":str(guest_desktop.relative_to(ROOT)),
               "guest_fixture_output":str(fixture.relative_to(ROOT)),
+              "upstream_console_output":str(upstream_console.relative_to(ROOT)),
+              "upstream_desktop_output":str(upstream_desktop.relative_to(ROOT)),
+              "title_staging_output":str(title_stage.relative_to(ROOT)),
               "unverified": ["physical Wii U execution, input/audio/exit", "PowerPC correctness/timings", "clean Windows execution", "commercial ROM execution", "WUP installation"],
-              "unimplemented": ["complete ARM/VFP", "multi-thread kernel and IPC/HID/GSP/other services", "PICA-to-GX2 rendering", "game saves/audio/CRO", "licensed WUP packing", "Windows GUI"],
+              "unimplemented": ["complete ARM/VFP", "multi-thread kernel and IPC/HID/GSP/other services", "PICA-to-GX2 rendering", "game saves/audio/CRO", "encrypted WUP packing", "Windows GUI"],
               "configuration": {"draft_persistence": "see STATUS.md", "publication": "not_checked_by_runner", "fresh_task_restore": "not_checked_by_runner"}}
     destination = report_root / "report.json"
     destination.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")

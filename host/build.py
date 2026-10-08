@@ -91,7 +91,9 @@ def _run_build(command, env, log, cwd, *, stage="compile", timeout=None):
                         details={"exit_code": result, "log": str(log)})
 
 
-def prototype(output: str | Path, guest_path=None):
+def prototype(output: str | Path, guest_path=None, *, backend="original"):
+    if backend not in ("original","upstream") or (backend=="upstream" and guest_path is None):
+        raise HostError("invalid_backend", "Upstream builds require the original guest fixture", stage="arguments")
     repo = repository_root()
     image = None
     if guest_path is not None:
@@ -118,14 +120,25 @@ def prototype(output: str | Path, guest_path=None):
     logs = repo / "artifacts" / "logs"
     logs.mkdir(parents=True, exist_ok=True)
     log = logs / ("prototype-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S") + "-" + staging.name.rsplit("-", 1)[-1] + ".log")
+    work = None
     try:
         env = tool_environment()
         command = [shutil.which("make", path=env.get("PATH")), "-C", str(makefile.parent)]
         target="ctr2wup-guest-fixture" if image else "ctr2wup-prototype"
         if image:
             command += ["OUTPUT=../../artifacts/wiiu-guest", "TARGET="+target, "GUEST_DEFAULT=1"]
+        generation=None
+        if backend=="upstream":
+            from translator.upstream import generate_into
+            work=Path(tempfile.mkdtemp(prefix="wiiu-upstream-",dir=repo/"artifacts"))
+            generation=generate_into(guest_path,work/"aot")
+            target="ctr2wup-upstream-guest"
+            command=[shutil.which("make",path=env.get("PATH")),"-C",str(makefile.parent),
+                     "OUTPUT=../../artifacts/"+work.name+"/wiiu","TARGET="+target,"GUEST_DEFAULT=1",
+                     "EXTERNAL_AOT=1","UPSTREAM_DIR=../../artifacts/"+work.name+"/aot","-j3"]
         _run_build(command, env, log, repo)
         artifact = repo / "artifacts" / ("wiiu-guest" if image else "wiiu") / (target+".rpx")
+        if work: artifact=work/"wiiu"/(target+".rpx")
         _validate_rpx(artifact)
         shutil.copy2(artifact, staging / artifact.name)
         _validate_rpx(staging / artifact.name)
@@ -140,8 +153,9 @@ def prototype(output: str | Path, guest_path=None):
         shutil.copy2(log, staging / "build.log")
         manifest = {"schema_version": 1, "ok": True, "stage": "complete",
                     "target": "guest-fixture" if image else "prototype", "package_format": "RPX",
-                    "host_version": __version__, "runtime_version": "0.2.0",
-                    "translator_version": "bounded-aot-v2" if image else None,
+                    "host_version": __version__, "runtime_version": __version__,
+                    "translator_version": ("external-abi4-checked-v1" if backend=="upstream" else "bounded-aot-v2") if image else None,
+                    "backend":backend,"generation":generation,
                     "profile": "ctr2wup-framebuffer-fixture-v1" if image else "native-diagnostics",
                     "input_identity": image["inspection"]["identity"] if image else None,
                     "executable_revision": image["inspection"]["executable_revision"] if image else None,
@@ -165,6 +179,7 @@ def prototype(output: str | Path, guest_path=None):
         publish_directory(staging, output)
         return {**manifest, "output": str(output)}
     finally:
+        if work and work.exists(): shutil.rmtree(work)
         if staging.exists():
             shutil.rmtree(staging)
 

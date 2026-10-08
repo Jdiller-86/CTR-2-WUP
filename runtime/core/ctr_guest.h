@@ -33,6 +33,10 @@ typedef struct {
     ctr_guest_handle handles[64];
     void (*debug)(void *context, const char *message);
     void *debug_context;
+    /* Optional checked static-code engine; the scheduler retains SVC ownership. */
+    ctr_cpu_result (*executor)(ctr_cpu *cpu,void *context,uint64_t budget);
+    void *executor_context;
+    void (*executor_close)(void *context);
 } ctr_guest;
 
 /* Call on a new/closed object. Loader failure frees allocations and leaves it

@@ -17,6 +17,12 @@ Version 0.2.0 also includes `ctr2wup-guest-fixture.rpx`/`.wuhb`, which starts in
 controlled guest mode. Both applications contain both modes; press Y to switch.
 Use the native mode for the original checks below, then run the guest checks.
 
+Version 0.3.0 also supplies `ctr2wup-upstream-guest.rpx`/`.wuhb`. Run the same
+guest checks with this build: it executes the actual external lifter's code
+through the checked portable ABI. The embedded CPU self-test remains the original
+bounded test; collect the guest instruction/frame/fault logs for this adapter.
+Neither the RPX/WUHB nor the separate title-staging ZIP is an installable WUP.
+
 ## Requested evidence
 
 1. Launch and photograph both independent screens together. TV shows moving
@@ -75,4 +81,4 @@ Installable WUP, conventional 3DS homebrew/service boot, PICA renderer scenes, c
 gameplay, DSP, saves, CRO modules, and representative CPU/VFP/fallback performance
 benchmarks. No commercial ROM is needed for the native test above. One user-owned
 fully decrypted Old 3DS revision will be requested for the commercial milestone
-after the fixture/runtime/rendering gates can support a meaningful title test.
+for the selected Super Mario 3D Land candidate's private revision analysis.

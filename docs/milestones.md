@@ -3,6 +3,15 @@
 Acceptance remains tied to the complete requirements in `project-brief.md`.
 Desktop passes and cross-compilation never check a physical-console box.
 
+The execution order is now defined in `development-plan.md`: integrate the
+audited AOT lifter and resolve installable WUP packaging early, select one exact
+Old 3DS revision, implement its required Wii U runtime/PICA features, automate
+Windows ROM-to-WUP conversion, then deliver the UWUVCI-style Windows GUI injector
+specified in `gui-workflow.md`. The CLI is its shared engine; the MVP is completed
+through the GUI's Inject-to-WUP workflow. Existing diagnostics
+and the custom framebuffer guest are regression tools within that product path.
+All acceptance checkboxes below remain open until their evidence is recorded.
+
 - [ ] M1 Native Wii U platform: build diagnostic RPX; physical dual-screen,
   buttons/sticks/touch/audio/exit test; independently investigate WUP.
 - [ ] M2 CPU correctness/benchmarks: tested bounded portable subset; complete
@@ -18,25 +27,26 @@ Desktop passes and cross-compilation never check a physical-console box.
 - [ ] M7 Windows GUI: proven same execution pipeline, usable responsive front
   end and documented packaged prerequisites.
 
-## Current evidence (2026-10-07)
+## Current evidence (2026-10-08 UTC)
 
 | Milestone | Verified portion | Remaining acceptance |
 |---|---|---|
-| M1 | Real RPX/WUHB built; native diagnostics implemented; packaging audited | Physical screens/input/audio/exit and independently installed WUP |
-| M2 | Bounded original CPU/AOT subset, 51,147 desktop assertions and sanitizers; console self-test linked | Complete semantic coverage/differential VFP and actual PowerPC timings |
+| M1 | Native/original/external-AOT RPX/WUHB built; native diagnostics; original title staging | Physical screens/input/audio/exit and independently installed WUP |
+| M2 | Original CPU/AOT subset; external generation/checked ABI; 566+34 integration assertions on GCC/sanitizers/Clang/emulated big-endian PPC; scalar VFP Unicorn match | Complete ARM/VFP semantics, workload memory/fallback costs and actual Espresso timings |
 | M3 | Original executable NCCH → checked loader → AOT/interpreter execution; bounded single-guest SVC/events; matching ARM-written frames/input; guest RPX/WUHB built | Physical guest frames/input/exit/stability; conventional homebrew boot, multi-thread kernel and required IPC/HID/GSP services |
 | M4 | Tested bounded command/format/viewport references | Actual PICA-to-GX2 features, scene comparisons and console timings |
-| M5 | Exact revision/hash identity preparation | User ROM, runtime/renderer/services/save/audio implementation and console gameplay |
-| M6 | Doctor/inspect/prototype-build/package-validate, atomic output and installed CLI wheel | Full conversion, licensed packing/keys, caches/traces/rebuild, clean Windows and console install checks |
+| M5 | User selected Super Mario 3D Land; private hash/service intake; Mii/save-identity and GPU-readback source leads | User ROM/revision, runtime/renderer/services/save/audio implementation and console gameplay |
+| M6 | External C generation/static compilation, title staging/artwork/intake, structure validator, atomic output/wheel; Windows workflow prepared | Encrypted WUP writer/local credentials, full conversion, caches/traces/rebuild, Windows execution and console install checks |
 | M7 | Deliberately deferred | Proven pipeline before responsive Windows GUI implementation |
 
 These are partial implementation outcomes. None of the full milestone checkboxes
 is satisfied by source/build/test artifacts alone.
 
-Version 0.2.0 adds the guest execution foundation. `docs/guest-fixture.md` records
-its contract and desktop evidence. Validation passes 88 Python tests, 51,147 CPU
-assertions and 221 guest assertions in each normal/sanitized C run, and 17 total
-workflow checks. Physical-console and clean Windows acceptance remain pending.
+Version 0.3.0 connects the audited lifter to the runtime; `upstream-integration.md`
+records its checks and limits. Validation passes 95 Python tests, 51,147 CPU
+assertions and 221 original-guest assertions in each normal/sanitized C run,
+566+34 external integration assertions and 24 complete workflow checks.
+Physical-console and clean Windows acceptance remain pending.
 
 ## Deferred features
 

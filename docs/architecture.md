@@ -18,8 +18,10 @@ segments; the portable loader allocates checked permissions/stack/TLS/BSS. A
 single-guest runtime implements bounded SVC sleep/events/handles/ticks/debug/exit.
 The original ARM fixture writes both framebuffers and responds to input through
 an explicit harness contract. Neither implements complete ARM11/VFP, a full
-3DS kernel, IPC or game HLE. The pinned external lifter is investigated at
-a host process boundary; its desktop runtime is not a Wii U dependency.
+3DS kernel, IPC or game HLE. The pinned external lifter now generates C through
+an original host driver. An original ABI 4 implementation statically executes
+that code using checked little-endian callbacks and per-instruction state;
+see `upstream-integration.md`. Its desktop runtime is not a Wii U dependency.
 
 The native WUT backend provides independent TV and GamePad diagnostic output,
 input, sound, process lifecycle, timing, and CPU self-test instrumentation.
@@ -35,6 +37,8 @@ exception reports the absent shader/texture/TEV/GX2 translation path.
 `packaging/` inspects original/supplied package structure and title identities.
 Content structure, cryptographic authenticity, and installer acceptance are
 different checks. There is no bundled common key and no unlicensed packer.
+Original `stage-title` metadata/artwork is a packaging prerequisite. Its output
+is explicitly not an installable package; encrypted construction is pending.
 
 Generated artifacts are ignored by Git. User ROMs, saves, extracted assets,
 translated commercial code, keys, and packages must stay under ignored private

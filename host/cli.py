@@ -36,13 +36,23 @@ def parser():
     guest.add_argument("--touch-x", type=int, default=0)
     guest.add_argument("--touch-y", type=int, default=0)
     guest.add_argument("--mode", choices=("aot", "interpreter"), default="aot")
+    guest.add_argument("--backend",choices=("original","upstream"),default="original")
+    translation=commands.add_parser("translate",help="Generate checked C with the separately installed pinned lifter; execution remains profile gated")
+    translation.add_argument("path")
+    translation.add_argument("--output",required=True)
+    intake=commands.add_parser("analyze-title",help="Write private revision/capability intake; no profile is enabled")
+    intake.add_argument("path");intake.add_argument("--output",required=True);intake.add_argument("--lifter",action="store_true")
     compile_command = commands.add_parser("build", help="Compile the native diagnostic RPX or check a ROM support gate")
     compile_command.add_argument("path", nargs="?")
     compile_command.add_argument("--target", choices=("prototype", "guest-fixture", "commercial"), default="commercial")
     compile_command.add_argument("--output", required=True)
+    compile_command.add_argument("--backend",choices=("original","upstream"),default="original")
     package = commands.add_parser("validate-package", help="Validate a WUP directory; reports structural limits")
     package.add_argument("path")
     package.add_argument("--registry")
+    staging=commands.add_parser("stage-title",help="Stage an original homebrew RPX and metadata/artwork; output is not an installable WUP")
+    staging.add_argument("rpx");staging.add_argument("--output",required=True);staging.add_argument("--title-id",required=True)
+    staging.add_argument("--name",default="CTR2WUP Prototype");staging.add_argument("--title-version",type=int,default=0)
     return result
 
 
@@ -57,16 +67,25 @@ def execute(args):
     if args.command == "run-fixture":
         from .guest_pipeline import run_fixture
         return run_fixture(args.path,args.output,frames=args.frames,buttons=args.buttons,touch=args.touch,
-                           x=args.touch_x,y=args.touch_y,translated=args.mode=="aot")
+                           x=args.touch_x,y=args.touch_y,translated=args.mode=="aot",backend=args.backend)
+    if args.command == "translate":
+        from translator.upstream import generate
+        return generate(args.path,args.output)
+    if args.command == "stage-title":
+        from .title_stage import stage_title
+        return stage_title(args.rpx,args.output,title_id=args.title_id,name=args.name,version=args.title_version)
+    if args.command == "analyze-title":
+        from .title_analysis import analyze_title
+        return analyze_title(args.path,args.output,lifter=args.lifter)
     if args.command == "build":
         if args.target == "prototype":
             if args.path:
                 raise HostError("usage", "A native prototype build does not take a ROM", stage="arguments")
-            return build.prototype(args.output)
+            return build.prototype(args.output,backend=args.backend)
         if args.target == "guest-fixture":
             if not args.path:
                 raise HostError("usage", "Guest fixture build requires the original fixture .cxi", stage="arguments")
-            return build.prototype(args.output,guest_path=args.path)
+            return build.prototype(args.output,guest_path=args.path,backend=args.backend)
         if not args.path:
             raise HostError("usage", "Commercial build requires an input .3ds or .cxi", stage="arguments")
         return build.commercial(args.path, args.output)

@@ -1,9 +1,14 @@
 # CTR2WUP
 
-A staged research project for ARM11-to-Wii U translation. The current working
+The product target is a Windows GUI injector like UWUVCI AIO: select a decrypted
+3DS game, configure title/artwork, click Inject and install its per-game WUP on
+Wii U. Super Mario 3D Land is the first selected candidate; its dump is pending.
+The current working
 deliverable includes native Wii U diagnostics and a controlled ARM guest
 RPX/WUHB, a Windows-compatible Python CLI, checked NCSD/NCCH loading, and a
-tested portable CPU/AOT and single-guest SVC/event runtime.
+tested portable CPU/AOT and single-guest SVC/event runtime. Version 0.3.0 connects
+the external lifter's generated C to an original checked ABI and static PowerPC
+build. It also adds original title staging and private title intake.
 Commercial ROM-to-WUP conversion is not implemented or claimed.
 
 Read `STATUS.md`, `docs/milestones.md` and `docs/foundation-audit.md` before
@@ -30,6 +35,9 @@ to remain running. Optional audited host lifter:
 bash tools/install-translator.sh
 python3 -m tests.host_fixtures artifacts/fixtures
 python3 -m translator.upstream artifacts/fixtures/synthetic.cxi
+python3 -m host run-fixture "artifacts/my fixture/ctr2wup-guest.cxi" --backend upstream --output artifacts/external-frames
+python3 -m host build "artifacts/my fixture/ctr2wup-guest.cxi" --target guest-fixture --backend upstream --output artifacts/external-console
+make upstream-check
 ```
 
 Inspect a fully decrypted user-owned dump with `python3 -m host inspect PATH`.
@@ -48,3 +56,6 @@ checks, `docs/console-testing.md` for the physical-console checklist, and
 `docs/guest-fixture.md` explains the real ARM execution pipeline and its explicit
 input/raw-framebuffer contract. It does not provide HID/GSP/PICA or stock 3DS
 graphical homebrew support. Both Wii U applications await physical execution.
+See `docs/upstream-integration.md` for checked ARM/Thumb/scalar-VFP evidence and
+`docs/first-title.md` for the Mario intake. `stage-title` produces original title
+staging, not a WUP. The GUI follows the working conversion/packing pipeline.

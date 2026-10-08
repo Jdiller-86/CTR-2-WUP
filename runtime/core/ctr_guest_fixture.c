@@ -1,6 +1,15 @@
 #include "ctr_guest_fixture.h"
+#ifdef CTR_EXTERNAL_AOT
+#include "ctr_recomp.h"
+#endif
 bool ctr_frame_open(ctr_guest *g) {
+#ifdef CTR_EXTERNAL_AOT
+    if (!ctr_guest_open(g,&ctr_frame_image,NULL,0)) return false;
+    if (!ctr_recomp_attach(g,false)) { ctr_guest_close(g);return false; }
+    return true;
+#else
     return ctr_guest_open(g,&ctr_frame_image,ctr_frame_fixture_blocks,ctr_frame_fixture_block_count);
+#endif
 }
 bool ctr_frame_input(ctr_guest *g,uint32_t buttons,bool touched,uint32_t x,uint32_t y) {
     if (touched && (x>=320 || y>=240)) return false;

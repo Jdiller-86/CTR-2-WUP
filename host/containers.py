@@ -193,6 +193,17 @@ def _ncch(reader, base, available, *, partition):
         result["codeset_name"] = _ascii(exheader[:8], "codeset name")
         result["stack_size"] = u32(exheader, 0x1C)
         result["bss_size"] = u32(exheader, 0x3C)
+        # Declared service access is an allowlist, not evidence of executed IPC
+        # commands or successful service emulation. Includes the two extra slots.
+        services=[]
+        for slot in range(34):
+            raw=exheader[0x250+slot*8:0x258+slot*8]
+            value=raw.split(b"\0",1)[0]
+            if not value: continue
+            if any(byte<0x21 or byte>0x7e for byte in value):
+                fail("invalid_service_access", "Extended-header service access must contain printable ASCII names")
+            services.append(value.decode("ascii"))
+        result["service_access"] = services
         result["segments"] = {name: {"address": u32(exheader, off),
                                              "pages": u32(exheader, off + 4),
                                              "size": u32(exheader, off + 8)}

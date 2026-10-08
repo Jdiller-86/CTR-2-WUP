@@ -44,7 +44,9 @@ def generated_sources(image):
             "image.generated.c": metadata}
 
 
-def run_fixture(path, output, *, frames=2, buttons=0, touch=False, x=0, y=0, translated=True):
+def run_fixture(path, output, *, frames=2, buttons=0, touch=False, x=0, y=0, translated=True, backend="original"):
+    if backend not in ("original","upstream") or (backend=="upstream" and not translated):
+        raise HostError("invalid_backend", "Use original aot/interpreter or upstream aot", stage="arguments")
     if not 1 <= frames <= 30 or not 0 <= buttons <= 0xFFFFFFFF or not 0 <= x < 320 or not 0 <= y < 240:
         raise HostError("invalid_fixture_input", "Require 1..30 frames, 32-bit buttons and touch coordinates within 320x240", stage="arguments")
     image = profiled_image(path)
@@ -72,8 +74,17 @@ def run_fixture(path, output, *, frames=2, buttons=0, touch=False, x=0, y=0, tra
         execution_log=logs/(stage.name+"-execute.log")
         core = repo / "runtime/core"
         sources = [repo / "runtime/desktop/guest_runner.c"] + [core / name for name in ("ctr_memory.c", "ctr_cpu.c", "ctr_guest.c", "ctr_guest_fixture.c")]
-        sources += [stage / name for name in generated_sources(image)]
-        command = [compiler, "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-I", str(core), *map(str, sources), "-o", str(binary)]
+        flags=[];generation=None
+        if backend=="upstream":
+            from translator.upstream import generate_into
+            generation=generate_into(path,stage/"aot")
+            sources += [repo/"runtime/recomp/ctr_recomp.c",stage/"image.generated.c"]
+            sources += [stage/"aot"/name for name in generation["sources"]]
+            flags=["-DCTR_EXTERNAL_AOT","-I",str(stage/"aot"),"-I",str(repo/"runtime/recomp"),"-ffp-contract=off","-fno-fast-math"]
+            (stage/"framebuffer.generated.c").unlink()
+        else:
+            sources += [stage / name for name in generated_sources(image)]
+        command = [compiler, "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-I", str(core), *flags,*map(str, sources), "-lm", "-o", str(binary)]
         _run_build(command, env, build_log, repo)
         _run_build([str(binary), str(frames), str(buttons), str(int(touch)), str(x), str(y), str(int(translated))],
                    env,execution_log,stage,stage="execute",timeout=60)
@@ -86,7 +97,7 @@ def run_fixture(path, output, *, frames=2, buttons=0, touch=False, x=0, y=0, tra
             raise HostError("invalid_guest_report", "Runner did not complete the requested frames and orderly guest exit", stage="execute")
         report = {"schema_version": 1, "ok": True, "target": "guest-fixture", "profile": "ctr2wup-framebuffer-fixture-v1",
                   "input_identity": image["inspection"]["identity"], "executable_revision": image["inspection"]["executable_revision"],
-                  "mode": "aot" if translated else "interpreter", "guest": result,
+                  "mode": "aot" if translated else "interpreter", "backend":backend,"generation":generation,"guest": result,
                   "console_verified": False, "io": "explicit fixture input/raw-framebuffer contract; HID/GSP/PICA unavailable",
                   "artifacts": [{"name": item.name, "size": item.stat().st_size, "sha256": _sha256(item)} for item in (binary, stage/"top.ppm", stage/"bottom.ppm")]}
         (stage/"build-report.json").write_text(json.dumps(report, indent=2)+"\n")

@@ -1,5 +1,5 @@
 PYTHON ?= python3
-.PHONY: check prototype regenerate doctor
+.PHONY: check prototype regenerate doctor upstream-check
 check:
 	$(PYTHON) -m unittest discover -s tests -v
 	$(MAKE) -C tests/cpu check sanitize
@@ -8,6 +8,8 @@ prototype:
 	$(MAKE) -C runtime/wiiu -j 3
 doctor:
 	$(PYTHON) -m host doctor
+upstream-check:
+	$(PYTHON) tools/validate-upstream.py --output artifacts/upstream-check-$(shell date -u +%Y%m%dT%H%M%S)
 regenerate:
 	$(PYTHON) tests/fixtures/cpu/make_fixture.py
 	$(PYTHON) translator/aot.py tests/fixtures/cpu/arithmetic.arm.bin tests/fixtures/cpu/arithmetic.generated.c --base 0x1000 --symbol ctr_arm_fixture

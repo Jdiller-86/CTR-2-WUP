@@ -1,0 +1,61 @@
+# First supported-title candidate: Super Mario 3D Land
+
+Selected by the user on 2026-10-08 UTC. The exact user-owned dump, region and
+revision have not been supplied. No commercial profile is enabled, and there is
+no reproduced CTR2WUP boot/gameplay/save or Wii U performance result.
+The MVP is still the Windows GUI's Inject → per-game WUP → Wii U Menu workflow.
+
+## Evidence and requirements to investigate
+
+The pinned Zakuro source provides concrete leads rather than a compatibility
+guarantee. At commit `76f17bf76cd9ea238a94f37d389fe701ab05a673`:
+
+- `zakuro-core/src/services/mod.rs` and `services/mii_selector.rs` include tests
+  explaining that the game's saved Mii must agree with its CFG console identity.
+  APT/Mii selection, CFG identity and save/reload must therefore be consistent;
+  an empty generic applet response is unsuitable.
+- `zakuro-gpu/src/raster/hardware.rs` notes small color-buffer CPU readbacks
+  while loading a course. GPU completion and guest-visible memory coherence
+  need real handling, beyond presenting a final framebuffer.
+
+These are source observations that have not been reproduced using the user's
+revision. The desktop Vulkan implementation is not a GX2 implementation. No
+upstream executable/assets/caches or implementation from these locations was
+copied into CTR2WUP.
+
+| Area | Intake/implementation evidence needed |
+|---|---|
+| Revision | NCCH/NCSD identity, region/version, input/executable hashes and module inventory |
+| CPU | ARM/Thumb/VFP coverage, CP15/TLS, exceptions, exact generated-code/RSS/memory costs; measured fallback |
+| Kernel/IPC | Required SVCs, threads/synchronization, `srv:` routing and traced command shapes |
+| Declared services | Read the private dump's extended-header allowlist; confirm actual use by tracing |
+| Input/display | HID shared memory/events, GSP/GX2 command/state translation, TV/GamePad mapping |
+| GPU | Vertex shaders, textures/TEV/depth/stencil and color-buffer readback/coherency needed by observed scenes |
+| Filesystem/modules | RomFS assets, save archive operations and CRO/CRS use if present |
+| Audio | Required DSP protocol/voices and console output; compare against game behavior |
+| APT/CFG/Mii | Repeatable console/Mii identity, applet completion and save continuity |
+| Packaging | Original encrypted WUP, install/Menu launch, stable identity across rebuild, uninstall |
+
+## Private intake
+
+Keep a fully decrypted `.3ds` or `.cxi` under ignored `private/`; no keys are
+needed for already decrypted input. Avoid update/DLC merging for the first exact
+revision. The following produces metadata and declared capabilities, not a
+supported or playable conversion:
+
+```sh
+python3 -m host analyze-title private/game.cxi --lifter --output private/first-title-intake
+```
+
+The report preserves exact hashes, segment/stack/BSS layout, declared service
+access and section inventory. The external lifter analysis remains private.
+Do not infer implemented/observed IPC from the service allowlist. Later extraction
+and module/shader analysis will use this revision to prioritize concrete runtime
+work. The synthetic intake command is verified; commercial intake is pending.
+
+Proposed manual route, to agree after identifying the dump: cold boot, title
+menu, start a new save, enter/play the first course, test movement/jump/touch as
+used, finish/save, exit and relaunch, then rebuild the same title ID and confirm
+save continuity. Record firmware, homebrew environment, installer, screen/audio
+behavior, frame/instruction timings and fault/fallback logs. This route is not
+claimed to have been executed.

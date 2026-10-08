@@ -6,6 +6,8 @@ export PATH := $(DEVKITPPC)/bin:$(DEVKITPRO)/tools/bin:$(PATH)
 OUTPUT ?= ../../artifacts/wiiu
 TARGET ?= ctr2wup-prototype
 GUEST_DEFAULT ?= 0
+EXTERNAL_AOT ?= 0
+UPSTREAM_DIR ?= ../../artifacts/generated-upstream-guest
 ifeq ($(GUEST_DEFAULT),1)
 APP_NAME := CTR2WUP ARM Guest Fixture
 else
@@ -24,9 +26,14 @@ CORE_SOURCES := ../core/ctr_memory.c ../core/ctr_cpu.c ../core/ctr_cpu_selftest.
                 ../core/ctr_guest.c ../core/ctr_guest_fixture.c \
                 ../../tests/fixtures/cpu/arithmetic.generated.c ../../tests/fixtures/cpu/exit.generated.c \
                 ../../tests/fixtures/guest/framebuffer.generated.c ../../tests/fixtures/guest/image.generated.c
+ifeq ($(EXTERNAL_AOT),1)
+CFLAGS += -DCTR_EXTERNAL_AOT -I../recomp -I"$(UPSTREAM_DIR)" -ffp-contract=off -fno-fast-math
+CORE_SOURCES := $(filter-out ../../tests/fixtures/guest/framebuffer.generated.c,$(CORE_SOURCES))
+CORE_SOURCES += ../recomp/ctr_recomp.c $(UPSTREAM_DIR)/entries.c $(wildcard $(UPSTREAM_DIR)/code*.c)
+endif
 CORE_OBJECTS := $(addprefix $(BUILD)/,$(notdir $(CORE_SOURCES:.c=.o)))
 OBJECTS += $(CORE_OBJECTS)
-vpath %.c ../core ../../tests/fixtures/cpu ../../tests/fixtures/guest
+vpath %.c ../core ../recomp ../../tests/fixtures/cpu ../../tests/fixtures/guest $(UPSTREAM_DIR)
 .PHONY: all clean
 all: $(OUTPUT)/$(TARGET).rpx $(OUTPUT)/$(TARGET).wuhb
 $(BUILD):

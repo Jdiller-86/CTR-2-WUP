@@ -39,7 +39,38 @@ rebuild reservations may update the package revision while keeping the title
 identity stable; another owner cannot take it. Serialize concurrent registry
 writes. A package TMD digest is a revision check, not the game's save identity.
 
-Next required work: license-cleared packing and certificate provenance, local
+## Original staging and selected packaging route
+
+Version 0.3.0 adds transactional original title staging:
+
+```sh
+python3 -m host stage-title PATH.rpx --title-id YOUR_APPLICATION_ID --name "My title" --output artifacts/my-title-staging
+```
+
+It creates `code/ctr2wup.rpx`, original app/cos/meta XML and checker TGA assets,
+plus an empty `content/` directory and a file-hash report. Metadata/resource/COS
+permissions and artwork acceptance remain awaiting console tests. The explicit
+ID is checked for application type and nonzero identity; it is not checked
+against console inventory or reserved by staging. XML escaping and Unicode
+length bounds are enforced. This directory and its delivery ZIP are **not WUPs**.
+
+Additional candidate: [shinyquagsire23/makefst](https://github.com/shinyquagsire23/makefst)
+at `e363897e29109e6f1125d60376822c3768d3c2d4`. Its root is MIT with complete notices;
+bundled PolarSSL is GPLv2-or-later, ezxml MIT and miniz Unlicense. Its main uses
+plaintext `0x2000` contents, test issuers/signing material and production certificate
+output. This does not supply the encrypted `0x2001` profile or establish acceptance
+by the intended installer. No implementation, certificate or signing material
+was copied, built, bundled or run. A root MIT label does not override dependency
+notices or establish certificate provenance.
+
+The chosen route is an **original scoped encrypted writer** using format facts
+and a license-cleared cryptographic library. Implement bounded/streaming FST,
+encrypted content, TMD/ticket construction and independent decryption/hash
+verification before exposing packing. Define its precise user-local common-key
+and certificate inputs then; no secret values are requested or bundled now.
+Original staging and the structural validator are its implemented prerequisites.
+
+Next required work: encrypted packing and certificate provenance, local
 key handling with redacted diagnostics, original title metadata/artwork and
 staging, plaintext/decryption integrity validation, installer/signature policy
 validation, and physical install/menu/rebuild/save/uninstall checks. Never

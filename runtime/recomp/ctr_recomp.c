@@ -1,0 +1,144 @@
+/* Copyright (c) 2026 CTR2WUP contributors. SPDX-License-Identifier: MIT */
+#include "ctr_recomp.h"
+#include "recomp.h"
+#include <limits.h>
+#include <setjmp.h>
+#include <stdlib.h>
+
+extern const uint32_t recomp_abi,recomp_generation,recomp_entry_count,recomp_module_count;
+extern const Entry recomp_entries[];
+extern const Origins recomp_origins[];
+typedef struct {
+    Context context;
+    uint32_t vfp[32],fpscr;
+    ctr_cpu *cpu;
+    uint64_t code_generation;
+    bool fallback;
+    jmp_buf escape;
+    ctr_cpu_result fault;
+} Engine;
+_Static_assert(sizeof(float)==4 && sizeof(double)==8,"IEEE scalar sizes required");
+_Static_assert(offsetof(Context,budget)==72 && offsetof(Context,read_pages)==96,"ABI 4 fixed-width prefix");
+
+static void import_cpu(Engine *e) {
+    Context *c=&e->context;ctr_cpu *p=e->cpu;
+    memcpy(c->r,p->r,sizeof(c->r));
+    c->n=p->cpsr>>31;c->z=(p->cpsr>>30)&1;c->c=(p->cpsr>>29)&1;c->v=(p->cpsr>>28)&1;
+    c->q=(p->cpsr>>27)&1;c->ge=(p->cpsr>>16)&15;c->thumb=(p->cpsr&CTR_FLAG_T)!=0;
+    c->exclusive=p->exclusive_valid && p->exclusive_generation==p->memory->generation;
+    c->exclusive_address=p->exclusive_address;
+}
+static void export_cpu(Engine *e) {
+    Context *c=&e->context;ctr_cpu *p=e->cpu;
+    memcpy(p->r,c->r,sizeof(p->r));
+    p->cpsr=(p->cpsr&~0xf80f0020u)|((uint32_t)c->n<<31)|((uint32_t)c->z<<30)|
+        ((uint32_t)c->c<<29)|((uint32_t)c->v<<28)|((uint32_t)c->q<<27)|((uint32_t)c->ge<<16)|
+        (c->thumb?CTR_FLAG_T:0);
+    p->exclusive_valid=c->exclusive!=0;p->exclusive_address=c->exclusive_address;
+    p->exclusive_generation=p->memory->generation;p->svc_number=c->svc;
+}
+_Noreturn void ctr_recomp_abort(Context *c,ctr_cpu_result result,uint32_t detail) {
+    Engine *e=c->user;e->fault=result;
+    export_cpu(e);ctr_cpu_stop(e->cpu,result,detail);
+    longjmp(e->escape,1);
+}
+int ctr_recomp_instruction(Context *c,uint32_t address,uint32_t opcode) {
+    Engine *e=c->user;
+    c->r[15]=address;
+    if (!c->budget) { c->exit=EXIT_BUDGET;return 0; }
+    if (e->cpu->memory->code_generation!=e->code_generation)
+        ctr_recomp_abort(c,CTR_CPU_CODE_INVALIDATED,address);
+    uint32_t actual;
+    ctr_mem_result r=ctr_memory_read(e->cpu->memory,address,c->thumb?2:4,CTR_MEM_EXEC,&actual);
+    if (r!=CTR_MEM_OK) { e->cpu->memory_fault=r;ctr_recomp_abort(c,CTR_CPU_MEMORY_FAULT,address); }
+    if (actual!=opcode) ctr_recomp_abort(c,CTR_CPU_CODE_INVALIDATED,address);
+    /* Non-default FP controls require a correctness implementation first. */
+    if (*c->fpscr&0x07ff9f00u) ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,*c->fpscr);
+    --c->budget;++e->cpu->instructions;
+    return 1;
+}
+static uint32_t read_value(Context *c,uint32_t a,unsigned width) {
+    Engine *e=c->user;uint32_t n;
+    ctr_mem_result r=ctr_memory_read(e->cpu->memory,a,width,CTR_MEM_READ,&n);
+    if (r!=CTR_MEM_OK) { e->cpu->memory_fault=r;ctr_recomp_abort(c,CTR_CPU_MEMORY_FAULT,a); }
+    return n;
+}
+static void write_value(Context *c,uint32_t a,unsigned width,uint32_t n) {
+    Engine *e=c->user;
+    ctr_mem_result r=ctr_memory_write(e->cpu->memory,a,width,n);
+    if (r!=CTR_MEM_OK) { e->cpu->memory_fault=r;ctr_recomp_abort(c,CTR_CPU_MEMORY_FAULT,a); }
+    c->exclusive=0;
+    if (e->cpu->memory->code_generation!=e->code_generation)
+        ctr_recomp_abort(c,CTR_CPU_CODE_INVALIDATED,a);
+}
+static uint8_t read8(Context *c,uint32_t a) { return (uint8_t)read_value(c,a,1); }
+static uint16_t read16(Context *c,uint32_t a) { return (uint16_t)read_value(c,a,2); }
+static uint32_t read32(Context *c,uint32_t a) { return read_value(c,a,4); }
+static void write8(Context *c,uint32_t a,uint8_t n) { write_value(c,a,1,n); }
+static void write16(Context *c,uint32_t a,uint16_t n) { write_value(c,a,2,n); }
+static void write32(Context *c,uint32_t a,uint32_t n) { write_value(c,a,4,n); }
+static Code lookup(Context *c,uint32_t a) {
+    (void)c;uint32_t lo=0,hi=recomp_entry_count;
+    while(lo<hi) { uint32_t m=lo+(hi-lo)/2;if(recomp_entries[m].address<a)lo=m+1;else hi=m; }
+    return lo<recomp_entry_count && recomp_entries[lo].address==a?recomp_entries[lo].code:NULL;
+}
+static void interpret(Context *c,uint32_t a,uint32_t opcode) {
+    Engine *e=c->user;
+    if (!e->fallback) ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
+    c->r[15]=a;export_cpu(e);
+    uint64_t count=e->cpu->instructions;
+    ctr_cpu_result r=ctr_cpu_step(e->cpu);
+    e->cpu->instructions=count; /* Already charged by CTR_INSTRUCTION. */
+    ++e->cpu->fallback_instructions;
+    import_cpu(e);
+    if(r==CTR_CPU_SVC){c->svc=e->cpu->svc_number;c->exit=EXIT_SVC;}
+    else if(r!=CTR_CPU_OK) ctr_recomp_abort(c,r,opcode);
+}
+static const Host callbacks={read8,read16,read32,write8,write16,write32,interpret,lookup};
+static ctr_cpu_result execute(ctr_cpu *p,void *user,uint64_t budget) {
+    Engine *e=user;Context *c=&e->context;e->cpu=p;
+    import_cpu(e);c->budget=(int32_t)(budget>INT32_MAX?INT32_MAX:budget);c->exit=EXIT_NONE;c->depth=0;
+    if (setjmp(e->escape)) return e->fault;
+    while(c->budget>0) {
+        Code code=lookup(c,c->r[15]|c->thumb);
+        if(!code) {
+            if(!e->fallback) ctr_recomp_abort(c,CTR_CPU_MISSING_BLOCK,c->r[15]);
+            uint32_t op;ctr_mem_result r=ctr_memory_read(p->memory,c->r[15],c->thumb?2:4,CTR_MEM_EXEC,&op);
+            if(r!=CTR_MEM_OK){p->memory_fault=r;ctr_recomp_abort(c,CTR_CPU_MEMORY_FAULT,c->r[15]);}
+            if(ctr_recomp_instruction(c,c->r[15],op))interpret(c,c->r[15],op);
+        } else code(c);
+        if(c->exit==EXIT_SVC){export_cpu(e);return CTR_CPU_SVC;}
+        if(c->exit==EXIT_BUDGET)break;
+        if(c->exit==EXIT_UNWIND) { c->exit=EXIT_NONE;c->depth=0; }
+    }
+    export_cpu(e);return CTR_CPU_LIMIT;
+}
+static bool matches(const ctr_guest *g) {
+    const Origins *o=&recomp_origins[0];
+    if(o->piece_count>1000000u)return false;
+    for(uint32_t i=0;i<o->piece_count;++i) {
+        const Piece *p=&o->pieces[i];uint64_t hash=UINT64_C(14695981039346656037);
+        if(p->end<=p->start || (uint64_t)p->end-p->start>CTR_GUEST_MAX_BYTES)return false;
+        for(uint32_t a=p->start;a<p->end;++a) {
+            uint32_t n;
+            if(ctr_memory_read(&g->memory,a,1,CTR_MEM_EXEC,&n)!=CTR_MEM_OK)return false;
+            hash=(hash^n)*UINT64_C(1099511628211);
+        }
+        if(hash!=p->hash)return false;
+    }
+    return o->piece_count!=0;
+}
+bool ctr_recomp_attach(ctr_guest *g,bool fallback) {
+    if(g->executor || g->state!=CTR_GUEST_READY || recomp_abi!=4 || recomp_generation!=3 ||
+        recomp_module_count || !recomp_entry_count || recomp_entry_count>10000000u || !matches(g))return false;
+    for(uint32_t i=1;i<recomp_entry_count;++i)if(recomp_entries[i-1].address>=recomp_entries[i].address)return false;
+    Engine *e=calloc(1,sizeof(*e));if(!e)return false;
+    e->cpu=&g->cpu;e->fallback=fallback;e->code_generation=g->memory.code_generation;
+    e->context.vfp=e->vfp;e->context.fpscr=&e->fpscr;e->context.host=&callbacks;e->context.user=e;
+    e->context.tls=g->tls_address;
+    g->executor=execute;g->executor_context=e;g->executor_close=free;return true;
+}
+bool ctr_recomp_vfp(const ctr_guest *g,unsigned word,uint32_t *value) {
+    if(g->executor!=execute || word>=32 || !value)return false;
+    const Engine *e=g->executor_context;*value=e->vfp[word];return true;
+}

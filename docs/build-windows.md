@@ -47,6 +47,15 @@ compiler. See the audited source pin and unresolved notice/ABI requirements in
 not advertised as a Windows installer. The bounded Python translator itself
 requires only Python and emits portable C for the supplied synthetic fixtures.
 
+Version 0.3.0 adds `tools/install-translator-windows.ps1` for the external
+generation driver. It requires official Rust/rustup and Git, builds the clean
+audited source with Rust 1.95.0 and writes the provenance receipt. Use
+`run-fixture --backend upstream` and `tools/validate-upstream.py` with native GCC.
+The script/workflow are prepared; they have not yet executed on Windows.
+The manual workflow at `.github/workflows/windows-validation.yml` also tests
+actual external ARM/Thumb/VFP execution and Unicode output, then builds a WPF
+tooling probe. Publishing/one run await the earlier requested approval.
+
 ## Windows checks still required
 
 Doctor and clean prototype compile; inspection of NCSD/NCCH and malformed inputs;
