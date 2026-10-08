@@ -53,6 +53,10 @@ def parser():
     staging=commands.add_parser("stage-title",help="Stage an original homebrew RPX and metadata/artwork; output is not an installable WUP")
     staging.add_argument("rpx");staging.add_argument("--output",required=True);staging.add_argument("--title-id",required=True)
     staging.add_argument("--name",default="CTR2WUP Prototype");staging.add_argument("--title-version",type=int,default=0)
+    packing=commands.add_parser("pack-title",help="Encrypt original staged homebrew using local inputs; installer acceptance remains unverified")
+    packing.add_argument("path");packing.add_argument("--output",required=True);packing.add_argument("--config",required=True)
+    integrity=commands.add_parser("verify-package",help="Decrypt and verify the original four-content package profile with a local key")
+    integrity.add_argument("path");integrity.add_argument("--common-key-file",required=True);integrity.add_argument("--expected-staging")
     return result
 
 
@@ -74,6 +78,12 @@ def execute(args):
     if args.command == "stage-title":
         from .title_stage import stage_title
         return stage_title(args.rpx,args.output,title_id=args.title_id,name=args.name,version=args.title_version)
+    if args.command == "pack-title":
+        from .package_writer import pack_title
+        return pack_title(args.path,args.output,args.config)
+    if args.command == "verify-package":
+        from .package_integrity import verify_package
+        return verify_package(args.path,args.common_key_file,expected_staging=args.expected_staging)
     if args.command == "analyze-title":
         from .title_analysis import analyze_title
         return analyze_title(args.path,args.output,lifter=args.lifter)

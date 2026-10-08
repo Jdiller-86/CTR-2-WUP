@@ -89,8 +89,8 @@ def stage_title(rpx,output,*,title_id,name='CTR2WUP Prototype',version=0):
                 'files':[{'path':str(p.relative_to(stage)).replace('\\','/'),'bytes':p.stat().st_size,'sha256':_sha256(p)}
                          for p in sorted(stage.rglob('*')) if p.is_file()],
                 'remaining':['Confirm COS permissions/resources and metadata/artwork on console',
-                             'Implement encrypted FST/content/TMD/ticket writer and independent decryption integrity checks',
-                             'Configure user-local key/certificate provenance after packaging inputs are defined',
+                             'Pack with the experimental encrypted writer and separately verify decrypted integrity',
+                             'Configure user-local key/certificates and establish their provenance',
                              'Verify installer acceptance, Wii U Menu launch, rebuild identity and uninstall']}
         (stage/'stage-report.json').write_text(json.dumps(report,indent=2,ensure_ascii=True)+'\n')
         publish_directory(stage,output);return {**report,'output':str(output)}

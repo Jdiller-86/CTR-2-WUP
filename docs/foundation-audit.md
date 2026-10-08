@@ -105,7 +105,16 @@ Actual source-only build errors: `javac: command not found` and `dotnet: command
 
 ## Remaining gates
 
-- Complete 3dsrecomp's redistribution notices; identify licensed packaging implementation.
+Resumed 2026-10-08: v0.3.0 integrates the pinned external generation driver with
+the original checked ABI; v0.4.0 implements original scoped encrypted packaging
+with independent decrypt/FST/file checks. cryptography 50.0.0 uses its
+BSD-3-Clause grant, preserved in THIRD_PARTY_NOTICES/docs/licenses. Offline
+packaging uses original synthetic credentials only; the real WUT RPX passes
+staging/packing/decryption comparison. No packer candidate implementation or
+certificate template was adopted. See `packaging.md` for the current contract;
+installer acceptance, certificate provenance/trust and Menu launch remain gates.
+
+- Complete 3dsrecomp's redistribution notices; validate the original packaging profile on console.
 - Replace/verify little-endian fast helpers, 32-bit ABI layouts, guest permission/alias handling, exclusive access and invalidation.
 - Validate ARM/Thumb/VFP semantics differentially, including unsupported-instruction failure visibility and state at SVC/yield boundaries.
 - Establish a supported Wii U interpreter/HLE platform port; the desktop Zakuro runtime is not a ready-made RPX runtime.

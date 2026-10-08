@@ -13,7 +13,7 @@ from host.guest_fixture import fixture_bytes
 OUT = ROOT / "artifacts" / "delivery"
 SOURCE_FOLDERS = (".github", "docs", "host", "translator", "runtime", "renderer", "packaging", "profiles", "tests", "tools")
 SOURCE_FILES = (".gitignore", "AGENTS.md", "LICENSE", "Makefile", "README.md", "STATUS.md", "THIRD_PARTY_NOTICES", "pyproject.toml")
-FORBIDDEN = {".3ds", ".cxi", ".cia", ".3dsx", ".sav", ".keys", ".key", ".app", ".h3", ".tik", ".tmd", ".pyc", ".log"}
+FORBIDDEN = {".3ds", ".cxi", ".cia", ".3dsx", ".sav", ".keys", ".key", ".cert", ".app", ".h3", ".tik", ".tmd", ".pyc", ".log"}
 
 
 def archive(path, entries):
@@ -46,6 +46,7 @@ def main():
     binary_entries += [(ROOT / name, name) for name in ("LICENSE", "THIRD_PARTY_NOTICES", "docs/console-testing.md", "docs/compatibility.md")]
     binary_entries += [(path, str(path.relative_to(ROOT))) for path in (ROOT / "docs/licenses").iterdir() if path.is_file()]
     binary_entries.append((latest, "validation-report.json"))
+    binary_entries.append((ROOT/report["packaging"]["offline_report"], "offline-packaging-report.json"))
     diagnostic_archive = OUT / ("CTR2WUP-diagnostic-"+__version__+".zip")
     archive(diagnostic_archive, binary_entries)
     guest_console=ROOT/report["guest_console_output"]
@@ -76,7 +77,7 @@ def main():
     wheel = ROOT / ("artifacts/dist/ctr2wup-"+__version__+"-py3-none-any.whl")
     results = [{"name": path.name, "size": path.stat().st_size, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()} for path in (source_archive, diagnostic_archive,guest_archive,upstream_archive,staging_archive,wheel)]
     (OUT / ("SHA256SUMS-"+__version__+".txt")).write_text("".join(f"{item['sha256']}  {item['name']}\n" for item in results))
-    (OUT / ("delivery-manifest-"+__version__+".json")).write_text(json.dumps({"schema_version": 1, "files": results, "console_verified": False, "commercial_conversion": "unimplemented", "wup_generated": False}, indent=2) + "\n")
+    (OUT / ("delivery-manifest-"+__version__+".json")).write_text(json.dumps({"schema_version": 1, "files": results, "console_verified": False, "commercial_conversion": "unimplemented", "wup_generated": False, "encrypted_writer": "implemented; offline verified with synthetic inputs", "installer_acceptance": "unverified"}, indent=2) + "\n")
     print(json.dumps(results, indent=2))
     return 0
 

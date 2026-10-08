@@ -75,9 +75,24 @@ Guest pixels are ARM-generated; the status overlay is host-generated. Success
 would establish this controlled fixture's PowerPC/input/presentation behavior,
 not stock 3DS graphics, PICA/HID/GSP or commercial compatibility.
 
+## Packaging prerequisite checks
+
+Version 0.4.0 supplies an experimental original encrypted writer, not a packaged
+installable diagnostic. Its offline proof uses synthetic key/certificates and
+deletes that temporary package. Use the local-input contract in `packaging.md`
+only after establishing your own inputs and console/installer environment.
+Never try to install the synthetic test fixture.
+
+A separately generated original homebrew package needs recorded installer
+acceptance, Wii U Menu icon/boot artwork, launch into both screens, input/audio,
+clean exit and removal. Record the title ID and installed-title inventory;
+confirm no existing title was replaced. FST/ownership/COS metadata and the
+nonhashed content/ticket policy may need corrections from those results.
+No console installation, replacement or removal is automated by these tools.
+
 ## Not yet available for console validation
 
-Installable WUP, conventional 3DS homebrew/service boot, PICA renderer scenes, commercial
+Proven installable WUP, conventional 3DS homebrew/service boot, PICA renderer scenes, commercial
 gameplay, DSP, saves, CRO modules, and representative CPU/VFP/fallback performance
 benchmarks. No commercial ROM is needed for the native test above. One user-owned
 fully decrypted Old 3DS revision will be requested for the commercial milestone

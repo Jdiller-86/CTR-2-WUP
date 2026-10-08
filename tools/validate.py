@@ -78,6 +78,7 @@ def main():
     run("external-rpx-build",[sys.executable,"-m","host","build",str(fixture/"ctr2wup-guest.cxi"),"--target","guest-fixture","--backend","upstream","--output",str(upstream_console)])
     title_stage=ROOT/"artifacts"/("title-staging-"+stamp)
     run("original-title-staging",[sys.executable,"-m","host","stage-title",str(upstream_console/"ctr2wup-upstream-guest.rpx"),"--output",str(title_stage),"--title-id","00050000cf520001","--name","CTR2WUP AOT Prototype"])
+    run("offline-encrypted-packaging",[sys.executable,"tools/validate-packaging.py","--rpx",str(upstream_console/"ctr2wup-upstream-guest.rpx"),"--output",str(report_root/"offline-packaging")])
     run("private-title-intake",[sys.executable,"-m","host","analyze-title",str(fixture/"ctr2wup-guest.cxi"),"--output",str(report_root/"intake-smoke"),"--lifter"])
     run("wheel-build", [sys.executable, "-m", "pip", "wheel", "--no-deps", "--no-build-isolation", "--wheel-dir", "artifacts/dist", "."], env=dict(os.environ, PIP_CACHE_DIR=str(ROOT / "artifacts/pip-cache")))
     wheel = ROOT / ("artifacts/dist/ctr2wup-"+__version__+"-py3-none-any.whl")
@@ -88,13 +89,16 @@ def main():
             run("installed-wheel-inspect", [sys.executable, "-m", "host", "inspect", str(ROOT / "artifacts/fixtures/synthetic.cxi")], env=task_env, cwd=Path(temporary))
             task_env["CTR2WUP_PROJECT_ROOT"]=str(ROOT)
             run("installed-wheel-guest-execute",[sys.executable,"-m","host","run-fixture",str(fixture/"ctr2wup-guest.cxi"),"--output",str(ROOT/"artifacts"/("installed-guest-"+stamp)),"--frames","1"],env=task_env,cwd=Path(temporary))
+            from tests.test_package_writer import original_inputs
+            _, local_config, _ = original_inputs(Path(temporary))
+            run("installed-wheel-encrypted-packaging",[sys.executable,"-m","host","pack-title",str(title_stage),"--config",str(local_config),"--output",str(Path(temporary)/"installed package 日本語")],env=task_env,cwd=Path(temporary))
     source_digest = hashlib.sha256()
     for folder in ("host", "runtime", "translator", "renderer", "packaging"):
         for path in sorted((ROOT / folder).rglob("*")):
             if path.is_file() and "__pycache__" not in path.parts:
                 source_digest.update(str(path.relative_to(ROOT)).encode("utf-8") + b"\0" + path.read_bytes())
     report = {"schema_version": 1, "generated_at_utc": datetime.now(timezone.utc).isoformat(),
-              "workflow": "native/original/external-AOT RPX builds, checked ARM/Thumb/scalar-VFP, title staging and intake",
+              "workflow": "native/original/external-AOT RPX builds, checked ARM/Thumb/scalar-VFP, title staging/intake and offline encrypted packaging",
               "version": __version__,
               "ok": all(result["passed"] for result in results), "python_tests": test_count,
               "cpu_runs": c_results, "guest_runs":guest_results,"checks": results,
@@ -108,7 +112,8 @@ def main():
               "upstream_desktop_output":str(upstream_desktop.relative_to(ROOT)),
               "title_staging_output":str(title_stage.relative_to(ROOT)),
               "unverified": ["physical Wii U execution, input/audio/exit", "PowerPC correctness/timings", "clean Windows execution", "commercial ROM execution", "WUP installation"],
-              "unimplemented": ["complete ARM/VFP", "multi-thread kernel and IPC/HID/GSP/other services", "PICA-to-GX2 rendering", "game saves/audio/CRO", "encrypted WUP packing", "Windows GUI"],
+              "unimplemented": ["complete ARM/VFP", "multi-thread kernel and IPC/HID/GSP/other services", "PICA-to-GX2 rendering", "game saves/audio/CRO", "commercial conversion pipeline", "Windows GUI"],
+              "packaging": {"writer": "original scoped encrypted profile", "offline_report": str((report_root/"offline-packaging/report.json").relative_to(ROOT)), "synthetic_credentials_only": True, "installer_acceptance": "unverified"},
               "configuration": {"draft_persistence": "see STATUS.md", "publication": "not_checked_by_runner", "fresh_task_restore": "not_checked_by_runner"}}
     destination = report_root / "report.json"
     destination.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")

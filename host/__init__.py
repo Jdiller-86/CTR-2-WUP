@@ -1,3 +1,3 @@
-"""CTR2WUP's dependency-free host tools."""
+"""CTR2WUP host tools; encrypted packaging has an optional crypto dependency."""
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"

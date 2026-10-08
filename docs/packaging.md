@@ -1,77 +1,128 @@
-# Packaging investigation and validator
+# Original encrypted homebrew packaging
 
-No installable WUP has been generated. The RPX and WUHB are original homebrew
-diagnostics. WUHB menu shortcuts and RPX launch are different from WUP install.
+Version 0.4.0 implements an original, scoped encrypted writer and a separate
+decrypting verifier. **No package has been installed or launched on a physical
+Wii U.** The offline test uses invented test certificates and a synthetic key;
+it cannot produce an installable title. Commercial conversion remains disabled.
 
-The two requested packer sources have no identified license grant. Both create
-unauthenticated signatures and require an appropriate patched/homebrew console
-environment; both also echo key values in upstream logs. They were researched,
-not incorporated or run. See `foundation-audit.md` for exact pins/build errors.
+## Implemented profile
 
-Original `host.package_validator` implements a narrow RSA2048/SHA256 encrypted
-Wii U application package structural profile:
+`host.package_writer` packs original `code/content/meta` staging into four
+encrypted `0x2001` contents: FST, code, content and meta. It supports application
+IDs beginning `00050000`, explicit version/group/OS fields, UTF-8 names, nested
+and empty directories, empty files and at most 1 GiB per content group. Files
+start at 32-byte boundaries; contents are padded with zeros to 32 KiB.
 
-- Bounds, title/TMD/ticket agreement, boot index and unique content indices/IDs.
-- SHA256 content-info table/group verification and declared content sizes.
-- H3 SHA1 verification for the supported hashed-content profile.
-- Missing, extra, malformed and symlink content rejection.
-- Explicit local title registry ownership and atomic registry writes.
+AES-128-CBC uses the content index followed by zero bytes as its IV. A fresh
+random title key is wrapped with the locally supplied common key using the title
+ID as IV. TMD content records contain SHA-1 of padded plaintext plus 12 zero
+bytes; SHA-256 protects the content-record group and content-info tables. The
+ticket contains one content-access bitmap. Common-key index 0, unpersonalized
+tickets, RSA-2048/SHA-256 header layouts and **absent signatures** are the only
+implemented profile. Hashed `0x2003`/H3 writing, disc/update/shared contents,
+authentic signatures and retail-console installation are unsupported.
 
-Run `python -m host validate-package PATH`. Results explicitly state
-`structure_only`, unverified plaintext integrity (requires a local key),
-unverified signatures/certificate chain and unrun console installation. A
-positive structure result is never proof of an authentic or installable title.
-The synthetic test fixture is deliberately not an installable package and is
-generated only inside temporary test directories.
+The writer checks RPX structure and XML identity, rejects symlinks and unsafe or
+case-colliding paths, refuses existing outputs, detects changed inputs, checks
+disk space and keeps unfinished output in a temporary directory. It streams
+content with 1 MiB buffers; bounded FST/name metadata is held in memory. FST
+logical cluster placement, ownership, COS permissions/resources and metadata/
+artwork are research settings awaiting installer/console evidence.
 
-An explicit reservation is available with:
+`host.package_integrity` independently reads the result without calling the
+writer's FST, inventory or serialization functions. It unwraps the key, verifies
+every padded plaintext hash, bounds/tree/parents/names/content assignments/file
+ranges and zero padding, checks decrypted XML against TMD identity and launch
+entry, and optionally compares every file hash and directory with source staging.
+Certificate layout and CP/XS issuer agreement are checked; a trusted root and
+signature authentication are **not** established. The existing structural
+validator still works without a key, with an explicitly narrower result.
+
+## Local inputs and commands
+
+Install the licensed crypto dependency in your Python environment:
+
+```sh
+python -m pip install '.[packaging]'
+```
+
+Copy `packaging/local-inputs.example.json` into an ignored private configuration
+directory. Its paths resolve relative to the configuration file:
+
+```json
+{
+  "schema_version": 1,
+  "signature_policy": "homebrew_unsigned",
+  "common_key_file": "common.key",
+  "certificate_file": "title.cert"
+}
+```
+
+The common-key file must contain exactly 16 raw bytes. The certificate file is a
+user-managed binary chain with its parents and one RSA-2048 CP and XS signer.
+Establish its provenance locally. No key, certificate or donor is downloaded or
+provided by CTR2WUP. Keep these files outside the staged folders; their paths and
+values are omitted from packaging reports. Do not paste keys into command-line
+arguments or conversations. The explicit policy acknowledges unsigned homebrew;
+it does not establish which patched installer/environment will accept the result.
+
+```sh
+python -m host stage-title PATH.rpx --title-id YOUR_APPLICATION_ID --name "My title" --output private/my-staging
+python -m host pack-title private/my-staging --config private/packaging/local-inputs.json --output private/my-package
+python -m host verify-package private/my-package --common-key-file private/packaging/common.key --expected-staging private/my-staging
+python -m host validate-package private/my-package
+```
+
+`stage-title` creates original XML/checker artwork and an empty `content/`; it
+produces staging, not a WUP. `pack-title` publishes the `.app`, TMD, ticket,
+certificate and report only after successful independent decrypted/file checks.
+Its `installable_wup` field explicitly awaits installer and console validation.
+The report separates decrypted integrity, unauthenticated signatures and unrun
+installation. It never claims an authentic or proven installable title.
+
+## Title identity
+
+IDs are explicit; no globally safe homebrew range is assumed. Staging/packing
+does not reserve an ID or inspect installed console titles. Check your console
+inventory and local projects before using an ID. The existing explicit local
+registry command remains available after structural validation:
 
 ```sh
 python packaging/validate.py PATH --registry private/title-registry.json --reserve "my project identity"
 ```
 
-The registry covers only this user's local project allocations. It does not
-prove absence of collisions on a console or in other projects. Future title
-allocation must check a user-supplied console inventory and require an explicit
-identity override. System/title types outside `00050000` and zero identities are
-rejected. No claimed globally safe homebrew range is invented. Same-owner
-rebuild reservations may update the package revision while keeping the title
-identity stable; another owner cannot take it. Serialize concurrent registry
-writes. A package TMD digest is a revision check, not the game's save identity.
+The registry covers only this user's local allocations. Same-owner rebuilds may
+update the package revision while retaining the title ID; a different owner
+cannot take it. Serialize concurrent registry writes. TMD digests and randomized
+ciphertext are package revisions; title/save identity remains the explicit ID.
+Rebuild/save continuity, installation, Menu launch, exit and uninstall await
+physical-console tests. No installation is automated.
 
-## Original staging and selected packaging route
+## Evidence and dependency audit
 
-Version 0.3.0 adds transactional original title staging:
+20 new offline tests exercise streaming across chunk boundaries, empty/Unicode
+paths, OpenSSL independently decrypting the ticket and all contents, wrong keys,
+ciphertext corruption, malicious FSTs with repaired hashes, source mutation,
+unsafe inputs, cancellation and output preservation. `tools/validate-packaging.py`
+also packages the real WUT-built RPX, verifies all staged files and exercises both
+CLI paths. Its synthetic inputs/package exist only in a temporary directory;
+the retained report records that they cannot authenticate a console title.
 
-```sh
-python3 -m host stage-title PATH.rpx --title-id YOUR_APPLICATION_ID --name "My title" --output artifacts/my-title-staging
-```
+The encryption dependency is **cryptography 50.0.0**, Apache-2.0 OR BSD-3-Clause;
+CTR2WUP selects the BSD-3-Clause grant and preserves its notice in
+`docs/licenses/cryptography-LICENSE.BSD`. The library and its native dependencies
+remain external Python packages; no crypto binary is bundled here.
 
-It creates `code/ctr2wup.rpx`, original app/cos/meta XML and checker TGA assets,
-plus an empty `content/` directory and a file-hash report. Metadata/resource/COS
-permissions and artwork acceptance remain awaiting console tests. The explicit
-ID is checked for application type and nonzero identity; it is not checked
-against console inventory or reserved by staging. XML escaping and Unicode
-length bounds are enforced. This directory and its delivery ZIP are **not WUPs**.
+Binary layout/alignment/hash facts were reviewed against makefst's `fst.h`,
+`tmd.h`, `tik.h`, `certs.h` at
+`e363897e29109e6f1125d60376822c3768d3c2d4` and the previously audited Java/C#
+packer format descriptions. The writer/reader are original implementations;
+no source, binary, XML template, certificate or key from those packers is adopted.
+This is a scoped research profile, not a full Wii U package-format implementation.
 
-Additional candidate: [shinyquagsire23/makefst](https://github.com/shinyquagsire23/makefst)
-at `e363897e29109e6f1125d60376822c3768d3c2d4`. Its root is MIT with complete notices;
-bundled PolarSSL is GPLv2-or-later, ezxml MIT and miniz Unlicense. Its main uses
-plaintext `0x2000` contents, test issuers/signing material and production certificate
-output. This does not supply the encrypted `0x2001` profile or establish acceptance
-by the intended installer. No implementation, certificate or signing material
-was copied, built, bundled or run. A root MIT label does not override dependency
-notices or establish certificate provenance.
-
-The chosen route is an **original scoped encrypted writer** using format facts
-and a license-cleared cryptographic library. Implement bounded/streaming FST,
-encrypted content, TMD/ticket construction and independent decryption/hash
-verification before exposing packing. Define its precise user-local common-key
-and certificate inputs then; no secret values are requested or bundled now.
-Original staging and the structural validator are its implemented prerequisites.
-
-Next required work: encrypted packing and certificate provenance, local
-key handling with redacted diagnostics, original title metadata/artwork and
-staging, plaintext/decryption integrity validation, installer/signature policy
-validation, and physical install/menu/rebuild/save/uninstall checks. Never
-automate installation or replacing console titles without user direction.
+The MIT-root makefst candidate bundles GPLv2-or-later PolarSSL, MIT ezxml and
+Unlicense miniz. Its plaintext `0x2000` route, test signing and production
+certificate output did not supply the required encrypted profile or certificate
+provenance; it was not incorporated or executed. The nuspacker/CNUS_Packer
+checkouts have no identified license grant and remain research references only.
+See `foundation-audit.md` for pins and licensing constraints.

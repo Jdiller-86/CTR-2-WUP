@@ -256,7 +256,7 @@ def reserve_title_id(registry, report, owner):
     path = Path(registry)
     if not isinstance(owner, str) or not owner.strip():
         _fail("invalid_owner", "Title reservation requires a nonempty owner label")
-    if report.get("ok") is not True or report.get("validation") != "structure_only":
+    if report.get("ok") is not True or report.get("validation") not in ("structure_only", "decrypted_integrity"):
         _fail("invalid_reservation", "Reserve only after successful package validation")
     title = _title_id(report["title_id"])
     digest = report.get("tmd_sha256")

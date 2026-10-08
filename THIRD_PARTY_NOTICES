@@ -97,6 +97,14 @@ templates from the packaging candidates were not copied.
 
 External development tools
 --------------------------
+Encrypted packaging optionally calls the external Python package cryptography
+50.0.0, https://github.com/pyca/cryptography. Its Apache-2.0 OR BSD-3-Clause
+license permits the BSD-3-Clause grant selected here; the full notice is
+preserved at docs/licenses/cryptography-LICENSE.BSD. No cryptography, OpenSSL,
+CFFI or other native dependency binary is bundled in these source/diagnostic
+archives. A future Windows dependency distribution must retain all applicable
+package and native dependency notices.
+
 Rust, Cargo, GCC/devkitPPC, newlib, elf2rpl and optional SDK packages remain
 external toolchain dependencies. This notice does not assert that their
 licenses are identical to WUT's. Redistributing a complete host application or

@@ -8,7 +8,9 @@ deliverable includes native Wii U diagnostics and a controlled ARM guest
 RPX/WUHB, a Windows-compatible Python CLI, checked NCSD/NCCH loading, and a
 tested portable CPU/AOT and single-guest SVC/event runtime. Version 0.3.0 connects
 the external lifter's generated C to an original checked ABI and static PowerPC
-build. It also adds original title staging and private title intake.
+build. Version 0.4.0 adds an original encrypted homebrew package writer and
+independent decrypting/FST/file verification, tested with synthetic local inputs.
+It also retains original title staging and private title intake.
 Commercial ROM-to-WUP conversion is not implemented or claimed.
 
 Read `STATUS.md`, `docs/milestones.md` and `docs/foundation-audit.md` before
@@ -59,3 +61,6 @@ graphical homebrew support. Both Wii U applications await physical execution.
 See `docs/upstream-integration.md` for checked ARM/Thumb/scalar-VFP evidence and
 `docs/first-title.md` for the Mario intake. `stage-title` produces original title
 staging, not a WUP. The GUI follows the working conversion/packing pipeline.
+See `docs/packaging.md` for `pack-title`, `verify-package`, the optional crypto
+dependency and local key/certificate requirements. Installer acceptance remains
+unverified; the offline test credentials cannot create an installable title.

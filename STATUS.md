@@ -7,10 +7,11 @@ title candidate. The target remains an UWUVCI-style Windows GUI: select a
 decrypted game, configure title/artwork, click Inject, install its per-game WUP
 and launch from Wii U Menu. The CLI is the shared engine, not the final product.
 
-**Version 0.3.0 implements external-lifter C generation and checked static
-execution/linking, original title staging, and private revision/service intake.**
-Commercial conversion, encrypted WUP generation and the Windows GUI are still
-incomplete. No milestone requiring physical-console evidence is complete.
+**Version 0.4.0 adds original encrypted homebrew packaging and independent
+decryption/FST/file verification to v0.3.0's external-lifter C generation and
+checked static execution/linking, title staging and private revision intake.**
+Commercial conversion and the Windows GUI remain incomplete. Installer acceptance
+is unverified; no milestone requiring physical-console evidence is complete.
 
 ## Verified implementation
 
@@ -41,6 +42,17 @@ incomplete. No milestone requiring physical-console evidence is complete.
   metadata and checker artwork. It refuses system IDs and existing destinations.
   Its launch settings are candidates needing console validation. It produces
   **staging, not an installable WUP**; no certificate/key/donor is included.
+- `pack-title` streams four encrypted `0x2001` FST/code/content/meta contents,
+  original TMD/ticket rights and locally supplied certificates. It wraps a fresh
+  title key with a user-local common key and publishes only after independent
+  decryption/hash/FST/source-file checks. It refuses changed/unsafe inputs and
+  existing outputs. Signatures are absent; FST/COS/installer behavior is pending.
+  No credentials are bundled or printed. `verify-package` is a separate reader.
+- The real WUT RPX passes staging -> encrypted packing -> independent verification
+  and both CLI paths with spaces/Japanese characters. **Synthetic key/certificates
+  only**, temporary package deleted; this is not an installable title. OpenSSL
+  independently decrypts the ticket and all four test contents. Wrong keys,
+  repaired-hash malicious FSTs, corruption, mutation and cancellation are tested.
 - `analyze-title` writes a private exact-hash intake with segments, stack/BSS,
   section inventory, extended-header service allowlist and optional lifter
   analysis. Declared service access is not executed/implemented IPC. No intake
@@ -50,14 +62,15 @@ incomplete. No milestone requiring physical-console evidence is complete.
   single-guest events/handles/sleep/debug/exit, native diagnostics and structural
   WUP validator remain tested. Commercial `build` still fails without publishing
   a placeholder package. Paths with spaces/Japanese characters work on Linux.
-- **95 Python tests**, 51,147 CPU assertions and 221 original-guest assertions
-  pass; both C suites also pass ASan/UBSan. The complete v0.3.0 runner passes
-  **24 checks**, including external generation/execution, all three RPX builds,
-  original staging/intake and installed-wheel inspection/execution.
+- **115 Python tests**, 51,147 CPU assertions and 221 original-guest assertions
+  pass; both C suites also pass ASan/UBSan. The complete v0.4.0 runner passes
+  **26 checks**, including external generation/execution, all three RPX builds,
+  original staging/intake, offline encrypted packaging and installed-wheel
+  inspection/execution/packing. Crypto remains an optional external dependency.
 
 ## Reports and deliverables
 
-Main validation: `artifacts/reports/validation-v1-20261008T004051Z/report.json`.
+Main validation: `artifacts/reports/validation-v1-20261008T010054Z/report.json`.
 Additional checks: `artifacts/reports/upstream-ppc-final/`,
 `upstream-clang-final/`, and the Unicorn reference report under
 `upstream-native-v5/`. `python3 tools/validate.py` regenerates the complete checks;
@@ -66,7 +79,7 @@ See `docs/upstream-integration.md` for commands and precise limits.
 
 Versioned source/native/original-guest/external-guest delivery bundles, wheel,
 checksums and original title-staging output are under `artifacts/`. Earlier
-v0.1.0/v0.2.0 reports and bundles are preserved. Source is maintained in the
+v0.1.0/v0.2.0/v0.3.0 reports and bundles are preserved. Source is maintained in the
 existing Git checkout; do not reset, force-push or replace user changes.
 
 ## Awaiting user inputs and physical tests
@@ -82,16 +95,20 @@ existing Git checkout; do not reset, force-push or replace user changes.
   `.github/workflows/windows-validation.yml`, including actual external AOT and
   Unicode execution. Publication/one run remain subject to the earlier requested
   approval. Native Windows, interactive WPF and Windows devkitPPC are unverified.
+- **Packaging inputs/console:** configure the documented user-local key and
+  certificate chain outside staging, establish provenance and report the actual
+  homebrew/installer environment. Then verify a diagnostic package's installation,
+  Menu launch, dual screens/input/audio/exit and removal. No authentic signatures,
+  production credentials or installation test are available in this environment.
 
 ## Internal work still required
 
-P1 packaging: implement an original encrypted FST/content/TMD/ticket writer and
-independent decryption/integrity checks. The newly audited MIT-root makefst
-candidate bundles GPLv2-or-later PolarSSL and uses plaintext content with test
-issuers plus production certificates; it was not incorporated or run. The
-selected route is an original scoped encrypted writer; that implementation and
-its local key/certificate inputs remain work. Console installation/Menu launch
-must validate its result.
+P1 packaging now has the original scoped writer, local-input contract and
+independent integrity proof. Physical installer/Menu results must validate its
+nonhashed contents, FST logical clusters/ownership, XML/COS/artwork and ticket
+policy before expanding the profile or claiming installation. The MIT-root
+makefst candidate was not incorporated or run; no packer code or credential
+template was copied. Full hashed/shared/update/disc formats remain unsupported.
 
 P2/P3: inspect the supplied Mario revision, then implement required kernel/IPC,
 CP15/TLS, multi-thread scheduling, PICA/GX2 state/shaders/textures/coherency,
@@ -105,7 +122,7 @@ save/title identity, then implement/package the responsive WPF GUI injector.
 ## Reusable development environment
 
 The restored SDK/tooling works: pinned devkitPPC/WUT, Rust 1.95.0, .NET 10.0.401,
-Unicorn and container Clang/CMake/GDB/PowerPC Linux/QEMU. Activate with
+Unicorn, cryptography 50.0.0 and container Clang/CMake/GDB/PowerPC Linux/QEMU. Activate with
 `source /workspace/ctr2wup-tools/environment/activate.sh`.
 `install_script` remains the tested reusable installer. `start_skill` was updated
 and saved to reflect resumed implementation, Mario selection and current gates.

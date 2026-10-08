@@ -4,7 +4,8 @@ The attached development brief is the project requirements. The repository was
 empty at the start of this implementation. See `foundation-audit.md` for pinned
 candidate source, measured builds, and licensing/PowerPC constraints.
 
-The host CLI is Python 3.12 with no third-party Python dependencies, and uses the
+The host CLI is Python 3.12; inspection/runtime tooling uses the standard library
+and encrypted packaging optionally uses cryptography. It uses the
 same argument-list subprocess interface on Windows and Linux. Container parsing,
 inspection, build reports, and package inspection are separate from execution.
 Executable artifacts are the original native diagnostic and controlled guest RPXs.
@@ -38,7 +39,11 @@ exception reports the absent shader/texture/TEV/GX2 translation path.
 Content structure, cryptographic authenticity, and installer acceptance are
 different checks. There is no bundled common key and no unlicensed packer.
 Original `stage-title` metadata/artwork is a packaging prerequisite. Its output
-is explicitly not an installable package; encrypted construction is pending.
+is explicitly not an installable package. Version 0.4.0 implements scoped
+encrypted FST/content/TMD/ticket construction with user-local inputs, and a
+separate streaming decrypting verifier. The original four-content profile has
+no authentic signatures and awaits installer/console acceptance. No key or
+certificate is bundled; offline proof uses temporary synthetic inputs only.
 
 Generated artifacts are ignored by Git. User ROMs, saves, extracted assets,
 translated commercial code, keys, and packages must stay under ignored private

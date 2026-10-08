@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "signature_policy": "homebrew_unsigned",
+  "common_key_file": "common.key",
+  "certificate_file": "title.cert"
+}

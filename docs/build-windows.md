@@ -56,6 +56,12 @@ The manual workflow at `.github/workflows/windows-validation.yml` also tests
 actual external ARM/Thumb/VFP execution and Unicode output, then builds a WPF
 tooling probe. Publishing/one run await the earlier requested approval.
 
+Version 0.4.0 adds optional encrypted packaging. From source, run
+`python -m pip install '.[packaging]'` and follow `packaging.md` for local file-based inputs.
+`pack-title` and `verify-package` pass Linux Unicode/space-path and installed-wheel
+checks; native Windows packaging remains unverified. The prepared workflow now
+installs the crypto dependency and runs its original offline unit tests too.
+
 ## Windows checks still required
 
 Doctor and clean prototype compile; inspection of NCSD/NCCH and malformed inputs;

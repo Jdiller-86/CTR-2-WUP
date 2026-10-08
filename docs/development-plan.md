@@ -45,7 +45,10 @@ diagnostics. Commercial `build` currently stops at an unsupported-profile error;
 its external lifter adapter performed analysis only. Version 0.3.0 now integrates
 external C generation and checked static linking/execution; see
 `upstream-integration.md`. There is no PICA
-renderer, commercial runtime, WUP generator or Windows executable distribution.
+renderer, commercial runtime or Windows executable distribution. Version 0.4.0
+implements an original scoped encrypted writer and independent decrypting
+verifier; installer acceptance and the commercial pipeline remain unverified.
+`packaging.md` defines its exact limits and local-input contract.
 
 Keep those foundations and use the synthetic guest as a regression test for the
 conversion/runtime boundary. Direct development effort toward integrating the
@@ -120,10 +123,11 @@ Upstream desktop compatibility and coverage percentages cannot close these gates
 
 The user resumed development. P1's external generation/checked ABI/static-link
 proof now executes on desktop and emulated big-endian PowerPC and builds an RPX.
-Original metadata/artwork staging is implemented; encrypted WUP construction and
-physical install/Menu launch remain open. The selected packaging route is an
-original scoped encrypted writer; the legacy makefst candidate's plaintext and
-test/production certificate combination is unsuitable for an installation claim.
+Original metadata/artwork staging is implemented. Version 0.4.0 now writes the
+scoped encrypted FST/content/TMD/ticket profile and independently verifies all
+decrypted files. The real RPX passes the offline path with synthetic inputs;
+physical install/Menu launch remains open. The legacy makefst candidate's
+plaintext and test/production certificate combination was not adopted.
 
 The user selected **Super Mario 3D Land** for P2. `first-title.md` records concrete
 upstream source leads and intake commands. Its exact dump/revision is pending;

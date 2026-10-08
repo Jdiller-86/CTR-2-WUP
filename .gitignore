@@ -21,6 +21,7 @@ __pycache__/
 *.h3
 *.tik
 *.tmd
+*.cert
 *.rpx
 *.elf
 *.o
