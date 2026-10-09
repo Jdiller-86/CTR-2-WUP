@@ -44,7 +44,7 @@ static void faults(void) {
     CHECK(ctr_cpu_step(&cpu)==CTR_CPU_MEMORY_FAULT && cpu.memory_fault==CTR_MEM_ALIGNMENT && cpu.r[13]==0x08000007 && cpu.r[15]==0x100000);
 }
 static void unsupported(void) {
-    const uint32_t arm[]={0xe8cc0001,0xe8ac1001,0xe8bc1001,0xe89f0001,0xe88c8000,0xe8ac0000,0xe12fff3f};
+    const uint32_t arm[]={0xe8cc0001,0xe8ac1001,0xe8bc1001,0xe89f0001,0xe88f8000,0xe8ac0000,0xe12fff3f};
     const uint32_t thumb[]={0xb400,0xbc00,0xc000,0xc800,0xc103,0x47f8};
     for(unsigned t=0;t<2;++t)for(unsigned i=0;i<(t?6u:7u);++i) {
         setup(t?thumb[i]:arm[i],t!=0);cpu.r[12]=cpu.r[13]=0x08000020;

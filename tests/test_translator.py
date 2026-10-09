@@ -17,7 +17,7 @@ class TranslatorTests(unittest.TestCase):
         self.assertNotIn("ctr_cpu_step", source)
 
     def test_tls_write_flag_destination_and_cache_operations_are_rejected(self):
-        for instruction in (0xEE0D0F70, 0xEE1DFF70, 0xEE070F9A, 0xEE1D0F50):
+        for instruction in (0xEE0D0F70, 0xEE1DFF70, 0xEE070F15, 0xEE1D0F50):
             with self.assertRaises(ValueError):
                 translate(struct.pack("<I", instruction), 0x1000, "invalid_tls", False)
 

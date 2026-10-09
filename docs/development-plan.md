@@ -193,3 +193,14 @@ prerequisites. External fault/unsupported guards preserve checked behavior even
 where the emitter updates a base early or erases an empty transfer. Thread contexts,
 address arbitration, barriers, FS/APT, GX/PICA, audio/saves and exact Mario intake
 remain priorities; this checkpoint does not change the GUI/WUP product goal.
+
+v0.13 advances the shared M3 foundation through normal devkitARM/libctru/newlib
+applications, rather than stopping at hand-authored SVC probes. Implemented
+prerequisites include single-core thread contexts, priority/quanta, owner-aware
+locks, address arbiters, local resource limits, correct partial-page DATA/BSS,
+synthetic kernel configuration, CPU media/barriers/FPSCR/FP word transfers and
+signed halfword accumulation. Real compiled threads/C TLS/LightLock, standard
+HID and all pixels of three CPU-written screen pairs pass without interpreter
+fallback. The additional interactive Wii U build is the concrete next M3
+hardware test. Wider APT/FS/GX/PICA/audio/save implementation and exact Mario
+intake remain required; no full milestone or commercial profile is enabled.

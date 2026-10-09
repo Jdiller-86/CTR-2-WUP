@@ -30,7 +30,8 @@ base early; the checked ABI captures and restores that base on a memory fault.
 It clears that abort bookkeeping at subsequent instruction/execution boundaries.
 CPU logs contain the failed address/opcode; guest fault detail retains the PC.
 
-Empty lists, PC as base, stores of PC, user register banks/SPSR returns and ARM
+v0.13 supports ARM STM's PC source as PC+8, checked independently against ARM1176.
+Empty lists, PC as base, Thumb stores of PC, user register banks/SPSR returns and ARM
 writeback with its base in the list are rejected before effects. Thumb STM with
 a non-first base and BLX PC are rejected. The external instruction guard rejects
 the same empty/unpredictable transfer forms, including empty Thumb operations

@@ -28,6 +28,7 @@ _Static_assert(offsetof(Context,budget)==72 && offsetof(Context,read_pages)==96,
 static void import_cpu(Engine *e) {
     Context *c=&e->context;ctr_cpu *p=e->cpu;
     memcpy(c->r,p->r,sizeof(c->r));
+    memcpy(e->vfp,p->vfp,sizeof(e->vfp));e->fpscr=p->fpscr;
     c->n=p->cpsr>>31;c->z=(p->cpsr>>30)&1;c->c=(p->cpsr>>29)&1;c->v=(p->cpsr>>28)&1;
     c->q=(p->cpsr>>27)&1;c->ge=(p->cpsr>>16)&15;c->thumb=(p->cpsr&CTR_FLAG_T)!=0;
     c->exclusive=p->exclusive_valid && p->exclusive_generation==p->memory->generation;
@@ -37,6 +38,7 @@ static void import_cpu(Engine *e) {
 static void export_cpu(Engine *e) {
     Context *c=&e->context;ctr_cpu *p=e->cpu;
     memcpy(p->r,c->r,sizeof(p->r));
+    memcpy(p->vfp,e->vfp,sizeof(p->vfp));p->fpscr=e->fpscr;
     p->cpsr=(p->cpsr&~0xf80f0020u)|((uint32_t)c->n<<31)|((uint32_t)c->z<<30)|
         ((uint32_t)c->c<<29)|((uint32_t)c->v<<28)|((uint32_t)c->q<<27)|((uint32_t)c->ge<<16)|
         (c->thumb?CTR_FLAG_T:0);
@@ -60,11 +62,35 @@ int ctr_recomp_instruction(Context *c,uint32_t address,uint32_t opcode) {
     ctr_mem_result r=ctr_memory_read(e->cpu->memory,address,c->thumb?2:4,CTR_MEM_EXEC,&actual);
     if (r!=CTR_MEM_OK) { e->cpu->memory_fault=r;ctr_recomp_abort(c,CTR_CPU_MEMORY_FAULT,address); }
     if (actual!=opcode) ctr_recomp_abort(c,CTR_CPU_CODE_INVALIDATED,address);
-    /* Non-default FP controls require a correctness implementation first. */
-    if (*c->fpscr&0x07ff9f00u) ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,*c->fpscr);
     --c->budget;++e->cpu->instructions;
     ctr_cpu flags={0};flags.cpsr=((uint32_t)c->n<<31)|((uint32_t)c->z<<30)|
         ((uint32_t)c->c<<29)|((uint32_t)c->v<<28);
+    bool fpscr_transfer=(opcode&0x0fff0fffu)==0x0ee10a10u || (opcode&0x0fff0fffu)==0x0ef10a10u;
+    bool fp_memory=(opcode&0x0f200f00u)==0x0d000a00u || (opcode&0x0f200f00u)==0x0d000b00u;
+    /* Preserve controls across integer/kernel work. FP data operations under
+       unsupported controls still stop before effects; FPSCR bit transport does
+       not perform floating arithmetic. */
+    bool fp=!c->thumb && ((opcode&0x0e000000u)==0x0c000000u || (opcode&0x0f000000u)==0x0e000000u) &&
+        (((opcode>>8)&15u)==10u || ((opcode>>8)&15u)==11u);
+    if(fp && opcode>>28==15u)ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
+    if(fp && ctr_cpu_condition(&flags,opcode>>28)) {
+        if(fpscr_transfer && (opcode&0x00100000u)==0 && ((opcode>>12)&15u)==15u)
+            ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
+        if(fp_memory && (((opcode&0xf00u)==0xb00u && (opcode&0x400000u)) ||
+            (((opcode>>16)&15u)==15u && !(opcode&0x100000u))))ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
+        if(!fpscr_transfer && !fp_memory && (*c->fpscr&0x07ff9f00u))ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,*c->fpscr);
+    }
+    uint32_t media=opcode&0x0ff00ff0u;
+    if(!c->thumb && (opcode&0x0f900090u)==0x01000080u &&
+       (opcode>>28==15 || ctr_cpu_condition(&flags,opcode>>28))) {
+        if((opcode&0x0ff00090u)!=0x01000080u || ((opcode>>16)&15u)==15 ||
+           ((opcode>>12)&15u)==15 || ((opcode>>8)&15u)==15 || (opcode&15u)==15)
+            ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
+    }
+    if(!c->thumb && (media==0x06500f90u || media==0x06500ff0u || media==0x06800fb0u) &&
+        ctr_cpu_condition(&flags,opcode>>28) &&
+        (((opcode>>16)&15u)==15 || ((opcode>>12)&15u)==15 || (opcode&15u)==15))
+        ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
     if(!c->thumb && (opcode&0x0e000000u)==0x08000000u &&
         (opcode>>28==15u || ctr_cpu_condition(&flags,opcode>>28))) {
         unsigned rn=(opcode>>16)&15u;bool load=(opcode&0x100000u)!=0,writeback=(opcode&0x200000u)!=0;
@@ -82,6 +108,11 @@ int ctr_recomp_instruction(Context *c,uint32_t address,uint32_t opcode) {
     }
     if((!c->thumb && (opcode&0x0fffffffu)==0x012fff3fu && ctr_cpu_condition(&flags,opcode>>28)) ||
         (c->thumb && opcode==0x47f8u))ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
+    bool barrier=!c->thumb && ((opcode&0x0fff0fffu)==0x0e070f9au || (opcode&0x0fff0fffu)==0x0e070fbau);
+    if(barrier && ctr_cpu_condition(&flags,opcode>>28)) {
+        if(((opcode>>12)&15u)==15u)ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
+        ctr_cpu_barrier();
+    }
     /* The pinned emitter silently removes some CP15 cache operations. This
        profile implements only the user TLS read; reject other executed CP15
        operations until their coherency/privilege behavior is implemented. */
@@ -89,7 +120,7 @@ int ctr_recomp_instruction(Context *c,uint32_t address,uint32_t opcode) {
         (opcode&0xfffffff0u)==0xf57ff050u || (opcode&0xfffffff0u)==0xf57ff060u))
         ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
     if (!c->thumb && (opcode&0x0f000f10u)==0x0e000f10u &&
-        ((opcode>>28)==15u || (opcode&0x0fff0fffu)!=0x0e1d0f70u || ((opcode>>12)&15u)==15u)) {
+        ((opcode>>28)==15u || (!barrier && (opcode&0x0fff0fffu)!=0x0e1d0f70u) || ((opcode>>12)&15u)==15u)) {
         ctr_cpu flags={0};
         flags.cpsr=((uint32_t)c->n<<31)|((uint32_t)c->z<<30)|
                    ((uint32_t)c->c<<29)|((uint32_t)c->v<<28);
@@ -182,5 +213,5 @@ bool ctr_recomp_attach(ctr_guest *g,bool fallback) {
 }
 bool ctr_recomp_vfp(const ctr_guest *g,unsigned word,uint32_t *value) {
     if(g->executor!=execute || word>=32 || !value)return false;
-    const Engine *e=g->executor_context;*value=e->vfp[word];return true;
+    *value=g->cpu.vfp[word];return true;
 }

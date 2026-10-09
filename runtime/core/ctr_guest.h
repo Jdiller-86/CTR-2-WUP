@@ -4,6 +4,8 @@
 
 #define CTR_GUEST_PAGE 4096u
 #define CTR_GUEST_MAX_BYTES (64u*1024u*1024u)
+#define CTR_GUEST_STORAGE_COUNT 6u
+#define CTR_GUEST_KERNEL_VERSION UINT32_C(0x023a0000)
 typedef struct { uint32_t address, pages, size; } ctr_guest_segment;
 typedef struct {
     const uint8_t *code;
@@ -16,7 +18,8 @@ typedef enum { CTR_GUEST_READY, CTR_GUEST_YIELDED, CTR_GUEST_SLEEPING,
                CTR_GUEST_WAITING, CTR_GUEST_EXITED, CTR_GUEST_FAULTED } ctr_guest_state;
 typedef struct { bool active, signaled; unsigned reset, references; } ctr_guest_event;
 typedef enum { CTR_HANDLE_EVENT, CTR_HANDLE_SESSION, CTR_HANDLE_SHARED,
-               CTR_HANDLE_MUTEX, CTR_HANDLE_SEMAPHORE } ctr_guest_handle_type;
+               CTR_HANDLE_MUTEX, CTR_HANDLE_SEMAPHORE, CTR_HANDLE_THREAD, CTR_HANDLE_ARBITER,
+               CTR_HANDLE_RESOURCE_LIMIT } ctr_guest_handle_type;
 typedef enum { CTR_SERVICE_SRV, CTR_SERVICE_CFG, CTR_SERVICE_HID, CTR_SERVICE_GSP } ctr_guest_service;
 typedef struct { uint32_t generation; unsigned object; bool active; ctr_guest_handle_type type; } ctr_guest_handle;
 typedef struct { bool active, registered; unsigned references; ctr_guest_service service; } ctr_guest_session;
@@ -24,8 +27,9 @@ enum { CTR_GUEST_MODEL_3DS=0, CTR_GUEST_MODEL_3DSXL=1, CTR_GUEST_MODEL_2DS=3 };
 typedef struct { uint8_t region, language, model; } ctr_guest_configuration;
 #define CTR_GUEST_MAX_ALLOCATIONS 16u
 typedef struct { uint32_t base, size; uint8_t *storage; bool linear; unsigned pins; } ctr_guest_allocation;
-typedef struct { bool active; unsigned references, depth; } ctr_guest_mutex;
+typedef struct { bool active; unsigned references, depth; uint32_t owner; } ctr_guest_mutex;
 typedef struct { bool active; unsigned references; uint32_t count, maximum; } ctr_guest_semaphore;
+typedef struct { bool active; unsigned references; } ctr_guest_arbiter;
 typedef struct {
     bool active, owned; unsigned references, allocation;
     uint8_t *storage; uint32_t size, own_permissions, other_permissions;
@@ -45,12 +49,27 @@ typedef struct {
     unsigned relay_owner, relay_shared, relay_event;
     uint64_t next_vblank_ns, vblanks, coalesced_vblanks, dropped_interrupts, failures;
 } ctr_guest_gsp;
+#define CTR_GUEST_MAX_THREADS 8u
+#define CTR_GUEST_THREAD_QUANTUM 32u
+#define CTR_GUEST_CURRENT_THREAD UINT32_C(0xffff8000)
+typedef struct {
+    bool active, finished;
+    unsigned references, stack_allocation;
+    uint32_t id, r[16], cpsr, vfp[32], fpscr, tls_address;
+    int priority;
+    ctr_guest_state state;
+    uint64_t deadline_ns;
+    bool infinite_wait, wait_all, wait_multiple;
+    ctr_guest_handle_type wait_types[16];
+    unsigned wait_objects[16], wait_count, wait_object;
+    uint32_t wait_address;
+} ctr_guest_thread;
 typedef struct {
     ctr_memory memory;
     ctr_cpu cpu;
     ctr_program program;
-    uint8_t *storage[5];
-    size_t storage_size[5];
+    uint8_t *storage[CTR_GUEST_STORAGE_COUNT];
+    size_t storage_size[CTR_GUEST_STORAGE_COUNT];
     ctr_guest_state state;
     uint64_t now_ns, deadline_ns, svc_count;
     unsigned wait_object;
@@ -63,11 +82,19 @@ typedef struct {
     ctr_guest_session sessions[16];
     ctr_guest_mutex mutexes[16];
     ctr_guest_semaphore semaphores[16];
+    ctr_guest_arbiter arbiters[8];
     ctr_guest_shared shared[8];
     ctr_guest_hid hid;
     ctr_guest_gsp gsp;
+    ctr_guest_thread threads[CTR_GUEST_MAX_THREADS];
+    unsigned current_thread, quantum_left;
+    uint32_t next_thread_id;
+    uint64_t context_switches;
+    bool threads_enabled, process_exited;
+    unsigned resource_references;
     ctr_guest_handle_type wait_types[16];
     unsigned wait_objects[16], wait_count;
+    uint32_t wait_address;
     bool wait_all, wait_multiple;
     ctr_guest_configuration configuration;
     ctr_guest_allocation allocations[CTR_GUEST_MAX_ALLOCATIONS];

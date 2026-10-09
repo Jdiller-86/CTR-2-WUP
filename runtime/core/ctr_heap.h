@@ -9,4 +9,5 @@ enum { CTR_HEAP_BASE=0x08000000u, CTR_HEAP_END=0x10000000u,
    backing only; no GPU/DSP physical-address mapping is supplied. */
 void ctr_heap_control(ctr_guest *guest);
 void ctr_heap_query(ctr_guest *guest);
+void ctr_heap_resource_svc(ctr_guest *guest,uint32_t number);
 #endif

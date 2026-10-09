@@ -31,7 +31,7 @@ class LoaderTests(unittest.TestCase):
     def test_real_page_layout(self):
         image=profiled_image(self.path)
         self.assertEqual(image["text"],guest_code())
-        self.assertEqual(image["allocated_bytes"],720896)
+        self.assertEqual(image["allocated_bytes"],724992)
         self.assertEqual(image["tls_address"],0x1ff82000)
 
     def test_source_reproducibility(self):
@@ -53,8 +53,19 @@ class LoaderTests(unittest.TestCase):
     def test_tls_overlap(self):
         self.mutate_header(0x230,0x1ff82000); self.rejected("overlapping_regions")
 
-    def test_bss_ambiguity_rejected(self):
-        self.mutate_header(0x238,4095); self.rejected("unsupported_bss_layout")
+    def test_bss_starts_inside_last_data_page(self):
+        self.mutate_header(0x238,4095)
+        image=load_image(self.path)
+        self.assertEqual(image["allocated_bytes"],724992)
+        self.assertEqual(image["segments"]["data"]["size"],4095)
+
+    def test_bss_can_fit_in_data_padding(self):
+        self.mutate_header(0x238,16);self.mutate_header(0x23c,32)
+        self.assertEqual(load_image(self.path)["allocated_bytes"],32768)
+
+    def test_bss_range_must_not_overlap_tls(self):
+        self.mutate_header(0x230,0x1ff81000);self.mutate_header(0x23c,4096)
+        self.rejected("overlapping_regions")
 
     def test_memory_limit(self):
         self.mutate_header(0x23c,128*1024*1024); self.rejected("guest_memory_limit")

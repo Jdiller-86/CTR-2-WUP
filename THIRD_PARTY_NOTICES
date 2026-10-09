@@ -97,6 +97,30 @@ templates from the packaging candidates were not copied.
 
 External development tools
 --------------------------
+The optional compiler-built homebrew workflow links original applications with
+unmodified devkitPro/libctru at 9b55eda44cf80b971503991e0c78f9bc8fe50425,
+https://github.com/devkitPro/libctru, using its zlib-style permission in README.md.
+The complete notice is preserved at docs/licenses/libctru.txt. Library source
+and devkitARM remain external dependencies; their source/tool binaries are not
+included in the source bundle. The optional compiled interactive RPX/WUHB embeds
+that original application's ARM executable, including linked libctru and
+GCC/newlib support. Keep the libctru notice and existing runtime license texts
+with that artifact. The ARM compiler used in this workflow is GCC 15.2.0; the
+GCC exception/GPL texts are the same license versions preserved below, not a
+claim that it is GCC 16.1.0 or that the ARM and PPC newlib builds are identical.
+ARM newlib's complete collected notices are also preserved as
+docs/licenses/COPYING.NEWLIB.ARM (devkitPro/newlib devkitPro license-reference
+commit 57bd8e1ade3cf46d2e61a72516ac8bfaf8fdfd62).
+The linked 3DSX CRT is devkitPro/devkitarm-crtls under MPL 2.0. Its unmodified
+3dsx_crt0.s, 3dsx.ld and 3dsx.specs source from commit
+1c0c10257c44bbb5a433453bb6bba91582825492 is included at
+docs/licenses/devkitarm-crtls/, with the full MPL text at docs/licenses/MPL-2.0.txt.
+The rebuilt .crt0 section bytes and relocations match the installed ARM SDK
+object; whole-object hashes differ. These sources accompany the covered startup
+code in the optional compiled guest. They are not project-authored code or linked
+into the native PPC platform as assembly. See the audit receipt at
+docs/licenses/devkitarm-crtls/README.md. CTR2WUP's license does not replace their MPL.
+
 The separate CTR2WUP-CIA-Intake Windows x64 utility bundles Microsoft's .NET
 10.0.12 runtime and apphost under MIT plus the preserved third-party notices
 from the exact restored runtime/host packages. Their LICENSE.TXT and

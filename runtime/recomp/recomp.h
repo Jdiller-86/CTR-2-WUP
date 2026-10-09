@@ -94,6 +94,22 @@ static inline uint32_t shift_lsl(uint32_t v,uint32_t n,uint8_t *c) { unsigned ou
 static inline uint32_t shift_lsr(uint32_t v,uint32_t n,uint8_t *c) { unsigned out;uint32_t r=ctr_cpu_shift(v,1,n,false,*c,&out);*c=(uint8_t)out;return r; }
 static inline uint32_t shift_asr(uint32_t v,uint32_t n,uint8_t *c) { unsigned out;uint32_t r=ctr_cpu_shift(v,2,n,false,*c,&out);*c=(uint8_t)out;return r; }
 static inline uint32_t shift_ror(uint32_t v,uint32_t n,uint8_t *c) { unsigned out;uint32_t r=ctr_cpu_shift(v,3,n,false,*c,&out);*c=(uint8_t)out;return r; }
+/* The exercised ARMv6 unsigned byte forms used by newlib string routines. */
+/* Widen before the pinned emitter multiplies/adds signed halves: an int32
+   expression could overflow before a Q helper sees its value. */
+#define HALF(word,high) ctr_cpu_signed_half((word),(high))
+static inline uint32_t accumulate(Context *c,int64_t value) {
+    if(value>INT32_MAX || value<INT32_MIN)c->q=1;
+    return (uint32_t)value;
+}
+static inline uint32_t media_parallel(Context *c,unsigned operation,unsigned lane,uint32_t left,uint32_t right) {
+    if(operation!=5 || (lane!=4 && lane!=7))ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,(operation<<20)|(lane<<5));
+    ctr_cpu flags={0};uint32_t result=ctr_cpu_byte_parallel(&flags,left,right,lane==7);
+    c->ge=(uint8_t)((flags.cpsr>>16)&15u);return result;
+}
+static inline uint32_t media_select(Context *c,uint32_t left,uint32_t right) {
+    ctr_cpu flags={0};flags.cpsr=(uint32_t)c->ge<<16;return ctr_cpu_byte_select(&flags,left,right);
+}
 
 /* Scalar IEEE bit transport is independent of the host's byte order. Full
  * FPSCR exception/NaN/denormal semantics are outside the current profile. */

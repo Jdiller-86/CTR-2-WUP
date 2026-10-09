@@ -4,6 +4,28 @@ No console is attached to this environment. Every item below is awaiting a
 physical console test. Cross-compilation, host tests and RPX headers do not
 establish console behavior.
 
+v0.13 adds `GUEST THREAD SCHEDULER PASS CODE 0` in native mode and
+`thread_selftest PASS result=0` in the SD log. Record its 345 instructions/eight
+switches, or the exact failure. This compares original interpreter/AOT contexts,
+per-thread TLS, owner-aware locks, waits and exit; no ROM is needed.
+
+The separate `CTR2WUP-libctru-interactive-0.13.0.zip` supplies
+`ctr2wup-libctru-interactive.rpx`/`.wuhb`, a real original compiled libctru program.
+It starts in standard GSP display mode: top red, A held turns it green; bottom
+blue, a valid GamePad touch marks the corresponding white pixel. B is consumed
+by the ARM application itself and exits its graphics thread/process. Plus
+restarts; Y switches between its display and native diagnostics; Minus exits the
+host. Check all native self-test rows as well. This build has no custom ARM
+framebuffer mode and no guest PICA/audio/FS implementation.
+
+Record `CTR2WUP INTERACTIVE READY`, increasing paired GSP swaps, zero fallback,
+touch corners/release, the guest `CTR2WUP compiled interactive PASS` and
+`state=exited` after B. Startup currently records eight unavailable service
+lookups; preserve the IPC result logs rather than interpret these as successful
+APT/FS initialization. Test ten-minute stability, repeated Plus restarts and
+clean host shutdown. Do not compare its diagnostic instruction budget with
+commercial performance or claim graphical-game compatibility from these frames.
+
 ## Artifacts and launch
 
 Use `artifacts/wiiu/ctr2wup-prototype.rpx` with an RPX-capable homebrew launcher,
@@ -13,7 +35,7 @@ Record the precise homebrew environment, firmware and launcher versions used.
 These are diagnostic applications, not WUP installation directories. Do not
 attempt to install the RPX/WUHB through a WUP installer.
 
-Current v0.12.0 delivery is `CTR2WUP-diagnostic-0.12.0.zip`; it contains the native
+Current v0.13.0 delivery is `CTR2WUP-diagnostic-0.13.0.zip`; it contains the native
 RPX/WUHB, the instructions and direct/shared display reference PPMs.
 The separate original/external-guest bundles contain the other starting modes.
 
@@ -44,7 +66,7 @@ required. GPU/DSP physical memory and commercial startup remain untested.
 v0.8.0 embeds the shared-memory/synchronization probe. Record
 `SHARED/SYNC LIFECYCLE PASS CODE 0` and `kernel_selftest PASS result=0`, or FAIL
 codes. Its 148 ARM instructions/27 SVCs check aliases, mutex/semaphore/event
-waits and ownership release; multi-thread behavior remains pending.
+waits and ownership release. v0.13 separately embeds the multi-thread test below.
 
 v0.9.0 adds `HID ARM CONSUMER PASS CODE 0` / `hid_selftest PASS result=0`.
 Native GamePad rows show ARM-read HID buttons, packed signed Circle Pad XY,

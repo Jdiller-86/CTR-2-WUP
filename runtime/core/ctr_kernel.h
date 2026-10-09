@@ -3,6 +3,11 @@
 #include "ctr_guest.h"
 void ctr_sync_svc(ctr_guest *guest, uint32_t number);
 void ctr_sync_poll(ctr_guest *guest);
+/* Single emulated core: contexts switch only at bounded execution/SVC boundaries. */
+void ctr_thread_svc(ctr_guest *guest, uint32_t number);
+void ctr_threads_poll(ctr_guest *guest);
+bool ctr_thread_schedule(ctr_guest *guest, bool rotate);
+void ctr_threads_exit_process(ctr_guest *guest);
 void ctr_shared_svc(ctr_guest *guest, uint32_t number);
 /* Create local device backing for a service; returns an owned handle. */
 uint32_t ctr_shared_create(ctr_guest *guest, uint32_t size, unsigned permissions);

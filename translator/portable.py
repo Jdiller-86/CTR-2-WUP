@@ -47,6 +47,9 @@ def adapt_source(source):
             return "(*ctx->fpscr)" if m[0] == "fpscr_" else "ctx->budget"
 
         line = _TOKEN.sub(token, line)
+        # Clang diagnoses the emitter's redundant equality parentheses under
+        # -Wall/-Werror; keep the same comparison and one conditional pair.
+        line = re.sub(r'^(\s*if )\(\((ctx->[nzcv] == ctx->[nzcv])\)\)( \{)$',r'\1(\2)\3',line)
         # The emitter declares acc even for non-accumulating scalar VFP ops.
         # Keep the declaration/evaluation while making that intent explicit.
         if "acc = vfp_from_" in line:

@@ -122,7 +122,7 @@ static void instruction_tests(void) {
     CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[6]==0 && cpu.r[15]==0x1004);
     setup(0xee1dff70);CHECK(ctr_cpu_step(&cpu)==CTR_CPU_UNSUPPORTED && cpu.r[15]==0x1000);
     setup(0xee0d0f70);CHECK(ctr_cpu_step(&cpu)==CTR_CPU_UNSUPPORTED);
-    setup(0xee070f9a);CHECK(ctr_cpu_step(&cpu)==CTR_CPU_UNSUPPORTED);
+    setup(0xee070f15);CHECK(ctr_cpu_step(&cpu)==CTR_CPU_UNSUPPORTED);
     setup(0xe3a0002a); CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[0]==42 && cpu.r[15]==0x1004);
     setup(0x03a0002a); CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[0]==0 && cpu.r[15]==0x1004);
     setup(0xe2800001); cpu.r[0]=41; CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[0]==42);

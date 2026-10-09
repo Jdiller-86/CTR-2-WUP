@@ -20,6 +20,6 @@ class StackFixtureTests(unittest.TestCase):
         for opcode,thumb in ((0xe92d40f0,False),(0xe8bd80f0,False),(0xb530,True),(0xbd30,True),(0xc630,True),(0xce0c,True)):
             source=translate(struct.pack('<H' if thumb else '<I',opcode),0x100000,'transfer',thumb)
             self.assertIn('ctr_cpu_multiple(cpu,',source);self.assertNotIn('ctr_cpu_step(',source)
-        for opcode,thumb in ((0xe8cc0001,False),(0xe8ac1001,False),(0xe8bc1001,False),(0xe89f0001,False),(0xe88c8000,False),
+        for opcode,thumb in ((0xe8cc0001,False),(0xe8ac1001,False),(0xe8bc1001,False),(0xe89f0001,False),(0xe88f8000,False),
                              (0xe8ac0000,False),(0xb400,True),(0xbc00,True),(0xc000,True),(0xc800,True),(0xc103,True),(0x47f8,True)):
             with self.subTest(opcode=hex(opcode)),self.assertRaises(ValueError):translate(struct.pack('<H' if thumb else '<I',opcode),0x100000,'invalid',thumb)

@@ -1,4 +1,5 @@
 #include "ctr_cpu.h"
+#include <stdatomic.h>
 
 #include <string.h>
 
@@ -50,6 +51,16 @@ uint32_t ctr_cpu_add(ctr_cpu *cpu, uint32_t left, uint32_t right, unsigned carry
     return result;
 }
 
+int64_t ctr_cpu_signed_half(uint32_t word,unsigned high) {
+    uint32_t half=(word>>(high?16:0))&0xffffu;
+    return (half&0x8000u)?(int64_t)half-65536:(int64_t)half;
+}
+uint32_t ctr_cpu_half_accumulate(ctr_cpu *cpu,uint32_t left,uint32_t right,uint32_t accumulator,unsigned x,unsigned y) {
+    int64_t signed_acc=(accumulator&0x80000000u)?(int64_t)accumulator-INT64_C(4294967296):(int64_t)accumulator;
+    int64_t result=ctr_cpu_signed_half(left,x)*ctr_cpu_signed_half(right,y)+signed_acc;
+    if(result>INT32_MAX || result<INT32_MIN)cpu->cpsr|=0x08000000u;
+    return (uint32_t)result;
+}
 uint32_t ctr_cpu_shift(uint32_t value, unsigned type, unsigned amount, bool immediate,
                        unsigned carry_in, unsigned *carry_out) {
     *carry_out = carry_in & 1u;
@@ -108,8 +119,32 @@ static uint32_t read_register(const ctr_cpu *cpu, unsigned reg, bool thumb) {
     return cpu->r[reg] + (reg == 15u ? (thumb ? 4u : 8u) : 0u);
 }
 
+void ctr_cpu_barrier(void) { atomic_thread_fence(memory_order_seq_cst); }
+ctr_cpu_result ctr_cpu_fp_transfer(ctr_cpu *cpu,unsigned first,unsigned words,uint32_t address,bool load,uint32_t opcode) {
+    if(!words || words>2 || first+words>32)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,opcode);
+    for(unsigned i=0;i<words;++i) {
+        ctr_cpu_result result=load?ctr_cpu_load(cpu,address+i*4u,4,&cpu->vfp[first+i]):
+            ctr_cpu_store(cpu,address+i*4u,4,cpu->vfp[first+i]);
+        if(result!=CTR_CPU_OK)return result;
+    }
+    return CTR_CPU_OK;
+}
+uint32_t ctr_cpu_byte_parallel(ctr_cpu *cpu,uint32_t left,uint32_t right,bool subtract) {
+    uint32_t result=0,ge=0;
+    for(unsigned i=0;i<4;++i) {
+        unsigned a=(left>>(i*8))&255u,b=(right>>(i*8))&255u;
+        unsigned n=subtract?a-b:a+b;result|=(n&255u)<<(i*8);
+        if(subtract?a>=b:n>255u)ge|=1u<<i;
+    }
+    cpu->cpsr=(cpu->cpsr&~0x000f0000u)|(ge<<16);return result;
+}
+uint32_t ctr_cpu_byte_select(const ctr_cpu *cpu,uint32_t left,uint32_t right) {
+    uint32_t result=0;
+    for(unsigned i=0;i<4;++i)result|=((cpu->cpsr&(1u<<(16+i))?left:right)>>(i*8)&255u)<<(i*8);
+    return result;
+}
 bool ctr_cpu_multiple_supported(unsigned base,uint16_t registers,bool writeback,bool load,bool thumb) {
-    if(base>=15 || !registers || (!load && (registers&0x8000u)))return false;
+    if(base>=15 || !registers || (thumb && !load && (registers&0x8000u)))return false;
     if(writeback && (registers&(1u<<base))) {
         if(load || !thumb || (registers&((1u<<base)-1u)))return false;
     }
@@ -122,7 +157,7 @@ ctr_cpu_result ctr_cpu_multiple(ctr_cpu *cpu,unsigned rn,uint16_t registers,
     uint32_t base=cpu->r[rn],span=count*4u;
     uint32_t address=increment?base+(before?4u:0u):base-span+(before?0u:4u),target=0;
     for(unsigned reg=0;reg<16;++reg)if(registers&(1u<<reg)) {
-        uint32_t value=cpu->r[reg];
+        uint32_t value=reg==15 && !thumb?cpu->r[15]+8u:cpu->r[reg];
         ctr_cpu_result result=load?ctr_cpu_load(cpu,address,4u,&value):ctr_cpu_store(cpu,address,4u,value);
         if(result!=CTR_CPU_OK)return result;
         if(load) { if(reg==15)target=value;else cpu->r[reg]=value; }
@@ -138,6 +173,31 @@ static ctr_cpu_result arm_step(ctr_cpu *cpu, uint32_t insn) {
     unsigned cond = insn >> 28;
     if (cond == 15u) return ctr_cpu_stop(cpu, CTR_CPU_UNSUPPORTED, insn);
     if (!ctr_cpu_condition(cpu, cond)) { cpu->r[15] = next; return CTR_CPU_OK; }
+    if((insn&0x0fff0fffu)==0x0e070f9au || (insn&0x0fff0fffu)==0x0e070fbau) {
+        if(((insn>>12)&15u)==15u)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
+        ctr_cpu_barrier();cpu->r[15]=next;return CTR_CPU_OK;
+    }
+    uint32_t fp_transfer=insn&0x0f200f00u;
+    if(fp_transfer==0x0d000a00u || fp_transfer==0x0d000b00u) {
+        unsigned rn=(insn>>16)&15u,first=(insn>>12)&15u;bool wide=fp_transfer==0x0d000b00u,load=(insn&0x100000u)!=0;
+        first=wide?(first+((insn>>22)&1u)*16u)*2u:first*2u+((insn>>22)&1u);
+        if(rn==15 && !load)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
+        uint32_t base=read_register(cpu,rn,false),offset=(insn&255u)*4u;
+        ctr_cpu_result result=ctr_cpu_fp_transfer(cpu,first,wide?2u:1u,(insn&0x800000u)?base+offset:base-offset,load,insn);
+        if(result==CTR_CPU_OK)cpu->r[15]=next;
+        return result;
+    }
+    if((insn&0x0fff0fffu)==0x0ee10a10u || (insn&0x0fff0fffu)==0x0ef10a10u) {
+        unsigned rt=(insn>>12)&15u;bool read=(insn&0x00100000u)!=0;
+        if(read) {
+            if(rt==15)cpu->cpsr=(cpu->cpsr&0x0fffffffu)|(cpu->fpscr&0xf0000000u);
+            else cpu->r[rt]=cpu->fpscr;
+        } else {
+            if(rt==15)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
+            cpu->fpscr=cpu->r[rt];
+        }
+        cpu->r[15]=next;return CTR_CPU_OK;
+    }
     if ((insn&UINT32_C(0x0fff0fff))==UINT32_C(0x0e1d0f70) && ((insn>>12)&15u)!=15u) {
         cpu->r[(insn>>12)&15u]=cpu->tls_address;
         cpu->r[15]=next;
@@ -163,6 +223,20 @@ static ctr_cpu_result arm_step(ctr_cpu *cpu, uint32_t insn) {
         if ((insn & UINT32_C(0x01000000)) != 0u) cpu->r[14] = next;
         cpu->r[15] = pc + 8u + (offset << 2);
         return CTR_CPU_OK;
+    }
+    uint32_t media=insn&0x0ff00ff0u;
+    if((insn&0x0ff00090u)==0x01000080u) { /* SMLAxy, signed halves and sticky Q. */
+        unsigned rd=(insn>>16)&15,rn=(insn>>12)&15,rs=(insn>>8)&15,rm=insn&15;
+        if(rd==15 || rn==15 || rs==15 || rm==15)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
+        cpu->r[rd]=ctr_cpu_half_accumulate(cpu,cpu->r[rm],cpu->r[rs],cpu->r[rn],(insn>>5)&1,(insn>>6)&1);
+        cpu->r[15]=next;return CTR_CPU_OK;
+    }
+    if(media==0x06500f90u || media==0x06500ff0u || media==0x06800fb0u) {
+        unsigned rn=(insn>>16)&15u,rd=(insn>>12)&15u,rm=insn&15u;
+        if(rn==15 || rd==15 || rm==15)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
+        cpu->r[rd]=media==0x06800fb0u?ctr_cpu_byte_select(cpu,cpu->r[rn],cpu->r[rm]):
+            ctr_cpu_byte_parallel(cpu,cpu->r[rn],cpu->r[rm],media==0x06500ff0u);
+        cpu->r[15]=next;return CTR_CPU_OK;
     }
     if((insn&UINT32_C(0x0e000000))==UINT32_C(0x08000000)) {
         if(insn&UINT32_C(0x00400000))return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);

@@ -70,7 +70,25 @@ static void rejection(void) {
         CHECK(g.fault==(kind==11 || kind==12?CTR_CPU_MEMORY_FAULT:CTR_CPU_UNSUPPORTED));ctr_guest_close(&g);
     }
 }
+static void coherency(void) {
+    for(unsigned kind=0;kind<8;++kind)for(unsigned invalidate=0;invalidate<2;++invalidate) {
+        ctr_guest g;CHECK(ctr_gsp_fixture_open(&g));uint32_t session=ctr_guest_session_open(&g,CTR_SERVICE_GSP);CHECK(session);
+        g.gsp.right=kind!=2;uint32_t request[]={invalidate?0x90082:0x80082,0x08001001,17,0,0xffff8001u};
+        if(kind==1)request[2]=0; /* Empty range has no memory side effects. */
+        if(kind==3)request[3]=0x10;
+        if(kind==4)request[4]=0xffff8000;
+        if(kind==5)request[1]=0xdead0000;
+        if(kind==6) { request[1]=0xfffffff0;request[2]=32; }
+        if(kind==7)CHECK(ctr_memory_change_range(&g.memory,0x08001000,4096,0,false)==CTR_MEM_OK);
+        ctr_guest_gsp before=g.gsp;uint64_t code=g.memory.code_generation;
+        send(&g,session,request,5);
+        CHECK(!memcmp(&before,&g.gsp,sizeof(before)) && g.memory.code_generation==code);
+        if(kind<2) { CHECK(g.state==CTR_GUEST_READY && !g.cpu.r[0] && !g.ipc_failures); }
+        else CHECK(g.state==CTR_GUEST_FAULTED && g.ipc_failures==1 && g.fault==(kind<5?CTR_CPU_UNSUPPORTED:CTR_CPU_MEMORY_FAULT));
+        ctr_guest_close(&g);
+    }
+}
 int main(void) {
-    display_formats();rejection();int result=ctr_gsp_selftest();if(result)fprintf(stderr,"gsp selftest code=%d\n",result);CHECK(!result);
+    display_formats();rejection();coherency();int result=ctr_gsp_selftest();if(result)fprintf(stderr,"gsp selftest code=%d\n",result);CHECK(!result);
     printf("{\"ok\":true,\"assertions\":%u,\"original_arm_hid_gsp_display\":true,\"rotated_framebuffer_formats\":5,\"console_verified\":false}\n",assertions);return 0;
 }

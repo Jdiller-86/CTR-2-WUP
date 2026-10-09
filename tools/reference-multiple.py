@@ -28,7 +28,6 @@ def cases():
             for pre in (False,True):
                 for wb in (False,True):
                     for mask in masks:
-                        if not load and mask&0x8000:continue
                         for cond,flags in ((14,0xa80f0010),(0,0x68050010),(0,0x08050010)):
                             opcode=cond<<28|0x080c0000|up<<23|pre<<24|wb<<21|load<<20|mask
                             rows.append((opcode,False,flags))
@@ -49,6 +48,22 @@ def cases():
         for rn in (0,8,14):
             for target_thumb in (False,True):
                 rows.append(((0x4780|rn<<3) if thumb else (0xe12fff30|rn),thumb,0x98050010|(0x20 if thumb else 0)))
+    # Compiled newlib uses unsigned byte arithmetic and GE-based selection.
+    for op in (0xe6524f93,0xe6524ff3,0xe6824fb3):
+        for flags in (0x98000010,0x080f0010,0x28050010,0x880a0010):
+            for _ in range(16):rows.append((op,False,flags))
+    for op in (0xeee10a10,0xeef10a10,0xeef1fa10):
+        for _ in range(8):rows.append((op,False,0x98050010))
+    for wide in (False,True):
+        for load in (False,True):
+            for up in (False,True):
+                for reg in (0,7,15):
+                    rows.append((0xed0c0a08|wide<<8|load<<20|up<<23|reg<<12,False,0xa8050010))
+    rows.extend(((0xee070fba,False,0x98050010),(0xee070f9a,False,0x98050010)))
+    for x in (0,1):
+        for y in (0,1):
+            for flags in (0x98050010,0x90050010,0x10050010):
+                for _ in range(32):rows.append((0xe1042381|x<<5|y<<6,False,flags))
     return rows
 
 def main():
@@ -67,13 +82,17 @@ def main():
     p=subprocess.run(command,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/'compile.log').write_text(p.stdout)
     if p.returncode:raise RuntimeError('Reference bridge compilation failed')
     bridge=ctypes.CDLL(str(library)).ctr_multiple_reference_step
+    fpwords=ctypes.c_uint32*32
     words=ctypes.c_uint32*16;page=ctypes.c_uint8*4096
-    bridge.argtypes=[ctypes.c_uint,ctypes.c_uint,ctypes.c_uint32,ctypes.POINTER(ctypes.c_uint32),ctypes.POINTER(ctypes.c_uint32),ctypes.POINTER(ctypes.c_uint8)]
+    bridge.argtypes=[ctypes.c_uint,ctypes.c_uint,ctypes.c_uint32,ctypes.POINTER(ctypes.c_uint32),ctypes.POINTER(ctypes.c_uint32),ctypes.POINTER(ctypes.c_uint8),ctypes.POINTER(ctypes.c_uint32),ctypes.POINTER(ctypes.c_uint32)]
     bridge.restype=ctypes.c_int
     registers=[getattr(ac,f'UC_ARM_REG_R{i}') for i in range(13)]+[ac.UC_ARM_REG_SP,ac.UC_ARM_REG_LR,ac.UC_ARM_REG_PC]
     seed=random.Random(0xc712);results=[]
     for index,(opcode,thumb,flags) in enumerate(rows):
         initial=[seed.getrandbits(32) for _ in range(16)];initial[12]=DATA+2048;initial[13]=DATA+2048;initial[15]=TEXT
+        initial_fp=0xa3000000 if opcode&0x0fff0fff in (0x0ee10a10,0x0ef10a10) or opcode&0x0f200f00 in (0x0d000a00,0x0d000b00) else 0
+        initial_vfp=[seed.getrandbits(32) for _ in range(32)]
+        if opcode&0x0fff0fff==0x0ee10a10:initial[(opcode>>12)&15]=seed.getrandbits(32)&0xf3000000
         memory=struct.pack('<1024I',*[seed.getrandbits(32) for _ in range(1024)])
         pc_load=(not thumb and opcode&0x0e100000==0x08100000 and opcode&0x8000) or (thumb and opcode&0xff00==0xbd00)
         if pc_load:memory=struct.pack('<I',TEXT+0x100+(index&1))*1024
@@ -81,17 +100,21 @@ def main():
         link=(thumb and opcode&0xff07==0x4700) or (not thumb and opcode&0x0ffffff0==0x012fff30)
         if link:initial[((opcode>>3)&15) if thumb else (opcode&15)]=TEXT+0x100+(index&1)
         reference=u.Uc(u.UC_ARCH_ARM,u.UC_MODE_ARM);reference.ctl_set_cpu_model(ac.UC_CPU_ARM_1176)
+        reference.reg_write(ac.UC_ARM_REG_FPEXC,0x40000000);reference.reg_write(ac.UC_ARM_REG_FPSCR,initial_fp)
         reference.mem_map(TEXT,4096);reference.mem_write(TEXT,struct.pack('<H' if thumb else '<I',opcode));reference.mem_map(DATA,4096);reference.mem_write(DATA,memory)
+        for i,value in enumerate(initial_vfp):reference.reg_write(getattr(ac,f'UC_ARM_REG_S{i}'),value)
         reference.reg_write(ac.UC_ARM_REG_CPSR,flags)
         for reg,value in zip(registers,initial):reference.reg_write(reg,value)
         reference.emu_start(TEXT|int(thumb),TEXT+4096,count=1)
-        expected=[reference.reg_read(reg) for reg in registers];expected_flags=reference.reg_read(ac.UC_ARM_REG_CPSR);expected_memory=bytes(reference.mem_read(DATA,4096))
+        expected=[reference.reg_read(reg) for reg in registers];expected_flags=reference.reg_read(ac.UC_ARM_REG_CPSR);expected_memory=bytes(reference.mem_read(DATA,4096));expected_fp=reference.reg_read(ac.UC_ARM_REG_FPSCR);expected_vfp=[reference.reg_read(getattr(ac,f'UC_ARM_REG_S{i}')) for i in range(32)]
         for translated in (False,True):
-            actual=words(*initial);actual_flags=ctypes.c_uint32(flags);actual_memory=page.from_buffer_copy(memory)
-            result=bridge(translated,index,opcode,actual,ctypes.byref(actual_flags),actual_memory)
+            actual=words(*initial);actual_flags=ctypes.c_uint32(flags);actual_memory=page.from_buffer_copy(memory);actual_fp=ctypes.c_uint32(initial_fp);actual_vfp=fpwords(*initial_vfp)
+            result=bridge(translated,index,opcode,actual,ctypes.byref(actual_flags),actual_memory,ctypes.byref(actual_fp),actual_vfp)
             assert result==0,(index,hex(opcode),result)
             assert list(actual)==expected,(index,hex(opcode),translated,list(actual),expected)
             assert actual_flags.value==expected_flags,(index,hex(opcode),hex(actual_flags.value),hex(expected_flags))
+            assert actual_fp.value==expected_fp,(index,hex(opcode),hex(actual_fp.value),hex(expected_fp))
+            assert list(actual_vfp)==expected_vfp,(index,hex(opcode),translated,'vfp')
             assert bytes(actual_memory)==expected_memory,(index,hex(opcode),translated,'memory')
         results.append({'opcode':hex(opcode),'thumb':thumb,'cpsr':hex(expected_flags),'registers':expected,'memory_sha256':hashlib.sha256(expected_memory).hexdigest()})
     from host.stack_fixture import image_code,EXPECTED

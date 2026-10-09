@@ -25,7 +25,8 @@ static void loader_tests(void) {
     bad=ctr_frame_image; bad.text.size=3; CHECK(!ctr_guest_open(&guest,&bad,NULL,0)); ctr_guest_close(&guest);
     bad=ctr_frame_image; bad.stack_size=3; CHECK(!ctr_guest_open(&guest,&bad,NULL,0)); ctr_guest_close(&guest);
     bad=ctr_frame_image; bad.code_size=100; CHECK(!ctr_guest_open(&guest,&bad,NULL,0)); ctr_guest_close(&guest);
-    bad=ctr_frame_image; bad.data.size=4095; CHECK(!ctr_guest_open(&guest,&bad,NULL,0)); ctr_guest_close(&guest);
+    bad=ctr_frame_image; bad.data.size=4095; CHECK(ctr_guest_open(&guest,&bad,NULL,0));
+    CHECK(ctr_memory_read(&guest.memory,CTR_FRAME_DATA+4095,1,1,&value)==CTR_MEM_OK && !value);ctr_guest_close(&guest);
     bad=ctr_frame_image; bad.bss_size=0xffffffffu; CHECK(!ctr_guest_open(&guest,&bad,NULL,0)); ctr_guest_close(&guest);
     bad=ctr_frame_image; bad.data.address=0xfffff000u; CHECK(!ctr_guest_open(&guest,&bad,NULL,0)); ctr_guest_close(&guest);
     bad=ctr_frame_image; bad.stack_size=128u*1024u*1024u; CHECK(!ctr_guest_open(&guest,&bad,NULL,0)); ctr_guest_close(&guest);

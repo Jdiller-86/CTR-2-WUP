@@ -2,8 +2,10 @@
 
 Version 0.8.0 adds original C11 objects needed by HID/GSP-style startup. Public
 SVC register interfaces were checked against pinned libctru `svc.h`/`svc.s`;
-no upstream implementation is copied. This is a single-process, single-thread
-subset, not full retail-kernel behavior or a commercial profile.
+no upstream implementation is copied. The original v0.8 fixture is single-thread;
+v0.13 extends ownership/waits to eight process-local contexts (`guest-threads.md`).
+This remains a single-process subset, not full retail-kernel behavior or a
+commercial profile.
 
 | Interface | Implemented behavior |
 |---|---|

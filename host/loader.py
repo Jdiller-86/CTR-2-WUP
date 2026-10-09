@@ -14,7 +14,7 @@ def load_image(path):
     main = report["partitions"][0]
     segments = main["segments"]
     regions = []
-    total = PAGE + main["stack_size"]
+    total = 2 * PAGE + main["stack_size"]
     if not main["stack_size"] or main["stack_size"] % PAGE or main["stack_size"] >= 0x10000000:
         raise HostError("invalid_stack", "Guest stack must be nonempty, page-aligned and fit below 0x10000000", stage="load")
     for name, segment in segments.items():
@@ -22,6 +22,8 @@ def load_image(path):
         allocated = pages * PAGE
         if address % PAGE or pages != (size + PAGE - 1) // PAGE or address + allocated > 2**32:
             raise HostError("invalid_segment", f"Invalid {name} guest segment bounds/alignment", stage="load")
+        if name == "data":
+            allocated = max(allocated, (size + main["bss_size"] + PAGE - 1) // PAGE * PAGE)
         total += allocated
         if allocated:
             regions.append((address, allocated, name))
@@ -29,13 +31,8 @@ def load_image(path):
         raise HostError("invalid_entry", "Initial fixture entry requires nonempty aligned ARM text", stage="load")
     data = segments["data"]
     bss = main["bss_size"]
-    if bss and data["size"] != data["pages"] * PAGE:
-        raise HostError("unsupported_bss_layout", "Non-page-aligned data/BSS layouts require additional validation", stage="load")
-    bss_pages = (bss + PAGE - 1) // PAGE * PAGE
-    total += bss_pages
-    if bss_pages:
-        regions.append((data["address"] + data["pages"] * PAGE, bss_pages, "bss"))
     regions += [(0x10000000 - main["stack_size"], main["stack_size"], "stack"),
+                (0x1FF80000, PAGE, "kernel-config"),
                 (0x1FF82000, PAGE, "tls")]
     if total > MAX_MEMORY or any(address + size > 2**32 for address, size, _ in regions):
         raise HostError("guest_memory_limit", "Guest layout exceeds the supported 64 MiB allocation limit", stage="load")

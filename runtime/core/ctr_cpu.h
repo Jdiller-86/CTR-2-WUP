@@ -18,6 +18,8 @@ typedef void (*ctr_cpu_log_fn)(void *context, const char *event, const char *mod
 typedef struct {
     uint32_t r[16];
     uint32_t cpsr;
+    /* Architectural FP words travel with a thread even when only AOT handles VFP. */
+    uint32_t vfp[32], fpscr;
     ctr_memory *memory;
     uint64_t instructions;
     uint64_t fallback_instructions;
@@ -45,6 +47,12 @@ typedef struct {
 void ctr_cpu_init(ctr_cpu *cpu, ctr_memory *memory);
 bool ctr_cpu_condition(const ctr_cpu *cpu, unsigned condition);
 uint32_t ctr_cpu_add(ctr_cpu *cpu, uint32_t left, uint32_t right, unsigned carry, bool flags);
+uint32_t ctr_cpu_byte_parallel(ctr_cpu *cpu,uint32_t left,uint32_t right,bool subtract);
+uint32_t ctr_cpu_byte_select(const ctr_cpu *cpu,uint32_t left,uint32_t right);
+int64_t ctr_cpu_signed_half(uint32_t word,unsigned high);
+uint32_t ctr_cpu_half_accumulate(ctr_cpu *cpu,uint32_t left,uint32_t right,uint32_t accumulator,unsigned x,unsigned y);
+ctr_cpu_result ctr_cpu_fp_transfer(ctr_cpu *cpu,unsigned first,unsigned words,uint32_t address,bool load,uint32_t opcode);
+void ctr_cpu_barrier(void);
 void ctr_cpu_logic_flags(ctr_cpu *cpu, uint32_t value, unsigned carry);
 uint32_t ctr_cpu_shift(uint32_t value, unsigned type, unsigned amount, bool immediate,
                        unsigned carry_in, unsigned *carry_out);

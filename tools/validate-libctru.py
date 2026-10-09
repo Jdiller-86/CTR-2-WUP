@@ -1,0 +1,93 @@
+#!/usr/bin/env python3
+"""Build original applications with pinned external libctru and run checked AOT.
+
+Uses the normal devkitARM CRT, newlib and libctru initialization. APT/FS and
+motion remain unavailable; reaching main does not prove their initialization.
+"""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import shlex
+import shutil
+import struct
+import subprocess
+import sys
+import tempfile
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from host.loader import load_image
+from host import __version__
+from host.build import _validate_rpx
+from tests.host_fixtures import ncch
+from translator.upstream import generate_into
+ROOT=Path(__file__).resolve().parents[1]
+PIN='9b55eda44cf80b971503991e0c78f9bc8fe50425'
+
+def container(elf):
+    data=elf.read_bytes()
+    if data[:7]!=b'\x7fELF\x01\x01\x01' or struct.unpack_from('<HH',data,16)!=(2,40):raise ValueError('Require the original ARM32 little-endian executable')
+    entry,phoff=struct.unpack_from('<II',data,24);width,count=struct.unpack_from('<HH',data,42)
+    if width!=32 or count!=3 or entry!=0x100000:raise ValueError('Unexpected original devkitARM layout')
+    segments=[];code=b''
+    for i,expected in enumerate((5,4,6)):
+        kind,offset,address,_,filesz,memsz,flags,alignment=struct.unpack_from('<8I',data,phoff+i*width)
+        if kind!=1 or flags!=expected or alignment!=4096 or filesz>memsz or offset+filesz>len(data):raise ValueError('Unexpected original segment')
+        pages=(filesz+4095)//4096;segments.append((address,pages,filesz,memsz-filesz));code+=data[offset:offset+filesz].ljust(pages*4096,b'\0')
+    rom=ncch([('.code',code)],program_id=0x000400000ff00f0c)
+    for at,segment in zip((0x210,0x220,0x230),segments):struct.pack_into('<III',rom,at,*segment[:3])
+    struct.pack_into('<I',rom,0x23c,segments[-1][3]);rom[0x160:0x180]=hashlib.sha256(rom[0x200:0x600]).digest()
+    return rom
+
+def main():
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--output',type=Path,required=True)
+    p.add_argument('--libctru-source',type=Path,default=ROOT.parent/'ctr2wup-deps/libctru')
+    p.add_argument('--devkitarm',type=Path,default=Path(os.environ.get('DEVKITARM',str(Path(os.environ.get('DEVKITPRO','/workspace/ctr2wup-sdk'))/'devkitARM'))))
+    p.add_argument('--cc',default='gcc');p.add_argument('--cc-prefix',default='');p.add_argument('--run-prefix',default='');p.add_argument('--static',action='store_true');p.add_argument('--sanitize',action='store_true')
+    p.add_argument('--application',choices=('boot','threaded','graphics','input','interactive'),help='Run only the selected original application')
+    p.add_argument('--wiiu',action='store_true',help='Also build the verified original interactive application as RPX/WUHB')
+    a=p.parse_args();out=a.output.resolve();out.mkdir(parents=True,exist_ok=False);checks=[]
+    def run(name,command,**kw):
+        r=subprocess.run(command,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,errors='replace',**kw)
+        (out/(name+'.log')).write_text(r.stdout)
+        checks.append({'name':name,'exit_code':r.returncode})
+        if r.returncode:raise RuntimeError(name+' failed; see its preserved log')
+        return r.stdout
+    pin=run('dependency-pin',['git','-C',str(a.libctru_source),'rev-parse','HEAD']).strip()
+    dirty=run('dependency-clean',['git','-C',str(a.libctru_source),'status','--porcelain'])
+    if pin!=PIN or dirty:raise RuntimeError('Require the clean audited libctru pin')
+    arm=a.devkitarm/'bin/arm-none-eabi-gcc';env=dict(os.environ,DEVKITARM=str(a.devkitarm),DEVKITPRO=str(a.devkitarm.parent))
+    arm_version=run('arm-compiler',[str(arm),'--version'])
+    with tempfile.TemporaryDirectory(prefix='ctr2wup-libctru-') as temp:
+        library=Path(temp)/'libctru';shutil.copytree(a.libctru_source/'libctru',library)
+        run('libctru-build',['make','-C',str(library),'lib/libctru.a','-j','4'],env=env)
+        library_hash=hashlib.sha256((library/'lib/libctru.a').read_bytes()).hexdigest()
+        reports=[]
+        for name in (a.application,) if a.application else ('boot','threaded','graphics','input','interactive'):
+            folder=out/name;folder.mkdir();elf=folder/'application.elf'
+            run(name+'-arm-compile',[str(arm),'-march=armv6k','-mtune=mpcore','-mfloat-abi=hard','-mfpu=vfp','-mtp=soft','-O2','-g','-ffunction-sections','-fdata-sections','-D__3DS__','-I'+str(library/'include'),'-L'+str(library/'lib'),'-specs=3dsx.specs',str(ROOT/'tests/homebrew'/(name+'.c')),'-lctru','-lm','-o',str(elf)])
+            rom=folder/'original.cxi';rom.write_bytes(container(elf));image=load_image(rom);generation=generate_into(rom,folder/'aot')
+            blob=','.join(str(b) for b in image['code']);segments=','.join('{'+','.join(str(s[k]) for k in ('address','pages','size'))+'}' for s in image['segments'].values())
+            (folder/'boot-image.h').write_text('#include "ctr_guest.h"\nstatic const uint8_t boot_bytes[]={'+blob+'};\nstatic const ctr_guest_image boot_image={boot_bytes,sizeof(boot_bytes),'+segments+','+str(image['bss_size'])+',16384,"'+hashlib.sha256(image['code']).hexdigest()+'"};\n')
+            core=ROOT/'runtime/core';binary=folder/'runner';flags=['-std=c11','-O2','-g','-Wall','-Wextra','-Werror','-ffp-contract=off','-fno-fast-math','-I'+str(core),'-I'+str(ROOT/'runtime/recomp'),'-I'+str(folder),'-I'+str(folder/'aot')]
+            if a.static:flags+=['-static','-mcpu=750']
+            if a.sanitize:flags+=['-O1','-fno-omit-frame-pointer','-fsanitize=address,undefined']
+            sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c')]+[ROOT/'runtime/recomp/ctr_recomp.c',ROOT/'tests/homebrew/runner.c']+[folder/'aot'/n for n in generation['sources']]
+            run(name+'-host-compile',shlex.split(a.cc_prefix)+[a.cc,*flags,*map(str,sources),'-lm','-o',str(binary)])
+            output=run(name+'-execute',shlex.split(a.run_prefix)+[str(binary)]+([str(folder)] if name in ('graphics','interactive') else []))
+            result=json.loads(output.splitlines()[-1]);expected='CTR2WUP compiled libctru boot PASS' if name=='boot' else 'CTR2WUP compiled thread/TLS/LightLock PASS' if name=='threaded' else 'CTR2WUP compiled graphics PASS' if name=='graphics' else 'CTR2WUP compiled input PASS' if name=='input' else 'CTR2WUP compiled interactive PASS'
+            if result['state']!='exited' or result['fallback'] or expected not in result['messages']:raise RuntimeError(name+' did not complete its real guest assertions')
+            if name in ('graphics','interactive') and result['frames']!=[0x00ff00ff,0xff0000ff,0x00ff00ff]:raise RuntimeError('Require all three exact two-screen RGB565 frames')
+            if name=='input' and result['input_samples']!=3:raise RuntimeError('Require all three standard HID publications')
+            if name=='interactive' and result['input_samples']!=4:raise RuntimeError('Require three input-driven frames and the guest B-button exit')
+            frames=[{'name':f.name,'sha256':hashlib.sha256(f.read_bytes()).hexdigest()} for f in sorted(folder.glob('frame-*.ppm'))]
+            reports.append({'application':name,'guest':result,'frames':frames,'generation':generation,'allocated_bytes':image['allocated_bytes'],'executable_sha256':hashlib.sha256(image['code']).hexdigest()})
+            if a.wiiu and name=='interactive':
+                wiiu=folder/'wiiu';wiiu.mkdir();recipe=ROOT/'runtime/wiiu'
+                run('interactive-wiiu-build',['make','-C',str(recipe),'OUTPUT='+os.path.relpath(wiiu,recipe),'TARGET=ctr2wup-libctru-interactive','GUEST_DEFAULT=2','EXTERNAL_AOT=1','COMPILED_HOMEBREW=1','COMPILED_IMAGE_DIR='+str(folder),'UPSTREAM_DIR='+str(folder/'aot')],env=env)
+                _validate_rpx(wiiu/'ctr2wup-libctru-interactive.rpx')
+                reports[-1]['wiiu_artifacts']=[{'name':f.name,'size':f.stat().st_size,'sha256':hashlib.sha256(f.read_bytes()).hexdigest()} for f in sorted(wiiu.glob('*.rp[x]*'))+sorted(wiiu.glob('*.wuhb'))]
+        if a.wiiu and not any('wiiu_artifacts' in r for r in reports):raise ValueError('--wiiu requires the interactive application')
+    report={'ok':True,'version':__version__,'libctru_pin':pin,'library_sha256':library_hash,'arm_compiler':arm_version.splitlines()[0],'applications':reports,'checks':checks,'console_verified':False,'native_windows_verified':False,'complete_service_startup':False,'powerpc_execution':'emulated Linux' if a.static else None}
+    (out/'report.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps({'ok':True,'applications':[{'name':r['application'],'instructions':r['guest']['instructions'],'ipc_failures':r['guest']['ipc_failures']} for r in reports],'report':str(out/'report.json')}));return 0
+if __name__=='__main__':raise SystemExit(main())

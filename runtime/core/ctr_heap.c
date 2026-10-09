@@ -55,7 +55,7 @@ static uint32_t allocate(ctr_guest *g,uint32_t *address,uint32_t size,unsigned p
     if (!base) return OUT_OF_MEMORY;
     if (available(&g->memory,base,base+size,size)!=base) return INVALID_STATE;
     uint64_t bytes=size;unsigned slot=CTR_GUEST_MAX_ALLOCATIONS;
-    for (unsigned i=0;i<5;++i) bytes+=g->storage_size[i];
+    for (unsigned i=0;i<CTR_GUEST_STORAGE_COUNT;++i) bytes+=g->storage_size[i];
     for (unsigned i=0;i<CTR_GUEST_MAX_ALLOCATIONS;++i) {
         if (g->allocations[i].storage) bytes+=g->allocations[i].size;
         else if (slot==CTR_GUEST_MAX_ALLOCATIONS) slot=i;
@@ -114,7 +114,7 @@ static unsigned state_of(const ctr_guest *g,const ctr_mapping *m) {
     const ctr_guest_allocation *a=owner(g,m);
     if (ctr_shared_mapping(g,m)) return 6u;
     if (a) return a->linear?7u:5u; /* Continuous / Private. */
-    for (unsigned i=0;i<5;++i) if (g->storage[i] && m->storage==g->storage[i])
+    for (unsigned i=0;i<CTR_GUEST_STORAGE_COUNT;++i) if (g->storage[i] && m->storage==g->storage[i])
         return i<2?4u:i>=3?11u:5u; /* Code / Locked stack and TLS / Private data. */
     return 3u; /* Static host-provided mapping; no physical-page information. */
 }
@@ -152,4 +152,40 @@ void ctr_heap_query(ctr_guest *g) {
     }
     g->cpu.r[1]=begin;g->cpu.r[2]=end-begin;g->cpu.r[3]=permissions;g->cpu.r[4]=state;
     g->memory_result=0;
+}
+
+/* Report the actual bounded runtime quotas used by libctru heap startup. */
+void ctr_heap_resource_svc(ctr_guest *g,uint32_t number) {
+    uint32_t *r=g->cpu.r;
+    if(number==0x38) {
+        uint32_t handle=r[1]==0xffff8001u?ctr_guest_handle_new(g,CTR_HANDLE_RESOURCE_LIMIT,0):0;
+        r[0]=r[1]!=0xffff8001u?0xd8e007f7u:handle?0:OUT_OF_MEMORY;r[1]=handle;return;
+    }
+    ctr_guest_handle *h=ctr_guest_handle_for(g,r[1]);
+    if(!h || h->type!=CTR_HANDLE_RESOURCE_LIMIT) { r[0]=0xd8e007f7u;return; }
+    unsigned count=r[3];uint32_t types[16],output=r[0],input=r[2];
+    if(!count || count>16) { r[0]=INVALID_COMBINATION;return; }
+    if((output|input)&3u || ctr_memory_check_range(&g->memory,output,count*8u,CTR_MEM_WRITE)!=CTR_MEM_OK ||
+        ctr_memory_check_range(&g->memory,input,count*4u,CTR_MEM_READ)!=CTR_MEM_OK) { r[0]=INVALID_ADDRESS;return; }
+    for(unsigned i=0;i<count;++i) {
+        ctr_memory_read(&g->memory,input+i*4u,4,CTR_MEM_READ,&types[i]);
+        if(types[i]>8) { r[0]=INVALID_COMBINATION;return; }
+    }
+    uint64_t current[9]={0};const uint64_t limits[]={0x18,CTR_GUEST_MAX_BYTES,CTR_GUEST_MAX_THREADS,32,16,16,0,8,8};
+    current[0]=0x18;
+    for(unsigned i=0;i<CTR_GUEST_STORAGE_COUNT;++i)current[1]+=g->storage_size[i];
+    for(unsigned i=0;i<CTR_GUEST_MAX_ALLOCATIONS;++i)if(g->allocations[i].storage)current[1]+=g->allocations[i].size;
+    for(unsigned i=0;i<CTR_GUEST_MAX_THREADS;++i)current[2]+=g->threads[i].active && !g->threads[i].finished;
+    for(unsigned i=0;i<32;++i)current[3]+=g->events[i].active;
+    for(unsigned i=0;i<16;++i) { current[4]+=g->mutexes[i].active;current[5]+=g->semaphores[i].active; }
+    for(unsigned i=0;i<8;++i) {
+        current[7]+=g->shared[i].active;current[8]+=g->arbiters[i].active;
+        if(g->shared[i].owned)current[1]+=g->shared[i].size;
+    }
+    for(unsigned i=0;i<count;++i) {
+        uint64_t value=number==0x39?limits[types[i]]:current[types[i]];
+        ctr_memory_write(&g->memory,output+i*8u,4,(uint32_t)value);
+        ctr_memory_write(&g->memory,output+i*8u+4u,4,(uint32_t)(value>>32));
+    }
+    r[0]=0;
 }

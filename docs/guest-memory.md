@@ -1,5 +1,12 @@
 # Shared guest memory management
 
+v0.13 places BSS directly after initialized DATA, including its last page's
+unused tail, and copies no ExeFS padding into BSS. A separate read-only synthetic
+kernel configuration page at 1ff80000 supplies documented HLE policy; it counts
+toward backing limits. Thread stacks pin owned allocations until their guest
+context exits, and eight 512-byte TLS slots share the original TLS page. See
+`guest-threads.md`; no retail firmware image or cross-process mapping is supplied.
+
 Version 0.7.0 advances M3/P3 with ControlMemory (SVC 1) and QueryMemory (SVC 2).
 It does not enable a commercial profile. This is original C11 code with checked
 little-endian accesses and no guest-to-host pointer casts. Public interface

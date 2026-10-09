@@ -39,10 +39,20 @@ complete permission/copyright notice still blocks bundling its implementation.
 
 ## Runtime contract
 
+v0.13 additionally preserves CPU/TLS/raw VFP/FPSCR contexts across real guest
+threads, implements checked user ARMv6 CP15 DMB/DSB, byte media/SMLAxy and scalar
+FP word transport, and allows integer work with nondefault FPSCR controls.
+Unsupported FP arithmetic/control modes still fail before effects. Normal
+devkitARM CRT/libctru/newlib applications exercise actual thread/C TLS/LightLock,
+standard HID and shared-GSP CPU framebuffers; see `compiled-homebrew.md`.
+The original three-thread, FP-context and media probes bring the external suite
+to 14 probes. The independent ARM1176 reference has 870 cases and a nested-call
+trace. Emulated PPC Linux is not a Wii U or performance acceptance result.
+
 v0.6.0 refreshes user read-only TLS from the CPU context on every execution entry.
 Its original 89-instruction SRV/CFG startup probe matches interpreter/original/
 external AOT state and memory (297 boundary assertions). It also rejects
-unsupported CP15 cache operations and DMB/DSB/ISB, including emitter no-ops;
+unsupported CP15 cache operations and ARMv7 DMB/DSB/ISB, including emitter no-ops;
 35 dedicated assertions cover executed faults and condition skips.
 `--service-api` adds the 1,001-assertion malformed IPC/handle/resource suite to a
 compiler/target run. All four integration probes pass on GCC/sanitizers, Clang
@@ -121,7 +131,8 @@ Source `tests/recomp/abi.s` generated `abi.arm.bin` with Clang 19's
 v0.8.0 adds the 148-instruction original shared/sync probe (639 assertions)
 and `--kernel-api` (197 assertions). All six probes pass GCC/sanitizers, Clang
 and emulated PPC; the compiler/target runs include the kernel API (14 checks).
-See `kernel-objects.md` for single-thread scope and exact lifetime rules.
+See `kernel-objects.md` for exact lifetime rules; v0.13 adds the separate
+single-core guest-thread scheduler described in `guest-threads.md`.
 
 v0.9.0 adds the standard-HID consumer (185 instructions, 18 SVCs, 858 boundary
 assertions) and `--hid-api` (336 assertions). The validator runs seven probes;

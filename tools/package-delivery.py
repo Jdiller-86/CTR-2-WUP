@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bundle only original source and native diagnostic artifacts, never user data."""
+"""Bundle project source/notices and scoped homebrew artifacts, never user data."""
 import hashlib
 import json
 from pathlib import Path
@@ -45,7 +45,8 @@ def main():
     binary_entries = [(prototype / name, name) for name in ("ctr2wup-prototype.rpx", "ctr2wup-prototype.wuhb", "build-report.json", "build.log")]
     binary_entries += [(ROOT / name, name) for name in ("LICENSE", "THIRD_PARTY_NOTICES", "docs/console-testing.md", "docs/compatibility.md")]
     binary_entries.append((ROOT/'docs/cpu-stack.md','docs/cpu-stack.md'))
-    binary_entries += [(path, str(path.relative_to(ROOT))) for path in (ROOT / "docs/licenses").iterdir() if path.is_file()]
+    binary_entries.append((ROOT/'docs/guest-threads.md','docs/guest-threads.md'))
+    binary_entries += [(path, str(path.relative_to(ROOT))) for path in (ROOT / "docs/licenses").rglob("*") if path.is_file()]
     binary_entries.append((latest, "validation-report.json"))
     binary_entries.append((ROOT/report["packaging"]["offline_report"], "offline-packaging-report.json"))
     display_reference=latest.parent/'upstream-native/gsp'
@@ -67,24 +68,39 @@ def main():
     guest_entries += [(guest_desktop/name,"desktop-reference/"+name) for name in ("top.ppm","bottom.ppm","build-report.json")]
     guest_entries += [(fixture/"ctr2wup-guest.cxi","original-fixture/ctr2wup-guest.cxi"),(fixture/"fixture-report.json","original-fixture/fixture-report.json")]
     guest_entries += [(ROOT/name,name) for name in ("LICENSE","THIRD_PARTY_NOTICES","docs/guest-fixture.md","docs/console-testing.md")]
-    guest_entries += [(path,str(path.relative_to(ROOT))) for path in (ROOT/"docs/licenses").iterdir() if path.is_file()]
+    guest_entries += [(path,str(path.relative_to(ROOT))) for path in (ROOT/"docs/licenses").rglob('*') if path.is_file()]
     guest_archive=OUT/("CTR2WUP-guest-fixture-"+__version__+".zip")
     archive(guest_archive,guest_entries)
     upstream=ROOT/report["upstream_console_output"]
     upstream_entries=[(upstream/name,name) for name in ("ctr2wup-upstream-guest.rpx","ctr2wup-upstream-guest.wuhb","build-report.json")]
     upstream_entries += [(ROOT/name,name) for name in ("LICENSE","THIRD_PARTY_NOTICES","docs/upstream-integration.md","docs/console-testing.md")]
-    upstream_entries += [(p,str(p.relative_to(ROOT))) for p in (ROOT/"docs/licenses").iterdir() if p.is_file()]
+    upstream_entries += [(p,str(p.relative_to(ROOT))) for p in (ROOT/"docs/licenses").rglob('*') if p.is_file()]
     upstream_entries += [(ROOT/report["upstream_desktop_output"]/name,"desktop-reference/"+name) for name in ("top.ppm","bottom.ppm","build-report.json")]
     upstream_archive=OUT/("CTR2WUP-upstream-guest-"+__version__+".zip")
     archive(upstream_archive,upstream_entries)
     staged=ROOT/report["title_staging_output"]
     staged_entries=[(p,str(p.relative_to(staged))+("/" if p.is_dir() else "")) for p in staged.rglob('*')]
     staged_entries += [(ROOT/name,name) for name in ("LICENSE","THIRD_PARTY_NOTICES","docs/packaging.md")]
-    staged_entries += [(p,str(p.relative_to(ROOT))) for p in (ROOT/"docs/licenses").iterdir() if p.is_file()]
+    staged_entries += [(p,str(p.relative_to(ROOT))) for p in (ROOT/"docs/licenses").rglob('*') if p.is_file()]
     staging_archive=OUT/("CTR2WUP-title-staging-"+__version__+".zip")
     archive(staging_archive,staged_entries)
     wheel = ROOT / ("artifacts/dist/ctr2wup-"+__version__+"-py3-none-any.whl")
-    results = [{"name": path.name, "size": path.stat().st_size, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()} for path in (source_archive, diagnostic_archive,guest_archive,upstream_archive,staging_archive,wheel)]
+    outputs=[source_archive,diagnostic_archive,guest_archive,upstream_archive,staging_archive,wheel]
+    if report.get('compiled_homebrew_report'):
+        compiled_report=ROOT/report['compiled_homebrew_report'];compiled=json.loads(compiled_report.read_text())
+        if not compiled['ok'] or compiled['version']!=__version__:raise RuntimeError('Require verified current compiled homebrew')
+        interactive=next(a for a in compiled['applications'] if a['application']=='interactive')
+        folder=compiled_report.parent/'interactive';compiled_entries=[]
+        for artifact in interactive['wiiu_artifacts']:
+            path=folder/'wiiu'/artifact['name']
+            if hashlib.sha256(path.read_bytes()).hexdigest()!=artifact['sha256']:raise RuntimeError('Compiled artifact changed')
+            compiled_entries.append((path,path.name))
+        compiled_entries += [(compiled_report,'compiled-homebrew-report.json')]
+        compiled_entries += [(ROOT/name,name) for name in ('LICENSE','THIRD_PARTY_NOTICES','docs/compiled-homebrew.md','docs/guest-threads.md','docs/console-testing.md')]
+        compiled_entries += [(p,str(p.relative_to(ROOT))) for p in (ROOT/'docs/licenses').rglob('*') if p.is_file()]
+        compiled_entries += [(p,'desktop-reference/'+p.name) for p in folder.glob('frame-*.ppm')]
+        compiled_archive=OUT/('CTR2WUP-libctru-interactive-'+__version__+'.zip');archive(compiled_archive,compiled_entries);outputs.append(compiled_archive)
+    results = [{"name": path.name, "size": path.stat().st_size, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()} for path in outputs]
     (OUT / ("SHA256SUMS-"+__version__+".txt")).write_text("".join(f"{item['sha256']}  {item['name']}\n" for item in results))
     (OUT / ("delivery-manifest-"+__version__+".json")).write_text(json.dumps({"schema_version": 1, "files": results, "console_verified": False, "commercial_conversion": "unimplemented", "wup_generated": False, "encrypted_writer": "implemented; offline verified with synthetic inputs", "installer_acceptance": "unverified"}, indent=2) + "\n")
     print(json.dumps(results, indent=2))

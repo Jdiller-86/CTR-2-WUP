@@ -27,13 +27,13 @@ All acceptance checkboxes below remain open until their evidence is recorded.
 - [ ] M7 Windows GUI: proven same execution pipeline, usable responsive front
   end and documented packaged prerequisites.
 
-## Current evidence (2026-10-08 UTC)
+## Current evidence (2026-10-09 UTC)
 
 | Milestone | Verified portion | Remaining acceptance |
 |---|---|---|
 | M1 | Native/original/external-AOT RPX/WUHB built; native diagnostics; original staging and offline encrypted packaging | Physical screens/input/audio/exit and independently installed WUP |
 | M2 | Original CPU/AOT subset plus stack/register transfers, BLX and user CP15 TLS; external generation/checked ABI; 566+34+297+35+1,778+639+858+3,603 integration assertions on GCC/sanitizers/Clang/emulated big-endian PPC; scalar VFP Unicorn match | Complete ARM/VFP semantics, workload memory/fallback costs and actual Espresso timings |
-| M3 | Checked NCCH → AOT/interpreter execution; single-guest SVC/events and stack-call frames; shared typed sessions, bounded SRV/CFG startup, checked heap/free/protection/query, typed shared aliases, mutex/semaphore/wait-any/all, standard HID pad/touch rings/events, direct/shared GSP display, VBlank/IRQ relay and original 89/151/148-instruction probes; matching ARM frames/input; RPX/WUHB/self-tests built | Physical guest/service startup evidence; conventional homebrew boot, broader/cross-process memory control, multi-thread kernel and broader IPC/HID motion/GX commands/graphics threads |
+| M3 | Checked NCCH loading and eight single-core contexts; CPU/TLS/VFP/FPSCR ownership, priorities/quanta, joins/locks/arbiters/quotas; SRV/CFG/heap/shared/HID/GSP/VBlank; real normal-CRT/libctru threads/C TLS/LightLock/input and exact CPU framebuffer pixels; fourth interactive RPX/WUHB built | Physical guest/input/display/thread/stability evidence; full APT/FS startup, broader/cross-process memory/thread semantics, motion, GX commands/PICA/audio/saves |
 | M4 | Bounded command references, standard direct/shared GSP display and five tested rotated CPU display formats | Actual PICA-to-GX2 features, scene comparisons and console timings |
 | M5 | Mario selected and CIA attachment supplied; transfer exceeds 32 MiB; intake/export helper tested; shared startup/memory development while user is away; upstream requirement leads | Actual smaller private executable export/revision, title-specific runtime/renderer/services/save/audio implementation and console gameplay |
 | M6 | External C generation/static compilation, staging/artwork/intake, original encrypted writer and independent decrypt/FST/file checks with synthetic inputs, atomic output/wheel; Windows workflow prepared | Actual local certificate/key provenance and installer acceptance, full commercial conversion, caches/traces/rebuild, Windows execution and console install checks |
@@ -116,3 +116,23 @@ Validation for v0.12 passes 150 Python tests, 33 complete workflow checks,
 probes. Required `make check` and `make prototype` pass. Compiler/target checks
 and independent reference evidence are recorded in STATUS.md; physical-console,
 clean Windows, commercial gameplay and WUP installation remain open.
+
+Version 0.13.0 advances the common M2/M3/P3 foundation through original C
+applications compiled with normal devkitARM CRT/newlib/libctru. Eight single-core
+threads retain CPU/TLS/VFP/FPSCR, stack and wait ownership; locks/arbiters/quota
+queries, correct BSS placement and explicit synthetic kernel policy allow boot.
+Real compiled threads/C TLS/LightLock, standard HID transitions/coordinates and
+three exact two-screen RGB565 graphics frames run without interpreter fallback.
+The fourth interactive RPX/WUHB consumes live input and its own B-button exit.
+APT/FS and optional startup lookups remain visibly unavailable. CPU byte media,
+FPSCR/scalar FP word transport, CP15 ARMv6 barriers, ARM PC stores and SMLAxy have
+870 independent ARM1176 cases plus the original nested-call trace. These results
+do not close a physical, commercial, installation or GUI milestone.
+
+v0.13 validation passes 155 Python tests and 36 complete workflow checks,
+including all 14 external probes and five normal compiled libctru applications
+normally/sanitized. Thread API has 310 normal/sanitized assertions; coherent CPU
+GSP flush/invalidate brings its API to 508 assertions. Real compiled threads
+pass Clang; the interactive program's exact frames/input/exit match under
+emulated big-endian PPC Linux. `make check` and `make prototype` pass. These
+are software/cross-build results; physical Wii U and native Windows remain open.

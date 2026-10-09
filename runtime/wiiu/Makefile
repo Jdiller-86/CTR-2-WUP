@@ -7,6 +7,7 @@ OUTPUT ?= ../../artifacts/wiiu
 TARGET ?= ctr2wup-prototype
 GUEST_DEFAULT ?= 0
 EXTERNAL_AOT ?= 0
+COMPILED_HOMEBREW ?= 0
 UPSTREAM_DIR ?= ../../artifacts/generated-upstream-guest
 ifeq ($(GUEST_DEFAULT),1)
 APP_NAME := CTR2WUP ARM Guest Fixture
@@ -18,6 +19,10 @@ CC := $(DEVKITPPC)/bin/powerpc-eabi-gcc
 WUT := $(DEVKITPRO)/wut
 CFLAGS := -std=c11 -O2 -g -Wall -Wextra -Werror -ffunction-sections -fdata-sections \
           -DESPRESSO -D__WIIU__ -D__WUT__ -DCTR_GUEST_DEFAULT=$(GUEST_DEFAULT) -mcpu=750 -meabi -mhard-float -I"$(WUT)/include" -I../core
+ifeq ($(COMPILED_HOMEBREW),1)
+CFLAGS += -DCTR_COMPILED_HOMEBREW -I"$(COMPILED_IMAGE_DIR)"
+APP_NAME := CTR2WUP Compiled libctru Test
+endif
 LDFLAGS := -mcpu=750 -meabi -mhard-float -specs="$(WUT)/share/wut.specs" \
            -Wl,-Map,$(OUTPUT)/$(TARGET).map
 SOURCES := main.c viewport.c diagnostic_font.c
@@ -30,7 +35,8 @@ CORE_SOURCES := ../core/ctr_memory.c ../core/ctr_cpu.c ../core/ctr_cpu_selftest.
                 ../core/ctr_hid_fixture.c \
                 ../core/ctr_gsp_fixture.c \
                 ../core/ctr_relay_fixture.c \
-                ../core/ctr_stack_fixture.c \
+                ../core/ctr_stack_fixture.c ../core/ctr_thread_fixture.c \
+                ../../tests/fixtures/threads/thread.generated.c ../../tests/fixtures/threads/thread-image.generated.c \
                 ../../tests/fixtures/stack/stack.generated.c ../../tests/fixtures/stack/stack-image.generated.c \
                 ../../tests/fixtures/relay/relay.generated.c ../../tests/fixtures/relay/relay-image.generated.c \
                 ../../tests/fixtures/gsp/gsp.generated.c ../../tests/fixtures/gsp/gsp-image.generated.c \
@@ -47,7 +53,7 @@ CORE_SOURCES += ../recomp/ctr_recomp.c $(UPSTREAM_DIR)/entries.c $(wildcard $(UP
 endif
 CORE_OBJECTS := $(addprefix $(BUILD)/,$(notdir $(CORE_SOURCES:.c=.o)))
 OBJECTS += $(CORE_OBJECTS)
-vpath %.c ../core ../recomp ../../tests/fixtures/cpu ../../tests/fixtures/guest ../../tests/fixtures/services ../../tests/fixtures/heap ../../tests/fixtures/kernel ../../tests/fixtures/hid ../../tests/fixtures/gsp ../../tests/fixtures/relay ../../tests/fixtures/stack $(UPSTREAM_DIR)
+vpath %.c ../core ../recomp ../../tests/fixtures/cpu ../../tests/fixtures/guest ../../tests/fixtures/services ../../tests/fixtures/heap ../../tests/fixtures/kernel ../../tests/fixtures/hid ../../tests/fixtures/gsp ../../tests/fixtures/relay ../../tests/fixtures/stack ../../tests/fixtures/threads $(UPSTREAM_DIR)
 .PHONY: all clean
 all: $(OUTPUT)/$(TARGET).rpx $(OUTPUT)/$(TARGET).wuhb
 $(BUILD):

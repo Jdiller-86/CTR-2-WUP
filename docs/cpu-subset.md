@@ -16,7 +16,7 @@ exits; Thumb16 shifts/ALU, high-register operations,
 branch/exchange, selected loads/stores/SP-relative operations and SVC exits.
 Version 0.12 adds checked user-mode ARM LDM/STM, Thumb16 PUSH/POP/LDMIA/STMIA
 and original-AOT register BLX calls; see `cpu-stack.md` for scope and reference
-evidence. Unaligned transfers fault deliberately. Unimplemented/exception-return/VFP,
+evidence. Unaligned transfers fault deliberately. Exception-return/general VFP arithmetic,
 Thumb long calls, ARM user-bank/exception-return multiple forms, other halfword
 transfers and privileged instructions
 are unsupported. The supported subset is research code, not a complete ARM11.
@@ -40,7 +40,11 @@ verify generator reproducibility and rejection behavior.
 The original translator also specializes this TLS read. v0.6.0's separate
 89-instruction original startup probe matches interpreter/original/external AOT
 state and memory through actual SRV/CFG SVCs; see `shared-services.md`.
-Other CP15/cache operations remain unsupported, including emitter no-ops.
+v0.13 adds user CP15 ARMv6 DMB/DSB ordering, UADD8/USUB8/SEL with GE flags,
+SMLAxy with signed halfwords and sticky Q, FPSCR transport and checked scalar
+VLDR/VSTR word transport. See `guest-threads.md`. Other CP15/cache operations
+remain unsupported, including emitter no-ops. General interpreter VFP arithmetic
+remains absent; external arithmetic rejects unsupported controls.
 v0.7.0's 151-instruction heap lifecycle probe executes allocation, permissions,
 partial free and queries through all three backends with zero fallback. Data
 mapping changes preserve AOT; executable mapping/protection and alias writes
@@ -57,7 +61,8 @@ The separate 85-instruction NCCH guest exercises a checked executable loader,
 SVC handling, long ARM framebuffer loops, input and orderly process exit. It
 matches interpreter/AOT registers, flags and full data/BSS memory after two
 frames. See `guest-fixture.md`; this adds single-guest sleep/event scheduling,
-not interrupts, multi-thread scheduling or full kernel/service emulation.
+not full kernel/service emulation. v0.13 separately adds bounded single-core
+multi-thread scheduling and conventional compiled libctru evidence.
 
 Desktop timing is reported separately from console results. Its combined tiny
 self-test time includes setup/interpreter/generated execution and cannot predict

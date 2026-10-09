@@ -67,6 +67,17 @@ ARM1176 reference checks; see `cpu-stack.md`.
 Compilation proves toolchain integration. Only physical console results can
 prove rendering, input, sound, guest semantics on PowerPC, or performance.
 
+Version 0.13 adds eight single-core guest contexts with strict priorities,
+instruction quanta, CPU/TLS/raw VFP/FPSCR isolation and retained wait/stack
+ownership. Thread joins, owner-aware locks, address arbiters and local quota
+queries support normal compiled libctru threads/startup. BSS shares the final
+DATA page correctly; a read-only synthetic kernel configuration page supplies
+explicit HLE policy. See `guest-threads.md` for supported SVCs and limits.
+`compiled-homebrew.md` records normal devkitARM CRT/newlib/libctru applications,
+checked three-frame CPU display, standard input and a fourth interactive Wii U
+build. This path leaves APT/FS and optional startup requests visibly unavailable.
+It does not execute PICA or supply commercial compatibility.
+
 `renderer/` contains bounded command inspection and small format/presentation
 references. Capturing PICA register writes does not execute a draw. An explicit
 exception reports the absent shader/texture/TEV/GX2 translation path.
@@ -90,9 +101,9 @@ source; no commercial assets are distributed.
 
 1. Native RPX compile and desktop tests can be completed in this environment.
 2. Physical RPX screen/input/audio/exit tests and PowerPC CPU results are pending.
-3. The controlled fixture now has real checked loading and a single-guest SVC
-   runtime. Console stability and conventional homebrew boot using required CPU,
-   broader IPC, graphics queues/threads and physical interface evidence are needed.
+3. Checked loading and bounded guest-thread/kernel services now execute original
+   compiled libctru CPU/input/framebuffer applications. Console stability,
+   physical interface evidence and wider APT/FS/GX service semantics are needed.
 4. PICA rendering, required services/modules, filesystem/save/audio semantics,
    and exact-ROM revision profiles must precede a commercial conversion.
 5. License-cleared packing plus locally configured keys and actual install/menu

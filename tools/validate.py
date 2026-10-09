@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run readiness checks and write a versioned report with actual exit statuses."""
 from datetime import datetime, timezone
+import argparse
 import hashlib
 import importlib.metadata
 import json
@@ -18,6 +19,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def main():
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--compiled-homebrew',action='store_true',help='Also verify the optional pinned libctru/devkitARM applications and console build')
+    options=parser.parse_args()
     os.chdir(ROOT)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     report_root = ROOT / "artifacts" / "reports" / ("validation-v1-" + stamp)
@@ -80,6 +84,10 @@ def main():
     multiple_results=[json.loads(line) for line in multiple_tests.stdout.splitlines() if line.startswith('{"ok":')]
     if len(multiple_results)!=2 or any(not item.get("ok") or not item.get("original_arm_thumb_stack_calls") for item in multiple_results):
         results[-1]["passed"]=False
+    thread_tests=run("thread-tests",["make","-C","tests/threads","check","sanitize"])
+    thread_results=[json.loads(line) for line in thread_tests.stdout.splitlines() if line.startswith('{"ok":')]
+    if len(thread_results)!=2 or any(not item.get("ok") or not item.get("original_arm_thread_scheduler") for item in thread_results):
+        results[-1]["passed"]=False
     run("fixtures", [sys.executable, "-m", "tests.host_fixtures", "artifacts/fixtures"])
     for kind in ("cxi", "3ds"):
         run("inspect-" + kind, [sys.executable, "-m", "host", "inspect", "artifacts/fixtures/synthetic." + kind])
@@ -120,16 +128,20 @@ def main():
             from tests.test_package_writer import original_inputs
             _, local_config, _ = original_inputs(Path(temporary))
             run("installed-wheel-encrypted-packaging",[sys.executable,"-m","host","pack-title",str(title_stage),"--config",str(local_config),"--output",str(Path(temporary)/"installed package 日本語")],env=task_env,cwd=Path(temporary))
+    if options.compiled_homebrew:
+        run('compiled-homebrew',[sys.executable,'tools/validate-libctru.py','--wiiu','--output',str(report_root/'libctru-native')])
+        run('compiled-homebrew-sanitizers',[sys.executable,'tools/validate-libctru.py','--sanitize','--output',str(report_root/'libctru-sanitized')])
     source_digest = hashlib.sha256()
     for folder in ("host", "runtime", "translator", "renderer", "packaging"):
         for path in sorted((ROOT / folder).rglob("*")):
             if path.is_file() and "__pycache__" not in path.parts:
                 source_digest.update(str(path.relative_to(ROOT)).encode("utf-8") + b"\0" + path.read_bytes())
     report = {"schema_version": 1, "generated_at_utc": datetime.now(timezone.utc).isoformat(),
-              "workflow": "native/original/external-AOT RPX builds, checked ARM/Thumb/scalar-VFP/TLS/halfwords/exclusives/stack/multiple transfers/BLX, SRV/CFG/HID/GSP direct and shared-queue display with VBlank relay, heap/shared memory and synchronization, title staging/intake and offline encrypted packaging",
+              "workflow": "native/original/external-AOT RPX builds; checked CPU, VFP state, media/SMLAxy/barriers, guest threads/TLS/arbitration/quotas, SRV/CFG/HID/GSP CPU display, heap/shared synchronization, title staging/intake and offline encrypted packaging",
               "version": __version__,
+              "compiled_homebrew_report":str((report_root/'libctru-native/report.json').relative_to(ROOT)) if options.compiled_homebrew else None,
               "ok": all(result["passed"] for result in results), "python_tests": test_count,
-              "cpu_runs": c_results, "guest_runs":guest_results,"service_runs":service_results,"heap_runs":heap_results,"kernel_runs":kernel_results,"hid_runs":hid_results,"gsp_runs":gsp_results,"relay_runs":relay_results,"multiple_runs":multiple_results,"checks": results,
+              "cpu_runs": c_results, "guest_runs":guest_results,"service_runs":service_results,"heap_runs":heap_results,"kernel_runs":kernel_results,"hid_runs":hid_results,"gsp_runs":gsp_results,"relay_runs":relay_results,"multiple_runs":multiple_results,"thread_runs":thread_results,"checks": results,
               "source_sha256": source_digest.hexdigest(),
               "build_tools": {package: importlib.metadata.version(package) for package in ("setuptools", "wheel", "pip")},
               "prototype_output": str(output.relative_to(ROOT)),

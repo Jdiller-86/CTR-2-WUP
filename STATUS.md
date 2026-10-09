@@ -1,6 +1,6 @@
 # CTR2WUP status
 
-Updated October 8, 2026 (America/New_York); report filenames use UTC.
+Updated October 9, 2026 (America/New_York); report filenames use UTC.
 Requirements: `docs/project-brief.md`; product plan:
 `docs/development-plan.md`; GUI workflow: `docs/gui-workflow.md`.
 The user resumed implementation and selected **Super Mario 3D Land** as the first
@@ -8,7 +8,20 @@ title candidate. The target remains an UWUVCI-style Windows GUI: select a
 decrypted game, configure title/artwork, click Inject, install its per-game WUP
 and launch from Wii U Menu. The CLI is the shared engine, not the final product.
 
-**Version 0.12.0 adds checked ARM/Thumb stack and register-transfer operations**.
+**Version 0.13.0 runs original compiler-built libctru applications** through
+normal CRT/newlib startup and checked external AOT, with zero interpreter fallback.
+Boot, real libctru threads/LightLock/C TLS, standard HID edges/Circle Pad/touch,
+and actual graphics-thread/shared-GSP RGB565 display are verified on desktop.
+All three exact two-screen frames are checked pixel by pixel. An additional
+interactive RPX/WUHB is built for live console input, touch display and guest exit.
+Eight guest thread slots preserve CPU/TLS/VFP/FPSCR context; address arbitration,
+quota queries, BSS layout and the kernel configuration page supply shared startup
+prerequisites. CPU media/FPSCR/scalar FP transport/ARMv6 barriers/SMLAxy have
+independent ARM1176 evidence (870 cases). See `docs/guest-threads.md` and
+`docs/compiled-homebrew.md`. APT/FS/optional startup requests still record eight
+lookup failures per application; no complete service or commercial boot is claimed.
+
+**Version 0.12.0 added checked ARM/Thumb stack and register-transfer operations**.
 An original 47-instruction nested ARM → Thumb → ARM call program preserves
 registers and restores its stack through interpreter/original/external AOT.
 Independent Unicorn ARM1176 checks pass 220 instruction cases and the full trace.
@@ -47,14 +60,30 @@ is unverified; no milestone requiring physical-console evidence is complete.
 
 ## Verified implementation
 
+- Normal devkitARM/libctru/newlib boot reaches main and exits after 12,416
+  instructions/35 SVCs. Real libctru threads/LightLock/initialized C TLS pass in
+  19,989 instructions/40 SVCs. Standard input passes 40,539 instructions/38 SVCs.
+  Graphics and input-driven interactive guests produce all expected pixels in
+  3,653,198/3,653,794 instructions, with zero fallback; unavailable APT/FS lookups
+  remain explicit. The interactive application also matches on emulated PPC
+  Linux; real compiled threads pass Clang. All physical results remain pending.
+- Eight process-local thread slots have separate CPU/TLS/raw FP state and waits,
+  strict priority/32-instruction quanta, retained handles/joins, stack pins,
+  recursive mutex ownership and exit cleanup. Address arbiters/local quota
+  output preflight are checked. The thread API has 310 normal/sanitized assertions;
+  the original three-thread probe has 2,694 external boundary assertions, and
+  FP contexts have a separate 61-assertion external arithmetic probe. All native
+  diagnostics embed `GUEST THREAD SCHEDULER`/`thread_selftest`.
+
 - User-mode ARM LDM/STM, Thumb16 PUSH/POP/LDMIA/STMIA and original-AOT register
   BLX calls use checked word access and interworking. Base writeback occurs after
   successful transfers; partial faults preserve earlier words and the original
-  base. Empty/user-bank/PC-store/unpredictable forms fail visibly. 160 API
+  base. Empty/user-bank/unpredictable forms fail visibly; v0.13 implements ARM
+  STM's PC+8 source value. 160 API
   assertions plus the nested-call self-test pass; the external comparison has
   352 normal/fault assertions and 48 invalid-Thumb assertions. The independent
   reference has 220 instruction cases and a 47-instruction full-program trace.
-  Thread scheduling, Thumb long-immediate calls, complete ARM/VFP and actual
+  Thumb long-immediate calls, complete ARM/VFP and actual
   PowerPC timings remain open.
 
 - GSP relay registration returns a retained read/write shared page and client0.
@@ -64,17 +93,19 @@ is unverified; no milestone requiring physical-console evidence is complete.
   self-test and queued original-AOT display guest. 762 API assertions and the original self-test pass normally and with sanitizers.
   The external comparison has 11,541 assertions, 1,383,167 instructions and
   34 SVCs per path, zero fallback and four reference images; GCC/sanitizers,
-  Clang and emulated PPC pass. No stock libctru startup,
+  Clang and emulated PPC pass. No complete stock service startup,
   real interrupt timing, physical execution, GX commands or PICA is claimed.
 - Standard direct GSP acquire/release/force-black/SetBufferSwap checks rights,
   modes and readable source extents before state changes. Presentation handles
   rotated RGBA8/BGR8/RGB565/RGB5A1/RGBA4, padding and adjacent mappings; invalid
-  source leaves host output unchanged. 362 API assertions and the original
+  source leaves host output unchanged. 508 API assertions (including v0.13
+  checked coherent CPU cache flush/invalidation) and the original
   HID/GSP graphics self-test pass normally and under sanitizers. The external
   display comparison has 3,603 assertions including four reference PPMs, and
   passes Clang/emulated PPC. All Wii U builds embed the self-test and original
   AOT display guest. GX commands, physical/VRAM translation, PICA and stock
-  graphical startup remain absent. No console run
+  GPU rendering remain absent. Scoped compiled CPU-framebuffer startup is now
+  verified separately. No console run
   or gameplay is claimed.
 - Checked unsigned immediate preindexed ARM LDRH/STRH without writeback works
   in interpreter/original AOT and is exercised by the external graphics probe.
@@ -88,7 +119,8 @@ is unverified; no milestone requiring physical-console evidence is complete.
   invalid input and capacity rollback. GCC/sanitizers, Clang and emulated PPC
   checks pass. All Wii U builds embed its self-test and a live original-AOT
   VPAD-to-ARM consumer. Physical input, timing and shutdown remain unverified;
-  motion/New-family controls and conventional homebrew boot remain absent.
+  motion/New-family controls remain absent; compiled libctru HID input is now
+  verified separately.
 
 - Shared/mutex/semaphore handles share the generation-tagged table. Mappings and
   waits retain objects independently of handles. Heap-backed shared objects pin
@@ -96,7 +128,8 @@ is unverified; no milestone requiring physical-console evidence is complete.
   Shared backing shares the 64 MiB budget. Wait-any selects the first ready
   object; wait-all consumes nothing until every distinct object is ready.
   Close/stale/invalid/timeout/resource failures are checked. This does not
-  implement cross-process ownership, priority inheritance or multi-thread scheduling.
+  implement cross-process ownership or priority inheritance. v0.13 adds the
+  separate bounded guest-thread scheduler and owner-aware locks.
 - The original 148-instruction ARM shared/sync probe matches state/memory across
   interpreter/original/external AOT with 639 boundary assertions and zero fallback.
   The 197 kernel API assertions and probe pass GCC, sanitizers, Clang and emulated
@@ -121,7 +154,8 @@ is unverified; no milestone requiring physical-console evidence is complete.
 
 - ARM user read-only CP15 TLS access works in interpreter/original/external AOT.
   The external ABI refreshes TLS on execution entry and rejects unsupported
-  cache/barrier operations even when the pinned emitter would erase them.
+  cache operations even when the pinned emitter would erase them. v0.13 explicitly
+  implements user ARMv6 DMB/DSB ordering for checked CPU backing.
 - Typed, reference-counted service sessions share the generation-tagged handle
   table. Checked ConnectToPort/SendSyncRequest supports SRV registration/CFG
   lookup and configured region/model/language reads. It rejects malformed
@@ -197,26 +231,38 @@ is unverified; no milestone requiring physical-console evidence is complete.
   single-guest events/handles/sleep/debug/exit, native diagnostics and structural
   WUP validator remain tested. Commercial `build` still fails without publishing
   a placeholder package. Paths with spaces/Japanese characters work on Linux.
-- **150 Python tests**, 51,202 CPU assertions, 221 original-guest assertions,
-  1,001 service, 307 heap, 197 kernel, 336 HID, 362 direct GSP, 762 relay and 160 stack/transfer
-  assertions pass; all C suites also pass ASan/UBSan. The complete v0.12.0 runner
-  passes **33 checks**, including all eleven external probes normally/sanitized,
-  three RPX builds, staging/intake, offline encrypted packaging and installed-wheel
-  inspection/execution/packing. Crypto remains an optional external dependency.
+- **155 Python tests**, 51,202 CPU assertions, 222 original-guest assertions,
+  1,001 service, 306 heap, 197 kernel, 336 HID, 508 direct GSP, 762 relay,
+  160 stack/transfer and 310 thread assertions pass; all C suites also pass
+  ASan/UBSan. The complete v0.13.0 runner passes **36 checks**, including all
+  14 external probes normally/sanitized, four RPX/WUHB builds, all five compiled
+  libctru applications normally/sanitized, staging/intake, offline encrypted
+  packaging and installed-wheel inspection/execution/packing. Required
+  `make check` and `make prototype` pass. Crypto and ARM/libctru are optional
+  external developer dependencies.
 
 ## Reports and deliverables
 
-The v0.12 source, native diagnostic, original/external guest and title-staging
+The v0.13 source, native diagnostic, original/external guest, compiled interactive and title-staging
 bundles, wheel and SHA256 manifest are under `artifacts/delivery/` and
 `artifacts/dist/`. The native bundle includes direct and shared display references.
 Diagnostic output is RPX/WUHB, not an installable WUP.
-Delivery/fresh-source verification report: `artifacts/reports/delivery-v12/report.json`.
+Delivery/fresh-source verification report: `artifacts/reports/delivery-v13/report.json`.
 
-Main validation: `artifacts/reports/validation-v1-20261008T203213Z/report.json`.
-New compiler/target checks: `artifacts/reports/stack-clang-v12/report.json`
-and `artifacts/reports/stack-ppc-v12/report.json` (24 checks each).
-Independent reference: `artifacts/reports/multiple-oracle-final-v12/report.json`
-(220 instruction cases, 47-instruction nested-call trace).
+Main validation: `artifacts/reports/validation-v1-20261009T140533Z/report.json`.
+Compiled application evidence is included under that report's `libctru-native/`
+and `libctru-sanitized/` directories. Independent compiler/target evidence:
+`libctru-clang-final-v13/report.json` (real threads), `libctru-ppc-v13/report.json`
+(exact interactive frames), `upstream-clang-v13/report.json`,
+`upstream-clang-dsp-v13/report.json`, `upstream-ppc-dsp-v13/report.json` and
+`upstream-ppc-final-v13/report.json` (32 passing checks). The full target run is recorded separately;
+never infer hardware execution from these reports. The first PPC media run failed
+because its generated six-instruction snapshot preceded the updated ten-instruction
+test; fresh generation passes. A Clang warning on redundant emitter parentheses
+was corrected in the adapter and real compiled threads then passed.
+Independent reference: `artifacts/reports/cpu-oracle-dsp-v13/report.json`
+(870 instruction cases, 47-instruction nested-call trace).
+Earlier v0.12 validation is preserved at `validation-v1-20261008T203213Z/report.json`.
 Earlier v0.11 evidence: `validation-v1-20261008T193827Z/report.json`,
 `relay-clang-corrected-v11/report.json`, `relay-ppc-v11/report.json` under
 `artifacts/reports/`.
@@ -272,14 +318,16 @@ makefst candidate was not incorporated or run; no packer code or credential
 template was copied. Full hashed/shared/update/disc formats remain unsupported.
 
 P2/P3: inspect the supplied Mario revision, then expand the kernel/IPC and
-CP15/thread context beyond the tested shared startup subset. Implement memory
+CPU semantics beyond the tested shared startup subset. Implement memory
 control beyond the checked owned-heap/shared-object subsets, cross-process maps,
-multi-thread scheduling, PICA/GX2 state/shaders/textures/coherency,
+broader thread/affinity/priority-inheritance behavior, PICA/GX2 state/shaders/textures/coherency,
 DSP/audio, RomFS/saves and module behavior. CFG user/Mii/console-unique identity
 and broader configuration blocks remain pending. Complete CPU/FP correctness and
 measure real console costs. The original framebuffer harness uses custom I/O; the separate standard-HID
 consumer and direct/queued HID/GSP graphics guests supply standard-interface evidence.
-GSP GX commands, threads/PICA and conventional 3DS homebrew boot remain unimplemented. No commercial profile is enabled.
+GSP GX commands/PICA and full service startup remain unimplemented. Scoped
+conventional libctru CPU/input/graphics homebrew is verified separately; no
+commercial profile is enabled.
 
 P4/P5: automate the verified Windows conversion engine, caching/rebuild/trace and
 save/title identity, then implement/package the responsive WPF GUI injector.

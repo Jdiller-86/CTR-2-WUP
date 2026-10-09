@@ -11,6 +11,7 @@ check:
 	$(MAKE) -C tests/gsp check sanitize
 	$(MAKE) -C tests/relay check sanitize
 	$(MAKE) -C tests/multiple check sanitize
+	$(MAKE) -C tests/threads check sanitize
 prototype:
 	$(MAKE) -C runtime/wiiu -j 3
 doctor:
@@ -29,3 +30,4 @@ regenerate:
 	$(PYTHON) tools/generate-gsp-fixture.py
 	$(PYTHON) tools/generate-relay-fixture.py
 	$(PYTHON) tools/generate-stack-fixture.py
+	$(PYTHON) tools/generate-thread-fixture.py

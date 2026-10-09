@@ -24,7 +24,7 @@ def register(index: int, pc: int, thumb: bool = False) -> str:
     return literal(pc + (4 if thumb else 8)) if index == 15 else f"cpu->r[{index}]"
 
 def multiple(rn, registers, increment, before, writeback, load, is_thumb, opcode, next_pc):
-    if rn==15 or not registers or (not load and registers&0x8000):
+    if rn==15 or not registers or (is_thumb and not load and registers&0x8000):
         raise ValueError("unsupported multiple-register list/base")
     if writeback and registers&(1<<rn) and (load or not is_thumb or registers&((1<<rn)-1)):
         raise ValueError("unpredictable multiple-transfer base/writeback combination")
@@ -43,6 +43,20 @@ def arm(insn: int, pc: int) -> list[str]:
     body = ["++cpu->instructions;"]
     if cond != 14:
         body += [f"if (!ctr_cpu_condition(cpu, {cond}u)) {{ cpu->r[15] = {next_pc}; return CTR_CPU_OK; }}"]
+    if insn&0x0fff0fff in (0x0e070f9a,0x0e070fba):
+        if (insn>>12)&15==15:raise ValueError('CP15 barrier PC operand is unsupported')
+        return body+['ctr_cpu_barrier();',f'cpu->r[15] = {next_pc};','return CTR_CPU_OK;']
+    if insn&0x0f200f00 in (0x0d000a00,0x0d000b00):
+        rn,reg=(insn>>16)&15,(insn>>12)&15;wide=(insn&0xf00)==0xb00;load=bool(insn&0x100000)
+        first=(reg+((insn>>22)&1)*16)*2 if wide else reg*2+((insn>>22)&1)
+        if first+(2 if wide else 1)>32 or (rn==15 and not load):raise ValueError('VFP bank/store PC base is unsupported')
+        address=f'{register(rn,pc)} {"+" if insn&0x800000 else "-"} {literal((insn&255)*4)}'
+        return body+[f'ctr_cpu_result result = ctr_cpu_fp_transfer(cpu, {first}u, {2 if wide else 1}u, {address}, {"true" if load else "false"}, {literal(insn)});','if (result != CTR_CPU_OK) return result;',f'cpu->r[15] = {next_pc};','return CTR_CPU_OK;']
+    if insn&0x0fff0fff in (0x0ee10a10,0x0ef10a10):
+        rt=(insn>>12)&15;read=bool(insn&0x00100000)
+        if not read and rt==15:raise ValueError('VMSR PC operand is unsupported')
+        statement=(f'cpu->r[{rt}] = cpu->fpscr;' if rt!=15 else 'cpu->cpsr = (cpu->cpsr & 0x0fffffffu) | (cpu->fpscr & 0xf0000000u);') if read else f'cpu->fpscr = cpu->r[{rt}];'
+        return body+[statement,f'cpu->r[15] = {next_pc};','return CTR_CPU_OK;']
     if insn & 0x0fff0fff == 0x0e1d0f70 and (insn >> 12) & 15 != 15:
         return body + [f"cpu->r[{(insn >> 12) & 15}] = cpu->tls_address;",
                        f"cpu->r[15] = {next_pc};", "return CTR_CPU_OK;"]
@@ -62,6 +76,15 @@ def arm(insn: int, pc: int) -> list[str]:
         if insn & 0x01000000:
             body += [f"cpu->r[14] = {next_pc};"]
         return body + [f"cpu->r[15] = {literal(pc + 8 + offset * 4)};", "return CTR_CPU_OK;"]
+    if insn&0x0ff00090==0x01000080:
+        rd,rn,rs,rm=(insn>>16)&15,(insn>>12)&15,(insn>>8)&15,insn&15
+        if 15 in (rd,rn,rs,rm):raise ValueError('SMLAxy PC operands are unsupported')
+        return body+[f'cpu->r[{rd}] = ctr_cpu_half_accumulate(cpu, cpu->r[{rm}], cpu->r[{rs}], cpu->r[{rn}], {(insn>>5)&1}, {(insn>>6)&1});',f'cpu->r[15] = {next_pc};','return CTR_CPU_OK;']
+    if insn&0x0ff00ff0 in (0x06500f90,0x06500ff0,0x06800fb0):
+        rn,rd,rm=(insn>>16)&15,(insn>>12)&15,insn&15
+        if 15 in (rn,rd,rm):raise ValueError("PC operand in byte media instructions is unsupported")
+        helper=f'ctr_cpu_byte_select(cpu, cpu->r[{rn}], cpu->r[{rm}])' if insn&0x0ff00ff0==0x06800fb0 else f'ctr_cpu_byte_parallel(cpu, cpu->r[{rn}], cpu->r[{rm}], {"true" if insn&0x0ff00ff0==0x06500ff0 else "false"})'
+        return body+[f'cpu->r[{rd}] = {helper};',f'cpu->r[15] = {next_pc};','return CTR_CPU_OK;']
     if insn&0x0e000000==0x08000000:
         if insn&0x00400000:raise ValueError("user-bank/exception-return multiple transfers are unsupported")
         return body+multiple((insn>>16)&15,insn&0xffff,bool(insn&0x00800000),bool(insn&0x01000000),

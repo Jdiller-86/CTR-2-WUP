@@ -30,6 +30,11 @@
 #include "ctr_gsp_fixture.h"
 #include "ctr_relay_fixture.h"
 #include "ctr_stack_fixture.h"
+#include "ctr_thread_fixture.h"
+#ifdef CTR_COMPILED_HOMEBREW
+#include "boot-image.h"
+#include "ctr_recomp.h"
+#endif
 
 enum { TOP_W=400, BOTTOM_W=320, GUEST_H=240, AUDIO_SAMPLES=12000 };
 static uint32_t top_image[TOP_W*GUEST_H], bottom_image[BOTTOM_W*GUEST_H];
@@ -48,7 +53,7 @@ static uint32_t hid_snapshot[5];
 static OSTime hid_origin;
 static int gsp_test_result,gsp_ready;
 static int relay_test_result;
-static int stack_test_result;
+static int stack_test_result,thread_test_result;
 static ctr_guest gsp_guest;
 static uint64_t gsp_presented;
 static OSTime gsp_origin;
@@ -66,14 +71,27 @@ static void guest_trace(void *context,const char *event,const char *hash,uint32_
 }
 static void restart_guest(void) {
     ctr_guest_close(&frame_guest);
+#ifdef CTR_COMPILED_HOMEBREW
+    guest_ready=0;
+#else
     guest_ready=ctr_frame_open(&frame_guest);
+#endif
     frame_guest.debug=guest_debug; frame_guest.cpu.log=guest_trace;
     guest_origin=OSGetTime(); presented_frames=0;
     WHBLogPrintf("guest_open ok=%u profile=ctr2wup-framebuffer-fixture-v1 mode=AOT custom_frame_io=1 GSP_PICA=unavailable",guest_ready);
-    ctr_guest_close(&gsp_guest);gsp_ready=ctr_relay_fixture_open(&gsp_guest);
+    ctr_guest_close(&gsp_guest);
+#ifdef CTR_COMPILED_HOMEBREW
+    gsp_ready=ctr_guest_open(&gsp_guest,&boot_image,NULL,0) && ctr_recomp_attach(&gsp_guest,false);
+#else
+    gsp_ready=ctr_relay_fixture_open(&gsp_guest);
+#endif
     gsp_guest.debug=guest_debug;gsp_guest.cpu.log=guest_trace;
     gsp_origin=OSGetTime();gsp_presented=0;
+#ifdef CTR_COMPILED_HOMEBREW
+    WHBLogPrintf("gsp_guest_open ok=%u profile=original_compiled_libctru_interactive mode=external_AOT PICA=unavailable",gsp_ready);
+#else
     WHBLogPrintf("gsp_guest_open ok=%u profile=original_hid_gsp_shared_relay_rgb565 mode=original_AOT PICA=unavailable",gsp_ready);
+#endif
 }
 
 static int circle_axis(float axis) {
@@ -239,6 +257,8 @@ static void diagnostic_images(unsigned frame, const VPADStatus *pad,
     image_text(top_image,TOP_W,12,text);
     snprintf(text,sizeof(text),"ARM/THUMB STACK CALLS %s CODE %d",stack_test_result?"FAIL":"PASS",stack_test_result);
     image_text(top_image,TOP_W,13,text);
+    snprintf(text,sizeof(text),"GUEST THREAD SCHEDULER %s CODE %d",thread_test_result?"FAIL":"PASS",thread_test_result);
+    image_text(top_image,TOP_W,14,text);
     for (unsigned y=0;y<GUEST_H;++y) for (unsigned x=0;x<BOTTOM_W;++x)
         bottom_image[y*BOTTOM_W+x]=y<92 ? 0x35194fff :
             (((x/20)^(y/20))&1) ? 0x783598ff:0x108797ff;
@@ -286,9 +306,12 @@ int main(int argc, char **argv) {
         log_file=fopen(path,"w");
         if (log_file) WHBAddLogHandler(file_log);
     }
-    WHBLogPrintf("CTR2WUP native diagnostic version=0.12.0 pointer_bits=%u endian=big UDP=%u SD_log=%u",
+    WHBLogPrintf("CTR2WUP native diagnostic version=0.13.0 pointer_bits=%u endian=big UDP=%u SD_log=%u",
                   (unsigned)(8*sizeof(void *)), udp_ready, log_file!=NULL);
     OSTime cpu_start=OSGetTime();
+    thread_test_result=ctr_thread_selftest();
+    WHBLogPrintf("thread_selftest %s result=%d fixture=original_arm_three_threads context_switches=8 instructions_per_path=345 console_result_required=1",
+                 thread_test_result?"FAIL":"PASS",thread_test_result);
     cpu_test_result=ctr_cpu_selftest();
     WHBLogPrintf("CPU_selftest %s result=%d elapsed_us=%llu guest_instructions_per_path=40 fallback=0 fixture=original_arm_thumb",
                   cpu_test_result?"FAIL":"PASS",cpu_test_result,
@@ -349,7 +372,11 @@ int main(int argc, char **argv) {
         if (pad.trigger&VPAD_BUTTON_A) play_tone();
         if (pad.trigger&VPAD_BUTTON_X) alloc_ok=allocation_test();
         if (pad.trigger&VPAD_BUTTON_Y) {
+#ifdef CTR_COMPILED_HOMEBREW
+            guest_mode=guest_mode==2?0:2;
+#else
             guest_mode=(guest_mode+1)%3;presented_frames=0;
+#endif
             WHBLogPrintf("display_mode=%s",guest_mode==2?"standard-hid-gsp":guest_mode==1?"guest-fixture":"native");
         }
         if (pad.trigger&VPAD_BUTTON_PLUS) restart_guest();
@@ -361,10 +388,12 @@ int main(int argc, char **argv) {
         if(hid_ready)ctr_hid_fixture_snapshot(&hid_guest,hid_snapshot);
         if (!guest_mode) diagnostic_images(frame,&pad,error,inside,&touch,tx,ty,frame_us,alloc_ok);
         else if(guest_mode==2) {
+#ifndef CTR_COMPILED_HOMEBREW
             if(pad.trigger&VPAD_BUTTON_B)ctr_relay_fixture_exit(&gsp_guest);
+#endif
             update_input_guest(&gsp_guest,gsp_ready,gsp_origin,&pad,inside!=0,tx,ty,50000);
             if(!gsp_presented) { memset(top_image,0,sizeof(top_image));memset(bottom_image,0,sizeof(bottom_image)); }
-            if(gsp_ready && gsp_guest.gsp.swaps[0] && gsp_guest.gsp.swaps[0]==gsp_guest.gsp.swaps[1] && gsp_guest.gsp.swaps[0]!=gsp_presented) {
+            if(gsp_ready && !gsp_guest.gsp.black && gsp_guest.gsp.swaps[0] && gsp_guest.gsp.swaps[0]==gsp_guest.gsp.swaps[1] && gsp_guest.gsp.swaps[0]!=gsp_presented) {
                 ctr_mem_result top=ctr_gsp_pixels(&gsp_guest,0,top_image,TOP_W*GUEST_H);
                 ctr_mem_result bottom=ctr_gsp_pixels(&gsp_guest,1,bottom_image,BOTTOM_W*GUEST_H);
                 if(top!=CTR_MEM_OK || bottom!=CTR_MEM_OK) {
@@ -374,7 +403,12 @@ int main(int argc, char **argv) {
                 gsp_presented=gsp_guest.gsp.swaps[0];
             }
             for(unsigned i=TOP_W*102;i<TOP_W*144;++i)top_image[i]=0x162d4fff;
-            char text[90];image_text(top_image,TOP_W,10,"CTR2WUP HID / GSP QUEUE / VBLANK");
+            char text[90];
+#ifdef CTR_COMPILED_HOMEBREW
+            image_text(top_image,TOP_W,10,"CTR2WUP COMPILED LIBCTRU / GSP");
+#else
+            image_text(top_image,TOP_W,10,"CTR2WUP HID / GSP QUEUE / VBLANK");
+#endif
             snprintf(text,sizeof(text),"FRAME %llu / STATE %s",(unsigned long long)gsp_presented,ctr_guest_state_name(gsp_guest.state));
             image_text(top_image,TOP_W,11,text);image_text(top_image,TOP_W,12,"A: GREEN / TOUCH: WHITE / B: EXIT");
             image_text(top_image,TOP_W,13,"Y: CYCLE / PLUS: RESET / PICA ABSENT");
@@ -455,11 +489,13 @@ cleanup:
             (unsigned long long)hid_guest.cpu.fallback_instructions);
     }
     ctr_guest_close(&hid_guest);
+#ifndef CTR_COMPILED_HOMEBREW
     if(gsp_ready && gsp_guest.state!=CTR_GUEST_FAULTED && gsp_guest.state!=CTR_GUEST_EXITED && ctr_relay_fixture_exit(&gsp_guest)) {
         ctr_guest_run(&gsp_guest,1000000,gsp_guest.now_ns,true);
         WHBLogPrintf("gsp_guest_shutdown state=%s fallback=%llu",ctr_guest_state_name(gsp_guest.state),
             (unsigned long long)gsp_guest.cpu.fallback_instructions);
     }
+#endif
     ctr_guest_close(&gsp_guest);
     if (tone_voice) { AXSetVoiceState(tone_voice,AX_VOICE_STATE_STOPPED); AXFreeVoice(tone_voice); }
     if (AXIsInit()) AXQuit();

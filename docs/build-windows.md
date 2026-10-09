@@ -102,3 +102,10 @@ Version 0.12 adds `make -C tests/multiple check` and
 All eleven external probes and the API execute on the selected compiler/target.
 The optional `tools/reference-multiple.py` requires pinned Unicorn 2.1.4 and a
 native GCC/shared-library toolchain; no native Windows reference result is claimed.
+
+v0.13 adds `make -C tests/threads check` and `tools/validate-upstream.py
+--thread-api` (14 external probes). Optional normal devkitARM/libctru application
+checks use `tools/validate-libctru.py`; see `compiled-homebrew.md`. The generated
+C adapter removes redundant equality parentheses so real compiled libctru code
+also builds under Clang with warnings treated as errors. This is Linux compiler
+evidence; native Windows/toolchain/WPF acceptance remains pending.

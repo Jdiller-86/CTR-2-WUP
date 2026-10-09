@@ -37,6 +37,17 @@ bool ctr_gsp_request(ctr_guest *g,unsigned session,const uint32_t *words,uint32_
         case 0x00170000:
             if(!g->gsp.right)return false;
             g->gsp.right=false;return true;
+        case 0x00080082: /* FlushDataCache: coherent CPU framebuffer backing. */
+        case 0x00090082: { /* InvalidateDataCache: same checked local backing. */
+            if(!g->gsp.right || words[3] || words[4]!=0xffff8001u)return false;
+            ctr_mem_result result=ctr_memory_check_range(&g->memory,words[1],words[2],CTR_MEM_READ);
+            if(result!=CTR_MEM_OK) {
+                g->cpu.memory_fault=result;g->fault=CTR_CPU_MEMORY_FAULT;g->fault_detail=words[1];
+                g->state=CTR_GUEST_FAULTED;ctr_cpu_stop(&g->cpu,g->fault,g->fault_detail);return false;
+            }
+            /* No asynchronous GPU writes exist in this scoped CPU path. */
+            ctr_cpu_barrier();return true;
+        }
         case 0x000b0040:
             if(!g->gsp.right || words[1]>1)return false;
             g->gsp.black=words[1]!=0;return true;
@@ -110,7 +121,7 @@ bool ctr_gsp_poll(ctr_guest *g,uint64_t now) {
     }
     ctr_shared_publish(g,s->relay_shared,next);
     ++s->vblanks;s->coalesced_vblanks+=frames-1;s->next_vblank_ns+=frames*CTR_GSP_FRAME_NS;
-    g->events[s->relay_event].signaled=true;ctr_sync_poll(g);return true;
+    g->events[s->relay_event].signaled=true;ctr_threads_poll(g);return true;
 }
 static unsigned expand(unsigned value,unsigned bits) {
     return bits==6?(value<<2)|(value>>4):bits==5?(value<<3)|(value>>2):(value<<4)|value;
