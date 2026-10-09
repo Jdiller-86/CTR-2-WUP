@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Bundle project source/notices and scoped homebrew artifacts, never user data."""
 import hashlib
+import argparse
 import json
 from pathlib import Path
 import zipfile
@@ -26,6 +27,9 @@ def archive(path, entries):
 
 
 def main():
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--compiled-packaging-report',type=Path,help='Optional verified offline report for the compiled interactive RPX')
+    options=parser.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
     entries = [(ROOT / name, "CTR2WUP/" + name) for name in SOURCE_FILES]
     for folder in SOURCE_FOLDERS:
@@ -96,6 +100,12 @@ def main():
             if hashlib.sha256(path.read_bytes()).hexdigest()!=artifact['sha256']:raise RuntimeError('Compiled artifact changed')
             compiled_entries.append((path,path.name))
         compiled_entries += [(compiled_report,'compiled-homebrew-report.json')]
+        packing_report=options.compiled_packaging_report
+        if packing_report:
+            packing=json.loads(packing_report.read_text())
+            rpx=folder/'wiiu/ctr2wup-libctru-interactive.rpx'
+            if not packing['ok'] or packing['version']!=__version__ or packing['rpx_sha256']!=hashlib.sha256(rpx.read_bytes()).hexdigest():raise RuntimeError('Compiled packaging report does not match this artifact')
+            compiled_entries.append((packing_report,'offline-packaging-report.json'))
         compiled_entries += [(ROOT/name,name) for name in ('LICENSE','THIRD_PARTY_NOTICES','docs/compiled-homebrew.md','docs/guest-threads.md','docs/console-testing.md')]
         compiled_entries += [(p,str(p.relative_to(ROOT))) for p in (ROOT/'docs/licenses').rglob('*') if p.is_file()]
         compiled_entries += [(p,'desktop-reference/'+p.name) for p in folder.glob('frame-*.ppm')]

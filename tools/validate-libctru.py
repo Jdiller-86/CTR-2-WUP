@@ -46,7 +46,10 @@ def main():
     p.add_argument('--cc',default='gcc');p.add_argument('--cc-prefix',default='');p.add_argument('--run-prefix',default='');p.add_argument('--static',action='store_true');p.add_argument('--sanitize',action='store_true')
     p.add_argument('--application',choices=('boot','threaded','graphics','input','interactive'),help='Run only the selected original application')
     p.add_argument('--wiiu',action='store_true',help='Also build the verified original interactive application as RPX/WUHB')
-    a=p.parse_args();out=a.output.resolve();out.mkdir(parents=True,exist_ok=False);checks=[]
+    p.add_argument('--trace-startup',action='store_true',help='Capture every IPC at single-instruction boundaries for the original boot application')
+    a=p.parse_args()
+    if a.trace_startup and a.application!='boot':p.error('--trace-startup requires --application boot')
+    out=a.output.resolve();out.mkdir(parents=True,exist_ok=False);checks=[]
     def run(name,command,**kw):
         r=subprocess.run(command,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,errors='replace',**kw)
         (out/(name+'.log')).write_text(r.stdout)
@@ -74,14 +77,20 @@ def main():
             if a.sanitize:flags+=['-O1','-fno-omit-frame-pointer','-fsanitize=address,undefined']
             sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c')]+[ROOT/'runtime/recomp/ctr_recomp.c',ROOT/'tests/homebrew/runner.c']+[folder/'aot'/n for n in generation['sources']]
             run(name+'-host-compile',shlex.split(a.cc_prefix)+[a.cc,*flags,*map(str,sources),'-lm','-o',str(binary)])
-            output=run(name+'-execute',shlex.split(a.run_prefix)+[str(binary)]+([str(folder)] if name in ('graphics','interactive') else []))
+            extra=['--trace-ipc'] if a.trace_startup else [str(folder)] if name in ('graphics','interactive') else []
+            output=run(name+'-execute',shlex.split(a.run_prefix)+[str(binary)]+extra)
             result=json.loads(output.splitlines()[-1]);expected='CTR2WUP compiled libctru boot PASS' if name=='boot' else 'CTR2WUP compiled thread/TLS/LightLock PASS' if name=='threaded' else 'CTR2WUP compiled graphics PASS' if name=='graphics' else 'CTR2WUP compiled input PASS' if name=='input' else 'CTR2WUP compiled interactive PASS'
             if result['state']!='exited' or result['fallback'] or expected not in result['messages']:raise RuntimeError(name+' did not complete its real guest assertions')
             if name in ('graphics','interactive') and result['frames']!=[0x00ff00ff,0xff0000ff,0x00ff00ff]:raise RuntimeError('Require all three exact two-screen RGB565 frames')
             if name=='input' and result['input_samples']!=3:raise RuntimeError('Require all three standard HID publications')
             if name=='interactive' and result['input_samples']!=4:raise RuntimeError('Require three input-driven frames and the guest B-button exit')
             frames=[{'name':f.name,'sha256':hashlib.sha256(f.read_bytes()).hexdigest()} for f in sorted(folder.glob('frame-*.ppm'))]
-            reports.append({'application':name,'guest':result,'frames':frames,'generation':generation,'allocated_bytes':image['allocated_bytes'],'executable_sha256':hashlib.sha256(image['code']).hexdigest()})
+            ipc=[]
+            for line in output.splitlines():
+                if line.startswith('ipc '):
+                    fields=dict(item.split('=',1) for item in line.split()[1:]);ipc.append({k:int(v,16) if k in ('header','result','pc') else int(v) if k=='request' else v for k,v in fields.items()})
+            if a.trace_startup and sum(bool(event['result']) for event in ipc)!=result['ipc_failures']:raise RuntimeError('Incomplete startup failure trace')
+            reports.append({'application':name,'guest':result,'frames':frames,'startup_ipc':ipc,'generation':generation,'allocated_bytes':image['allocated_bytes'],'executable_sha256':hashlib.sha256(image['code']).hexdigest()})
             if a.wiiu and name=='interactive':
                 wiiu=folder/'wiiu';wiiu.mkdir();recipe=ROOT/'runtime/wiiu'
                 run('interactive-wiiu-build',['make','-C',str(recipe),'OUTPUT='+os.path.relpath(wiiu,recipe),'TARGET=ctr2wup-libctru-interactive','GUEST_DEFAULT=2','EXTERNAL_AOT=1','COMPILED_HOMEBREW=1','COMPILED_IMAGE_DIR='+str(folder),'UPSTREAM_DIR='+str(folder/'aot')],env=env)

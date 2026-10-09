@@ -60,6 +60,9 @@ Resume in this order when the evidence is available:
 4. Validate the existing original packer's candidate metadata/ticket/FST policy
    using provenance-established local credentials and an actual diagnostic WUP
    installation/Menu launch/removal. Synthetic offline inputs cannot prove this.
+   The new compiled interactive RPX now also passes the complete encrypted
+   offline proof; its staging is `artifacts/libctru-title-staging-v13/`. No
+   synthetic package or key/certificate is retained or delivered for installation.
 5. Finish verified Windows conversion/caching/rebuild and then the UWUVCI-style
    GUI Inject workflow. The final product remains a per-game installable WUP
    generator; current diagnostic bundles are RPX/WUHB, not installable WUPs.

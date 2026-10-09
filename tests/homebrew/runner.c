@@ -55,17 +55,23 @@ static bool capture(ctr_guest *g,const char *folder) {
     free(pixels);return true;
 }
 int main(int argc,char **argv) {
+    bool ipc_trace=argc>1 && !strcmp(argv[1],"--trace-ipc");uint64_t requests=0;
     ctr_guest g;if(!ctr_guest_open(&g,&boot_image,NULL,0))return 1;
     g.cpu.log=trace;g.debug=message;if(!ctr_recomp_attach(&g,false)) { ctr_guest_close(&g);return 2; }
-    for(unsigned n=0;n<10000 && g.state!=CTR_GUEST_FAULTED && g.state!=CTR_GUEST_EXITED;++n) {
-        ctr_guest_run(&g,10000,n*1000000u,true);
-        if(!capture(&g,argc>1?argv[1]:NULL)) { ctr_guest_close(&g);return 3; }
+    for(unsigned n=0;n<(ipc_trace?2000000u:10000u) && g.state!=CTR_GUEST_FAULTED && g.state!=CTR_GUEST_EXITED;++n) {
+        uint64_t now=(uint64_t)n*(ipc_trace?1000u:1000000u);
+        ctr_guest_run(&g,ipc_trace?1:10000,now,true);
+        if(ipc_trace && g.ipc_requests!=requests) {
+            fprintf(stderr,"ipc request=%llu service=%s target=%s header=%08x result=%08x pc=%08x\n",(unsigned long long)g.ipc_requests,g.ipc_service[0]?g.ipc_service:"-",g.ipc_target[0]?g.ipc_target:"-",g.ipc_header,g.ipc_result,g.cpu.r[15]);
+            requests=g.ipc_requests;
+        }
+        if(!capture(&g,!ipc_trace && argc>1?argv[1]:NULL)) { ctr_guest_close(&g);return 3; }
         if(pending_input>=0) {
             static const int cx[]={-30,100,0,0},cy[]={40,-100,0,0};
             static const uint16_t x[]={17,319,0,0},y[]={23,239,0,0};
             unsigned stage=(unsigned)pending_input;
             uint32_t buttons=interactive?(stage==1?0:stage==3?2:1):(stage==0?1:stage==1?2:0);
-            if(!ctr_hid_update(&g,buttons,cx[stage],cy[stage],stage<2,x[stage],y[stage],(uint64_t)n*1000000u+1)) { ctr_guest_close(&g);return 4; }
+            if(!ctr_hid_update(&g,buttons,cx[stage],cy[stage],stage<2,x[stage],y[stage],now+1)) { ctr_guest_close(&g);return 4; }
             ++input_samples;input_stage=stage;pending_input=-1;
         }
     }

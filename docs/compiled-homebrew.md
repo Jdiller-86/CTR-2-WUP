@@ -47,9 +47,12 @@ HID producer; no host writes a private application result or skips guest code.
 The interactive program includes a 1 ms sleep per frame to expose boundaries
 and avoid polling between presentation and the next input sample.
 
-APT/FS and several optional startup services are unavailable: each application
-records eight service lookup failures tolerated by this pinned libctru's default
-startup. Reaching main does not prove those services initialized. No SD/RomFS,
+APT/FS startup remains unavailable: each application records eight failed IPC
+requests tolerated by this pinned libctru. A single-instruction boot trace shows
+six failed APT:S/A/U lookups, one fs:USER lookup and one invalid-session request
+after FS acquisition failed. Use `--application boot --trace-startup` to capture
+all 11 requests; `--sanitize` is also supported. Reaching main does not prove
+those services initialized. No SD/RomFS,
 saves, DSP/audio, CRO loader, PICA commands, GPU physical addresses or commercial
 compatibility is claimed. The interactive build's native tone is a platform
 diagnostic, not guest DSP audio. There is no Wii U hardware or Windows execution

@@ -18,8 +18,9 @@ Eight guest thread slots preserve CPU/TLS/VFP/FPSCR context; address arbitration
 quota queries, BSS layout and the kernel configuration page supply shared startup
 prerequisites. CPU media/FPSCR/scalar FP transport/ARMv6 barriers/SMLAxy have
 independent ARM1176 evidence (870 cases). See `docs/guest-threads.md` and
-`docs/compiled-homebrew.md`. APT/FS/optional startup requests still record eight
-lookup failures per application; no complete service or commercial boot is claimed.
+`docs/compiled-homebrew.md`. Startup still records eight failed IPC requests
+(six APT lookups, one fs:USER lookup and one invalid-session request); no complete
+service or commercial boot is claimed.
 
 **Version 0.12.0 added checked ARM/Thumb stack and register-transfer operations**.
 An original 47-instruction nested ARM → Thumb → ARM call program preserves
@@ -148,7 +149,7 @@ is unverified; no milestone requiring physical-console evidence is complete.
   budgets; 1,778 assertions cover lifecycle and protected/freed guest-store fault
   PCs with zero fallback. Ordinary data mapping changes preserve AOT snapshots;
   executable mapping/protection and executable-alias writes still invalidate.
-  The 307 heap API assertions pass GCC, sanitizers, Clang and emulated PPC Linux.
+  The current 306 heap API assertions pass GCC, sanitizers, Clang and emulated PPC Linux.
   All three RPX/WUHB builds embed `GUEST HEAP LIFECYCLE`/`heap_selftest` results;
   physical Wii U and native Windows acceptance remain pending.
 
@@ -262,6 +263,16 @@ test; fresh generation passes. A Clang warning on redundant emitter parentheses
 was corrected in the adapter and real compiled threads then passed.
 Independent reference: `artifacts/reports/cpu-oracle-dsp-v13/report.json`
 (870 instruction cases, 47-instruction nested-call trace).
+Follow-up evidence: `libctru-startup-trace-v13/report.json` captures all 11 boot
+IPC requests at single-instruction boundaries, explaining all eight failures.
+`libctru-driver-final-v13/report.json` checks the default interactive driver after
+adding trace mode and fixing its 32-bit host-time multiplication. The trace also
+has a separate sanitized run. `libctru-offline-packaging-v13/report.json` verifies
+the new real interactive RPX through encrypted packing/decryption/FST/file checks
+with temporary synthetic credentials (5,505,024 encrypted bytes). No package is
+retained or declared installable. Its real metadata/artwork staging is at
+`artifacts/libctru-title-staging-v13/`; production inputs and installer/Menu
+acceptance remain external gates.
 Earlier v0.12 validation is preserved at `validation-v1-20261008T203213Z/report.json`.
 Earlier v0.11 evidence: `validation-v1-20261008T193827Z/report.json`,
 `relay-clang-corrected-v11/report.json`, `relay-ppc-v11/report.json` under

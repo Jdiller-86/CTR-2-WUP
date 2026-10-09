@@ -20,8 +20,9 @@ framebuffer mode and no guest PICA/audio/FS implementation.
 
 Record `CTR2WUP INTERACTIVE READY`, increasing paired GSP swaps, zero fallback,
 touch corners/release, the guest `CTR2WUP compiled interactive PASS` and
-`state=exited` after B. Startup currently records eight unavailable service
-lookups; preserve the IPC result logs rather than interpret these as successful
+`state=exited` after B. Startup currently records eight failed IPC requests
+(six APT lookups, one FS lookup and one invalid session); preserve the IPC logs
+rather than interpret these as successful
 APT/FS initialization. Test ten-minute stability, repeated Plus restarts and
 clean host shutdown. Do not compare its diagnostic instruction budget with
 commercial performance or claim graphical-game compatibility from these frames.
