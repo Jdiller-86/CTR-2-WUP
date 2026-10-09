@@ -25,7 +25,9 @@ pin without replacing existing dependencies. `CTR2WUP_SDK_ROOT` and
 library, and preserves compiler logs, hashes, generated AOT and guest results
 under the requested new output directory. It also supports `--sanitize`,
 `--cc-prefix`, `--run-prefix` and emulated PPC Linux `--static`. Dependencies stay
-external; a future native Windows toolchain setup needs its own validation.
+external. Console compilation stages generated sources under controlled relative
+paths so chosen output and checkout paths can contain spaces/Unicode; RPX/WUHB
+are checked before copying them to the requested location. A future native Windows toolchain setup needs its own validation.
 
 The applications test:
 

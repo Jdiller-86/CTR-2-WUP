@@ -112,8 +112,18 @@ def main():
                 reports[-1]['snapshot_sha256']=hashlib.sha256(snapshot).hexdigest()
             if a.wiiu and name in ('interactive','filesystem'):
                 wiiu=folder/'wiiu';wiiu.mkdir();recipe=ROOT/'runtime/wiiu'
-                run(name+'-wiiu-build',['make','-C',str(recipe),'OUTPUT='+os.path.relpath(wiiu,recipe),'TARGET=ctr2wup-libctru-'+name,'FILESYSTEM_HOMEBREW='+('1' if name=='filesystem' else '0'),'GUEST_DEFAULT=2','EXTERNAL_AOT=1','COMPILED_HOMEBREW=1','COMPILED_IMAGE_DIR='+str(folder),'UPSTREAM_DIR='+str(folder/'aot')],env=env)
-                _validate_rpx(wiiu/('ctr2wup-libctru-'+name+'.rpx'))
+                # GNU Make tokenizes source/prerequisite lists. Keep its relative
+                # names free of user-path whitespace, as the main build engine
+                # does, and publish only validated artifacts to the chosen path.
+                (ROOT/'artifacts').mkdir(exist_ok=True)
+                with tempfile.TemporaryDirectory(prefix='compiled-console-',dir=ROOT/'artifacts') as temporary:
+                    work=Path(temporary);shutil.copytree(folder/'aot',work/'aot');shutil.copy2(folder/'boot-image.h',work/'boot-image.h')
+                    prefix=os.path.relpath(work,recipe)
+                    run(name+'-wiiu-build',['make','-C',str(recipe),'OUTPUT='+prefix+'/wiiu','TARGET=ctr2wup-libctru-'+name,'FILESYSTEM_HOMEBREW='+('1' if name=='filesystem' else '0'),'GUEST_DEFAULT=2','EXTERNAL_AOT=1','COMPILED_HOMEBREW=1','COMPILED_IMAGE_DIR='+prefix,'UPSTREAM_DIR='+prefix+'/aot'],env=env)
+                    built=work/'wiiu';rpx=built/('ctr2wup-libctru-'+name+'.rpx');shortcut=rpx.with_suffix('.wuhb')
+                    _validate_rpx(rpx)
+                    if shortcut.read_bytes()[:4]!=b'WUHB':raise RuntimeError('Invalid compiled WUHB')
+                    shutil.copy2(rpx,wiiu/rpx.name);shutil.copy2(shortcut,wiiu/shortcut.name)
                 reports[-1]['wiiu_artifacts']=[{'name':f.name,'size':f.stat().st_size,'sha256':hashlib.sha256(f.read_bytes()).hexdigest()} for f in sorted(wiiu.glob('*.rp[x]*'))+sorted(wiiu.glob('*.wuhb'))]
         if a.wiiu and not any('wiiu_artifacts' in r for r in reports):raise ValueError('--wiiu requires the interactive or filesystem application')
     report={'ok':True,'version':__version__,'libctru_pin':pin,'library_sha256':library_hash,'arm_compiler':arm_version.splitlines()[0],'applications':reports,'checks':checks,'console_verified':False,'native_windows_verified':False,'complete_service_startup':False,'standalone_apt_and_fs_startup':True,'unavailable_startup_services':['APT:S','APT:A','ptm:sysm'],'powerpc_execution':'emulated Linux' if a.static else None}

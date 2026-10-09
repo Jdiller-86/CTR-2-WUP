@@ -145,3 +145,10 @@ Normal APT event/wakeup/exit runs; privileged and optional lookup failures remai
 explicit. A fifth save diagnostic RPX/WUHB awaits physical SD save/reload.
 `filesystem.md` records bounds; ROMFS/retail saves/applications, PICA/audio and
 all full milestone acceptance remain open.
+
+v0.14 verification: 155 Python tests, 38 complete workflow checks, six compiled
+applications normally/sanitized, 1,387 filesystem and 671 APT API assertions.
+Clang/emulated PPC pass both APIs and actual save/reload with byte-identical
+snapshots. Spaced Japanese console-output paths pass after controlled build
+staging. The fifth save RPX also passes offline encrypted packing with temporary
+synthetic inputs; no installable WUP or physical acceptance is claimed.

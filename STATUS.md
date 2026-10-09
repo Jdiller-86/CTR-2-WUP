@@ -258,6 +258,44 @@ is unverified; no milestone requiring physical-console evidence is complete.
 
 ## Reports and deliverables
 
+The v0.14 source, native/original/external/compiled interactive and compiled-save
+RPX/WUHB bundles, wheel and SHA256 manifest are under `artifacts/delivery/` and
+`artifacts/dist/`. Consolidated current-artifact evidence is
+`artifacts/reports/validation-v1-20261009T183044Z/report.json`. It reuses the 155
+Python tests and 38 observed successful workflow checks from the completed
+`validation-v1-20261009T182145Z/report.json`, with an identical current runtime
+digest. Fresh retry component reports verify all 14 external probes and six
+compiled applications normally/sanitized; five current RPX/WUHB builds and exact
+builder/packaging hashes were independently checked. The retry lost its execution
+session before publishing the aggregate; its outer exit is explicitly unverified.
+The validator now journals observed statuses before stdout and tolerates a closed
+pipe. `closed-pipe-fixed-v14/report.json` verifies this with a real closed OS pipe
+and observed subprocess exit codes 0/2. No lost exit status was fabricated.
+The filesystem application verifies save/read then fresh-process reload, with
+57,135/58,806 guest instructions, zero fallback and exact snapshot bytes.
+The first run has one expected missing-file result plus the three explicitly
+unavailable startup lookups; reload has only those three lookup failures.
+The scoped boot trace is `libctru-startup-final-v14/report.json` (32 IPC requests,
+19,620 instructions, 97 SVCs, six switches). GCC, Clang and emulated PPC snapshots
+all hash to `a8a36b8acb27ca58bf4664e75bb960c76c4393deac9a13744c93173042cc7d78`.
+Independent reports: `libctru-filesystem-clang-v14/report.json`,
+`libctru-filesystem-ppc-v14/report.json`, `upstream-clang-fs-apt-container-v14/report.json`
+and `upstream-ppc-fs-apt-v14/report.json` (six checks each). The source/runtime
+required `make check` / `make prototype` passes are preserved in
+`make-check-final-v14.log` and `make-prototype-sd-path-v14.log`.
+The initial full v0.14 pass is preserved at `validation-v1-20261009T182145Z/`;
+final builds include the corrected WUT SD mount path/version banner. A failed
+spaced generated-source Make build prompted controlled relative staging; the
+follow-up `compiled console paths 日本語 v14/report.json` verifies the correction,
+including fresh-process saves and valid RPX/WUHB at a spaced Unicode destination.
+The actual compiled save and interactive RPXs also pass original staging,
+encrypted packing and independent decrypt/FST/file comparison in
+`libctru-filesystem-packaging-v14/report.json` and
+`libctru-interactive-packaging-v14/report.json`, with temporary synthetic inputs
+and no package/credentials retained. This does not prove installer acceptance.
+Delivery/fresh-source report: `artifacts/reports/delivery-v14/report.json`.
+
+
 The v0.13 source, native diagnostic, original/external guest, compiled interactive and title-staging
 bundles, wheel and SHA256 manifest are under `artifacts/delivery/` and
 `artifacts/dist/`. The native bundle includes direct and shared display references.
@@ -364,6 +402,9 @@ Unicorn, cryptography 50.0.0 and container Clang/CMake/GDB/PowerPC Linux/QEMU. A
 `source /workspace/ctr2wup-tools/environment/activate.sh`.
 `install_script` remains the tested reusable installer. `start_skill` was updated
 and saved to reflect resumed implementation, Mario selection and current gates.
-Saving the draft is not environment publication or proof of a new-task snapshot.
+The v0.14 resume draft was saved as
+`8c0c4ff7-e331-4103-9a95-c2a932f2e421~cecfgdraft_6ac934e11b2c819eacb36421a6f04b5f`;
+network, credentials and repository membership were preserved. It requires review,
+save and publication in environment settings. Saving the draft is not environment publication or proof of a new-task snapshot.
 Git/API read access works with existing authentication; no new secret is needed
 for local development. The manual Windows workflow has not been dispatched.

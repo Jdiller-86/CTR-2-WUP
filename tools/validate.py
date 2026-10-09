@@ -39,7 +39,13 @@ def main():
                   "elapsed_seconds": round(time.perf_counter() - start, 6),
                   "log": str(log.relative_to(ROOT))}
         results.append(result)
-        print(name + ": " + ("PASS" if result["passed"] else "FAIL"), flush=True)
+        # Persist observed exit statuses before writing to a possibly detached
+        # execution-session pipe. Long compiler runs must retain their evidence.
+        (report_root/"progress.json").write_text(json.dumps({"version":__version__,"checks":results},indent=2)+"\n")
+        try:
+            print(name + ": " + ("PASS" if result["passed"] else "FAIL"), flush=True)
+        except BrokenPipeError:
+            sys.stdout=open(os.devnull,"w")
         return process
 
     python_tests = run("python-tests", [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"])

@@ -4,8 +4,8 @@ No console is attached to this environment. Every item below is awaiting a
 physical console test. Cross-compilation, host tests and RPX headers do not
 establish console behavior.
 
-v0.14 adds `CTR2WUP-libctru-filesystem-0.14.0.zip`. Launch its WUHB/RPX with an accessible mounted SD card; the existing diagnostic
-creates its `ctr2wup` directory under the WHB SD mount. A fresh diagnostic
+v0.14 adds `CTR2WUP-libctru-filesystem-0.14.0.zip`. Launch its WUHB/RPX with
+an accessible mounted SD card; the existing diagnostic creates its `ctr2wup` directory under the WHB SD mount. A fresh diagnostic
 save must show/log `CTR2WUP compiled filesystem SAVE 1 PASS` and `state=exited`.
 Press Plus: it must reload, update and show `RELOAD PASS`. Exit with Minus and
 relaunch to test another fresh process. Preserve the private diagnostic snapshot

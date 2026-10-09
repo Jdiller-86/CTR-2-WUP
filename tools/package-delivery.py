@@ -29,6 +29,7 @@ def archive(path, entries):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--compiled-packaging-report',type=Path,help='Optional verified offline report for the compiled interactive RPX')
+    parser.add_argument('--filesystem-packaging-report',type=Path,help='Optional verified offline report for the compiled savedata RPX')
     options=parser.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
     entries = [(ROOT / name, "CTR2WUP/" + name) for name in SOURCE_FILES]
@@ -118,6 +119,11 @@ def main():
                 if hashlib.sha256(path.read_bytes()).hexdigest()!=artifact['sha256']:raise RuntimeError('Save diagnostic artifact changed')
                 fs_entries.append((path,path.name))
             fs_entries += [(compiled_report,'compiled-homebrew-report.json')]
+            if options.filesystem_packaging_report:
+                packing=json.loads(options.filesystem_packaging_report.read_text())
+                rpx=folder/'wiiu/ctr2wup-libctru-filesystem.rpx'
+                if not packing['ok'] or packing['version']!=__version__ or packing['rpx_sha256']!=hashlib.sha256(rpx.read_bytes()).hexdigest():raise RuntimeError('Savedata packaging report does not match this artifact')
+                fs_entries.append((options.filesystem_packaging_report,'offline-packaging-report.json'))
             fs_entries += [(ROOT/name,name) for name in ('LICENSE','THIRD_PARTY_NOTICES','docs/filesystem.md','docs/compiled-homebrew.md','docs/console-testing.md')]
             fs_entries += [(p,str(p.relative_to(ROOT))) for p in (ROOT/'docs/licenses').rglob('*') if p.is_file()]
             fs_archive=OUT/('CTR2WUP-libctru-filesystem-'+__version__+'.zip');archive(fs_archive,fs_entries);outputs.append(fs_archive)
