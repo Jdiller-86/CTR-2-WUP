@@ -29,11 +29,15 @@ All acceptance checkboxes below remain open until their evidence is recorded.
 
 ## Current evidence (2026-10-09 UTC)
 
+The current rough implementation estimate is **approximately 20% of the finished
+GUI-to-playable-WUP product**; full milestone acceptance is **0/7**. These measure
+different things. See [progress.md](progress.md) for the assessment and evidence.
+
 | Milestone | Verified portion | Remaining acceptance |
 |---|---|---|
 | M1 | Native/original/external-AOT RPX/WUHB built; native diagnostics; original staging and offline encrypted packaging | Physical screens/input/audio/exit and independently installed WUP |
-| M2 | Original CPU/AOT subset plus stack/register transfers, BLX and user CP15 TLS; external generation/checked ABI; 566+34+297+35+1,778+639+858+3,603 integration assertions on GCC/sanitizers/Clang/emulated big-endian PPC; scalar VFP Unicorn match | Complete ARM/VFP semantics, workload memory/fallback costs and actual Espresso timings |
-| M3 | Checked NCCH loading and eight single-core contexts; CPU/TLS/VFP/FPSCR ownership, priorities/quanta, joins/locks/arbiters/quotas; SRV/CFG/heap/shared/HID/GSP/VBlank; real normal-CRT/libctru threads/C TLS/LightLock/input and exact CPU framebuffer pixels; fourth interactive RPX/WUHB built | Physical guest/input/display/thread/stability evidence; full APT/FS startup, broader/cross-process memory/thread semantics, motion, GX commands/PICA/audio/saves |
+| M2 | Original CPU/AOT subset plus stack/register transfers, BLX, user CP15 TLS, byte media, barriers and scoped FP; external generation/checked ABI; GCC/sanitizers/Clang/emulated big-endian PPC checks; 870 independent ARM1176 cases and nested-call trace | Complete ARM/VFP semantics, workload memory/fallback costs and actual Espresso timings |
+| M3 | Checked NCCH loading and eight single-core contexts; CPU/TLS/VFP/FPSCR ownership, priorities/quanta, joins/locks/arbiters/quotas; SRV/CFG/heap/shared/HID/GSP/VBlank; six normal-CRT/libctru applications including exact CPU framebuffer pixels, private FS save/fresh-process reload and standalone APT lifecycle; interactive and fifth save RPX/WUHB built | Physical guest/input/display/thread/SD/stability evidence; broader services, applets, ROMFS/assets/retail saves, cross-process semantics, motion, GX commands/PICA and guest audio |
 | M4 | Bounded command references, standard direct/shared GSP display and five tested rotated CPU display formats | Actual PICA-to-GX2 features, scene comparisons and console timings |
 | M5 | Mario selected and CIA attachment supplied; transfer exceeds 32 MiB; intake/export helper tested; shared startup/memory development while user is away; upstream requirement leads | Actual smaller private executable export/revision, title-specific runtime/renderer/services/save/audio implementation and console gameplay |
 | M6 | External C generation/static compilation, staging/artwork/intake, original encrypted writer and independent decrypt/FST/file checks with synthetic inputs, atomic output/wheel; Windows workflow prepared | Actual local certificate/key provenance and installer acceptance, full commercial conversion, caches/traces/rebuild, Windows execution and console install checks |

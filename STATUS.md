@@ -8,6 +8,12 @@ title candidate. The target remains an UWUVCI-style Windows GUI: select a
 decrypted game, configure title/artwork, click Inject, install its per-game WUP
 and launch from Wii U Menu. The CLI is the shared engine, not the final product.
 
+**Overall implementation estimate: approximately 20%**, reassessed against the
+v0.14 GUI-to-playable-WUP target on October 9, 2026. This is a rough engineering
+judgment, not measured task completion. **0/7 full milestones are accepted.**
+See [the completion assessment](docs/progress.md) for its basis, remaining work,
+and external testing gates; the README provides a concise progress overview.
+
 **Version 0.14.0 adds bounded private FS saves and standalone APT lifecycle**.
 Normal compiled libctru/newlib code writes, rereads and commits original save data,
 uses a Japanese filename, deletes a temporary file, exits, then reloads and updates
@@ -42,10 +48,6 @@ registers and restores its stack through interpreter/original/external AOT.
 Independent Unicorn ARM1176 checks pass 220 instruction cases and the full trace.
 Partial-fault and unsupported-encoding probes validate the external ABI. All
 Wii U builds embed `ARM/THUMB STACK CALLS`/`stack_selftest`; see `docs/cpu-stack.md`.
-The requested overall estimate is approximately **15% of the final GUI-to-playable
-WUP product**. This is a rough engineering estimate, not a measured percentage or
-milestone tally. The main runtime/renderer/audio/save/gameplay/Windows GUI and
-physical acceptance work remains; all seven full milestone checkboxes stay open.
 
 **Version 0.11.0 adds shared GSP framebuffer queues and a VBlank relay**.
 An original ARM guest now registers/maps the GSP page, queues both RGB565 screens,
@@ -257,6 +259,15 @@ is unverified; no milestone requiring physical-console evidence is complete.
   external developer dependencies.
 
 ## Reports and deliverables
+
+October 9 documentation follow-up: the README now presents the product workflow,
+current limits, progress graphic and milestone overview; `docs/progress.md`
+records the reassessment. Fresh `make check` (155 Python tests plus normal/
+ASan/UBSan C suites), `make prototype`, and the README's diagnostic/fixture
+quick start pass. Documentation verification checks 26 local links, SVG metadata
+and all seven open acceptance boxes. Logs/reports are under
+`artifacts/reports/readme-assessment-20261009/`. The v0.14 source bundle is the
+previously verified snapshot; it predates this documentation-only follow-up.
 
 The v0.14 source, native/original/external/compiled interactive and compiled-save
 RPX/WUHB bundles, wheel and SHA256 manifest are under `artifacts/delivery/` and
