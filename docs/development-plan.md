@@ -204,3 +204,13 @@ HID and all pixels of three CPU-written screen pairs pass without interpreter
 fallback. The additional interactive Wii U build is the concrete next M3
 hardware test. Wider APT/FS/GX/PICA/audio/save implementation and exact Mario
 intake remain required; no full milestone or commercial profile is enabled.
+
+v0.14 continues the independent shared runtime through checked private FS
+archives/files, original compiled save/read/fresh-process reload, snapshot
+validation and standalone APT initialization/event/wakeup/shutdown. The fifth
+console diagnostic makes SD save/reload testable without a ROM. Next selected-title
+work requires the actual private executable/assets and a boot/unsupported trace
+to choose ROMFS/retail-save/module/PICA/audio implementation. Physical save and
+interactive tests remain required, alongside installer and Windows acceptance.
+General unimplemented features are not presumed impossible; this increment does
+not activate a commercial profile or replace the GUI-to-installable-WUP goal.

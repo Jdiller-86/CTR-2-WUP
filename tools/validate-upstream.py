@@ -40,6 +40,8 @@ def main():
     parser.add_argument('--hid-api',action='store_true',help='Also execute HID wire-layout, input and lifetime API tests')
     parser.add_argument('--gsp-api',action='store_true',help='Also execute GSP display format/rights/bounds API tests')
     parser.add_argument('--relay-api',action='store_true',help='Also execute GSP relay/shared queue/timing/lifetime API tests')
+    parser.add_argument('--fs-api',action='store_true',help='Also execute filesystem wire/lifetime/snapshot tests')
+    parser.add_argument('--apt-api',action='store_true',help='Also execute standalone lifecycle/descriptor tests')
     parser.add_argument('--thread-api',action='store_true',help='Also execute thread ownership/context/rollback tests')
     parser.add_argument('--only',choices=('frame','abi','services','cp15','heap','kernel','hid','gsp','relay','stack','stack_reject','threads','thread_vfp','media'),help='Run one external integration probe')
     parser.add_argument('--multiple-api',action='store_true',help='Also execute stack/multiple-register transfer API tests')
@@ -72,7 +74,7 @@ def main():
             rom.write_bytes(container)
         else: rom.write_bytes(service_fixture_bytes() if name=='services' else heap_fixture_bytes() if name=='heap' else kernel_fixture_bytes() if name=='kernel' else hid_fixture_bytes() if name=='hid' else gsp_fixture_bytes() if name=='gsp' else relay_fixture_bytes() if name=='relay' else stack_fixture_bytes() if name=='stack' else thread_fixture_bytes() if name=='threads' else fixture_bytes())
         generation=generate_into(rom,folder/'aot')
-        sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c')]+[recomp/'ctr_recomp.c']
+        sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c','ctr_fs.c','ctr_apt.c')]+[recomp/'ctr_recomp.c']
         flags=[]
         if name=='frame':
             flags=['-DCTR_EXTERNAL_AOT'];sources += [core/'ctr_guest_fixture.c',ROOT/'tests/fixtures/guest/image.generated.c']
@@ -100,52 +102,59 @@ def main():
         run(name+'-execute',shlex.split(args.run_prefix)+[str(binary)]+([str(folder)] if name in ('gsp','relay') else []))
     if args.service_api:
         binary=out/('service-api'+('.exe' if os.name=='nt' else ''))
-        sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c','ctr_service_fixture.c')]
+        sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c','ctr_fs.c','ctr_apt.c','ctr_service_fixture.c')]
         sources += [ROOT/'tests/services/test_services.c',ROOT/'tests/fixtures/services/boot-image.generated.c',ROOT/'tests/fixtures/services/boot.generated.c']
         run('service-api-compile',common+[*map(str,sources),'-o',str(binary)])
         run('service-api-execute',shlex.split(args.run_prefix)+[str(binary)])
     if args.heap_api:
         binary=out/('heap-api'+('.exe' if os.name=='nt' else ''))
-        sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c','ctr_heap_fixture.c')]
+        sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c','ctr_fs.c','ctr_apt.c','ctr_heap_fixture.c')]
         sources += [ROOT/'tests/heap/test_heap.c',ROOT/'tests/fixtures/heap/heap-image.generated.c',ROOT/'tests/fixtures/heap/heap.generated.c']
         run('heap-api-compile',common+[*map(str,sources),'-o',str(binary)])
         run('heap-api-execute',shlex.split(args.run_prefix)+[str(binary)])
     if args.kernel_api:
         binary=out/('kernel-api'+('.exe' if os.name=='nt' else ''))
-        sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c','ctr_kernel_fixture.c')]
+        sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c','ctr_fs.c','ctr_apt.c','ctr_kernel_fixture.c')]
         sources += [ROOT/'tests/kernel/test_kernel.c',ROOT/'tests/fixtures/kernel/kernel-image.generated.c',ROOT/'tests/fixtures/kernel/kernel.generated.c']
         run('kernel-api-compile',common+[*map(str,sources),'-o',str(binary)])
         run('kernel-api-execute',shlex.split(args.run_prefix)+[str(binary)])
     if args.hid_api:
         binary=out/('hid-api'+('.exe' if os.name=='nt' else ''))
-        sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c','ctr_hid_fixture.c')]
+        sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c','ctr_fs.c','ctr_apt.c','ctr_hid_fixture.c')]
         sources += [ROOT/'tests/hid/test_hid.c',ROOT/'tests/fixtures/hid/hid-image.generated.c',ROOT/'tests/fixtures/hid/hid.generated.c']
         run('hid-api-compile',common+[*map(str,sources),'-o',str(binary)])
         run('hid-api-execute',shlex.split(args.run_prefix)+[str(binary)])
     if args.gsp_api:
         binary=out/('gsp-api'+('.exe' if os.name=='nt' else ''))
-        sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c','ctr_hid_fixture.c','ctr_gsp_fixture.c')]
+        sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c','ctr_fs.c','ctr_apt.c','ctr_hid_fixture.c','ctr_gsp_fixture.c')]
         sources += [ROOT/'tests/gsp/test_gsp.c',ROOT/'tests/fixtures/hid/hid-image.generated.c',ROOT/'tests/fixtures/hid/hid.generated.c',ROOT/'tests/fixtures/gsp/gsp-image.generated.c',ROOT/'tests/fixtures/gsp/gsp.generated.c']
         run('gsp-api-compile',common+[*map(str,sources),'-o',str(binary)])
         run('gsp-api-execute',shlex.split(args.run_prefix)+[str(binary)])
     if args.relay_api:
         binary=out/('relay-api'+('.exe' if os.name=='nt' else ''))
-        sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c','ctr_hid_fixture.c','ctr_relay_fixture.c')]
+        sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c','ctr_fs.c','ctr_apt.c','ctr_hid_fixture.c','ctr_relay_fixture.c')]
         sources += [ROOT/'tests/relay/test_relay.c',ROOT/'tests/fixtures/hid/hid-image.generated.c',ROOT/'tests/fixtures/hid/hid.generated.c',ROOT/'tests/fixtures/relay/relay-image.generated.c',ROOT/'tests/fixtures/relay/relay.generated.c']
         run('relay-api-compile',common+[*map(str,sources),'-o',str(binary)])
         run('relay-api-execute',shlex.split(args.run_prefix)+[str(binary)])
     if args.multiple_api:
         binary=out/('multiple-api'+('.exe' if os.name=='nt' else ''))
-        sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c','ctr_stack_fixture.c')]
+        sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c','ctr_fs.c','ctr_apt.c','ctr_stack_fixture.c')]
         sources += [ROOT/'tests/multiple/test_multiple.c',ROOT/'tests/fixtures/stack/stack-image.generated.c',ROOT/'tests/fixtures/stack/stack.generated.c']
         run('multiple-api-compile',common+[*map(str,sources),'-o',str(binary)])
         run('multiple-api-execute',shlex.split(args.run_prefix)+[str(binary)])
     if args.thread_api:
         binary=out/('thread-api'+('.exe' if os.name=='nt' else ''))
-        sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c','ctr_thread_fixture.c')]
+        sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c','ctr_fs.c','ctr_apt.c','ctr_thread_fixture.c')]
         sources += [ROOT/'tests/threads/test_threads.c',ROOT/'tests/fixtures/threads/thread-image.generated.c',ROOT/'tests/fixtures/threads/thread.generated.c']
         run('thread-api-compile',common+[*map(str,sources),'-o',str(binary)])
         run('thread-api-execute',shlex.split(args.run_prefix)+[str(binary)])
+    for enabled,name,source in ((args.fs_api,'filesystem','test_filesystem.c'),(args.apt_api,'apt','test_apt.c')):
+        if not enabled:continue
+        binary=out/(name+'-api')
+        sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c','ctr_fs.c','ctr_fs_snapshot.c','ctr_apt.c','ctr_service_fixture.c')]
+        sources += [ROOT/'tests'/name/source,ROOT/'tests/fixtures/services/boot-image.generated.c',ROOT/'tests/fixtures/services/boot.generated.c']
+        run(name+'-api-compile',common+[*map(str,sources),'-o',str(binary)])
+        run(name+'-api-execute',shlex.split(args.run_prefix)+[str(binary)])
     (out/'report.json').write_text(json.dumps({'ok':True,'checks':results,'console_verified':False,'powerpc_execution':'emulated Linux' if args.static else None},indent=2)+'\n')
     return 0
 if __name__=='__main__':raise SystemExit(main())

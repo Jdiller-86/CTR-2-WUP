@@ -20,9 +20,11 @@ typedef struct { bool active, signaled; unsigned reset, references; } ctr_guest_
 typedef enum { CTR_HANDLE_EVENT, CTR_HANDLE_SESSION, CTR_HANDLE_SHARED,
                CTR_HANDLE_MUTEX, CTR_HANDLE_SEMAPHORE, CTR_HANDLE_THREAD, CTR_HANDLE_ARBITER,
                CTR_HANDLE_RESOURCE_LIMIT } ctr_guest_handle_type;
-typedef enum { CTR_SERVICE_SRV, CTR_SERVICE_CFG, CTR_SERVICE_HID, CTR_SERVICE_GSP } ctr_guest_service;
+typedef enum { CTR_SERVICE_SRV, CTR_SERVICE_CFG, CTR_SERVICE_HID, CTR_SERVICE_GSP,
+               CTR_SERVICE_FS, CTR_SERVICE_FILE, CTR_SERVICE_APT } ctr_guest_service;
 typedef struct { uint32_t generation; unsigned object; bool active; ctr_guest_handle_type type; } ctr_guest_handle;
-typedef struct { bool active, registered; unsigned references; ctr_guest_service service; } ctr_guest_session;
+typedef struct { bool active, registered; unsigned references; ctr_guest_service service;
+                 unsigned fs_volume, fs_file, fs_flags; bool fs_closed; } ctr_guest_session;
 enum { CTR_GUEST_MODEL_3DS=0, CTR_GUEST_MODEL_3DSXL=1, CTR_GUEST_MODEL_2DS=3 };
 typedef struct { uint8_t region, language, model; } ctr_guest_configuration;
 #define CTR_GUEST_MAX_ALLOCATIONS 16u
@@ -64,7 +66,7 @@ typedef struct {
     unsigned wait_objects[16], wait_count, wait_object;
     uint32_t wait_address;
 } ctr_guest_thread;
-typedef struct {
+typedef struct ctr_guest {
     ctr_memory memory;
     ctr_cpu cpu;
     ctr_program program;
@@ -80,6 +82,12 @@ typedef struct {
     ctr_guest_event events[32];
     ctr_guest_handle handles[64];
     ctr_guest_session sessions[16];
+    /* Platform-owned virtual archives; never maps a guest path to a host path. */
+    struct ctr_fs_volume *fs_volumes[2];
+    struct { uint32_t generation; unsigned volume, owner; bool active; } fs_archives[8];
+    uint32_t fs_generation;
+    struct { bool available, lock, initialized, enabled, pending, notified, closing;
+             unsigned mutex, events[2]; uint32_t transitions; } apt;
     ctr_guest_mutex mutexes[16];
     ctr_guest_semaphore semaphores[16];
     ctr_guest_arbiter arbiters[8];

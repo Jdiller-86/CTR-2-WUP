@@ -88,6 +88,12 @@ def main():
     thread_results=[json.loads(line) for line in thread_tests.stdout.splitlines() if line.startswith('{"ok":')]
     if len(thread_results)!=2 or any(not item.get("ok") or not item.get("original_arm_thread_scheduler") for item in thread_results):
         results[-1]["passed"]=False
+    fs_tests=run("filesystem-tests",["make","-C","tests/filesystem","check","sanitize"])
+    fs_results=[json.loads(line) for line in fs_tests.stdout.splitlines() if line.startswith('{"ok":')]
+    if len(fs_results)!=2 or any(not item.get("ok") or not item.get("bounded_private_filesystem") for item in fs_results):results[-1]["passed"]=False
+    apt_tests=run("apt-tests",["make","-C","tests/apt","check","sanitize"])
+    apt_results=[json.loads(line) for line in apt_tests.stdout.splitlines() if line.startswith('{"ok":')]
+    if len(apt_results)!=2 or any(not item.get("ok") or not item.get("standalone_apt_lifecycle") for item in apt_results):results[-1]["passed"]=False
     run("fixtures", [sys.executable, "-m", "tests.host_fixtures", "artifacts/fixtures"])
     for kind in ("cxi", "3ds"):
         run("inspect-" + kind, [sys.executable, "-m", "host", "inspect", "artifacts/fixtures/synthetic." + kind])
@@ -137,11 +143,11 @@ def main():
             if path.is_file() and "__pycache__" not in path.parts:
                 source_digest.update(str(path.relative_to(ROOT)).encode("utf-8") + b"\0" + path.read_bytes())
     report = {"schema_version": 1, "generated_at_utc": datetime.now(timezone.utc).isoformat(),
-              "workflow": "native/original/external-AOT RPX builds; checked CPU, VFP state, media/SMLAxy/barriers, guest threads/TLS/arbitration/quotas, SRV/CFG/HID/GSP CPU display, heap/shared synchronization, title staging/intake and offline encrypted packaging",
+              "workflow": "native/original/external-AOT RPX builds; checked CPU, VFP state, media/SMLAxy/barriers, guest threads/TLS/arbitration/quotas, SRV/CFG/HID/GSP CPU display, standalone APT, bounded private FS saves/reload, heap/shared synchronization, title staging/intake and offline encrypted packaging",
               "version": __version__,
               "compiled_homebrew_report":str((report_root/'libctru-native/report.json').relative_to(ROOT)) if options.compiled_homebrew else None,
               "ok": all(result["passed"] for result in results), "python_tests": test_count,
-              "cpu_runs": c_results, "guest_runs":guest_results,"service_runs":service_results,"heap_runs":heap_results,"kernel_runs":kernel_results,"hid_runs":hid_results,"gsp_runs":gsp_results,"relay_runs":relay_results,"multiple_runs":multiple_results,"thread_runs":thread_results,"checks": results,
+              "cpu_runs": c_results, "guest_runs":guest_results,"service_runs":service_results,"heap_runs":heap_results,"kernel_runs":kernel_results,"hid_runs":hid_results,"gsp_runs":gsp_results,"relay_runs":relay_results,"multiple_runs":multiple_results,"thread_runs":thread_results,"filesystem_runs":fs_results,"apt_runs":apt_results,"checks": results,
               "source_sha256": source_digest.hexdigest(),
               "build_tools": {package: importlib.metadata.version(package) for package in ("setuptools", "wheel", "pip")},
               "prototype_output": str(output.relative_to(ROOT)),
@@ -152,7 +158,7 @@ def main():
               "upstream_desktop_output":str(upstream_desktop.relative_to(ROOT)),
               "title_staging_output":str(title_stage.relative_to(ROOT)),
               "unverified": ["physical Wii U execution, input/audio/exit", "PowerPC correctness/timings", "clean Windows execution", "commercial ROM execution", "WUP installation"],
-              "unimplemented": ["complete ARM/VFP", "multi-thread kernel and general IPC/HID/GSP/other services", "PICA-to-GX2 rendering", "game saves/audio/CRO", "commercial conversion pipeline", "Windows GUI"],
+              "unimplemented": ["complete ARM/VFP", "multi-thread kernel and general IPC/HID/GSP/other services", "PICA-to-GX2 rendering", "commercial archive/ROMFS/save integration, audio/CRO", "commercial conversion pipeline", "Windows GUI"],
               "packaging": {"writer": "original scoped encrypted profile", "offline_report": str((report_root/"offline-packaging/report.json").relative_to(ROOT)), "synthetic_credentials_only": True, "installer_acceptance": "unverified"},
               "configuration": {"draft_persistence": "see STATUS.md", "publication": "not_checked_by_runner", "fresh_task_restore": "not_checked_by_runner"}}
     destination = report_root / "report.json"

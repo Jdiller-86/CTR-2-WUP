@@ -4,6 +4,22 @@ No console is attached to this environment. Every item below is awaiting a
 physical console test. Cross-compilation, host tests and RPX headers do not
 establish console behavior.
 
+v0.14 adds `CTR2WUP-libctru-filesystem-0.14.0.zip`. Launch its WUHB/RPX with an accessible mounted SD card; the existing diagnostic
+creates its `ctr2wup` directory under the WHB SD mount. A fresh diagnostic
+save must show/log `CTR2WUP compiled filesystem SAVE 1 PASS` and `state=exited`.
+Press Plus: it must reload, update and show `RELOAD PASS`. Exit with Minus and
+relaunch to test another fresh process. Preserve the private diagnostic snapshot
+and logs on failures; do not discard a corrupt snapshot or stale `.pending` file.
+Its path, atomic-publication limits and detailed procedure are in `filesystem.md`.
+The fifth build executes standard libctru/newlib savedata code, not a Mario save.
+Native SD exclusive-write/rename behavior and stability are unverified.
+
+The v0.14 compiled interactive build also enables standalone APT startup/exit and
+an empty private virtual SDMC, with no host SD-card exposure. Boot tracing now
+records only privileged APT:S/APT:A and optional ptm:sysm lookup failures; all
+scoped APT/FS startup requests succeed. The v0.13 notes below describe that older
+artifact's unavailable APT/FS path. Use current bundles for new hardware evidence.
+
 v0.13 adds `GUEST THREAD SCHEDULER PASS CODE 0` in native mode and
 `thread_selftest PASS result=0` in the SD log. Record its 345 instructions/eight
 switches, or the exact failure. This compares original interpreter/AOT contexts,
@@ -36,7 +52,7 @@ Record the precise homebrew environment, firmware and launcher versions used.
 These are diagnostic applications, not WUP installation directories. Do not
 attempt to install the RPX/WUHB through a WUP installer.
 
-Current v0.13.0 delivery is `CTR2WUP-diagnostic-0.13.0.zip`; it contains the native
+Current v0.14.0 delivery is `CTR2WUP-diagnostic-0.14.0.zip`; it contains the native
 RPX/WUHB, the instructions and direct/shared display reference PPMs.
 The separate original/external-guest bundles contain the other starting modes.
 

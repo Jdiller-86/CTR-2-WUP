@@ -3,6 +3,8 @@
 #include "ctr_heap.h"
 #include "ctr_kernel.h"
 #include "ctr_gsp.h"
+#include "ctr_fs.h"
+#include "ctr_apt.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -18,6 +20,9 @@ const char *ctr_guest_state_name(ctr_guest_state state) {
 }
 void ctr_guest_close(ctr_guest *guest) {
     if (guest->executor_close) guest->executor_close(guest->executor_context);
+    for(unsigned i=0;i<16;++i)if(guest->sessions[i].active)ctr_fs_session_closed(guest,i);
+    ctr_apt_close(guest);
+    for(unsigned i=0;i<2;++i)if(guest->fs_volumes[i] && guest->fs_volumes[i]->mounts)--guest->fs_volumes[i]->mounts;
     for (unsigned i=0;i<CTR_GUEST_STORAGE_COUNT;++i) free(guest->storage[i]);
     for (unsigned i=0;i<CTR_GUEST_MAX_ALLOCATIONS;++i) free(guest->allocations[i].storage);
     for (unsigned i=0;i<8;++i) if (guest->shared[i].owned) free(guest->shared[i].storage);
@@ -152,6 +157,7 @@ void ctr_guest_object_release(ctr_guest *g,ctr_guest_handle_type type,unsigned o
     if (type==CTR_HANDLE_SESSION) {
         ctr_guest_session *s=&g->sessions[object];
         if (s->references && --s->references==0) {
+            ctr_fs_session_closed(g,object);
             bool gsp=s->service==CTR_SERVICE_GSP;memset(s,0,sizeof(*s));
             if(gsp) {
                 ctr_gsp_session_closed(g,object);
@@ -165,9 +171,9 @@ void ctr_guest_object_release(ctr_guest *g,ctr_guest_handle_type type,unsigned o
     if (e->references && --e->references==0) memset(e,0,sizeof(*e));
 }
 uint32_t ctr_guest_session_open(ctr_guest *g,ctr_guest_service service) {
-    if (service!=CTR_SERVICE_SRV && service!=CTR_SERVICE_CFG && service!=CTR_SERVICE_HID && service!=CTR_SERVICE_GSP) return 0;
+    if ((unsigned)service>CTR_SERVICE_APT) return 0;
     for (unsigned i=0;i<16;++i) if (!g->sessions[i].active) {
-        g->sessions[i]=(ctr_guest_session){true,false,0,service};
+        g->sessions[i]=(ctr_guest_session){.active=true,.service=service,.fs_closed=true};
         uint32_t handle=ctr_guest_handle_new(g,CTR_HANDLE_SESSION,i);
         if (!handle) memset(&g->sessions[i],0,sizeof(g->sessions[i]));
         return handle;

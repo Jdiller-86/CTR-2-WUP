@@ -31,9 +31,20 @@
 #include "ctr_relay_fixture.h"
 #include "ctr_stack_fixture.h"
 #include "ctr_thread_fixture.h"
+#ifdef CTR_FILESYSTEM_HOMEBREW
+#include "ctr_fs_snapshot.h"
+static ctr_fs_volume diagnostic_save;
+static bool diagnostic_save_ready;
+static char diagnostic_save_path[384];
+static char filesystem_message[64];
+#endif
 #ifdef CTR_COMPILED_HOMEBREW
 #include "boot-image.h"
 #include "ctr_recomp.h"
+#include "ctr_apt.h"
+#include "ctr_fs.h"
+static ctr_fs_volume compiled_sd;
+static bool compiled_sd_ready;
 #endif
 
 enum { TOP_W=400, BOTTOM_W=320, GUEST_H=240, AUDIO_SAMPLES=12000 };
@@ -64,6 +75,9 @@ static OSTime guest_origin;
 
 static void guest_debug(void *context,const char *message) {
     (void)context; WHBLogPrintf("guest_debug %s",message);
+#ifdef CTR_FILESYSTEM_HOMEBREW
+    snprintf(filesystem_message,sizeof(filesystem_message),"%s",message);
+#endif
 }
 static void guest_trace(void *context,const char *event,const char *hash,uint32_t pc,bool thumb,uint32_t detail) {
     (void)context;
@@ -80,15 +94,34 @@ static void restart_guest(void) {
     guest_origin=OSGetTime(); presented_frames=0;
     WHBLogPrintf("guest_open ok=%u profile=ctr2wup-framebuffer-fixture-v1 mode=AOT custom_frame_io=1 GSP_PICA=unavailable",guest_ready);
     ctr_guest_close(&gsp_guest);
+#ifdef CTR_FILESYSTEM_HOMEBREW
+    if(diagnostic_save_ready)ctr_fs_volume_close(&diagnostic_save);
+    diagnostic_save_ready=ctr_fs_volume_init(&diagnostic_save,4,true);
+    filesystem_message[0]=0;
+    ctr_fs_snapshot_result loaded=ctr_fs_snapshot_load(&diagnostic_save,diagnostic_save_path);
+    diagnostic_save.persist=ctr_fs_snapshot_save;diagnostic_save.persist_context=diagnostic_save_path;
+#endif
 #ifdef CTR_COMPILED_HOMEBREW
     gsp_ready=ctr_guest_open(&gsp_guest,&boot_image,NULL,0) && ctr_recomp_attach(&gsp_guest,false);
+    if(compiled_sd_ready)ctr_fs_volume_close(&compiled_sd);
+    compiled_sd_ready=ctr_fs_volume_init(&compiled_sd,9,false);
+    gsp_ready=gsp_ready && compiled_sd_ready && ctr_apt_configure(&gsp_guest) && ctr_fs_mount(&gsp_guest,&compiled_sd);
 #else
     gsp_ready=ctr_relay_fixture_open(&gsp_guest);
 #endif
     gsp_guest.debug=guest_debug;gsp_guest.cpu.log=guest_trace;
+#ifdef CTR_FILESYSTEM_HOMEBREW
+    gsp_ready=gsp_ready && diagnostic_save_ready && loaded!=CTR_FS_SNAPSHOT_ERROR && ctr_fs_mount(&gsp_guest,&diagnostic_save);
+    if(!gsp_ready) { gsp_guest.state=CTR_GUEST_FAULTED;snprintf(filesystem_message,sizeof(filesystem_message),"SAVE LOAD / MOUNT FAIL"); }
+    WHBLogPrintf("filesystem_load result=%d ok=%u path=%s console_result_required=1",loaded,gsp_ready,diagnostic_save_path);
+#endif
     gsp_origin=OSGetTime();gsp_presented=0;
 #ifdef CTR_COMPILED_HOMEBREW
+#ifdef CTR_FILESYSTEM_HOMEBREW
+    WHBLogPrintf("gsp_guest_open ok=%u profile=original_compiled_libctru_filesystem mode=external_AOT PICA=unavailable",gsp_ready);
+#else
     WHBLogPrintf("gsp_guest_open ok=%u profile=original_compiled_libctru_interactive mode=external_AOT PICA=unavailable",gsp_ready);
+#endif
 #else
     WHBLogPrintf("gsp_guest_open ok=%u profile=original_hid_gsp_shared_relay_rgb565 mode=original_AOT PICA=unavailable",gsp_ready);
 #endif
@@ -302,11 +335,14 @@ int main(int argc, char **argv) {
         char directory[320], path[384];
         snprintf(directory,sizeof(directory),"%s/ctr2wup",WHBGetSdCardMountPath());
         mkdir(directory,0777);
+#ifdef CTR_FILESYSTEM_HOMEBREW
+        snprintf(diagnostic_save_path,sizeof(diagnostic_save_path),"%s/filesystem-test.snapshot",directory);
+#endif
         snprintf(path,sizeof(path),"%s/native-%llx.log",directory,(unsigned long long)OSGetTime());
         log_file=fopen(path,"w");
         if (log_file) WHBAddLogHandler(file_log);
     }
-    WHBLogPrintf("CTR2WUP native diagnostic version=0.13.0 pointer_bits=%u endian=big UDP=%u SD_log=%u",
+    WHBLogPrintf("CTR2WUP native diagnostic version=0.14.0 pointer_bits=%u endian=big UDP=%u SD_log=%u",
                   (unsigned)(8*sizeof(void *)), udp_ready, log_file!=NULL);
     OSTime cpu_start=OSGetTime();
     thread_test_result=ctr_thread_selftest();
@@ -405,13 +441,22 @@ int main(int argc, char **argv) {
             for(unsigned i=TOP_W*102;i<TOP_W*144;++i)top_image[i]=0x162d4fff;
             char text[90];
 #ifdef CTR_COMPILED_HOMEBREW
+#ifdef CTR_FILESYSTEM_HOMEBREW
+            image_text(top_image,TOP_W,10,"CTR2WUP COMPILED SAVE / RELOAD");
+#else
             image_text(top_image,TOP_W,10,"CTR2WUP COMPILED LIBCTRU / GSP");
+#endif
 #else
             image_text(top_image,TOP_W,10,"CTR2WUP HID / GSP QUEUE / VBLANK");
 #endif
             snprintf(text,sizeof(text),"FRAME %llu / STATE %s",(unsigned long long)gsp_presented,ctr_guest_state_name(gsp_guest.state));
             image_text(top_image,TOP_W,11,text);image_text(top_image,TOP_W,12,"A: GREEN / TOUCH: WHITE / B: EXIT");
+#ifdef CTR_FILESYSTEM_HOMEBREW
+            image_text(top_image,TOP_W,12,filesystem_message);
+            image_text(top_image,TOP_W,13,"PLUS: RELOAD SAVE / MINUS: EXIT");
+#else
             image_text(top_image,TOP_W,13,"Y: CYCLE / PLUS: RESET / PICA ABSENT");
+#endif
         } else {
             if (guest_ready && frame_guest.state!=CTR_GUEST_FAULTED && frame_guest.state!=CTR_GUEST_EXITED) {
                 uint32_t buttons=(pad.hold&VPAD_BUTTON_A)?1u:0u;
@@ -497,7 +542,13 @@ cleanup:
     }
 #endif
     ctr_guest_close(&gsp_guest);
+#ifdef CTR_FILESYSTEM_HOMEBREW
+    if(diagnostic_save_ready)ctr_fs_volume_close(&diagnostic_save);
+#endif
     if (tone_voice) { AXSetVoiceState(tone_voice,AX_VOICE_STATE_STOPPED); AXFreeVoice(tone_voice); }
+#ifdef CTR_COMPILED_HOMEBREW
+    if(compiled_sd_ready)ctr_fs_volume_close(&compiled_sd);
+#endif
     if (AXIsInit()) AXQuit();
     if (gfx_ready) GX2DrawDone();
     if (tv_source.image) MEMFreeToDefaultHeap(tv_source.image);

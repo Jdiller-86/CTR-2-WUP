@@ -8,6 +8,20 @@ title candidate. The target remains an UWUVCI-style Windows GUI: select a
 decrypted game, configure title/artwork, click Inject, install its per-game WUP
 and launch from Wii U Menu. The CLI is the shared engine, not the final product.
 
+**Version 0.14.0 adds bounded private FS saves and standalone APT lifecycle**.
+Normal compiled libctru/newlib code writes, rereads and commits original save data,
+uses a Japanese filename, deletes a temporary file, exits, then reloads and updates
+both records in a fresh process. Guest paths never become host paths. Checked
+archive/file ownership, access/buffer bounds, read-only mounts and CRC-checked
+snapshot publication support shared filesystem work without a game patch.
+Standalone APT runs its real library event thread, wakeup and process shutdown;
+the boot checks `aptIsActive`/`aptMainLoop`. The only remaining traced startup
+lookup failures are privileged APT:S/APT:A and optional ptm:sysm. A fifth
+RPX/WUHB supplies an original persistent-save console diagnostic. FS has 1,387
+normal/sanitized assertions and APT has 671; see `docs/filesystem.md`.
+ROMFS/assets/retail save integration, applets, GX/PICA/audio, Mario execution,
+installer and Windows GUI remain unfinished. Physical acceptance remains open.
+
 **Version 0.13.0 runs original compiler-built libctru applications** through
 normal CRT/newlib startup and checked external AOT, with zero interpreter fallback.
 Boot, real libctru threads/LightLock/C TLS, standard HID edges/Circle Pad/touch,
@@ -18,7 +32,7 @@ Eight guest thread slots preserve CPU/TLS/VFP/FPSCR context; address arbitration
 quota queries, BSS layout and the kernel configuration page supply shared startup
 prerequisites. CPU media/FPSCR/scalar FP transport/ARMv6 barriers/SMLAxy have
 independent ARM1176 evidence (870 cases). See `docs/guest-threads.md` and
-`docs/compiled-homebrew.md`. Startup still records eight failed IPC requests
+`docs/compiled-homebrew.md`. The v0.13 startup recorded eight failed IPC requests
 (six APT lookups, one fs:USER lookup and one invalid-session request); no complete
 service or commercial boot is claimed.
 

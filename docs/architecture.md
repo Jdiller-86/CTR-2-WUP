@@ -75,7 +75,11 @@ DATA page correctly; a read-only synthetic kernel configuration page supplies
 explicit HLE policy. See `guest-threads.md` for supported SVCs and limits.
 `compiled-homebrew.md` records normal devkitARM CRT/newlib/libctru applications,
 checked three-frame CPU display, standard input and a fourth interactive Wii U
-build. This path leaves APT/FS and optional startup requests visibly unavailable.
+build. The v0.13 path left APT/FS startup requests visibly unavailable; v0.14 adds
+explicit standalone APT and platform-owned private FS volumes with checked
+archive/file sessions and snapshot commits. Guest filenames never address the
+host filesystem. The original compiled test proves save/read/fresh-process reload;
+see `filesystem.md` for supported commands and remaining commercial boundaries.
 It does not execute PICA or supply commercial compatibility.
 
 `renderer/` contains bounded command inspection and small format/presentation

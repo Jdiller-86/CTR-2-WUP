@@ -3,6 +3,8 @@
 #include "ctr_recomp.h"
 #include "ctr_gsp.h"
 #include "ctr_hid.h"
+#include "ctr_fs_snapshot.h"
+#include "ctr_apt.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -56,7 +58,17 @@ static bool capture(ctr_guest *g,const char *folder) {
 }
 int main(int argc,char **argv) {
     bool ipc_trace=argc>1 && !strcmp(argv[1],"--trace-ipc");uint64_t requests=0;
+    bool filesystem=argc>2 && !strcmp(argv[1],"--filesystem");
     ctr_guest g;if(!ctr_guest_open(&g,&boot_image,NULL,0))return 1;
+    if(!ctr_apt_configure(&g)) { ctr_guest_close(&g);return 7; }
+    ctr_fs_volume sd;
+    if(!ctr_fs_volume_init(&sd,9,false) || !ctr_fs_mount(&g,&sd)) { ctr_guest_close(&g);return 8; }
+    ctr_fs_volume save;
+    if(filesystem) {
+        ctr_fs_volume_init(&save,4,true);
+        if(ctr_fs_snapshot_load(&save,argv[2])==CTR_FS_SNAPSHOT_ERROR || !ctr_fs_mount(&g,&save)) { ctr_guest_close(&g);ctr_fs_volume_close(&save);return 5; }
+        save.persist=ctr_fs_snapshot_save;save.persist_context=argv[2];
+    }
     g.cpu.log=trace;g.debug=message;if(!ctr_recomp_attach(&g,false)) { ctr_guest_close(&g);return 2; }
     for(unsigned n=0;n<(ipc_trace?2000000u:10000u) && g.state!=CTR_GUEST_FAULTED && g.state!=CTR_GUEST_EXITED;++n) {
         uint64_t now=(uint64_t)n*(ipc_trace?1000u:1000000u);
@@ -65,7 +77,7 @@ int main(int argc,char **argv) {
             fprintf(stderr,"ipc request=%llu service=%s target=%s header=%08x result=%08x pc=%08x\n",(unsigned long long)g.ipc_requests,g.ipc_service[0]?g.ipc_service:"-",g.ipc_target[0]?g.ipc_target:"-",g.ipc_header,g.ipc_result,g.cpu.r[15]);
             requests=g.ipc_requests;
         }
-        if(!capture(&g,!ipc_trace && argc>1?argv[1]:NULL)) { ctr_guest_close(&g);return 3; }
+        if(!capture(&g,!ipc_trace && !filesystem && argc>1?argv[1]:NULL)) { ctr_guest_close(&g);return 3; }
         if(pending_input>=0) {
             static const int cx[]={-30,100,0,0},cy[]={40,-100,0,0};
             static const uint16_t x[]={17,319,0,0},y[]={23,239,0,0};
@@ -77,6 +89,6 @@ int main(int argc,char **argv) {
     }
     printf("{\"state\":\"%s\",\"fault\":\"%s\",\"pc\":%u,\"instructions\":%llu,\"svcs\":%llu,\"switches\":%llu,\"fallback\":%llu,\"ipc_failures\":%llu,\"messages\":\"%s\",\"frames\":[",ctr_guest_state_name(g.state),ctr_cpu_result_name(g.fault),g.cpu.r[15],(unsigned long long)g.cpu.instructions,(unsigned long long)g.svc_count,(unsigned long long)g.context_switches,(unsigned long long)g.cpu.fallback_instructions,(unsigned long long)g.ipc_failures,messages);
     for(unsigned i=0;i<captures;++i)printf("%s%u",i?",":"",colors[i]);
-    printf("],\"input_samples\":%u}\n",input_samples);
-    ctr_guest_close(&g);return 0;
+    printf("],\"input_samples\":%u,\"save_commits\":%llu}\n",input_samples,(unsigned long long)(filesystem?save.commits:0));
+    ctr_guest_close(&g);if(!ctr_fs_volume_close(&sd) || (filesystem && !ctr_fs_volume_close(&save)))return 6;return 0;
 }

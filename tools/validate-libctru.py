@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Build original applications with pinned external libctru and run checked AOT.
 
-Uses the normal devkitARM CRT, newlib and libctru initialization. APT/FS and
-motion remain unavailable; reaching main does not prove their initialization.
+Uses normal devkitARM CRT/newlib/libctru startup with standalone APT and
+explicit private virtual filesystem volumes. Motion, ROMFS and applets are absent.
 """
 import argparse
 import hashlib
@@ -15,6 +15,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import zlib
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from host.loader import load_image
 from host import __version__
@@ -44,8 +45,8 @@ def main():
     p.add_argument('--libctru-source',type=Path,default=ROOT.parent/'ctr2wup-deps/libctru')
     p.add_argument('--devkitarm',type=Path,default=Path(os.environ.get('DEVKITARM',str(Path(os.environ.get('DEVKITPRO','/workspace/ctr2wup-sdk'))/'devkitARM'))))
     p.add_argument('--cc',default='gcc');p.add_argument('--cc-prefix',default='');p.add_argument('--run-prefix',default='');p.add_argument('--static',action='store_true');p.add_argument('--sanitize',action='store_true')
-    p.add_argument('--application',choices=('boot','threaded','graphics','input','interactive'),help='Run only the selected original application')
-    p.add_argument('--wiiu',action='store_true',help='Also build the verified original interactive application as RPX/WUHB')
+    p.add_argument('--application',choices=('boot','threaded','graphics','input','interactive','filesystem'),help='Run only the selected original application')
+    p.add_argument('--wiiu',action='store_true',help='Also build original interactive/filesystem applications as RPX/WUHB')
     p.add_argument('--trace-startup',action='store_true',help='Capture every IPC at single-instruction boundaries for the original boot application')
     a=p.parse_args()
     if a.trace_startup and a.application!='boot':p.error('--trace-startup requires --application boot')
@@ -66,7 +67,7 @@ def main():
         run('libctru-build',['make','-C',str(library),'lib/libctru.a','-j','4'],env=env)
         library_hash=hashlib.sha256((library/'lib/libctru.a').read_bytes()).hexdigest()
         reports=[]
-        for name in (a.application,) if a.application else ('boot','threaded','graphics','input','interactive'):
+        for name in (a.application,) if a.application else ('boot','threaded','graphics','input','interactive','filesystem'):
             folder=out/name;folder.mkdir();elf=folder/'application.elf'
             run(name+'-arm-compile',[str(arm),'-march=armv6k','-mtune=mpcore','-mfloat-abi=hard','-mfpu=vfp','-mtp=soft','-O2','-g','-ffunction-sections','-fdata-sections','-D__3DS__','-I'+str(library/'include'),'-L'+str(library/'lib'),'-specs=3dsx.specs',str(ROOT/'tests/homebrew'/(name+'.c')),'-lctru','-lm','-o',str(elf)])
             rom=folder/'original.cxi';rom.write_bytes(container(elf));image=load_image(rom);generation=generate_into(rom,folder/'aot')
@@ -75,15 +76,18 @@ def main():
             core=ROOT/'runtime/core';binary=folder/'runner';flags=['-std=c11','-O2','-g','-Wall','-Wextra','-Werror','-ffp-contract=off','-fno-fast-math','-I'+str(core),'-I'+str(ROOT/'runtime/recomp'),'-I'+str(folder),'-I'+str(folder/'aot')]
             if a.static:flags+=['-static','-mcpu=750']
             if a.sanitize:flags+=['-O1','-fno-omit-frame-pointer','-fsanitize=address,undefined']
-            sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c')]+[ROOT/'runtime/recomp/ctr_recomp.c',ROOT/'tests/homebrew/runner.c']+[folder/'aot'/n for n in generation['sources']]
+            sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c','ctr_fs.c','ctr_apt.c','ctr_fs_snapshot.c')]+[ROOT/'runtime/recomp/ctr_recomp.c',ROOT/'tests/homebrew/runner.c']+[folder/'aot'/n for n in generation['sources']]
             run(name+'-host-compile',shlex.split(a.cc_prefix)+[a.cc,*flags,*map(str,sources),'-lm','-o',str(binary)])
-            extra=['--trace-ipc'] if a.trace_startup else [str(folder)] if name in ('graphics','interactive') else []
+            extra=['--trace-ipc'] if a.trace_startup else [str(folder)] if name in ('graphics','interactive') else ['--filesystem',str(folder/'save.snapshot')] if name=='filesystem' else []
             output=run(name+'-execute',shlex.split(a.run_prefix)+[str(binary)]+extra)
-            result=json.loads(output.splitlines()[-1]);expected='CTR2WUP compiled libctru boot PASS' if name=='boot' else 'CTR2WUP compiled thread/TLS/LightLock PASS' if name=='threaded' else 'CTR2WUP compiled graphics PASS' if name=='graphics' else 'CTR2WUP compiled input PASS' if name=='input' else 'CTR2WUP compiled interactive PASS'
+            result=json.loads(output.splitlines()[-1]);expected='CTR2WUP compiled libctru boot PASS' if name=='boot' else 'CTR2WUP compiled thread/TLS/LightLock PASS' if name=='threaded' else 'CTR2WUP compiled graphics PASS' if name=='graphics' else 'CTR2WUP compiled input PASS' if name=='input' else 'CTR2WUP compiled filesystem SAVE 1 PASS' if name=='filesystem' else 'CTR2WUP compiled interactive PASS'
             if result['state']!='exited' or result['fallback'] or expected not in result['messages']:raise RuntimeError(name+' did not complete its real guest assertions')
             if name in ('graphics','interactive') and result['frames']!=[0x00ff00ff,0xff0000ff,0x00ff00ff]:raise RuntimeError('Require all three exact two-screen RGB565 frames')
             if name=='input' and result['input_samples']!=3:raise RuntimeError('Require all three standard HID publications')
             if name=='interactive' and result['input_samples']!=4:raise RuntimeError('Require three input-driven frames and the guest B-button exit')
+            if name=='filesystem':
+                reloaded=json.loads(run(name+'-reload',shlex.split(a.run_prefix)+[str(binary),*extra]).splitlines()[-1])
+                if reloaded['state']!='exited' or reloaded['fallback'] or 'CTR2WUP compiled filesystem RELOAD PASS' not in reloaded['messages'] or reloaded['save_commits']!=1:raise RuntimeError('Fresh process failed standard savedata reload')
             frames=[{'name':f.name,'sha256':hashlib.sha256(f.read_bytes()).hexdigest()} for f in sorted(folder.glob('frame-*.ppm'))]
             ipc=[]
             for line in output.splitlines():
@@ -91,12 +95,27 @@ def main():
                     fields=dict(item.split('=',1) for item in line.split()[1:]);ipc.append({k:int(v,16) if k in ('header','result','pc') else int(v) if k=='request' else v for k,v in fields.items()})
             if a.trace_startup and sum(bool(event['result']) for event in ipc)!=result['ipc_failures']:raise RuntimeError('Incomplete startup failure trace')
             reports.append({'application':name,'guest':result,'frames':frames,'startup_ipc':ipc,'generation':generation,'allocated_bytes':image['allocated_bytes'],'executable_sha256':hashlib.sha256(image['code']).hexdigest()})
-            if a.wiiu and name=='interactive':
+            if name=='filesystem':
+                reports[-1]['reload']=reloaded
+                snapshot=(folder/'save.snapshot').read_bytes()
+                if snapshot[:8]!=b'CTRFS001' or struct.unpack_from('<4I',snapshot,8)!=(4,2,len(snapshot),(zlib.crc32(snapshot[24:])^zlib.crc32(snapshot[:20]))):raise RuntimeError('Wrong snapshot framing/checksum')
+                cursor=24;saved={}
+                for _ in range(2):
+                    length,size=struct.unpack_from('<2I',snapshot,cursor);cursor+=8
+                    path=snapshot[cursor:cursor+length].decode('utf-8');cursor+=length
+                    saved[path]=snapshot[cursor:cursor+size];cursor+=size
+                if cursor!=len(snapshot) or saved!={'/progress.dat':b'CTR2SAVE\x02\0\0\0','/記録.dat':b'CTR2SAVE\x02\0\0\0'}:raise RuntimeError('Wrong independently preserved save files')
+                corrupt=folder/'corrupt.snapshot';bad=bytearray(snapshot);bad[-1]^=1;corrupt.write_bytes(bad)
+                rejected=subprocess.run(shlex.split(a.run_prefix)+[str(binary),'--filesystem',str(corrupt)],capture_output=True,text=True)
+                checks.append({'name':'filesystem-corrupt-reject','exit_code':rejected.returncode,'expected':5})
+                if rejected.returncode!=5 or corrupt.read_bytes()!=bad:raise RuntimeError('Corrupt save was not preserved/rejected')
+                reports[-1]['snapshot_sha256']=hashlib.sha256(snapshot).hexdigest()
+            if a.wiiu and name in ('interactive','filesystem'):
                 wiiu=folder/'wiiu';wiiu.mkdir();recipe=ROOT/'runtime/wiiu'
-                run('interactive-wiiu-build',['make','-C',str(recipe),'OUTPUT='+os.path.relpath(wiiu,recipe),'TARGET=ctr2wup-libctru-interactive','GUEST_DEFAULT=2','EXTERNAL_AOT=1','COMPILED_HOMEBREW=1','COMPILED_IMAGE_DIR='+str(folder),'UPSTREAM_DIR='+str(folder/'aot')],env=env)
-                _validate_rpx(wiiu/'ctr2wup-libctru-interactive.rpx')
+                run(name+'-wiiu-build',['make','-C',str(recipe),'OUTPUT='+os.path.relpath(wiiu,recipe),'TARGET=ctr2wup-libctru-'+name,'FILESYSTEM_HOMEBREW='+('1' if name=='filesystem' else '0'),'GUEST_DEFAULT=2','EXTERNAL_AOT=1','COMPILED_HOMEBREW=1','COMPILED_IMAGE_DIR='+str(folder),'UPSTREAM_DIR='+str(folder/'aot')],env=env)
+                _validate_rpx(wiiu/('ctr2wup-libctru-'+name+'.rpx'))
                 reports[-1]['wiiu_artifacts']=[{'name':f.name,'size':f.stat().st_size,'sha256':hashlib.sha256(f.read_bytes()).hexdigest()} for f in sorted(wiiu.glob('*.rp[x]*'))+sorted(wiiu.glob('*.wuhb'))]
-        if a.wiiu and not any('wiiu_artifacts' in r for r in reports):raise ValueError('--wiiu requires the interactive application')
-    report={'ok':True,'version':__version__,'libctru_pin':pin,'library_sha256':library_hash,'arm_compiler':arm_version.splitlines()[0],'applications':reports,'checks':checks,'console_verified':False,'native_windows_verified':False,'complete_service_startup':False,'powerpc_execution':'emulated Linux' if a.static else None}
+        if a.wiiu and not any('wiiu_artifacts' in r for r in reports):raise ValueError('--wiiu requires the interactive or filesystem application')
+    report={'ok':True,'version':__version__,'libctru_pin':pin,'library_sha256':library_hash,'arm_compiler':arm_version.splitlines()[0],'applications':reports,'checks':checks,'console_verified':False,'native_windows_verified':False,'complete_service_startup':False,'standalone_apt_and_fs_startup':True,'unavailable_startup_services':['APT:S','APT:A','ptm:sysm'],'powerpc_execution':'emulated Linux' if a.static else None}
     (out/'report.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps({'ok':True,'applications':[{'name':r['application'],'instructions':r['guest']['instructions'],'ipc_failures':r['guest']['ipc_failures']} for r in reports],'report':str(out/'report.json')}));return 0
 if __name__=='__main__':raise SystemExit(main())

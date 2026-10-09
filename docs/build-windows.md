@@ -109,3 +109,10 @@ checks use `tools/validate-libctru.py`; see `compiled-homebrew.md`. The generate
 C adapter removes redundant equality parentheses so real compiled libctru code
 also builds under Clang with warnings treated as errors. This is Linux compiler
 evidence; native Windows/toolchain/WPF acceptance remains pending.
+
+v0.14 adds portable `tests/filesystem` and `tests/apt` suites, and
+`tools/validate-upstream.py --fs-api --apt-api`. Savedata and standalone APT run
+through normal compiled original applications. Snapshot bytes are little-endian,
+bounded and CRC checked; the persistence adapter uses standard C I/O and rename.
+Native Windows rename/exclusive-file and application/toolchain behavior still
+need execution evidence. These Linux/emulated-PPC checks do not validate Windows.

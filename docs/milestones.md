@@ -136,3 +136,12 @@ GSP flush/invalidate brings its API to 508 assertions. Real compiled threads
 pass Clang; the interactive program's exact frames/input/exit match under
 emulated big-endian PPC Linux. `make check` and `make prototype` pass. These
 are software/cross-build results; physical Wii U and native Windows remain open.
+
+Version 0.14.0 continues M3/P3 through normal compiled savedata I/O and
+standalone APT lifecycle. Explicit private archives/files have checked ownership,
+rights, whole-buffer preflight and CRC-checked snapshot commits. The original
+program proves fresh-process reload and exact independently checked save bytes.
+Normal APT event/wakeup/exit runs; privileged and optional lookup failures remain
+explicit. A fifth save diagnostic RPX/WUHB awaits physical SD save/reload.
+`filesystem.md` records bounds; ROMFS/retail saves/applications, PICA/audio and
+all full milestone acceptance remain open.

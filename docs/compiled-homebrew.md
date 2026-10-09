@@ -1,6 +1,6 @@
 # Compiler-built homebrew evidence
 
-The optional v0.13 developer workflow builds original C applications with the
+The optional v0.14 developer workflow builds original C applications with the
 normal devkitARM 3DSX CRT/newlib and clean unmodified libctru source pinned at
 `9b55eda44cf80b971503991e0c78f9bc8fe50425`. It does not replace `__appInit`,
 library startup, locks, threads or input functions with test stubs. The trusted
@@ -37,6 +37,10 @@ The applications test:
   must decode to green/red/green on top and blue below; six PPMs are preserved.
 - `input`: real `hidScanInput`, held/down/up edges, signed Circle Pad and touch
   coordinates, including release, through three standard shared-ring updates.
+- `filesystem`: normal savedata mount and newlib file I/O, Japanese UTF-16
+  path, delete, explicit commit, fresh-process reload and independently checked
+  snapshot bytes. Corrupt snapshots are rejected and preserved. Its optional
+  fifth RPX/WUHB writes only an original private diagnostic save.
 - `interactive`: standard input drives three exact top-screen colors, bottom
   touch pixels at (17,23)/(319,239), release and the guest's own B-button exit.
   Its optional RPX/WUHB uses live VPAD input and the same checked AOT/GSP runtime.
@@ -47,16 +51,17 @@ HID producer; no host writes a private application result or skips guest code.
 The interactive program includes a 1 ms sleep per frame to expose boundaries
 and avoid polling between presentation and the next input sample.
 
-APT/FS startup remains unavailable: each application records eight failed IPC
-requests tolerated by this pinned libctru. A single-instruction boot trace shows
-six failed APT:S/A/U lookups, one fs:USER lookup and one invalid-session request
-after FS acquisition failed. Use `--application boot --trace-startup` to capture
-all 11 requests; `--sanitize` is also supported. Reaching main does not prove
-those services initialized. No SD/RomFS,
-saves, DSP/audio, CRO loader, PICA commands, GPU physical addresses or commercial
-compatibility is claimed. The interactive build's native tone is a platform
-diagnostic, not guest DSP audio. There is no Wii U hardware or Windows execution
-result. Do not enable a commercial profile from these homebrew passes.
+v0.14 explicitly enables standalone APT and mounts an empty read-only private
+virtual SDMC for these applications. Normal APT initialization, wakeup/event
+thread, Old-family model query, FS initialization/archive mount and APT exit now
+run successfully. The boot checks its active state and `aptMainLoop`. Use
+`--application boot --trace-startup` to capture every request. The remaining
+startup lookup failures are APT:S, APT:A and optional ptm:sysm. Privileged/system
+services and general applets are not supplied. See `filesystem.md` for exact
+state, ownership, persistence and limits. No ROMFS/retail saves, DSP/audio, CRO,
+PICA commands, GPU physical addresses or commercial compatibility is claimed.
+Native diagnostic tone remains platform audio; console and Windows results are
+pending. Do not enable a commercial profile from these homebrew passes.
 
 The original source is under `tests/homebrew`. Optional locally generated guest
 images link external libctru/newlib/compiler support. The library's full license

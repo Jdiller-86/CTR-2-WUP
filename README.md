@@ -32,6 +32,9 @@ Version 0.13.0 adds guest threads/TLS/VFP contexts, locks/arbitration/quotas,
 compiled libctru startup and verified standard input/CPU-framebuffer applications.
 An additional interactive RPX/WUHB runs that original compiled application;
 see `docs/guest-threads.md` and `docs/compiled-homebrew.md`.
+Version 0.14.0 adds checked private FS archives/files, original save/reload
+through normal libctru/newlib, standalone APT startup/exit and a fifth compiled
+save diagnostic RPX/WUHB; see `docs/filesystem.md`.
 Commercial ROM-to-WUP conversion is not implemented or claimed.
 
 Read `STATUS.md`, `docs/milestones.md` and `docs/foundation-audit.md` before

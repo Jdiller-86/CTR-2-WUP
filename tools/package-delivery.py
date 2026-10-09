@@ -110,6 +110,17 @@ def main():
         compiled_entries += [(p,str(p.relative_to(ROOT))) for p in (ROOT/'docs/licenses').rglob('*') if p.is_file()]
         compiled_entries += [(p,'desktop-reference/'+p.name) for p in folder.glob('frame-*.ppm')]
         compiled_archive=OUT/('CTR2WUP-libctru-interactive-'+__version__+'.zip');archive(compiled_archive,compiled_entries);outputs.append(compiled_archive)
+        filesystem=next((a for a in compiled['applications'] if a['application']=='filesystem'),None)
+        if filesystem and filesystem.get('wiiu_artifacts'):
+            folder=compiled_report.parent/'filesystem';fs_entries=[]
+            for artifact in filesystem['wiiu_artifacts']:
+                path=folder/'wiiu'/artifact['name']
+                if hashlib.sha256(path.read_bytes()).hexdigest()!=artifact['sha256']:raise RuntimeError('Save diagnostic artifact changed')
+                fs_entries.append((path,path.name))
+            fs_entries += [(compiled_report,'compiled-homebrew-report.json')]
+            fs_entries += [(ROOT/name,name) for name in ('LICENSE','THIRD_PARTY_NOTICES','docs/filesystem.md','docs/compiled-homebrew.md','docs/console-testing.md')]
+            fs_entries += [(p,str(p.relative_to(ROOT))) for p in (ROOT/'docs/licenses').rglob('*') if p.is_file()]
+            fs_archive=OUT/('CTR2WUP-libctru-filesystem-'+__version__+'.zip');archive(fs_archive,fs_entries);outputs.append(fs_archive)
     results = [{"name": path.name, "size": path.stat().st_size, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()} for path in outputs]
     (OUT / ("SHA256SUMS-"+__version__+".txt")).write_text("".join(f"{item['sha256']}  {item['name']}\n" for item in results))
     (OUT / ("delivery-manifest-"+__version__+".json")).write_text(json.dumps({"schema_version": 1, "files": results, "console_verified": False, "commercial_conversion": "unimplemented", "wup_generated": False, "encrypted_writer": "implemented; offline verified with synthetic inputs", "installer_acceptance": "unverified"}, indent=2) + "\n")
