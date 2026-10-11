@@ -1,6 +1,6 @@
 # CTR2WUP status
 
-Updated October 9, 2026 (America/New_York); report filenames use UTC.
+Updated October 11, 2026 (America/New_York); report filenames use UTC.
 Requirements: `docs/project-brief.md`; product plan:
 `docs/development-plan.md`; GUI workflow: `docs/gui-workflow.md`.
 The user resumed implementation and selected **Super Mario 3D Land** as the first
@@ -13,6 +13,22 @@ v0.14 GUI-to-playable-WUP target on October 9, 2026. This is a rough engineering
 judgment, not measured task completion. **0/7 full milestones are accepted.**
 See [the completion assessment](docs/progress.md) for its basis, remaining work,
 and external testing gates; the README provides a concise progress overview.
+
+**Version 0.14.1 makes console testing guided and records readable TXT reports.**
+The native, compiled-interactive and compiled-save apps prompt for inputs and
+controller confirmations, record completed/failed/skipped steps, and show report
+filenames and upload instructions. Button/stick/touch samples, guest PASS/exit,
+save reload, diagnostic timing and an explicit session summary are recorded.
+Exclusive per-launch files preserve previous reports; checked writes expose SD
+errors. Interrupted/cancelled tests remain incomplete, and subjective visual/audio
+confirmations are labeled as user evidence. See `docs/guided-testing.md`.
+This improves test collection; the implementation estimate remains roughly 20%
+and all seven full acceptance gates remain open. Console results are pending.
+
+October 11 private intake: a valid report-only ZIP was received. The helper
+reports `encrypted_cia_content` for the Mario executable; no executable view or
+game assets were supplied. The original CIA bytes were not independently inspected.
+The user is preparing hardware tests; decrypted executable intake remains needed.
 
 **Version 0.14.0 adds bounded private FS saves and standalone APT lifecycle**.
 Normal compiled libctru/newlib code writes, rereads and commits original save data,
@@ -259,6 +275,19 @@ is unverified; no milestone requiring physical-console evidence is complete.
   external developer dependencies.
 
 ## Reports and deliverables
+
+v0.14.1 guided-test verification is under `artifacts/reports/txt-reports-v0141/`:
+the required `make check` passes 155 Python tests and all normal/sanitized C suites;
+the final guide/report suite checks successful, failed, skipped, cancelled and
+interrupted evidence, report preservation/write failures, countdown boundaries,
+old-session rejection and fresh-launch reload. `make prototype` and three current
+RPX/WUHB builds pass. The original interactive and filesystem applications are
+revalidated on desktop, including exact frames and save/fresh-process reload.
+Final console receipts explicitly retain that original host evidence while
+recording fresh console build logs and hashes after prompt refinements.
+The source and SD-ready kit are under `artifacts/delivery/guided-0.14.1/`;
+`manifest.json` records verified hashes and the source snapshot. These are new
+diagnostics, not installable WUPs. Console execution is still awaiting the user.
 
 October 9 documentation follow-up: the README now presents the product workflow,
 current limits, progress graphic and milestone overview; `docs/progress.md`

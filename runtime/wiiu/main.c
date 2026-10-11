@@ -15,12 +15,15 @@
 #include <whb/proc.h>
 #include <whb/sdcard.h>
 #include <math.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include "diagnostic_font.h"
 #include "viewport.h"
+#include "test_report.h"
+#include "test_guide.h"
 #include "ctr_cpu.h"
 #include "ctr_guest_fixture.h"
 #include "ctr_service_fixture.h"
@@ -50,7 +53,34 @@ static bool compiled_sd_ready;
 enum { TOP_W=400, BOTTOM_W=320, GUEST_H=240, AUDIO_SAMPLES=12000 };
 static uint32_t top_image[TOP_W*GUEST_H], bottom_image[BOTTOM_W*GUEST_H];
 static int16_t audio_samples[AUDIO_SAMPLES] __attribute__((aligned(64)));
-static FILE *log_file;
+static ctr_test_report test_report;
+static ctr_test_guide test_guide;
+static bool gsp_pass_seen,fresh_save_reload_seen;
+static bool report_handler_added,report_error_announced;
+static OSTime session_started;
+static unsigned guest_sessions,completed_frames,input_samples,input_errors;
+static unsigned button_presses[12],touch_samples,border_touch_samples;
+static uint32_t frame_min_us=UINT32_MAX,frame_max_us;
+static uint64_t frame_total_us;
+static bool left_stick_seen,right_stick_seen,guest_fault_seen,allocation_checked;
+static bool allocation_failure_seen;
+static int alloc_ok_for_report;
+static uint16_t touch_min_x=UINT16_MAX,touch_min_y=UINT16_MAX,touch_max_x,touch_max_y;
+#ifdef CTR_FILESYSTEM_HOMEBREW
+#define REPORT_APPLICATION "compiled-save"
+#elif defined(CTR_COMPILED_HOMEBREW)
+#define REPORT_APPLICATION "compiled-interactive"
+#elif defined(CTR_EXTERNAL_AOT)
+#define REPORT_APPLICATION "upstream-guest"
+#elif CTR_GUEST_DEFAULT == 1
+#define REPORT_APPLICATION "original-guest"
+#else
+#define REPORT_APPLICATION "native"
+#endif
+static const uint32_t input_masks[]={VPAD_BUTTON_A,VPAD_BUTTON_B,VPAD_BUTTON_MINUS,VPAD_BUTTON_PLUS,
+    VPAD_BUTTON_RIGHT,VPAD_BUTTON_LEFT,VPAD_BUTTON_UP,VPAD_BUTTON_DOWN,VPAD_BUTTON_R,VPAD_BUTTON_L,
+    VPAD_BUTTON_X,VPAD_BUTTON_Y};
+static const char *const input_names[]={"A","B","Minus","Plus","Right","Left","Up","Down","R","L","X","Y"};
 static AXVoice *tone_voice;
 static unsigned tone_count;
 static int audio_ready;
@@ -75,6 +105,10 @@ static OSTime guest_origin;
 
 static void guest_debug(void *context,const char *message) {
     (void)context; WHBLogPrintf("guest_debug %s",message);
+    if(strstr(message,"CTR2WUP compiled interactive PASS") ||
+       strstr(message,"CTR2WUP compiled filesystem SAVE 1 PASS") ||
+       strstr(message,"CTR2WUP compiled filesystem RELOAD PASS"))gsp_pass_seen=true;
+    if(guest_sessions==1 && strstr(message,"CTR2WUP compiled filesystem RELOAD PASS"))fresh_save_reload_seen=true;
 #ifdef CTR_FILESYSTEM_HOMEBREW
     snprintf(filesystem_message,sizeof(filesystem_message),"%s",message);
 #endif
@@ -84,6 +118,15 @@ static void guest_trace(void *context,const char *event,const char *hash,uint32_
     WHBLogPrintf("guest_event=%s module=%s pc=%08x thumb=%u detail=%08x",event,hash,pc,thumb,detail);
 }
 static void restart_guest(void) {
+    if(guest_sessions) {
+        WHBLogPrintf("Restart requested: prior framebuffer=%s prior GSP=%s prior GSP fallback=%llu fault=%s detail=%08x",
+            ctr_guest_state_name(frame_guest.state),ctr_guest_state_name(gsp_guest.state),
+            (unsigned long long)gsp_guest.cpu.fallback_instructions,ctr_cpu_result_name(gsp_guest.fault),gsp_guest.fault_detail);
+        if(frame_guest.state==CTR_GUEST_FAULTED || gsp_guest.state==CTR_GUEST_FAULTED)guest_fault_seen=true;
+    }
+    ++guest_sessions;
+    gsp_pass_seen=false;
+    WHBLogPrintf("Guest session %u starting",guest_sessions);
     ctr_guest_close(&frame_guest);
 #ifdef CTR_COMPILED_HOMEBREW
     guest_ready=0;
@@ -148,9 +191,46 @@ static void update_input_guest(ctr_guest *guest,int ready,OSTime origin,const VP
 }
 
 static void file_log(const char *message) {
-    if (log_file) { fprintf(log_file, "%s\n", message); fflush(log_file); }
+    if(!ctr_test_report_line(&test_report,message) && !report_error_announced) {
+        report_error_announced=true;
+        /* Calling WHBLogPrintf here would recurse through this handler. */
+        OSReport("CTR2WUP TXT report write FAILED errno=%d path=%s\n",test_report.error_code,test_report.path);
+    }
 }
 static void system_log(const char *message) { OSReport("%s\n", message); }
+static void guide_log(void *context,const char *message) {
+    (void)context;WHBLogPrintf("%s",message);
+}
+
+static void session_summary(int result) {
+    WHBLogPrintf("===== SESSION SUMMARY =====");
+    ctr_test_guide_summary(&test_guide);
+    WHBLogPrintf("Application: %s | Build: 0.14.1 | Entering cleanup: result=%d",REPORT_APPLICATION,result);
+    WHBLogPrintf("Elapsed milliseconds: %llu | Completed display frames: %u | Guest sessions: %u",
+        (unsigned long long)(OSTicksToMicroseconds(OSGetTime()-session_started)/1000),completed_frames,guest_sessions);
+    WHBLogPrintf("Display frame microseconds: minimum=%u average=%llu maximum=%u (diagnostic workload, not game FPS)",
+        completed_frames?frame_min_us:0,(unsigned long long)(completed_frames?frame_total_us/completed_frames:0),frame_max_us);
+    WHBLogPrintf("Self-tests (0=PASS): CPU=%d services=%d heap=%d objects=%d HID=%d GSP=%d relay=%d stack=%d threads=%d",
+        cpu_test_result,service_test_result,heap_test_result,kernel_test_result,hid_test_result,gsp_test_result,
+        relay_test_result,stack_test_result,thread_test_result);
+    WHBLogPrintf("Allocation latest: %s | Allocation failure ever seen: %s | Audio configured: %s | Tone requests: %u",
+        !allocation_checked?"NOT TESTED":alloc_ok_for_report?"PASS":"FAIL",allocation_failure_seen?"YES":"NO",audio_ready?"YES":"NO",tone_count);
+    WHBLogPrintf("Input samples: %u | Input errors: %u | Left stick moved: %s | Right stick moved: %s",
+        input_samples,input_errors,left_stick_seen?"YES":"NO",right_stick_seen?"YES":"NO");
+    for(unsigned i=0;i<12;++i)WHBLogPrintf("Button %s presses: %u",input_names[i],button_presses[i]);
+    WHBLogPrintf("Accepted touch samples: %u | Rejected border touch samples: %u | Accepted range: %u,%u to %u,%u",
+        touch_samples,border_touch_samples,touch_samples?touch_min_x:0,touch_samples?touch_min_y:0,touch_max_x,touch_max_y);
+    WHBLogPrintf("Guest fault observed during session: %s",guest_fault_seen || frame_guest.state==CTR_GUEST_FAULTED ||
+        hid_guest.state==CTR_GUEST_FAULTED || gsp_guest.state==CTR_GUEST_FAULTED?"YES":"NO");
+    WHBLogPrintf("Framebuffer guest: %s | GSP guest: %s | GSP instructions: %llu | GSP fallback: %llu",
+        ctr_guest_state_name(frame_guest.state),ctr_guest_state_name(gsp_guest.state),
+        (unsigned long long)gsp_guest.cpu.instructions,(unsigned long long)gsp_guest.cpu.fallback_instructions);
+    WHBLogPrintf("GSP fault: %s detail=%08x | Presentations: %llu | Device failures: %llu | Dropped IRQs: %llu",
+        ctr_cpu_result_name(gsp_guest.fault),gsp_guest.fault_detail,(unsigned long long)gsp_presented,
+        (unsigned long long)gsp_guest.gsp.failures,(unsigned long long)gsp_guest.gsp.dropped_interrupts);
+    WHBLogPrintf("Human observations: note incorrect picture/touch alignment, missing sound, or failure to return to launcher.");
+    WHBLogPrintf("No overall hardware/game compatibility PASS is inferred from these counters.");
+}
 
 static int surface_create(GX2Surface *s, const GX2Surface *target) {
     memset(s, 0, sizeof(*s));
@@ -195,9 +275,10 @@ static void scale_image(GX2Surface *s, const CtrViewport *v, const uint32_t *ima
 }
 
 static int allocation_test(void) {
+    allocation_checked=true;alloc_ok_for_report=0;
     const uint32_t bytes=65536;
     unsigned char *buffer=MEMAllocFromDefaultHeapEx(bytes, 64);
-    if (!buffer) { WHBLogPrintf("allocation_test FAIL bytes=%u", bytes); return 0; }
+    if (!buffer) { allocation_failure_seen=true;WHBLogPrintf("allocation_test FAIL bytes=%u", bytes); return 0; }
     int ok=1;
     for (uint32_t i=0;i<bytes;++i) buffer[i]=(unsigned char)(i^(i>>8)^0xa5);
     for (uint32_t i=0;i<bytes;++i)
@@ -205,6 +286,8 @@ static int allocation_test(void) {
     WHBLogPrintf("allocation_test %s bytes=%u aligned64=%u", ok ? "PASS":"FAIL",
                   bytes, (unsigned)(((uintptr_t)buffer&63)==0));
     MEMFreeToDefaultHeap(buffer);
+    alloc_ok_for_report=ok;
+    if(!ok)allocation_failure_seen=true;
     return ok;
 }
 
@@ -328,22 +411,37 @@ int main(int argc, char **argv) {
     GX2Surface tv_source={0}, drc_source={0};
     CtrViewport tv_view, drc_view;
     WHBProcInit();
+    session_started=OSGetTime();
     WHBAddLogHandler(system_log);
     udp_ready=WHBLogUdpInit();
     sd_ready=WHBMountSdCard();
     if (sd_ready) {
-        char directory[320], path[384];
-        snprintf(directory,sizeof(directory),"%s/ctr2wup",WHBGetSdCardMountPath());
-        mkdir(directory,0777);
+        char directory[320];
+        int n=snprintf(directory,sizeof(directory),"%s/ctr2wup",WHBGetSdCardMountPath());
+        bool directory_ok=n>0 && (size_t)n<sizeof(directory);
+        if(directory_ok)directory_ok=mkdir(directory,0777)==0 || errno==EEXIST;
 #ifdef CTR_FILESYSTEM_HOMEBREW
-        snprintf(diagnostic_save_path,sizeof(diagnostic_save_path),"%s/filesystem-test.snapshot",directory);
+        if(directory_ok)snprintf(diagnostic_save_path,sizeof(diagnostic_save_path),"%s/filesystem-test.snapshot",directory);
 #endif
-        snprintf(path,sizeof(path),"%s/native-%llx.log",directory,(unsigned long long)OSGetTime());
-        log_file=fopen(path,"w");
-        if (log_file) WHBAddLogHandler(file_log);
+        if(directory_ok && ctr_test_report_open(&test_report,directory,REPORT_APPLICATION,"0.14.1",(uint64_t)session_started)) {
+            WHBAddLogHandler(file_log);report_handler_added=true;
+        } else if(!directory_ok) {
+            test_report.failed=true;test_report.error_code=n>0 && (size_t)n<sizeof(directory)?errno:ENAMETOOLONG;
+        }
+    } else {
+        test_report.failed=true;test_report.error_code=ENODEV;
     }
-    WHBLogPrintf("CTR2WUP native diagnostic version=0.14.0 pointer_bits=%u endian=big UDP=%u SD_log=%u",
-                  (unsigned)(8*sizeof(void *)), udp_ready, log_file!=NULL);
+    WHBLogPrintf("CTR2WUP native diagnostic version=0.14.1 application=%s pointer_bits=%u endian=big UDP=%u TXT_report=%u",
+                  REPORT_APPLICATION,(unsigned)(8*sizeof(void *)),udp_ready,report_handler_added);
+    WHBLogPrintf("TXT report path=%s status=%s errno=%d",test_report.path[0]?test_report.path:"unavailable",
+        report_handler_added?"SAVING":"FAILED",test_report.error_code);
+#ifdef CTR_FILESYSTEM_HOMEBREW
+    ctr_test_guide_init(&test_guide,CTR_GUIDE_SAVE,guide_log,NULL);
+#elif defined(CTR_COMPILED_HOMEBREW)
+    ctr_test_guide_init(&test_guide,CTR_GUIDE_INTERACTIVE,guide_log,NULL);
+#else
+    ctr_test_guide_init(&test_guide,CTR_GUIDE_NATIVE,guide_log,NULL);
+#endif
     OSTime cpu_start=OSGetTime();
     thread_test_result=ctr_thread_selftest();
     WHBLogPrintf("thread_selftest %s result=%d fixture=original_arm_three_threads context_switches=8 instructions_per_path=345 console_result_required=1",
@@ -394,6 +492,9 @@ int main(int argc, char **argv) {
     int alloc_ok=allocation_test();
     audio_init();
     restart_guest();
+#ifndef CTR_COMPILED_HOMEBREW
+    guest_mode=0;
+#endif
     VPADStatus pad={0}; VPADReadError error=VPAD_READ_NO_SAMPLES;
     unsigned frame=0; uint32_t frame_us=0;
     OSTime log_time=OSGetTime();
@@ -404,10 +505,21 @@ int main(int argc, char **argv) {
         pad.trigger=pad.release=0;
         if (count>0 && error==VPAD_READ_SUCCESS) pad=sample;
         else if (error!=VPAD_READ_NO_SAMPLES) memset(&pad,0,sizeof(pad));
-        if (pad.trigger&VPAD_BUTTON_MINUS) { WHBProcStopRunning(); continue; }
+        if(count>0 && error==VPAD_READ_SUCCESS)++input_samples;
+        else if(error!=VPAD_READ_NO_SAMPLES)++input_errors;
+        for(unsigned i=0;i<12;++i)if(pad.trigger&input_masks[i])++button_presses[i];
+        if(pad.trigger || pad.release)WHBLogPrintf("Input event: pressed=%08x released=%08x held=%08x",
+            (unsigned)pad.trigger,(unsigned)pad.release,(unsigned)pad.hold);
+        if(fabsf(pad.leftStick.x)>0.15f || fabsf(pad.leftStick.y)>0.15f)left_stick_seen=true;
+        if(fabsf(pad.rightStick.x)>0.15f || fabsf(pad.rightStick.y)>0.15f)right_stick_seen=true;
+        if (pad.trigger&VPAD_BUTTON_MINUS) {
+            ctr_guide_input stop={0};stop.milliseconds=OSTicksToMicroseconds(OSGetTime()-session_started)/1000;stop.pressed=CTR_GUIDE_MINUS;
+            ctr_test_guide_update(&test_guide,&stop);
+            WHBProcStopRunning();continue;
+        }
         if (pad.trigger&VPAD_BUTTON_A) play_tone();
         if (pad.trigger&VPAD_BUTTON_X) alloc_ok=allocation_test();
-        if (pad.trigger&VPAD_BUTTON_Y) {
+        if (test_guide.done && (pad.trigger&VPAD_BUTTON_Y)) {
 #ifdef CTR_COMPILED_HOMEBREW
             guest_mode=guest_mode==2?0:2;
 #else
@@ -415,11 +527,18 @@ int main(int argc, char **argv) {
 #endif
             WHBLogPrintf("display_mode=%s",guest_mode==2?"standard-hid-gsp":guest_mode==1?"guest-fixture":"native");
         }
-        if (pad.trigger&VPAD_BUTTON_PLUS) restart_guest();
+        if (test_guide.done && (pad.trigger&VPAD_BUTTON_PLUS)) restart_guest();
         VPADTouchData touch={0}; uint16_t tx=0, ty=0;
         VPADGetTPCalibratedPointEx(VPAD_CHAN_0,VPAD_TP_1280X720,&touch,&pad.tpNormal);
         int inside=touch.touched && touch.validity==VPAD_VALID &&
             ctr_viewport_touch(&drc_view,touch.x,touch.y,1280,720,&tx,&ty);
+        if(inside) {
+            ++touch_samples;
+            if(tx<touch_min_x)touch_min_x=tx;
+            if(ty<touch_min_y)touch_min_y=ty;
+            if(tx>touch_max_x)touch_max_x=tx;
+            if(ty>touch_max_y)touch_max_y=ty;
+        } else if(touch.touched && touch.validity==VPAD_VALID)++border_touch_samples;
         update_input_guest(&hid_guest,hid_ready,hid_origin,&pad,inside!=0,tx,ty,1000);
         if(hid_ready)ctr_hid_fixture_snapshot(&hid_guest,hid_snapshot);
         if (!guest_mode) diagnostic_images(frame,&pad,error,inside,&touch,tx,ty,frame_us,alloc_ok);
@@ -482,7 +601,39 @@ int main(int argc, char **argv) {
             snprintf(text,sizeof(text),"Y: NATIVE / PLUS: RESET / FAULT %u",(unsigned)frame_guest.fault);
             image_text(top_image,TOP_W,3,text);
         }
-        /* Synchronize previous GPU reads before rewriting the CPU surfaces. */
+        ctr_guide_input guide_input={0};
+        guide_input.milliseconds=OSTicksToMicroseconds(OSGetTime()-session_started)/1000;
+        for(unsigned i=0;i<12;++i) {
+            if(pad.trigger&input_masks[i])guide_input.pressed|=1u<<i;
+            if(pad.hold&input_masks[i])guide_input.held|=1u<<i;
+        }
+        if(pad.trigger&VPAD_BUTTON_ZL)guide_input.pressed|=CTR_GUIDE_SKIP;
+        if(pad.trigger&VPAD_BUTTON_ZR)guide_input.pressed|=CTR_GUIDE_FAIL;
+        guide_input.left_x=pad.leftStick.x;guide_input.left_y=pad.leftStick.y;
+        guide_input.right_x=pad.rightStick.x;guide_input.right_y=pad.rightStick.y;
+        guide_input.touch_inside=inside!=0;guide_input.touch_border=!inside && touch.touched && touch.validity==VPAD_VALID;
+        guide_input.touch_x=tx;guide_input.touch_y=ty;
+        guide_input.guest_exited=gsp_guest.state==CTR_GUEST_EXITED;
+        guide_input.guest_fault=gsp_guest.state==CTR_GUEST_FAULTED;
+        guide_input.guest_pass=gsp_pass_seen;guide_input.guest_sessions=guest_sessions;
+        guide_input.guest_frame_available=gsp_presented>0;
+        guide_input.fresh_save_reload=fresh_save_reload_seen;
+        ctr_test_guide_update(&test_guide,&guide_input);
+        if(ctr_test_guide_take_restart(&test_guide))restart_guest();
+        char guide_rows[7][72];ctr_test_guide_view(&test_guide,guide_input.milliseconds,guide_rows);
+        for(unsigned i=0;i<TOP_W*83;++i)top_image[i]=0x162d4fff;
+        if(test_report.failed && test_guide.done) {
+            snprintf(guide_rows[3],72,"SD WRITE FAILED; report may be missing/partial.");
+            snprintf(guide_rows[4],72,"Send the error below and any available TXT.");
+        }
+        for(unsigned i=0;i<7;++i)image_text(top_image,TOP_W,i,guide_rows[i]);
+        for(unsigned i=TOP_W*154;i<TOP_W*178;++i)top_image[i]=0x162d4fff;
+        image_text(top_image,TOP_W,15,test_report.file && !test_report.failed?"TXT REPORT SAVING / UPLOAD SD:/CTR2WUP":"TXT REPORT FAILED / CHECK SD CARD");
+        char report_line[100];
+        if(!test_report.failed)snprintf(report_line,sizeof(report_line),"%s",test_report.filename);
+        else snprintf(report_line,sizeof(report_line),"SD REPORT ERROR %d",test_report.error_code);
+        image_text(top_image,TOP_W,16,report_line);
+        /* Draw prompts before scaling so they reach the actual outputs. */
         GX2DrawDone();
         scale_image(&tv_source,&tv_view,top_image);
         scale_image(&drc_source,&drc_view,bottom_image);
@@ -495,6 +646,10 @@ int main(int argc, char **argv) {
         WHBGfxFinishRenderDRC();
         WHBGfxFinishRender();
         frame_us=(uint32_t)OSTicksToMicroseconds(OSGetTime()-frame_start);
+        ++completed_frames;frame_total_us+=frame_us;
+        if(frame_us<frame_min_us)frame_min_us=frame_us;
+        if(frame_us>frame_max_us)frame_max_us=frame_us;
+        if(frame_guest.state==CTR_GUEST_FAULTED || hid_guest.state==CTR_GUEST_FAULTED || gsp_guest.state==CTR_GUEST_FAULTED)guest_fault_seen=true;
         if ((uint64_t)(OSGetTime()-log_time)>=OSSecondsToTicks(1)) {
             WHBLogPrintf("frame=%u frame_us=%u buttons=%08x input_error=%d left=%.3f,%.3f right=%.3f,%.3f touch=%u,%u inside=%u tone=%u",
                 frame,frame_us,(unsigned)pad.hold,(int)error,(double)pad.leftStick.x,
@@ -520,6 +675,10 @@ int main(int argc, char **argv) {
                 gsp_guest.gsp.registered,(unsigned long long)gsp_guest.gsp.vblanks,
                 (unsigned long long)gsp_guest.gsp.coalesced_vblanks,(unsigned long long)gsp_guest.gsp.dropped_interrupts,
                 (unsigned long long)gsp_guest.gsp.failures);
+            WHBLogPrintf("GSP IPC requests=%llu failures=%llu service=%s target=%s header=%08x result=%08x",
+                (unsigned long long)gsp_guest.ipc_requests,(unsigned long long)gsp_guest.ipc_failures,
+                gsp_guest.ipc_service[0]?gsp_guest.ipc_service:"none",gsp_guest.ipc_target[0]?gsp_guest.ipc_target:"none",
+                gsp_guest.ipc_header,gsp_guest.ipc_result);
             log_time=OSGetTime();
         }
         ++frame;
@@ -527,6 +686,7 @@ int main(int argc, char **argv) {
     result=0;
 cleanup:
     WHBLogPrintf("shutdown begin result=%d",result);
+    session_summary(result);
     ctr_guest_close(&frame_guest);
     if (hid_ready && hid_guest.state!=CTR_GUEST_FAULTED && ctr_hid_fixture_exit(&hid_guest)) {
         ctr_guest_run(&hid_guest,1000,hid_guest.now_ns,true);
@@ -555,7 +715,9 @@ cleanup:
     if (drc_source.image) MEMFreeToDefaultHeap(drc_source.image);
     if (gfx_ready) WHBGfxShutdown();
     WHBLogPrintf("shutdown complete result=%d",result);
-    if (log_file) { WHBRemoveLogHandler(file_log); fclose(log_file); log_file=NULL; }
+    WHBLogPrintf("===== END OF REPORT: application resource cleanup reached; result=%d =====",result);
+    if(report_handler_added)WHBRemoveLogHandler(file_log);
+    if(!ctr_test_report_close(&test_report))OSReport("CTR2WUP TXT report close FAILED errno=%d\n",test_report.error_code);
     if (sd_ready) WHBUnmountSdCard();
     if (udp_ready) WHBLogUdpDeinit();
     WHBRemoveLogHandler(system_log);

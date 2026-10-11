@@ -1,5 +1,12 @@
 # Physical Wii U test checklist
 
+**Current first-round workflow: use the v0.14.1 kit and follow
+[guided-testing.md](guided-testing.md).** The three apps now prompt for inputs
+and observations and write per-launch `.txt` reports under `sd:/ctr2wup/`.
+Upload those reports in this chat. Photos are optional when illustrating a visual
+problem; the manual checklist below remains a reference for deeper investigation
+and older artifacts. No physical results have been received yet.
+
 No console is attached to this environment. Every item below is awaiting a
 physical console test. Cross-compilation, host tests and RPX headers do not
 establish console behavior.
@@ -122,7 +129,8 @@ emulated-PPC evidence, even in the external-guest RPX/WUHB build.
    normal HOME/lifecycle handling supported by your environment. Record any
    failure to exit or audio continuing after exit.
 
-Logs are written under `sd:/ctr2wup/native-*.log` if SD mounting succeeds.
+The older v0.14.0 builds write `sd:/ctr2wup/native-*.log`; v0.14.1 uses named
+`native-*.txt`, `compiled-interactive-*.txt`, and `compiled-save-*.txt` reports.
 WHB UDP logging uses port4405; SD logging is enough if UDP is unavailable. Supply
 the log and the two-screen photo, test duration and console environment. The log
 includes CPU outcome/timing, pointer bits, output surface dimensions, allocation,

@@ -1,5 +1,11 @@
 # First supported-title candidate: Super Mario 3D Land
 
+October 11 update: the user is preparing console tests and has supplied the
+small CIA helper receipt. It reports outer-encrypted executable content and
+contains no executable view. Decrypted executable intake is still needed; no
+commercial code or assets have been analyzed. See `guided-testing.md` for the
+new controller-driven TXT test workflow.
+
 October 8 (America/New_York): the user is away from the CIA's computer. Development
 continues on shared ROM-independent TLS/SRV/CFG startup support and original
 fixtures (`shared-services.md`). These are general startup interfaces, not

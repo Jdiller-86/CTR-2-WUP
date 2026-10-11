@@ -98,6 +98,7 @@ See [CIA intake](docs/cia-intake.md) for the small private executable export hel
 
 ## Development and testing
 
+- [Guided console tests and TXT uploads](docs/guided-testing.md) — v0.14.1 prompts for inputs and records results on SD.
 - [Current status and reports](STATUS.md) — implementation history and verification evidence.
 - [Next testing and input gates](docs/current-roadblock.md) — what awaits a dump, Wii U, or Windows test.
 - [Console testing](docs/console-testing.md) — launch and record the diagnostic results.

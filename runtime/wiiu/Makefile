@@ -30,7 +30,7 @@ APP_NAME := CTR2WUP Compiled Save Test
 endif
 LDFLAGS := -mcpu=750 -meabi -mhard-float -specs="$(WUT)/share/wut.specs" \
            -Wl,-Map,$(OUTPUT)/$(TARGET).map
-SOURCES := main.c viewport.c diagnostic_font.c
+SOURCES := main.c viewport.c diagnostic_font.c test_report.c test_guide.c
 OBJECTS := $(addprefix $(BUILD)/,$(SOURCES:.c=.o))
 CORE_SOURCES := ../core/ctr_memory.c ../core/ctr_cpu.c ../core/ctr_cpu_selftest.c \
                 ../core/ctr_guest.c ../core/ctr_ipc.c ../core/ctr_heap.c ../core/ctr_kernel.c ../core/ctr_hid.c ../core/ctr_gsp.c ../core/ctr_fs.c ../core/ctr_apt.c ../core/ctr_fs_snapshot.c ../core/ctr_guest_fixture.c \

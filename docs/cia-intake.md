@@ -1,5 +1,10 @@
 # CIA intake and the attachment transfer limit
 
+October 11 update: the user returned a valid report-only intake ZIP. The helper
+reports `encrypted_cia_content`; no executable view was exported. This identifies
+the next input as a decrypted executable/CIA copy. The receipt is retained
+privately, and the original CIA bytes have not been independently inspected.
+
 Updated October 7, 2026 (America/New_York). The user supplied
 `0004000000054000 Super Mario 3D Land (CTR-P-AREE) (v0.3.0) (U).legit.cia`.
 Its transfer into this execution workspace failed because the attachment exceeds

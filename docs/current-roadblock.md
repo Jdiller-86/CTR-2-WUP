@@ -1,4 +1,4 @@
-# Next acceptance gate and resume steps (0.14.0)
+# Next acceptance gate and resume steps (0.14.1)
 
 Implementation continued through the verified shared-memory/synchronization,
 standard HID input, direct/shared GSP display, diagnostic VBlank, checked
@@ -16,11 +16,11 @@ verified with the resources currently available:
   These are the next M3 acceptance tests; no ROM
   is required. AOT emulated PPC passes cannot substitute for native Wii U state,
   FPSCR/byte order, GX2 display, input or lifecycle evidence.
-- The supplied Mario CIA exceeds the attachment transfer tool's 32 MiB limit.
-  No bytes, encryption state, exact executable revision or runtime requirements
-  have been inspected. The user is away from the computer containing that CIA.
-  The delivered Windows intake helper can export a small private executable
-  view when available; an encrypted result requires decrypted executable data.
+- The supplied full Mario CIA exceeds the attachment transfer tool's 32 MiB limit.
+  The user has now supplied its small helper receipt, which reports outer-encrypted
+  executable content and contains no executable view. Original CIA bytes, exact
+  executable revision and runtime requirements remain uninspected. A decrypted
+  copy must supply the private executable intake; the report is stored privately.
 
 These block physical M3 acceptance and the selected-title P2/P3/M4/M5 route.
 More generic kernel/graphics code can be written independently, but it does not
@@ -49,14 +49,14 @@ No commercial profile or playable Mario build is enabled.
 
 Resume in this order when the evidence is available:
 
-1. Run the v0.14 diagnostic, compiled interactive and savedata RPX/WUHB per
-   `console-testing.md`. Record every self-test outcome, corner/channel/rotation
-   correctness, touch mapping, input latency, audio/lifecycle, ten-minute stability
-   and SD logs, with firmware/homebrew/launcher versions. Fix reproducible console
+1. Run the v0.14.1 guided diagnostic, compiled interactive and savedata RPX/WUHB
+   per `guided-testing.md`. Follow the prompts and upload the new `.txt` files
+   under `sd:/ctr2wup/`, with firmware/homebrew/launcher versions. The guide records
+   inputs, user observations, timing, restart and save/reload results. Fix reproducible console
    failures before drawing performance conclusions. Common runtime implementation
    can proceed independently; it must retain explicit unsupported states and
    original fixtures rather than guess the selected game's requirements.
-2. Use `CTR2WUP-CIA-Intake` with the original local CIA and privately return its
+2. Use `CTR2WUP-CIA-Intake` with a decrypted local CIA and privately return its
    small `CTR2WUP-intake.zip` per `cia-intake.md`. Analyze actual hashes/segments/
    allowlists and pinned-lifter coverage; establish the exact Mario revision.
 3. Capture a private boot/unsupported trace and select the exercised next kernel,

@@ -14,6 +14,7 @@ check:
 	$(MAKE) -C tests/threads check sanitize
 	$(MAKE) -C tests/filesystem check sanitize
 	$(MAKE) -C tests/apt check sanitize
+	$(MAKE) -C tests/report check sanitize
 prototype:
 	$(MAKE) -C runtime/wiiu -j 3
 doctor:
