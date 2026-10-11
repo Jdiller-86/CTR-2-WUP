@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 #include "test_report.h"
 #include "test_guide.h"
+#include "test_lifecycle.h"
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
@@ -104,8 +105,29 @@ static void read_file(const char *path, char *buffer, size_t size) {
     CHECK(fclose(f) == 0);
 }
 
+static void lifecycle_tests(void) {
+    const uint64_t hbl[]={UINT64_C(0x0005000013374842),UINT64_C(0x000500101004a000),
+        UINT64_C(0x000500101004a100),UINT64_C(0x000500101004a200)};
+    for(unsigned i=0;i<4;++i) {
+        ctr_test_lifecycle state={hbl[i],false};
+        CHECK(ctr_test_from_hbl(state.title_id));
+        CHECK(ctr_test_request_exit(&state)==CTR_EXIT_HBL);
+        CHECK(ctr_test_request_exit(&state)==CTR_EXIT_NONE);
+    }
+    const uint64_t menu[]={0,UINT64_C(0x0005000013374843),UINT64_C(0x000500001011ec00)};
+    for(unsigned i=0;i<3;++i) {
+        ctr_test_lifecycle state={menu[i],false};
+        CHECK(!ctr_test_from_hbl(state.title_id));
+        CHECK(ctr_test_request_exit(&state)==CTR_EXIT_MENU);
+        CHECK(state.requested);
+        CHECK(ctr_test_request_exit(&state)==CTR_EXIT_NONE);
+    }
+    CHECK(ctr_test_request_exit(NULL)==CTR_EXIT_NONE);
+}
+
 int main(void) {
     guide_tests();
+    lifecycle_tests();
     char directory[] = "/tmp/ctr2wup-report-XXXXXX", text[4096];
     CHECK(mkdtemp(directory) != NULL);
     ctr_test_report first = {0}, second = {0}, bad = {0};
@@ -129,6 +151,11 @@ int main(void) {
     CHECK(ctr_test_report_line(&first, "Cleanup reached: yes | result=0"));
     CHECK(ctr_test_report_close(&first));
     CHECK(ctr_test_report_close(&first));
+    CHECK(ctr_test_report_checkpoint(&first,"EXIT stage=report_close_done"));
+    CHECK(first.file==NULL);
+    read_file(first.path,text,sizeof(text));
+    CHECK(strstr(text,"CPU_selftest PASS result=0")!=NULL);
+    CHECK(strstr(text,"EXIT stage=report_close_done")!=NULL);
     read_file(second.path, text, sizeof(text));
     CHECK(strstr(text, "SAVE LOAD / MOUNT FAIL") != NULL);
     CHECK(strstr(text, "===== SESSION SUMMARY =====") == NULL); /* Interrupted evidence is not a pass. */
@@ -146,7 +173,20 @@ int main(void) {
     CHECK(!ctr_test_report_line(&full, "Never clear the failed status"));
     CHECK(!ctr_test_report_close(&full));
     CHECK(full.file == NULL);
-    CHECK(unlink(first.path) == 0); CHECK(unlink(second.path) == 0); CHECK(rmdir(directory) == 0);
+    CHECK(!ctr_test_report_checkpoint(&full,"Must not hide the prior SD error"));
+    CHECK(full.file == NULL);
+    CHECK(unlink(second.path)==0);
+    CHECK(!ctr_test_report_checkpoint(&second,"Never recreate a missing result"));
+    CHECK(second.failed && second.error_code==ENOENT);
+    CHECK(access(second.path,F_OK)!=0);
+    ctr_test_report busy={0};
+    CHECK(ctr_test_report_open(&busy,directory,"native","0.14.2",2));
+    CHECK(!ctr_test_report_checkpoint(&busy,"Reject an active stream"));
+    CHECK(busy.failed && busy.error_code==EBUSY);
+    CHECK(!ctr_test_report_close(&busy));
+    CHECK(busy.file==NULL);
+    CHECK(unlink(busy.path)==0);
+    CHECK(unlink(first.path) == 0); CHECK(rmdir(directory) == 0);
     printf("{\"ok\":true,\"assertions\":%u,\"text_reports\":true,\"console_verified\":false}\n", checks);
     return 0;
 }

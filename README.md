@@ -30,7 +30,7 @@ games will grow as the shared runtime gains the features they require. See the
 
 ![Estimated implementation progress: approximately 20%; zero of seven full milestones accepted.](docs/images/progress.svg)
 
-**Assessment: October 9, 2026 · runtime version 0.14.0.** About **20%** is a rough
+**Assessment: October 11, 2026 · runtime version 0.14.2.** About **20%** is a rough
 engineering estimate toward the finished GUI-to-playable-WUP product, not a
 measured task percentage or a compatibility rating. **0 of 7 full milestones
 have met their acceptance criteria.** Most renderer, commercial-game, GUI, and
@@ -38,7 +38,7 @@ hardware validation work remains.
 
 | Milestone | Current status | Main remaining work |
 |---|---|---|
-| M1 · Wii U platform | Diagnostic builds ready | Physical screens, input, sound, exit, and installation tests |
+| M1 · Wii U platform | Native screen/input/sound guide passed on console; exit froze | Verify corrected exit and WUP installation |
 | M2 · CPU translation | Tested subset and AOT integration | Broader instruction support and Wii U performance |
 | M3 · Homebrew runtime | Six original applications verified on desktop | Broader services and console execution/stability |
 | M4 · PICA → GX2 graphics | Renderer not implemented | 3DS draws, shaders, textures, and reference scenes |
@@ -59,7 +59,8 @@ or the [milestone checklist](docs/milestones.md) for detailed acceptance gates.
   threads, input, CPU-written two-screen images, private save/reload, and
   standalone application startup and exit.
 - **Wii U diagnostic builds:** five RPX/WUHB variants are compiled, including
-  interactive input/display and persistent-save tests. Physical execution is pending.
+  interactive input/display and persistent-save tests. Native guided checks have
+  console evidence; exit and compiled-input freezes need the focused retest.
 - **Packaging foundations:** original metadata/artwork staging and encrypted
   packing with independent decryption and file checks using synthetic test inputs.
   Actual WUP installation remains unverified.
@@ -98,7 +99,7 @@ See [CIA intake](docs/cia-intake.md) for the small private executable export hel
 
 ## Development and testing
 
-- [Guided console tests and TXT uploads](docs/guided-testing.md) — v0.14.1 prompts for inputs and records results on SD.
+- [Guided console tests and TXT uploads](docs/guided-testing.md) — v0.14.2 records inputs/results and exit stages on SD; start with the short freeze retest.
 - [Current status and reports](STATUS.md) — implementation history and verification evidence.
 - [Next testing and input gates](docs/current-roadblock.md) — what awaits a dump, Wii U, or Windows test.
 - [Console testing](docs/console-testing.md) — launch and record the diagnostic results.

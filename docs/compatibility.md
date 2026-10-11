@@ -2,7 +2,7 @@
 
 | Input/workflow | Current state | Evidence and limit |
 |---|---|---|
-| Original native diagnostic | Experimental; awaiting console | Real devkitPPC/WUT RPX and WUHB compile; no physical execution evidence |
+| Original native diagnostic | Partial console evidence; exit failure | v0.14.1 native report records all ten guided checks/nine embedded self-tests and cleanup; user reports frozen launcher return; v0.14.2 correction awaits retest |
 | Synthetic ARM/Thumb fixture | Desktop verified bounded subset | Interpreter/generated-C state matches; linked into diagnostic RPX, console run pending |
 | Original framebuffer NCCH fixture | Desktop execution verified; awaiting Wii U | Checked loader, sleep/event SVC runtime, ARM-written frames/input/exit, AOT/interpreter matches; console RPX/WUHB built; explicit harness I/O, not HID/GSP/PICA |
 | Original TLS/SRV/CFG ARM startup probe | Desktop verified; awaiting Wii U | Standard TLS and restricted service commands; interpreter/original/external AOT match; original self-test embedded in diagnostics |
@@ -13,7 +13,7 @@
 | Original shared-GSP/VBlank graphics fixture | Desktop verified; awaiting Wii U | Relay registration/shared framebuffer queues, exclusive retry, IRQ ring and cleanup match three backends; original AOT runs in standard diagnostic mode; GX/PICA absent |
 | Original ARM/Thumb nested stack-call fixture | Desktop verified; awaiting Wii U | 47 instructions/one SVC, restored registers/stack, three-backend state/memory match, independent ARM1176 trace, partial-fault parity; embedded diagnostic |
 | Original three-thread fixture | Desktop verified; awaiting Wii U | Three-backend CPU/TLS/ownership/wait/quantum parity; embedded 345-instruction/eight-switch self-test; single emulated CPU, no priority inheritance |
-| Original compiled libctru applications | Scoped desktop execution verified; interactive console build available | Normal CRT/newlib/library startup, real threads/LightLock/C TLS, standard HID, graphics thread/shared GSP display; exact CPU-written pixels; standalone APT startup/exit and configured private FS save/reload; privileged/optional lookups explicit, ROMFS/retail saves/GX/PICA/audio absent |
+| Original compiled libctru applications | Scoped desktop execution verified; newer console A-input freeze unresolved | Older v0.14.0 console log records guest PASS; newer run reportedly shows red/blue then freezes on A, without its log; v0.14.2 isolates A from native tones and adds checkpoints. Desktop normal CRT/newlib, threads/TLS/HID/GSP/FS/APT pass; ROMFS/retail saves/GX/PICA/audio absent |
 | Original compiled savedata program | Desktop save/reload verified; console build awaiting hardware | Normal newlib file I/O, Japanese paths, commit, separate-process reload, snapshot corruption rejection; bounded private archives only |
 | Decrypted base-application CIA | Intake supported | Checked index-0 NCCH, metadata/bitmap/content hashes and loader offsets; small executable export supported |
 | Decrypted NCCH v2 `.cxi` | Inspection supported | Bounds, sections/ExeFS hashes, code decompression and metadata tested with original fixtures |
@@ -33,6 +33,11 @@ developer tests and embedded diagnostics, alongside the heap/shared/HID/GSP prob
 No commercial title profile is enabled. Profiles must match an exact
 executable/module revision and recorded console evidence. Upstream authors'
 desktop compatibility reports never set CTR2WUP's console-verified status.
+
+The October 11 native report provides scoped physical evidence for its embedded
+CPU/services/heap/objects/HID/GSP/relay/stack/thread self-tests. It does not
+establish full live guest graphics, save persistence, launcher return or commercial
+compatibility. Full console acceptance remains open; see `console-retest.md`.
 
 Deferred: New 3DS exclusives, stereo output, online services, cameras, microphone,
 DLC/update merging, save import/export, arbitrary-ROM compatibility and Windows

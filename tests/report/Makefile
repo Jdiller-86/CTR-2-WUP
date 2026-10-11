@@ -1,6 +1,6 @@
 CC ?= cc
 CFLAGS := -std=c11 -O2 -g -Wall -Wextra -Werror -I../../runtime/wiiu
-SOURCES := test_report.c ../../runtime/wiiu/test_report.c ../../runtime/wiiu/test_guide.c
+SOURCES := test_report.c ../../runtime/wiiu/test_report.c ../../runtime/wiiu/test_guide.c ../../runtime/wiiu/test_lifecycle.c
 OUT := ../../artifacts/report-tests
 .PHONY: check sanitize clean
 $(OUT):

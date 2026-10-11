@@ -1,6 +1,6 @@
 # Project completion assessment
 
-Updated **October 9, 2026**, against runtime version **0.14.0** and the
+Updated **October 11, 2026**, against runtime version **0.14.2** and the
 [product plan](development-plan.md).
 
 ## Estimated implementation: approximately 20%
@@ -33,9 +33,9 @@ while every full acceptance checkbox remains open. See the
 |---|---|---|
 | Host preparation | Decrypted container inspection, executable loading, private intake, external code generation, static builds, original metadata/artwork staging | No complete commercial conversion or clean Windows execution |
 | CPU and shared runtime | Bounded ARM/Thumb/VFP support, checked AOT boundary, memory, eight single-core guest thread contexts, scoped services | Incomplete CPU/HLE coverage; actual game and Wii U timing requirements unknown |
-| Homebrew execution | Six original normal-CRT/libctru applications, checked input and exact CPU-written frames; filesystem save/reload and standalone lifecycle | Desktop and emulated PPC evidence; no physical Wii U execution |
+| Homebrew execution | Six original normal-CRT/libctru applications, checked input and exact CPU-written frames; filesystem save/reload and standalone lifecycle | Desktop/emulated PPC evidence; older console log records compiled guest PASS, newer A-button freeze unresolved |
 | Packaging | Original encrypted writer and independent decrypt/hash/FST/file verification, including real diagnostic RPX payloads | Synthetic credentials; no installer acceptance or retained installable package |
-| Wii U platform | Five diagnostic RPX/WUHB variants cross-compiled | Screens, controls, SD persistence, audio, shutdown, and stability need physical tests |
+| Wii U platform | Five diagnostic variants; native guided picture/input/touch/audio/stability checks passed on console | Native launcher return froze; v0.14.2 exit/input corrections await retest; save and installation untested |
 
 The completed v0.14 regression report records **155 Python tests and 38 passing
 workflow checks**. Normal and sanitized runs cover six compiled homebrew
@@ -71,9 +71,12 @@ private executable view for revision and code analysis when the user's computer
 is available. An encrypted executable needs decrypted data. That export excludes
 game assets; commercial asset integration will require access to those separately.
 
-Physical Wii U testing can start with the existing original diagnostics without
-a ROM. It must establish interactive display/input, platform audio, SD save/reload,
-exit, and stability before any hardware compatibility or performance claim.
+The first native console report records all ten guided checks and resource
+cleanup, but the user reports a freeze returning to the launcher. The newer
+compiled run froze after A; save testing was deferred. v0.14.2 changes exit and
+SD ownership and isolates compiled input from native audio, with more checkpoints.
+Follow the [short retest](console-retest.md) without a ROM. Successful corrected
+exit, compiled input, SD save/reload and installation evidence remain needed.
 Actual WUP installation also needs the documented console environment and local
 packaging prerequisites. Native Windows tests remain pending.
 

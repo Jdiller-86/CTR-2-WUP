@@ -1,8 +1,12 @@
-# Guided Wii U testing and TXT reports (0.14.1)
+# Guided Wii U testing and TXT reports (0.14.2)
 
-Use the **0.14.1 console testing kit** for the current test round. It supplies
+Use the **0.14.2 console testing kit** for the current test round. It supplies
 three original homebrew applications with prompts and automatic plain-text
 recording. No ROM is required and these builds are RPX/WUHB, not WUP packages.
+
+**Current round: follow [the short freeze retest](console-retest.md) first.**
+Check native Minus exit, then compiled A input; postpone the save app and long
+stability loops until both work. The same `console-retest.md` is in the kit.
 
 ## Start
 
@@ -28,6 +32,10 @@ available partial file. Logging cannot work without accessible writable SD stora
 - **ZR** records a problem for the current step and advances.
 - **Minus** finishes early or closes a completed test. Unfinished steps stay
   **NOT TESTED**; the app writes its available session summary before closing.
+  Reports are written throughout the run, rather than waiting for Minus.
+
+Only the native app plays the diagnostic tone on A. The compiled apps reserve A
+for guest input and show progress counters. They do not implement guest audio.
 
 The native and interactive tests include a ten-minute countdown. Their final
 stability prompt asks whether you observed problems. The interval and your
@@ -59,7 +67,9 @@ and a final session summary. Session IDs use console ticks rather than wall-cloc
 dates; collisions try another suffix instead of replacing a report.
 Records are flushed as they are written. An interrupted run can leave useful
 partial evidence: absence of the final `===== END OF REPORT:` marker means
-completion was not recorded. Flush and close do not establish power-loss durability.
+resource cleanup was not recorded. Exit checkpoints follow that marker; neither
+the marker nor `main_return` proves successful launcher return. Include your
+brief return/freeze observation. Flush and close do not establish power-loss durability.
 
 After the tests, exit with Minus and copy the **new `.txt` files** from that
 folder to your PC. **Upload them in this chat**, individually or in one ZIP

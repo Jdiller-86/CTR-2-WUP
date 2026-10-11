@@ -43,6 +43,11 @@ see `upstream-integration.md`. Its desktop runtime is not a Wii U dependency.
 
 The native WUT backend provides independent TV and GamePad diagnostic output,
 input, sound, process lifecycle, timing, and CPU self-test instrumentation.
+v0.14.2 requests system/ProcUI exit for menu titles and preserves the WUT HBL
+relaunch route. The WUT newlib devoptab owns SD mounting; diagnostics do not
+remount or unmount it independently. TXT reports have bounded input/render and
+late exit checkpoints; end-of-report does not establish launcher return. AX
+tones are native-only and UDP logging is optional. See `console-retest.md`.
 All diagnostic builds also contain the original TLS/SRV/CFG startup self-test
 with a visible result and SD log. Unsupported cache operations fail visibly
 instead of inheriting the external emitter's no-op behavior.

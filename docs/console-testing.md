@@ -1,14 +1,16 @@
 # Physical Wii U test checklist
 
-**Current first-round workflow: use the v0.14.1 kit and follow
+**Current workflow: use the v0.14.2 kit and first follow
 [guided-testing.md](guided-testing.md).** The three apps now prompt for inputs
 and observations and write per-launch `.txt` reports under `sd:/ctr2wup/`.
 Upload those reports in this chat. Photos are optional when illustrating a visual
 problem; the manual checklist below remains a reference for deeper investigation
-and older artifacts. No physical results have been received yet.
+and older artifacts. Native guided checks have now passed on the user's console,
+but final launcher return froze; newer compiled A input also reportedly froze.
+Follow `console-retest.md` before repeating long guides or running the save app.
 
-No console is attached to this environment. Every item below is awaiting a
-physical console test. Cross-compilation, host tests and RPX headers do not
+No console is attached to this environment. Full physical acceptance remains
+open despite the scoped native results. Cross-compilation, host tests and RPX headers do not
 establish console behavior.
 
 v0.14 adds `CTR2WUP-libctru-filesystem-0.14.0.zip`. Launch its WUHB/RPX with
@@ -131,7 +133,8 @@ emulated-PPC evidence, even in the external-guest RPX/WUHB build.
 
 The older v0.14.0 builds write `sd:/ctr2wup/native-*.log`; v0.14.1 uses named
 `native-*.txt`, `compiled-interactive-*.txt`, and `compiled-save-*.txt` reports.
-WHB UDP logging uses port4405; SD logging is enough if UDP is unavailable. Supply
+Optional WHB UDP logging uses port4405 (`UDP_LOG=1` developer build); it is off
+by default in v0.14.2. SD TXT logging remains enabled. Supply
 the log and the two-screen photo, test duration and console environment. The log
 includes CPU outcome/timing, pointer bits, output surface dimensions, allocation,
 input/touch/tone events, frame timing and shutdown. These timings include CPU

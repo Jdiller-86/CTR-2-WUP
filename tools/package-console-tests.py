@@ -62,7 +62,8 @@ def main():
     out.mkdir(parents=True,exist_ok=False)
     source=out/('CTR2WUP-source-'+__version__+'.zip');write_zip(source,sources)
     entries=inputs+reports+[(source,'source-and-notices/'+source.name),
-        (ROOT/'docs/guided-testing.md','START-HERE.md'),(ROOT/'LICENSE','LICENSE'),
+        (ROOT/'docs/guided-testing.md','START-HERE.md'),
+        (ROOT/'docs/console-retest.md','console-retest.md'),(ROOT/'LICENSE','LICENSE'),
         (ROOT/'THIRD_PARTY_NOTICES','THIRD_PARTY_NOTICES')]
     kit=out/('CTR2WUP-console-testing-kit-'+__version__+'.zip');write_zip(kit,entries)
     with zipfile.ZipFile(kit) as z:

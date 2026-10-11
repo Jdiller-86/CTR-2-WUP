@@ -48,6 +48,7 @@ bool ctr_test_report_open(ctr_test_report *r, const char *directory,
         !ctr_test_report_line(r, "PASS messages cover the named software checks, not commercial compatibility.") ||
         !ctr_test_report_line(r, "Picture alignment/colors, audible sound and launcher return need your brief observation.") ||
         !ctr_test_report_line(r, "Session IDs are console ticks; flushes do not guarantee power-loss durability.") ||
+        !ctr_test_report_line(r, "END OF REPORT records resource cleanup only; EXIT checkpoints and your launcher-return observation are separate.") ||
         !ctr_test_report_line(r, "===== DIAGNOSTIC LOG =====")) return false;
     return true;
 }
@@ -60,4 +61,17 @@ bool ctr_test_report_close(ctr_test_report *r) {
         if (fclose(file) != 0) return fail(r, errno);
     }
     return !r->failed;
+}
+
+bool ctr_test_report_checkpoint(ctr_test_report *r, const char *message) {
+    if(!r || !message)return false;
+    if(r->failed)return false;
+    if(r->file)return fail(r,EBUSY);
+    if(!r->path[0])return fail(r,EINVAL);
+    r->file=fopen(r->path,"r+");
+    if(!r->file)return fail(r,errno);
+    if(fseek(r->file,0,SEEK_END)!=0)fail(r,errno);
+    bool written=!r->failed && ctr_test_report_line(r,message);
+    bool closed=ctr_test_report_close(r);
+    return written && closed;
 }

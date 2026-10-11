@@ -9,6 +9,7 @@ GUEST_DEFAULT ?= 0
 EXTERNAL_AOT ?= 0
 COMPILED_HOMEBREW ?= 0
 FILESYSTEM_HOMEBREW ?= 0
+UDP_LOG ?= 0
 UPSTREAM_DIR ?= ../../artifacts/generated-upstream-guest
 ifeq ($(GUEST_DEFAULT),1)
 APP_NAME := CTR2WUP ARM Guest Fixture
@@ -19,7 +20,7 @@ BUILD := $(OUTPUT)/objects
 CC := $(DEVKITPPC)/bin/powerpc-eabi-gcc
 WUT := $(DEVKITPRO)/wut
 CFLAGS := -std=c11 -O2 -g -Wall -Wextra -Werror -ffunction-sections -fdata-sections \
-          -DESPRESSO -D__WIIU__ -D__WUT__ -DCTR_GUEST_DEFAULT=$(GUEST_DEFAULT) -mcpu=750 -meabi -mhard-float -I"$(WUT)/include" -I../core
+          -DESPRESSO -D__WIIU__ -D__WUT__ -DCTR_GUEST_DEFAULT=$(GUEST_DEFAULT) -DCTR_DIAGNOSTIC_UDP=$(UDP_LOG) -mcpu=750 -meabi -mhard-float -I"$(WUT)/include" -I../core
 ifeq ($(COMPILED_HOMEBREW),1)
 CFLAGS += -DCTR_COMPILED_HOMEBREW -I"$(COMPILED_IMAGE_DIR)"
 APP_NAME := CTR2WUP Compiled libctru Test
@@ -30,7 +31,7 @@ APP_NAME := CTR2WUP Compiled Save Test
 endif
 LDFLAGS := -mcpu=750 -meabi -mhard-float -specs="$(WUT)/share/wut.specs" \
            -Wl,-Map,$(OUTPUT)/$(TARGET).map
-SOURCES := main.c viewport.c diagnostic_font.c test_report.c test_guide.c
+SOURCES := main.c viewport.c diagnostic_font.c test_report.c test_guide.c test_lifecycle.c
 OBJECTS := $(addprefix $(BUILD)/,$(SOURCES:.c=.o))
 CORE_SOURCES := ../core/ctr_memory.c ../core/ctr_cpu.c ../core/ctr_cpu_selftest.c \
                 ../core/ctr_guest.c ../core/ctr_ipc.c ../core/ctr_heap.c ../core/ctr_kernel.c ../core/ctr_hid.c ../core/ctr_gsp.c ../core/ctr_fs.c ../core/ctr_apt.c ../core/ctr_fs_snapshot.c ../core/ctr_guest_fixture.c \

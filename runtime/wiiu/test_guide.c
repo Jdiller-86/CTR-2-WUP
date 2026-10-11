@@ -145,7 +145,7 @@ void ctr_test_guide_view(const ctr_test_guide *g,uint64_t milliseconds,char rows
     if(g->done) {
         snprintf(rows[0],72,"GUIDED TEST COMPLETE");
         snprintf(rows[1],72,"PASS %u / FAIL %u / SKIPPED %u",g->passed,g->failed,g->skipped);
-        snprintf(rows[2],72,"Press MINUS to finish and save this report.");
+        snprintf(rows[2],72,"Press MINUS to close; report is already saved.");
         snprintf(rows[3],72,"Results: SD:/CTR2WUP/*.TXT");
         snprintf(rows[4],72,"Upload the TXT files in this chat.");
         snprintf(rows[5],72,"Filename and SD status are shown below.");

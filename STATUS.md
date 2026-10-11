@@ -14,7 +14,26 @@ judgment, not measured task completion. **0/7 full milestones are accepted.**
 See [the completion assessment](docs/progress.md) for its basis, remaining work,
 and external testing gates; the README provides a concise progress overview.
 
-**Version 0.14.1 makes console testing guided and records readable TXT reports.**
+**Version 0.14.2 addresses the first reported console failures and adds a focused retest.**
+The received v0.14.1 native TXT records ten passing guided steps, nine passing
+software self-tests, zero input errors/faults and completed resource cleanup.
+The user reports a freeze after Minus, requiring reboot. This is partial physical
+evidence, not successful launcher return. The newer compiled run reportedly
+shows red/blue and freezes after A's native tone; its run log was not supplied.
+The older uploaded v0.14.0 `.log` identifies compiled-interactive and records a
+guest PASS; it must not be attributed to the newer failed run. Save testing was
+not attempted. Uploaded raw logs and receipts remain under ignored `private/`.
+
+Menu launches now request SYSLaunchMenu and poll ProcUI until exit; HBL/Mii Maker
+routes retain their relaunch path. WUT owns the SD mount, with no duplicate WHB
+mount/unmount. UDP is optional/off by default. Compiled apps do not initialize
+or stop AX or play native tones; A is guest input only. Bounded input/guest/render
+checkpoints, visible progress counters and closed-file exit stages support the
+next diagnosis. These changes are locally verified; resolution of either console
+freeze remains **awaiting retest**. Follow `docs/console-retest.md` before repeating
+long guides or running the save app. No full milestone is closed.
+
+**Version 0.14.1 made console testing guided and recorded readable TXT reports.**
 The native, compiled-interactive and compiled-save apps prompt for inputs and
 controller confirmations, record completed/failed/skipped steps, and show report
 filenames and upload instructions. Button/stick/touch samples, guest PASS/exit,
@@ -23,7 +42,8 @@ Exclusive per-launch files preserve previous reports; checked writes expose SD
 errors. Interrupted/cancelled tests remain incomplete, and subjective visual/audio
 confirmations are labeled as user evidence. See `docs/guided-testing.md`.
 This improves test collection; the implementation estimate remains roughly 20%
-and all seven full acceptance gates remain open. Console results are pending.
+and all seven full acceptance gates remain open. Partial console results and
+remaining failures are recorded above.
 
 October 11 private intake: a valid report-only ZIP was received. The helper
 reports `encrypted_cia_content` for the Mario executable; no executable view or
@@ -99,7 +119,8 @@ is unverified; no milestone requiring physical-console evidence is complete.
   Graphics and input-driven interactive guests produce all expected pixels in
   3,653,198/3,653,794 instructions, with zero fallback; unavailable APT/FS lookups
   remain explicit. The interactive application also matches on emulated PPC
-  Linux; real compiled threads pass Clang. All physical results remain pending.
+  Linux; real compiled threads pass Clang. The scoped native physical results and
+  remaining compiled/save/exit gates are recorded above.
 - Eight process-local thread slots have separate CPU/TLS/raw FP state and waits,
   strict priority/32-instruction quanta, retained handles/joins, stack pins,
   recursive mutex ownership and exit cleanup. Address arbiters/local quota
@@ -276,6 +297,17 @@ is unverified; no milestone requiring physical-console evidence is complete.
 
 ## Reports and deliverables
 
+v0.14.2 verification is under `artifacts/reports/console-retest-v0142/`:
+required `make check` passes 155 Python tests and all normal/ASan/UBSan C suites;
+the guide/report/exit suite has 213 assertions per run, including all WUT HBL
+routes, idempotent menu exit requests and preserving reports across closed-file
+checkpoints/missing files/write failures. `make prototype`, the current native
+build and full interactive/save validators pass. The compiled validators have
+8/10 checks, exact interactive frames and first/fresh-process save/reload with
+zero fallback, plus actual rebuilt RPX/WUHB pairs. The SD-ready kit and matching
+source are under `artifacts/delivery/retest-0.14.2/`. No corrected console run or
+save/installer acceptance is inferred from these desktop/build results.
+
 v0.14.1 guided-test verification is under `artifacts/reports/txt-reports-v0141/`:
 the required `make check` passes 155 Python tests and all normal/sanitized C suites;
 the final guide/report suite checks successful, failed, skipped, cancelled and
@@ -287,7 +319,7 @@ Final console receipts explicitly retain that original host evidence while
 recording fresh console build logs and hashes after prompt refinements.
 The source and SD-ready kit are under `artifacts/delivery/guided-0.14.1/`;
 `manifest.json` records verified hashes and the source snapshot. These are new
-diagnostics, not installable WUPs. Console execution is still awaiting the user.
+diagnostics, not installable WUPs. The later partial console results are recorded above.
 
 October 9 documentation follow-up: the README now presents the product workflow,
 current limits, progress graphic and milestone overview; `docs/progress.md`
@@ -394,7 +426,11 @@ existing Git checkout; do not reset, force-push or replace user changes.
   private `CTR2WUP-intake.zip`. The full original can stay local for later asset
   work. If it reports encryption, decrypted executable data is still needed.
   No commercial profile is enabled until actual private intake and runtime evidence.
-- **Wii U:** run the delivered RPX/WUHB and return screen/input/audio/exit,
+- **Wii U:** first run the short v0.14.2 native-exit/compiled-input retest per
+  `docs/console-retest.md`, upload the new TXT reports and note menu return/freeze.
+  After both failures are resolved, complete the other guided/save tests. Native
+  guided input/display/audio/stability and embedded self-tests have scoped evidence;
+  full launcher/compiled/save/installation acceptance remains open. Return screen/input/audio/exit,
   TLS/SRV/CFG, heap, shared/sync, stack-call and HID PASS/FAIL/SD log, live ARM-read
   buttons/Circle Pad/touch/snapshot/clean exit, HID/GSP rotated color/corner/touch
   display/stability and exit,

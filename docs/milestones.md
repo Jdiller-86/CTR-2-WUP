@@ -27,7 +27,7 @@ All acceptance checkboxes below remain open until their evidence is recorded.
 - [ ] M7 Windows GUI: proven same execution pipeline, usable responsive front
   end and documented packaged prerequisites.
 
-## Current evidence (2026-10-09 UTC)
+## Current evidence (October 11, 2026, America/New_York)
 
 The current rough implementation estimate is **approximately 20% of the finished
 GUI-to-playable-WUP product**; full milestone acceptance is **0/7**. These measure
@@ -35,7 +35,7 @@ different things. See [progress.md](progress.md) for the assessment and evidence
 
 | Milestone | Verified portion | Remaining acceptance |
 |---|---|---|
-| M1 | Native/original/external-AOT RPX/WUHB built; native diagnostics; original staging and offline encrypted packaging | Physical screens/input/audio/exit and independently installed WUP |
+| M1 | RPX/WUHB built; native report records nine self-tests and ten guided picture/input/touch/audio/stability checks passed; resource cleanup reached | Native launcher return froze; corrected v0.14.2 exit retest and independently installed WUP |
 | M2 | Original CPU/AOT subset plus stack/register transfers, BLX, user CP15 TLS, byte media, barriers and scoped FP; external generation/checked ABI; GCC/sanitizers/Clang/emulated big-endian PPC checks; 870 independent ARM1176 cases and nested-call trace | Complete ARM/VFP semantics, workload memory/fallback costs and actual Espresso timings |
 | M3 | Checked NCCH loading and eight single-core contexts; CPU/TLS/VFP/FPSCR ownership, priorities/quanta, joins/locks/arbiters/quotas; SRV/CFG/heap/shared/HID/GSP/VBlank; six normal-CRT/libctru applications including exact CPU framebuffer pixels, private FS save/fresh-process reload and standalone APT lifecycle; interactive and fifth save RPX/WUHB built | Physical guest/input/display/thread/SD/stability evidence; broader services, applets, ROMFS/assets/retail saves, cross-process semantics, motion, GX commands/PICA and guest audio |
 | M4 | Bounded command references, standard direct/shared GSP display and five tested rotated CPU display formats | Actual PICA-to-GX2 features, scene comparisons and console timings |
@@ -46,10 +46,16 @@ different things. See [progress.md](progress.md) for the assessment and evidence
 These are partial implementation outcomes. None of the full milestone checkboxes
 is satisfied by source/build/test artifacts alone.
 
-v0.14.1 adds controller-driven guided native/compiled/save tests and checked
+v0.14.2 records the first partial console results and addresses exit routing/SD
+ownership. Native launcher return and the newer compiled A-button response failed;
+save testing was not run. Compiled native tones are disabled, progress counters
+and bounded freeze/exit checkpoints are added. Desktop/build checks pass; the
+corrections await [the focused retest](console-retest.md). No full gate is closed.
+
+v0.14.1 added controller-driven guided native/compiled/save tests and checked
 per-launch TXT evidence, with upload guidance. Automatic observations, user
-confirmations, failures and skips are separate. New builds await physical execution;
-this test-collection improvement closes no milestone. See `guided-testing.md`.
+confirmations, failures and skips are separate. Its native partial results are
+recorded above; this test-collection improvement closes no milestone. See `guided-testing.md`.
 
 Version 0.3.0 connects the audited lifter to the runtime; `upstream-integration.md`
 records its checks and limits. Version 0.4.0 adds scoped encrypted packing and a

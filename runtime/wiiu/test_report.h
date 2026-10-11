@@ -22,5 +22,8 @@ bool ctr_test_report_open(ctr_test_report *report, const char *directory,
  * A successful flush is not a power-loss durability guarantee. */
 bool ctr_test_report_line(ctr_test_report *report, const char *message);
 bool ctr_test_report_close(ctr_test_report *report);
+/* Append a closed-file exit checkpoint, closing it again before returning.
+ * Never creates/replaces a missing report or hides an earlier write failure. */
+bool ctr_test_report_checkpoint(ctr_test_report *report, const char *message);
 
 #endif

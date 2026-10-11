@@ -1,4 +1,12 @@
-# Next acceptance gate and resume steps (0.14.1)
+# Next acceptance gate and resume steps (0.14.2)
+
+**October 11 console feedback:** the native guide's ten steps and nine self-tests
+pass and its report reaches resource cleanup, but Minus freezes during final
+return. The newer compiled app reportedly freezes after A's tone; its run log
+was not supplied. The older `.log` records a separate v0.14.0 compiled guest PASS.
+The save app was not tested. v0.14.2 corrects menu exit routing and SD ownership,
+isolates compiled A from native audio, and adds checkpoints/progress counters.
+Start with `console-retest.md`; fix verification is the immediate hardware gate.
 
 Implementation continued through the verified shared-memory/synchronization,
 standard HID input, direct/shared GSP display, diagnostic VBlank, checked
@@ -49,8 +57,9 @@ No commercial profile or playable Mario build is enabled.
 
 Resume in this order when the evidence is available:
 
-1. Run the v0.14.1 guided diagnostic, compiled interactive and savedata RPX/WUHB
-   per `guided-testing.md`. Follow the prompts and upload the new `.txt` files
+1. Run the short v0.14.2 native-exit and compiled-input checks per
+   `console-retest.md`, then return to full guides/save testing when both pass.
+   Follow the prompts and upload the new `.txt` files
    under `sd:/ctr2wup/`, with firmware/homebrew/launcher versions. The guide records
    inputs, user observations, timing, restart and save/reload results. Fix reproducible console
    failures before drawing performance conclusions. Common runtime implementation
