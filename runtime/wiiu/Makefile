@@ -10,11 +10,13 @@ EXTERNAL_AOT ?= 0
 COMPILED_HOMEBREW ?= 0
 FILESYSTEM_HOMEBREW ?= 0
 UDP_LOG ?= 0
+CALL_LIMIT ?= 64
+APP_VERSION := 0.14.3
 UPSTREAM_DIR ?= ../../artifacts/generated-upstream-guest
 ifeq ($(GUEST_DEFAULT),1)
-APP_NAME := CTR2WUP ARM Guest Fixture
+APP_NAME := CTR2WUP ARM Guest $(APP_VERSION)
 else
-APP_NAME := CTR2WUP Native Diagnostic
+APP_NAME := CTR2WUP Native $(APP_VERSION)
 endif
 BUILD := $(OUTPUT)/objects
 CC := $(DEVKITPPC)/bin/powerpc-eabi-gcc
@@ -23,11 +25,15 @@ CFLAGS := -std=c11 -O2 -g -Wall -Wextra -Werror -ffunction-sections -fdata-secti
           -DESPRESSO -D__WIIU__ -D__WUT__ -DCTR_GUEST_DEFAULT=$(GUEST_DEFAULT) -DCTR_DIAGNOSTIC_UDP=$(UDP_LOG) -mcpu=750 -meabi -mhard-float -I"$(WUT)/include" -I../core
 ifeq ($(COMPILED_HOMEBREW),1)
 CFLAGS += -DCTR_COMPILED_HOMEBREW -I"$(COMPILED_IMAGE_DIR)"
-APP_NAME := CTR2WUP Compiled libctru Test
+APP_NAME := CTR2WUP Compiled AOT $(APP_VERSION)
+ifeq ($(CALL_LIMIT),2)
+APP_NAME := CTR2WUP Guarded AOT $(APP_VERSION)
+CFLAGS += -DCTR_SHALLOW_AOT
+endif
 endif
 ifeq ($(FILESYSTEM_HOMEBREW),1)
 CFLAGS += -DCTR_FILESYSTEM_HOMEBREW
-APP_NAME := CTR2WUP Compiled Save Test
+APP_NAME := CTR2WUP Compiled Save $(APP_VERSION)
 endif
 LDFLAGS := -mcpu=750 -meabi -mhard-float -specs="$(WUT)/share/wut.specs" \
            -Wl,-Map,$(OUTPUT)/$(TARGET).map
@@ -54,6 +60,7 @@ CORE_SOURCES := ../core/ctr_memory.c ../core/ctr_cpu.c ../core/ctr_cpu_selftest.
                 ../../tests/fixtures/guest/framebuffer.generated.c ../../tests/fixtures/guest/image.generated.c
 ifeq ($(EXTERNAL_AOT),1)
 CFLAGS += -DCTR_EXTERNAL_AOT -I../recomp -I"$(UPSTREAM_DIR)" -ffp-contract=off -fno-fast-math
+CFLAGS += -DCTR_RECOMP_CALL_LIMIT=$(CALL_LIMIT)
 CORE_SOURCES := $(filter-out ../../tests/fixtures/guest/framebuffer.generated.c,$(CORE_SOURCES))
 CORE_SOURCES += ../recomp/ctr_recomp.c $(UPSTREAM_DIR)/entries.c $(wildcard $(UPSTREAM_DIR)/code*.c)
 endif

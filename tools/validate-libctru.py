@@ -47,9 +47,11 @@ def main():
     p.add_argument('--cc',default='gcc');p.add_argument('--cc-prefix',default='');p.add_argument('--run-prefix',default='');p.add_argument('--static',action='store_true');p.add_argument('--sanitize',action='store_true')
     p.add_argument('--application',choices=('boot','threaded','graphics','input','interactive','filesystem'),help='Run only the selected original application')
     p.add_argument('--wiiu',action='store_true',help='Also build original interactive/filesystem applications as RPX/WUHB')
+    p.add_argument('--wiiu-guarded',action='store_true',help='Also verify/build an interactive AOT comparison with call depth limited to 2')
     p.add_argument('--trace-startup',action='store_true',help='Capture every IPC at single-instruction boundaries for the original boot application')
     a=p.parse_args()
     if a.trace_startup and a.application!='boot':p.error('--trace-startup requires --application boot')
+    if a.wiiu_guarded and (not a.wiiu or a.application!='interactive'):p.error('--wiiu-guarded requires --wiiu --application interactive')
     out=a.output.resolve();out.mkdir(parents=True,exist_ok=False);checks=[]
     def run(name,command,**kw):
         r=subprocess.run(command,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,errors='replace',**kw)
@@ -95,6 +97,16 @@ def main():
                     fields=dict(item.split('=',1) for item in line.split()[1:]);ipc.append({k:int(v,16) if k in ('header','result','pc') else int(v) if k=='request' else v for k,v in fields.items()})
             if a.trace_startup and sum(bool(event['result']) for event in ipc)!=result['ipc_failures']:raise RuntimeError('Incomplete startup failure trace')
             reports.append({'application':name,'guest':result,'frames':frames,'startup_ipc':ipc,'generation':generation,'allocated_bytes':image['allocated_bytes'],'executable_sha256':hashlib.sha256(image['code']).hexdigest()})
+            if a.wiiu_guarded:
+                guarded=folder/'runner-guarded';frames_folder=folder/'guarded-frames';frames_folder.mkdir()
+                run('interactive-guarded-host-compile',shlex.split(a.cc_prefix)+[a.cc,*flags,'-DCTR_RECOMP_CALL_LIMIT=2',*map(str,sources),'-lm','-o',str(guarded)])
+                guarded_result=json.loads(run('interactive-guarded-execute',shlex.split(a.run_prefix)+[str(guarded),str(frames_folder)]).splitlines()[-1])
+                if guarded_result['state']!='exited' or guarded_result['fallback'] or expected not in guarded_result['messages'] or guarded_result['frames']!=result['frames'] or guarded_result['input_samples']!=4 or guarded_result['aot_max_depth']>2 or not guarded_result['aot_unwinds']:
+                    raise RuntimeError('Guarded AOT failed original guest/frame/input/depth checks')
+                if guarded_result['instructions']!=result['instructions']:raise RuntimeError('Guarded AOT changed guest instruction execution')
+                for frame in frames:
+                    if hashlib.sha256((frames_folder/frame['name']).read_bytes()).hexdigest()!=frame['sha256']:raise RuntimeError('Guarded AOT pixels differ')
+                reports[-1]['guarded']={'call_limit':2,'guest':guarded_result,'exact_frames_match':True}
             if name=='filesystem':
                 reports[-1]['reload']=reloaded
                 snapshot=(folder/'save.snapshot').read_bytes()
@@ -125,6 +137,17 @@ def main():
                     if shortcut.read_bytes()[:4]!=b'WUHB':raise RuntimeError('Invalid compiled WUHB')
                     shutil.copy2(rpx,wiiu/rpx.name);shutil.copy2(shortcut,wiiu/shortcut.name)
                 reports[-1]['wiiu_artifacts']=[{'name':f.name,'size':f.stat().st_size,'sha256':hashlib.sha256(f.read_bytes()).hexdigest()} for f in sorted(wiiu.glob('*.rp[x]*'))+sorted(wiiu.glob('*.wuhb'))]
+                if a.wiiu_guarded:
+                    guarded_folder=folder/'wiiu-guarded';guarded_folder.mkdir()
+                    with tempfile.TemporaryDirectory(prefix='guarded-console-',dir=ROOT/'artifacts') as temporary:
+                        work=Path(temporary);shutil.copytree(folder/'aot',work/'aot');shutil.copy2(folder/'boot-image.h',work/'boot-image.h')
+                        prefix=os.path.relpath(work,recipe)
+                        run('interactive-guarded-wiiu-build',['make','-C',str(recipe),'OUTPUT='+prefix+'/wiiu','TARGET=ctr2wup-libctru-guarded','GUEST_DEFAULT=2','EXTERNAL_AOT=1','COMPILED_HOMEBREW=1','CALL_LIMIT=2','COMPILED_IMAGE_DIR='+prefix,'UPSTREAM_DIR='+prefix+'/aot'],env=env)
+                        rpx=work/'wiiu/ctr2wup-libctru-guarded.rpx';shortcut=rpx.with_suffix('.wuhb')
+                        _validate_rpx(rpx)
+                        if shortcut.read_bytes()[:4]!=b'WUHB':raise RuntimeError('Invalid guarded WUHB')
+                        shutil.copy2(rpx,guarded_folder/rpx.name);shutil.copy2(shortcut,guarded_folder/shortcut.name)
+                    reports[-1]['guarded_wiiu_artifacts']=[{'name':f.name,'size':f.stat().st_size,'sha256':hashlib.sha256(f.read_bytes()).hexdigest()} for f in sorted(guarded_folder.iterdir())]
         if a.wiiu and not any('wiiu_artifacts' in r for r in reports):raise ValueError('--wiiu requires the interactive or filesystem application')
     report={'ok':True,'version':__version__,'libctru_pin':pin,'library_sha256':library_hash,'arm_compiler':arm_version.splitlines()[0],'applications':reports,'checks':checks,'console_verified':False,'native_windows_verified':False,'complete_service_startup':False,'standalone_apt_and_fs_startup':True,'unavailable_startup_services':['APT:S','APT:A','ptm:sysm'],'powerpc_execution':'emulated Linux' if a.static else None}
     (out/'report.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps({'ok':True,'applications':[{'name':r['application'],'instructions':r['guest']['instructions'],'ipc_failures':r['guest']['ipc_failures']} for r in reports],'report':str(out/'report.json')}));return 0

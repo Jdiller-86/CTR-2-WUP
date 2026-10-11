@@ -109,14 +109,14 @@ static void lifecycle_tests(void) {
     const uint64_t hbl[]={UINT64_C(0x0005000013374842),UINT64_C(0x000500101004a000),
         UINT64_C(0x000500101004a100),UINT64_C(0x000500101004a200)};
     for(unsigned i=0;i<4;++i) {
-        ctr_test_lifecycle state={hbl[i],false};
+        ctr_test_lifecycle state={.title_id=hbl[i]};
         CHECK(ctr_test_from_hbl(state.title_id));
         CHECK(ctr_test_request_exit(&state)==CTR_EXIT_HBL);
         CHECK(ctr_test_request_exit(&state)==CTR_EXIT_NONE);
     }
     const uint64_t menu[]={0,UINT64_C(0x0005000013374843),UINT64_C(0x000500001011ec00)};
     for(unsigned i=0;i<3;++i) {
-        ctr_test_lifecycle state={menu[i],false};
+        ctr_test_lifecycle state={.title_id=menu[i]};
         CHECK(!ctr_test_from_hbl(state.title_id));
         CHECK(ctr_test_request_exit(&state)==CTR_EXIT_MENU);
         CHECK(state.requested);
@@ -125,9 +125,97 @@ static void lifecycle_tests(void) {
     CHECK(ctr_test_request_exit(NULL)==CTR_EXIT_NONE);
 }
 
+typedef struct {
+    const ctr_proc_status *states;
+    unsigned count,polls,cleanups,menus,releases,waits,shutdowns,relaunches;
+    bool proc_alive,graphics_alive,audio_alive,report_open,callbacks_cleared;
+    char checkpoints[8192];
+} fake_platform;
+static void fake_cleanup(void *context) {
+    fake_platform *p=context;
+    CHECK(p->proc_alive && p->graphics_alive && p->audio_alive && p->report_open);
+    CHECK(!p->menus && !p->cleanups);
+    p->graphics_alive=p->audio_alive=p->report_open=false;++p->cleanups;
+}
+static void fake_clear(void *context) {
+    fake_platform *p=context;
+    CHECK(p->proc_alive && !p->graphics_alive && !p->report_open);
+    p->callbacks_cleared=true;
+}
+static void fake_menu(void *context) {
+    fake_platform *p=context;
+    CHECK(p->proc_alive && p->callbacks_cleared && !p->graphics_alive && !p->audio_alive && !p->report_open);
+    CHECK(!p->menus);++p->menus;
+}
+static ctr_proc_status fake_poll(void *context) {
+    fake_platform *p=context;
+    /* A callback attached to freed GFX, or polling after shutdown, is invalid. */
+    CHECK(p->proc_alive && p->callbacks_cleared && p->menus==1);
+    CHECK(p->polls<p->count);return p->states[p->polls++];
+}
+static void fake_release(void *context) {
+    fake_platform *p=context;
+    CHECK(p->polls && p->states[p->polls-1]==CTR_PROC_RELEASE);
+    CHECK(!p->graphics_alive && !p->audio_alive);++p->releases;
+}
+static void fake_wait(void *context) {
+    fake_platform *p=context;
+    CHECK(p->polls && p->states[p->polls-1]!=CTR_PROC_EXITING);++p->waits;
+}
+static void fake_shutdown(void *context) {
+    fake_platform *p=context;
+    CHECK(p->proc_alive && !p->graphics_alive && !p->audio_alive && !p->report_open && p->callbacks_cleared);
+    CHECK(!p->menus || (p->polls==p->count && p->states[p->polls-1]==CTR_PROC_EXITING));
+    p->proc_alive=false;++p->shutdowns;
+}
+static void fake_whb(void *context) {
+    fake_platform *p=context;
+    CHECK(!p->proc_alive && p->shutdowns==1);++p->relaunches;
+}
+static void fake_checkpoint(void *context,const char *message) {
+    fake_platform *p=context;size_t used=strlen(p->checkpoints),n=strlen(message);
+    CHECK(!p->report_open && used+n+2<sizeof(p->checkpoints));
+    memcpy(p->checkpoints+used,message,n);p->checkpoints[used+n]='\n';
+}
+static void exit_order_tests(void) {
+    const ctr_exit_ops ops={fake_cleanup,fake_clear,fake_menu,fake_poll,fake_release,
+        fake_wait,fake_shutdown,fake_whb,fake_checkpoint};
+    const ctr_proc_status states[]={CTR_PROC_FOREGROUND,CTR_PROC_FOREGROUND,
+        CTR_PROC_RELEASE,CTR_PROC_BACKGROUND,CTR_PROC_BACKGROUND,(ctr_proc_status)7,CTR_PROC_EXITING};
+    fake_platform p={.states=states,.count=7,.proc_alive=true,.graphics_alive=true,.audio_alive=true,.report_open=true};
+    ctr_test_lifecycle state={.title_id=UINT64_C(0x000500001011ec00)};
+    CHECK(ctr_test_complete_exit(&state,false,&ops,&p));
+    CHECK(state.finished && state.requested && p.cleanups==1 && p.menus==1 && p.polls==7);
+    CHECK(p.releases==1 && p.waits==6 && p.shutdowns==1 && p.relaunches==1);
+    CHECK(strstr(p.checkpoints,"EXIT status=BACKGROUND")!=NULL);
+    CHECK(strstr(p.checkpoints,"EXIT status=UNRECOGNIZED")!=NULL);
+    CHECK(strstr(p.checkpoints,"procui_shutdown_done")!=NULL);
+    CHECK(ctr_test_complete_exit(&state,false,&ops,&p)); /* Repeated close does no platform work. */
+    CHECK(p.cleanups==1 && p.menus==1 && p.polls==7 && p.shutdowns==1);
+    const uint64_t ids[]={UINT64_C(0x0005000013374842),UINT64_C(0x000500101004a000),
+        UINT64_C(0x000500101004a100),UINT64_C(0x000500101004a200)};
+    for(unsigned i=0;i<4;++i) {
+        memset(&p,0,sizeof(p));p.proc_alive=p.graphics_alive=p.audio_alive=p.report_open=true;
+        state=(ctr_test_lifecycle){.title_id=ids[i]};
+        CHECK(ctr_test_complete_exit(&state,false,&ops,&p));
+        CHECK(p.cleanups==1 && !p.menus && !p.polls && p.shutdowns==1 && p.relaunches==1);
+    }
+    memset(&p,0,sizeof(p));p.proc_alive=p.graphics_alive=p.audio_alive=p.report_open=true;
+    state=(ctr_test_lifecycle){.title_id=UINT64_C(0x000500001011ec00)};
+    CHECK(ctr_test_complete_exit(&state,true,&ops,&p)); /* System already requested exit. */
+    CHECK(!p.menus && !p.polls && p.cleanups==1 && p.shutdowns==1);
+    CHECK(!ctr_test_complete_exit(NULL,true,&ops,&p));
+    CHECK(!ctr_test_complete_exit(&state,true,NULL,&p));
+    ctr_exit_ops bad=ops;bad.shutdown_procui=NULL;
+    state=(ctr_test_lifecycle){0};
+    CHECK(!ctr_test_complete_exit(&state,false,&bad,&p));
+    CHECK(!state.requested && !state.finished);
+}
+
 int main(void) {
     guide_tests();
     lifecycle_tests();
+    exit_order_tests();
     char directory[] = "/tmp/ctr2wup-report-XXXXXX", text[4096];
     CHECK(mkdtemp(directory) != NULL);
     ctr_test_report first = {0}, second = {0}, bad = {0};

@@ -225,6 +225,20 @@ static ctr_cpu_result arm_step(ctr_cpu *cpu, uint32_t insn) {
         return CTR_CPU_OK;
     }
     uint32_t media=insn&0x0ff00ff0u;
+    uint32_t extend=insn&0x0fff03f0u;
+    if(extend==0x06af0070u || extend==0x06bf0070u ||
+       extend==0x06ef0070u || extend==0x06ff0070u) {
+        /* ARMv6 SXTB/SXTH/UXTB/UXTH, including ROR #0/8/16/24.
+           Adding/paired forms remain unsupported; none of these alter flags. */
+        unsigned rd=(insn>>12)&15u,rm=insn&15u;
+        if(rd==15u || rm==15u)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
+        unsigned ignored;
+        uint32_t value=ctr_cpu_shift(cpu->r[rm],3,((insn>>10)&3u)*8u,false,0,&ignored);
+        uint32_t mask=(insn&0x00100000u)?0xffffu:0xffu;
+        value&=mask;
+        if(!(insn&0x00400000u) && (value&((mask+1u)>>1)))value|=~mask;
+        cpu->r[rd]=value;cpu->r[15]=next;return CTR_CPU_OK;
+    }
     if((insn&0x0ff00090u)==0x01000080u) { /* SMLAxy, signed halves and sticky Q. */
         unsigned rd=(insn>>16)&15,rn=(insn>>12)&15,rs=(insn>>8)&15,rm=insn&15;
         if(rd==15 || rn==15 || rs==15 || rm==15)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);

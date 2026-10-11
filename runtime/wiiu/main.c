@@ -4,6 +4,7 @@
 #include <coreinit/thread.h>
 #include <coreinit/time.h>
 #include <coreinit/title.h>
+#include <coreinit/foreground.h>
 #include <gx2/event.h>
 #include <gx2/mem.h>
 #include <gx2/surface.h>
@@ -17,12 +18,14 @@
 #endif
 #include <whb/proc.h>
 #include <sysapp/launch.h>
+#include <proc_ui/procui.h>
 #include <math.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <stdatomic.h>
 #include "diagnostic_font.h"
 #include "viewport.h"
 #include "test_report.h"
@@ -62,6 +65,7 @@ static int16_t audio_samples[AUDIO_SAMPLES] __attribute__((aligned(64)));
 static ctr_test_report test_report;
 static ctr_test_guide test_guide;
 static ctr_test_lifecycle lifecycle;
+static atomic_uint home_exit_requested;
 static unsigned freeze_trace_frames;
 static bool gsp_pass_seen,fresh_save_reload_seen;
 static bool report_handler_added,report_error_announced;
@@ -76,6 +80,8 @@ static int alloc_ok_for_report;
 static uint16_t touch_min_x=UINT16_MAX,touch_min_y=UINT16_MAX,touch_max_x,touch_max_y;
 #ifdef CTR_FILESYSTEM_HOMEBREW
 #define REPORT_APPLICATION "compiled-save"
+#elif defined(CTR_SHALLOW_AOT)
+#define REPORT_APPLICATION "compiled-guarded"
 #elif defined(CTR_COMPILED_HOMEBREW)
 #define REPORT_APPLICATION "compiled-interactive"
 #elif defined(CTR_EXTERNAL_AOT)
@@ -113,15 +119,8 @@ static int guest_ready,guest_mode=CTR_GUEST_DEFAULT;
 static uint32_t presented_frames;
 static OSTime guest_origin;
 
-static void request_app_exit(void) {
-    ctr_exit_action action=ctr_test_request_exit(&lifecycle);
-    if(action==CTR_EXIT_NONE)return;
-    WHBLogPrintf("EXIT stage=request_begin route=%s title_id=%016llx",
-        action==CTR_EXIT_HBL?"HBL_relaunch":"system_menu",
-        (unsigned long long)lifecycle.title_id);
-    if(action==CTR_EXIT_HBL)WHBProcStopRunning();
-    else SYSLaunchMenu();
-    WHBLogPrintf("EXIT stage=request_returned; waiting for ProcUI exit");
+static uint32_t home_button_exit(void *context) {
+    (void)context;atomic_store(&home_exit_requested,1);return 0;
 }
 
 static void freeze_checkpoint(const char *stage) {
@@ -129,6 +128,14 @@ static void freeze_checkpoint(const char *stage) {
     WHBLogPrintf("INPUT CHECKPOINT stage=%s remaining=%u state=%s pc=%08x instructions=%llu swaps=%llu",
         stage,freeze_trace_frames,ctr_guest_state_name(gsp_guest.state),gsp_guest.cpu.r[15],
         (unsigned long long)gsp_guest.cpu.instructions,(unsigned long long)gsp_guest.gsp.swaps[0]);
+#ifdef CTR_COMPILED_HOMEBREW
+    unsigned depth=0;uint64_t unwinds=0;
+    ctr_recomp_depth_stats(&gsp_guest,&depth,&unwinds);
+    OSThread *thread=OSGetCurrentThread();uint32_t sp=OSGetStackPointer();
+    uintptr_t end=thread?(uintptr_t)thread->stackEnd:0;
+    WHBLogPrintf("AOT checkpoint max_depth=%u unwinds=%llu call_limit=%u host_stack_headroom=%lu",
+        depth,(unsigned long long)unwinds,CTR_RECOMP_CALL_LIMIT,(unsigned long)(end && sp>=end?sp-end:0));
+#endif
 }
 
 static void guest_debug(void *context,const char *message) {
@@ -233,7 +240,7 @@ static void guide_log(void *context,const char *message) {
 static void session_summary(int result) {
     WHBLogPrintf("===== SESSION SUMMARY =====");
     ctr_test_guide_summary(&test_guide);
-    WHBLogPrintf("Application: %s | Build: 0.14.2 | Entering cleanup: result=%d",REPORT_APPLICATION,result);
+    WHBLogPrintf("Application: %s | Build: 0.14.3 | Entering cleanup: result=%d",REPORT_APPLICATION,result);
     WHBLogPrintf("Elapsed milliseconds: %llu | Completed display frames: %u | Guest sessions: %u",
         (unsigned long long)(OSTicksToMicroseconds(OSGetTime()-session_started)/1000),completed_frames,guest_sessions);
     WHBLogPrintf("Display frame microseconds: minimum=%u average=%llu maximum=%u (diagnostic workload, not game FPS)",
@@ -320,11 +327,13 @@ static int allocation_test(void) {
 }
 
 #ifndef CTR_COMPILED_HOMEBREW
+static bool audio_owned;
 static void audio_init(void) {
     AXInitParams params={0};
     params.renderer=AX_INIT_RENDERER_48KHZ;
     params.pipeline=AX_INIT_PIPELINE_SINGLE;
-    AXInitWithParams(&params);
+    audio_owned=!AXIsInit();
+    if(audio_owned)AXInitWithParams(&params);
     if (!AXIsInit()) { WHBLogPrintf("audio FAIL AX initialization"); return; }
     tone_voice=AXAcquireVoice(31, NULL, NULL);
     if (!tone_voice) { WHBLogPrintf("audio FAIL no AX voice"); return; }
@@ -361,6 +370,14 @@ static void play_tone(void) {
     AXSetVoiceCurrentOffset(tone_voice, 0);
     AXSetVoiceState(tone_voice, AX_VOICE_STATE_PLAYING);
     WHBLogPrintf("tone request=%u frequency_hz=440 duration_ms=250", ++tone_count);
+}
+static void audio_shutdown(void) {
+    if(tone_voice) {
+        AXSetVoiceState(tone_voice,AX_VOICE_STATE_STOPPED);AXFreeVoice(tone_voice);tone_voice=NULL;
+    }
+    audio_ready=0;
+    if(audio_owned && AXIsInit())AXQuit();
+    audio_owned=false;
 }
 #endif
 
@@ -435,14 +452,105 @@ static void diagnostic_images(unsigned frame, const VPADStatus *pad,
     }
 }
 
+typedef struct {
+    int result, gfx_ready, udp_ready;
+    bool foreground;
+    GX2Surface *tv,*drc;
+} native_exit_context;
+
+static void exit_checkpoint(void *context,const char *message) {
+    (void)context;
+    OSReport("%s\n",message);
+    if(!ctr_test_report_checkpoint(&test_report,message))
+        OSReport("CTR2WUP exit checkpoint FAILED errno=%d\n",test_report.error_code);
+}
+static void cleanup_resources(void *context) {
+    native_exit_context *exit=context;
+    int result=exit->result;
+    WHBLogPrintf("shutdown begin result=%d",result);
+    session_summary(result);
+    WHBLogPrintf("EXIT stage=guest_cleanup_begin");
+    ctr_guest_close(&frame_guest);
+    if (hid_ready && hid_guest.state!=CTR_GUEST_FAULTED && ctr_hid_fixture_exit(&hid_guest)) {
+        ctr_guest_run(&hid_guest,1000,hid_guest.now_ns,true);
+        WHBLogPrintf("hid_live_shutdown state=%s fallback=%llu",ctr_guest_state_name(hid_guest.state),
+            (unsigned long long)hid_guest.cpu.fallback_instructions);
+    }
+    ctr_guest_close(&hid_guest);
+#ifndef CTR_COMPILED_HOMEBREW
+    if(gsp_ready && gsp_guest.state!=CTR_GUEST_FAULTED && gsp_guest.state!=CTR_GUEST_EXITED && ctr_relay_fixture_exit(&gsp_guest)) {
+        ctr_guest_run(&gsp_guest,1000000,gsp_guest.now_ns,true);
+        WHBLogPrintf("gsp_guest_shutdown state=%s fallback=%llu",ctr_guest_state_name(gsp_guest.state),
+            (unsigned long long)gsp_guest.cpu.fallback_instructions);
+    }
+#endif
+    ctr_guest_close(&gsp_guest);
+#ifdef CTR_FILESYSTEM_HOMEBREW
+    if(diagnostic_save_ready)ctr_fs_volume_close(&diagnostic_save);
+#endif
+    WHBLogPrintf("EXIT stage=guest_cleanup_done");
+    WHBLogPrintf("EXIT stage=audio_cleanup_begin");
+#ifdef CTR_COMPILED_HOMEBREW
+    if(compiled_sd_ready)ctr_fs_volume_close(&compiled_sd);
+#endif
+#ifndef CTR_COMPILED_HOMEBREW
+    audio_shutdown();
+#endif
+    WHBLogPrintf("EXIT stage=audio_cleanup_done");
+    WHBLogPrintf("EXIT stage=graphics_cleanup_begin");
+    if (exit->gfx_ready && exit->foreground) GX2DrawDone();
+    if (exit->tv->image) MEMFreeToDefaultHeap(exit->tv->image);
+    if (exit->drc->image) MEMFreeToDefaultHeap(exit->drc->image);
+    if (exit->gfx_ready) WHBGfxShutdown();
+    WHBLogPrintf("EXIT stage=graphics_cleanup_done");
+#if CTR_DIAGNOSTIC_UDP
+    WHBLogPrintf("EXIT stage=udp_cleanup_begin");
+    if (exit->udp_ready) WHBLogUdpDeinit();
+    WHBLogPrintf("EXIT stage=udp_cleanup_done");
+#endif
+    WHBLogPrintf("shutdown complete result=%d",result);
+    WHBLogPrintf("===== END OF REPORT: application resource cleanup reached; result=%d =====",result);
+    WHBLogPrintf("EXIT stage=report_close_begin; launcher return is not yet established");
+    if(report_handler_added)WHBRemoveLogHandler(file_log);
+    if(!ctr_test_report_close(&test_report))OSReport("CTR2WUP TXT report close FAILED errno=%d\n",test_report.error_code);
+    ctr_test_report_checkpoint(&test_report,"EXIT stage=report_close_done; SD mount cleanup belongs to WUT");
+}
+static uint32_t exit_save_ready(void *context) {
+    (void)context;OSSavesDone_ReadyToRelease();return 0;
+}
+static void clear_proc_callbacks(void *context) {
+    (void)context;ProcUIClearCallbacks();
+    /* Keep the save acknowledgement even after removing the GFX callbacks. */
+    ProcUISetSaveCallback(exit_save_ready,NULL);
+}
+static void request_system_menu(void *context) { (void)context;SYSLaunchMenu(); }
+static ctr_proc_status process_proc_messages(void *context) {
+    (void)context;
+    switch(ProcUIProcessMessages(TRUE)) {
+        case PROCUI_STATUS_IN_FOREGROUND:return CTR_PROC_FOREGROUND;
+        case PROCUI_STATUS_IN_BACKGROUND:return CTR_PROC_BACKGROUND;
+        case PROCUI_STATUS_RELEASE_FOREGROUND:return CTR_PROC_RELEASE;
+        case PROCUI_STATUS_EXITING:return CTR_PROC_EXITING;
+        default:return (ctr_proc_status)-1;
+    }
+}
+static void release_foreground(void *context) { (void)context;ProcUIDrawDoneRelease(); }
+static void wait_proc_messages(void *context) { (void)context;OSSleepTicks(OSMillisecondsToTicks(5)); }
+static void shutdown_procui(void *context) { (void)context;ProcUIShutdown(); }
+static void shutdown_whb(void *context) { (void)context;WHBProcShutdown(); }
+static const ctr_exit_ops exit_ops={cleanup_resources,clear_proc_callbacks,request_system_menu,
+    process_proc_messages,release_foreground,wait_proc_messages,shutdown_procui,shutdown_whb,exit_checkpoint};
+
 int main(int argc, char **argv) {
     (void)argc; (void)argv;
     int result=1, gfx_ready=0;
-    bool proc_stopped=false;
+    bool exit_observed=false, foreground=true;
     GX2Surface tv_source={0}, drc_source={0};
     CtrViewport tv_view, drc_view;
     WHBProcInit();
     lifecycle.title_id=OSGetTitleID();
+    if(ctr_test_from_hbl(lifecycle.title_id))
+        ProcUIRegisterCallback(PROCUI_CALLBACK_HOME_BUTTON_DENIED,home_button_exit,NULL,99);
     session_started=OSGetTime();
     WHBAddLogHandler(system_log);
 #if CTR_DIAGNOSTIC_UDP
@@ -458,13 +566,13 @@ int main(int argc, char **argv) {
 #ifdef CTR_FILESYSTEM_HOMEBREW
         if(directory_ok)snprintf(diagnostic_save_path,sizeof(diagnostic_save_path),"%s/filesystem-test.snapshot",directory);
 #endif
-        if(directory_ok && ctr_test_report_open(&test_report,directory,REPORT_APPLICATION,"0.14.2",(uint64_t)session_started)) {
+        if(directory_ok && ctr_test_report_open(&test_report,directory,REPORT_APPLICATION,"0.14.3",(uint64_t)session_started)) {
             WHBAddLogHandler(file_log);report_handler_added=true;
         } else if(!directory_ok) {
             test_report.failed=true;test_report.error_code=errno;
         }
     }
-    WHBLogPrintf("CTR2WUP native diagnostic version=0.14.2 application=%s pointer_bits=%u endian=big UDP=%u TXT_report=%u",
+    WHBLogPrintf("CTR2WUP native diagnostic version=0.14.3 application=%s pointer_bits=%u endian=big UDP=%u TXT_report=%u",
                   REPORT_APPLICATION,(unsigned)(8*sizeof(void *)),udp_ready,report_handler_added);
     WHBLogPrintf("Platform title_id=%016llx exit_route=%s SD_owner=WUT_devoptab",
         (unsigned long long)lifecycle.title_id,ctr_test_from_hbl(lifecycle.title_id)?"HBL_relaunch":"system_menu");
@@ -527,6 +635,7 @@ int main(int argc, char **argv) {
     int alloc_ok=allocation_test();
 #ifdef CTR_COMPILED_HOMEBREW
     WHBLogPrintf("Compiled test: native AX/tone disabled; A is guest input only; guest audio unavailable");
+    WHBLogPrintf("AOT call_limit=%u variant=%s",CTR_RECOMP_CALL_LIMIT,REPORT_APPLICATION);
 #else
     audio_init();
 #endif
@@ -537,8 +646,31 @@ int main(int argc, char **argv) {
     VPADStatus pad={0}; VPADReadError error=VPAD_READ_NO_SAMPLES;
     unsigned frame=0; uint32_t frame_us=0;
     OSTime log_time=OSGetTime();
-    while (WHBProcIsRunning()) {
-        if(lifecycle.requested) { OSSleepTicks(OSMillisecondsToTicks(5));continue; }
+    ctr_proc_status prior_status=(ctr_proc_status)-1;
+    for(;;) {
+        /* WHBProcIsRunning shuts ProcUI down on EXITING, before our resource
+           cleanup. Poll directly so cleanup can precede ProcUIShutdown. */
+        ctr_proc_status status=process_proc_messages(NULL);
+        if(status!=prior_status) {
+            WHBLogPrintf("APP ProcUI status=%d",(int)status);prior_status=status;
+        }
+        if(status==CTR_PROC_EXITING) { exit_observed=true;break; }
+        if(atomic_load(&home_exit_requested)) {
+            WHBLogPrintf("EXIT trigger=HBL_home_button");break;
+        }
+        if(status==CTR_PROC_RELEASE) {
+#ifndef CTR_COMPILED_HOMEBREW
+            audio_shutdown();
+#endif
+            foreground=false;ProcUIDrawDoneRelease();continue;
+        }
+        if(status!=CTR_PROC_FOREGROUND) {
+            foreground=false;wait_proc_messages(NULL);continue;
+        }
+#ifndef CTR_COMPILED_HOMEBREW
+        if(!foreground)audio_init();
+#endif
+        foreground=true;
         OSTime frame_start=OSGetTime();
         VPADStatus sample={0};
         int32_t count=VPADRead(VPAD_CHAN_0,&sample,1,&error);
@@ -555,7 +687,7 @@ int main(int argc, char **argv) {
         if (pad.trigger&VPAD_BUTTON_MINUS) {
             ctr_guide_input stop={0};stop.milliseconds=OSTicksToMicroseconds(OSGetTime()-session_started)/1000;stop.pressed=CTR_GUIDE_MINUS;
             ctr_test_guide_update(&test_guide,&stop);
-            request_app_exit();continue;
+            WHBLogPrintf("EXIT trigger=Minus; cleaning resources before system transition");break;
         }
 #ifdef CTR_COMPILED_HOMEBREW
         if(pad.trigger&(VPAD_BUTTON_A|VPAD_BUTTON_B|VPAD_BUTTON_PLUS))freeze_trace_frames=64;
@@ -611,10 +743,14 @@ int main(int argc, char **argv) {
             for(unsigned i=TOP_W*102;i<TOP_W*144;++i)top_image[i]=0x162d4fff;
             char text[90];
 #ifdef CTR_COMPILED_HOMEBREW
+#ifdef CTR_SHALLOW_AOT
+            image_text(top_image,TOP_W,10,"CTR2WUP GUARDED AOT / LIMIT 2");
+#else
 #ifdef CTR_FILESYSTEM_HOMEBREW
             image_text(top_image,TOP_W,10,"CTR2WUP COMPILED SAVE / RELOAD");
 #else
             image_text(top_image,TOP_W,10,"CTR2WUP COMPILED LIBCTRU / GSP");
+#endif
 #endif
 #else
             image_text(top_image,TOP_W,10,"CTR2WUP HID / GSP QUEUE / VBLANK");
@@ -746,68 +882,12 @@ int main(int argc, char **argv) {
         }
         ++frame;
     }
-    proc_stopped=true;
     result=0;
 cleanup:
-    WHBLogPrintf("shutdown begin result=%d",result);
-    session_summary(result);
-    if(!proc_stopped) {
-        request_app_exit();
-        while(WHBProcIsRunning())OSSleepTicks(OSMillisecondsToTicks(5));
+    {
+        native_exit_context exit={result,gfx_ready,udp_ready,foreground,&tv_source,&drc_source};
+        if(!ctr_test_complete_exit(&lifecycle,exit_observed,&exit_ops,&exit))result=1;
     }
-    WHBLogPrintf("EXIT stage=procui_stopped");
-    WHBLogPrintf("EXIT stage=guest_cleanup_begin");
-    ctr_guest_close(&frame_guest);
-    if (hid_ready && hid_guest.state!=CTR_GUEST_FAULTED && ctr_hid_fixture_exit(&hid_guest)) {
-        ctr_guest_run(&hid_guest,1000,hid_guest.now_ns,true);
-        WHBLogPrintf("hid_live_shutdown state=%s fallback=%llu",ctr_guest_state_name(hid_guest.state),
-            (unsigned long long)hid_guest.cpu.fallback_instructions);
-    }
-    ctr_guest_close(&hid_guest);
-#ifndef CTR_COMPILED_HOMEBREW
-    if(gsp_ready && gsp_guest.state!=CTR_GUEST_FAULTED && gsp_guest.state!=CTR_GUEST_EXITED && ctr_relay_fixture_exit(&gsp_guest)) {
-        ctr_guest_run(&gsp_guest,1000000,gsp_guest.now_ns,true);
-        WHBLogPrintf("gsp_guest_shutdown state=%s fallback=%llu",ctr_guest_state_name(gsp_guest.state),
-            (unsigned long long)gsp_guest.cpu.fallback_instructions);
-    }
-#endif
-    ctr_guest_close(&gsp_guest);
-#ifdef CTR_FILESYSTEM_HOMEBREW
-    if(diagnostic_save_ready)ctr_fs_volume_close(&diagnostic_save);
-#endif
-    WHBLogPrintf("EXIT stage=guest_cleanup_done");
-    WHBLogPrintf("EXIT stage=audio_cleanup_begin");
-#ifndef CTR_COMPILED_HOMEBREW
-    if (tone_voice) { AXSetVoiceState(tone_voice,AX_VOICE_STATE_STOPPED); AXFreeVoice(tone_voice); }
-#endif
-#ifdef CTR_COMPILED_HOMEBREW
-    if(compiled_sd_ready)ctr_fs_volume_close(&compiled_sd);
-#endif
-#ifndef CTR_COMPILED_HOMEBREW
-    if (AXIsInit()) AXQuit();
-#endif
-    WHBLogPrintf("EXIT stage=audio_cleanup_done");
-    WHBLogPrintf("EXIT stage=graphics_cleanup_begin");
-    if (gfx_ready) GX2DrawDone();
-    if (tv_source.image) MEMFreeToDefaultHeap(tv_source.image);
-    if (drc_source.image) MEMFreeToDefaultHeap(drc_source.image);
-    if (gfx_ready) WHBGfxShutdown();
-    WHBLogPrintf("EXIT stage=graphics_cleanup_done");
-#if CTR_DIAGNOSTIC_UDP
-    WHBLogPrintf("EXIT stage=udp_cleanup_begin");
-    if (udp_ready) WHBLogUdpDeinit();
-    WHBLogPrintf("EXIT stage=udp_cleanup_done");
-#endif
-    WHBLogPrintf("shutdown complete result=%d",result);
-    WHBLogPrintf("===== END OF REPORT: application resource cleanup reached; result=%d =====",result);
-    WHBLogPrintf("EXIT stage=report_close_begin; launcher return is not yet established");
-    if(report_handler_added)WHBRemoveLogHandler(file_log);
-    if(!ctr_test_report_close(&test_report))OSReport("CTR2WUP TXT report close FAILED errno=%d\n",test_report.error_code);
-    ctr_test_report_checkpoint(&test_report,"EXIT stage=report_close_done; SD mount cleanup belongs to WUT");
-    ctr_test_report_checkpoint(&test_report,"EXIT stage=whb_proc_shutdown_begin");
-    WHBProcShutdown();
-    ctr_test_report_checkpoint(&test_report,"EXIT stage=whb_proc_shutdown_done");
-    ctr_test_report_checkpoint(&test_report,"EXIT stage=main_return; runtime finalizers and launcher return still require observation");
     WHBRemoveLogHandler(system_log);
     return result;
 }

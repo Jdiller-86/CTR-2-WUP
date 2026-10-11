@@ -27,11 +27,14 @@ def main():
     parser.add_argument('--native',type=Path,required=True)
     parser.add_argument('--interactive-report',type=Path,required=True)
     parser.add_argument('--filesystem-report',type=Path,required=True)
+    parser.add_argument('--include-guarded',action='store_true')
     parser.add_argument('--output',type=Path,required=True)
     a=parser.parse_args();out=a.output.resolve()
     native=a.native.resolve();report=json.loads((native/'build-report.json').read_text())
     if not report['ok'] or report['runtime_version']!=__version__ or report['profile']!='native-diagnostics':
         raise RuntimeError('Require a verified current native diagnostic')
+    for entry in report['artifacts']:
+        if digest(native/entry['name'])!=entry['sha256']:raise RuntimeError('Native artifact mismatch')
     inputs=[(native/'ctr2wup-prototype.rpx','rpx/ctr2wup-prototype.rpx'),
             (native/'ctr2wup-prototype.wuhb','sd-card/wiiu/apps/ctr2wup-prototype.wuhb')]
     reports=[(native/'build-report.json','build-reports/native.json')]
@@ -46,7 +49,13 @@ def main():
             if f.suffix=='.rpx':inputs.append((f,'rpx/'+f.name))
             elif f.suffix=='.wuhb':inputs.append((f,'sd-card/wiiu/apps/'+f.name))
         reports.append((path,'build-reports/'+name+'.json'))
-    if len(inputs)!=6:raise RuntimeError('Require all three RPX/WUHB pairs')
+        if name=='interactive' and a.include_guarded:
+            if not app.get('guarded',{}).get('exact_frames_match') or app['guarded']['guest']['state']!='exited':raise RuntimeError('Require verified guarded AOT comparison')
+            for entry in app['guarded_wiiu_artifacts']:
+                f=path.parent/'interactive/wiiu-guarded'/entry['name']
+                if digest(f)!=entry['sha256']:raise RuntimeError('Guarded artifact mismatch')
+                inputs.append((f,('rpx/' if f.suffix=='.rpx' else 'sd-card/wiiu/apps/')+f.name))
+    if len(inputs)!=(8 if a.include_guarded else 6):raise RuntimeError('Require every requested RPX/WUHB pair')
     for f,_ in inputs:
         if f.suffix=='.rpx':_validate_rpx(f)
         elif f.read_bytes()[:4]!=b'WUHB':raise RuntimeError('Invalid WUHB')
@@ -72,7 +81,7 @@ def main():
     source_digest=hashlib.sha256()
     for f,name in sorted(sources,key=lambda pair:pair[1]):
         source_digest.update(name.encode());source_digest.update(bytes.fromhex(digest(f)))
-    manifest={'ok':True,'version':__version__,'app_count':3,'source_file_count':len(sources),
+    manifest={'ok':True,'version':__version__,'app_count':len(inputs)//2,'source_file_count':len(sources),
         'source_digest':source_digest.hexdigest(),'console_verified':False,'installable_wup':False,
         'files':[{'name':p.name,'bytes':p.stat().st_size,'sha256':digest(p)} for p in (source,kit)],
         'apps':[{'path':name,'sha256':digest(f)} for f,name in inputs]}

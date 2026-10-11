@@ -1,12 +1,13 @@
 # Physical Wii U test checklist
 
-**Current workflow: use the v0.14.2 kit and first follow
-[guided-testing.md](guided-testing.md).** The three apps now prompt for inputs
+**Current workflow: use the v0.14.3 kit and first follow
+[guided-testing.md](guided-testing.md).** The diagnostic variants now prompt for inputs
 and observations and write per-launch `.txt` reports under `sd:/ctr2wup/`.
 Upload those reports in this chat. Photos are optional when illustrating a visual
 problem; the manual checklist below remains a reference for deeper investigation
 and older artifacts. Native guided checks have now passed on the user's console,
-but final launcher return froze; newer compiled A input also reportedly froze.
+but Minus stalls at the Menu splash/music; compiled A still freezes the system
+with no tone. The v0.14.3 retest checks cleanup order and guarded/standard AOT.
 Follow `console-retest.md` before repeating long guides or running the save app.
 
 No console is attached to this environment. Full physical acceptance remains

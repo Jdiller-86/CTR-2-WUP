@@ -188,8 +188,31 @@ static void halfword_tests(void) {
     const uint32_t unsupported[]={0xe0c100b0,0xe18100b0,0xe1e100b0,0xe1c1f0b0};
     for(unsigned i=0;i<4;++i){setup(unsupported[i]);CHECK(ctr_cpu_step(&cpu)==CTR_CPU_UNSUPPORTED && cpu.r[15]==0x1000);}
 }
+static void extend_tests(void) {
+    const uint32_t forms[]={0xe6af4072,0xe6bf4072,0xe6ef4072,0xe6ff4072};
+    const uint32_t values[]={0,0xff,0x80,0x7f,0xffff,0x8000,0x123480ab,0x800000ff,UINT32_MAX};
+    for(unsigned form=0;form<4;++form)for(unsigned rotation=0;rotation<4;++rotation)
+        for(unsigned i=0;i<9;++i) {
+            setup(forms[form]|(rotation<<10));cpu.r[2]=values[i];cpu.cpsr=0x98050010;
+            unsigned bits=rotation*8;
+            uint32_t rotated=bits?(values[i]>>bits)|(values[i]<<(32-bits)):values[i];
+            int64_t expected=rotated&((form&1)?65535u:255u);
+            if(form<2 && expected>=((form&1)?32768:128))expected-=(form&1)?65536:256;
+            CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[4]==(uint32_t)expected);
+            CHECK(cpu.r[2]==values[i] && cpu.r[15]==0x1004 && cpu.cpsr==0x98050010);
+        }
+    setup(0xe6ef2072);cpu.r[2]=0x123480ab;
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[2]==0xab); /* Same source and destination. */
+    setup(0x06ef4072);cpu.cpsr=0x10;cpu.r[4]=123;
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[4]==123 && cpu.r[15]==0x1004); /* Failed EQ. */
+    const uint32_t rejected[]={0xe6eff072,0xe6ef407f,0xe6e24072,0xe68f4072};
+    for(unsigned i=0;i<4;++i) {
+        setup(rejected[i]);cpu.r[4]=123;
+        CHECK(ctr_cpu_step(&cpu)==CTR_CPU_UNSUPPORTED && cpu.r[4]==123 && cpu.r[15]==0x1000);
+    }
+}
 int main(void) {
-    memory_tests(); flag_tests(); instruction_tests(); viewport_tests();halfword_tests();
+    memory_tests(); flag_tests(); instruction_tests(); viewport_tests();halfword_tests();extend_tests();
     clock_t start=clock();
     for (unsigned i=0;i<1000;++i) CHECK(ctr_cpu_selftest()==0);
     double seconds=(double)(clock()-start)/CLOCKS_PER_SEC;

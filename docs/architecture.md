@@ -43,11 +43,17 @@ see `upstream-integration.md`. Its desktop runtime is not a Wii U dependency.
 
 The native WUT backend provides independent TV and GamePad diagnostic output,
 input, sound, process lifecycle, timing, and CPU self-test instrumentation.
-v0.14.2 requests system/ProcUI exit for menu titles and preserves the WUT HBL
-relaunch route. The WUT newlib devoptab owns SD mounting; diagnostics do not
-remount or unmount it independently. TXT reports have bounded input/render and
-late exit checkpoints; end-of-report does not establish launcher return. AX
-tones are native-only and UDP logging is optional. See `console-retest.md`.
+v0.14.3 polls ProcUI directly, suspends input/rendering outside foreground and
+releases guest/owned AX/GX2/report resources before ProcUIShutdown. On Minus it
+cleans up, clears stale graphics callbacks while retaining save acknowledgement,
+requests Menu and polls to EXITING; HBL relaunch follows cleanup/shutdown.
+WUT's devoptab owns SD mounting. Checked TXT records include lifecycle states and
+bounded input/guest/render checkpoints; end-of-report does not establish menu
+return. Native AX ownership is explicit; compiled apps do not use AX.
+The guarded AOT comparison uses a call limit of two instead of the standard 64,
+with the existing unwind/dispatcher. Exact desktop frames/input/exit match; depth,
+unwinds and frame-boundary stack headroom are diagnostic evidence, not proof of
+a console stack fault. See `console-retest.md`.
 All diagnostic builds also contain the original TLS/SRV/CFG startup self-test
 with a visible result and SD log. Unsupported cache operations fail visibly
 instead of inheriting the external emitter's no-op behavior.
@@ -118,3 +124,11 @@ source; no commercial assets are distributed.
 5. License-cleared packing plus locally configured keys and actual install/menu
    launch tests must precede a WUP conversion claim.
 6. The Windows GUI follows a demonstrated execution pipeline; it is deferred.
+
+The interpreter implements ARMv6 SXTB/SXTH/UXTB/UXTH register extensions, ROR
+#0/8/16/24, conditional execution and destination/source aliasing without flag
+changes. PC operands and adding/paired forms remain unsupported. Unit/sanitizer
+checks and 2,048 Unicorn ARM1176 cases validate this scope. Full compiled libctru
+interpreter startup still stops on STRD, so no interpreter comparison is shipped.
+For the optional reference, install `unicorn==2.1.4` in a developer Python
+environment, then run `python3 tools/reference-extend.py --output NEW_DIRECTORY`.

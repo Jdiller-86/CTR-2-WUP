@@ -89,6 +89,7 @@ int main(int argc,char **argv) {
     }
     printf("{\"state\":\"%s\",\"fault\":\"%s\",\"pc\":%u,\"instructions\":%llu,\"svcs\":%llu,\"switches\":%llu,\"fallback\":%llu,\"ipc_failures\":%llu,\"messages\":\"%s\",\"frames\":[",ctr_guest_state_name(g.state),ctr_cpu_result_name(g.fault),g.cpu.r[15],(unsigned long long)g.cpu.instructions,(unsigned long long)g.svc_count,(unsigned long long)g.context_switches,(unsigned long long)g.cpu.fallback_instructions,(unsigned long long)g.ipc_failures,messages);
     for(unsigned i=0;i<captures;++i)printf("%s%u",i?",":"",colors[i]);
-    printf("],\"input_samples\":%u,\"save_commits\":%llu}\n",input_samples,(unsigned long long)(filesystem?save.commits:0));
+    unsigned depth=0;uint64_t unwinds=0;ctr_recomp_depth_stats(&g,&depth,&unwinds);
+    printf("],\"input_samples\":%u,\"save_commits\":%llu,\"aot_max_depth\":%u,\"aot_unwinds\":%llu}\n",input_samples,(unsigned long long)(filesystem?save.commits:0),depth,(unsigned long long)unwinds);
     ctr_guest_close(&g);if(!ctr_fs_volume_close(&sd) || (filesystem && !ctr_fs_volume_close(&save)))return 6;return 0;
 }

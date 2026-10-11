@@ -1,19 +1,20 @@
-# Guided Wii U testing and TXT reports (0.14.2)
+# Guided Wii U testing and TXT reports (0.14.3)
 
-Use the **0.14.2 console testing kit** for the current test round. It supplies
-three original homebrew applications with prompts and automatic plain-text
+Use the **0.14.3 console testing kit** for the current test round. It supplies
+four original homebrew diagnostic variants with prompts and automatic plain-text
 recording. No ROM is required and these builds are RPX/WUHB, not WUP packages.
 
-**Current round: follow [the short freeze retest](console-retest.md) first.**
+**Current round: follow [the short menu/input retest](console-retest.md) first.**
 Check native Minus exit, then compiled A input; postpone the save app and long
 stability loops until both work. The same `console-retest.md` is in the kit.
 
 ## Start
 
 1. Extract the kit on your PC. For Aroma, copy the contents of `sd-card/` to
-   your SD card root. The three WUHB files belong in `sd:/wiiu/apps/`.
-2. Launch **CTR2WUP Native Diagnostic**, then **CTR2WUP Compiled libctru Test**,
-   then **CTR2WUP Compiled Save Test**. Follow each app's on-screen prompts.
+   your SD card root. The four WUHB files belong in `sd:/wiiu/apps/`.
+2. For this round use **Native 0.14.3**, then **Guarded AOT 0.14.3**, then
+   **Compiled AOT 0.14.3** per the short retest. Leave **Compiled Save** for later.
+   For complete acceptance rounds, follow each app's on-screen guide.
 3. For an RPX-capable launcher, use the matching files under `rpx/` through
    that launcher's normal workflow. Use your existing homebrew environment.
 
@@ -57,6 +58,7 @@ Reports are in **`sd:/ctr2wup/`**:
 ```text
 native-<session>-<suffix>.txt
 compiled-interactive-<session>-<suffix>.txt
+compiled-guarded-<session>-<suffix>.txt
 compiled-save-<session>-<suffix>.txt
 ```
 
@@ -69,7 +71,7 @@ Records are flushed as they are written. An interrupted run can leave useful
 partial evidence: absence of the final `===== END OF REPORT:` marker means
 resource cleanup was not recorded. Exit checkpoints follow that marker; neither
 the marker nor `main_return` proves successful launcher return. Include your
-brief return/freeze observation. Flush and close do not establish power-loss durability.
+brief return/stall/freeze observation. Flush and close do not establish power-loss durability.
 
 After the tests, exit with Minus and copy the **new `.txt` files** from that
 folder to your PC. **Upload them in this chat**, individually or in one ZIP

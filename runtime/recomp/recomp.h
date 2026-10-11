@@ -132,7 +132,13 @@ static inline uint32_t vfp_compared(uint32_t f,double a,double b) {
 static inline void vfp_vector(Context *c,int op,int wide,int d,int n,int m) { (void)op;(void)wide;(void)d;(void)n;(void)m;ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,FPSCR(c)); }
 #define VFP_VECTOR(c,...) vfp_vector((c),__VA_ARGS__)
 #define RETURN() return
-#define CALL(code) do { if (ctx->depth>=64) {ctx->exit=EXIT_UNWIND;return;} ++ctx->depth;code(ctx);--ctx->depth;if(ctx->exit)return; } while (0)
+#ifndef CTR_RECOMP_CALL_LIMIT
+#define CTR_RECOMP_CALL_LIMIT 64
+#endif
+#if CTR_RECOMP_CALL_LIMIT < 1 || CTR_RECOMP_CALL_LIMIT > 64
+#error "CTR_RECOMP_CALL_LIMIT must be between 1 and 64"
+#endif
+#define CALL(code) do { if (ctx->depth>=CTR_RECOMP_CALL_LIMIT) {ctx->exit=EXIT_UNWIND;return;} ++ctx->depth;code(ctx);--ctx->depth;if(ctx->exit)return; } while (0)
 static inline void recomp_call(Context *c) { Code f=c->host->lookup(c,c->r[15]|c->thumb);if(f)f(c);else c->exit=EXIT_UNWIND; }
 #define RETURNED(address) do { if(ctx->r[15]!=(address)||ctx->thumb){target=ctx->r[15];goto dispatch;} } while (0)
 #define RETURNED_T(address) do { if(ctx->r[15]!=(address)||!ctx->thumb){target=ctx->r[15];goto dispatch;} } while (0)

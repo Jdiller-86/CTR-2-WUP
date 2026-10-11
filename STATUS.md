@@ -14,7 +14,37 @@ judgment, not measured task completion. **0/7 full milestones are accepted.**
 See [the completion assessment](docs/progress.md) for its basis, remaining work,
 and external testing gates; the README provides a concise progress overview.
 
-**Version 0.14.2 addresses the first reported console failures and adds a focused retest.**
+**Version 0.14.3 corrects shutdown ordering and adds a compiled-input comparison.**
+The user clarifies that Minus reaches the Menu splash and keeps playing its music,
+but never reaches the actual menu. This is a transition stall, not a complete
+console freeze. The compiled app still freezes the whole system when holding A,
+without green; no tone played in the newer run. Latest-run TXT files have not
+been supplied. The first v0.14.1 native report remains positive scoped evidence
+for ten guided steps/nine embedded checks and resource cleanup. Save testing
+remains deferred. Feedback/received logs remain under ignored `private/`.
+
+The previous helper could shut ProcUI down before app resource cleanup. The app
+now polls ProcUI directly, pauses input/rendering outside the foreground, cleans
+owned guest/audio/GX2/report resources, clears stale graphics callbacks, preserves
+save acknowledgement, then requests Menu and waits for EXITING before ProcUI
+shutdown. HBL relaunch also follows cleanup/ProcUI shutdown. Native AX ownership
+is tracked across foreground changes; compiled apps never initialize/quit AX.
+
+A new guarded compiled-AOT app limits native call nesting to two instead of 64,
+using the existing unwind/dispatcher. It runs the same original guest with exact
+matching frames/input/exit and recorded depth/unwinds on desktop. App menu names
+show 0.14.3. Checkpoints include call depth, unwinds, frame-boundary stack headroom
+and lifecycle states; they do not identify the cause of the console freeze.
+Follow `docs/console-retest.md`: native Minus first, guarded A next only if exit
+works, then standard AOT if guarded succeeds. Full console resolution remains
+**awaiting retest**; rough implementation stays 20% and no full gate is closed.
+
+The interpreter comparison exposed missing startup instructions. ARMv6
+SXTB/SXTH/UXTB/UXTH rotations/conditions/aliases now pass 2,048 independent Unicorn
+ARM1176 cases and unit/sanitizer checks. Full compiled-interpreter startup still
+stops visibly on unsupported STRD; no interpreter app is delivered or claimed.
+
+**Version 0.14.2 attempted the first console corrections; follow-up failures are above.**
 The received v0.14.1 native TXT records ten passing guided steps, nine passing
 software self-tests, zero input errors/faults and completed resource cleanup.
 The user reports a freeze after Minus, requiring reboot. This is partial physical
@@ -29,9 +59,9 @@ routes retain their relaunch path. WUT owns the SD mount, with no duplicate WHB
 mount/unmount. UDP is optional/off by default. Compiled apps do not initialize
 or stop AX or play native tones; A is guest input only. Bounded input/guest/render
 checkpoints, visible progress counters and closed-file exit stages support the
-next diagnosis. These changes are locally verified; resolution of either console
-freeze remains **awaiting retest**. Follow `docs/console-retest.md` before repeating
-long guides or running the save app. No full milestone is closed.
+next diagnosis. Local checks passed, but the user's follow-up reports both
+failures persisting. Current v0.14.3 steps are in `docs/console-retest.md`; defer
+long guides and the save app. No full milestone is closed.
 
 **Version 0.14.1 made console testing guided and recorded readable TXT reports.**
 The native, compiled-interactive and compiled-save apps prompt for inputs and
@@ -297,6 +327,19 @@ is unverified; no milestone requiring physical-console evidence is complete.
 
 ## Reports and deliverables
 
+v0.14.3 evidence is under `artifacts/reports/menu-exit-v0143/`: required `make check`
+passes 155 Python tests and all normal/ASan/UBSan C suites. The guide/report/lifecycle
+suite has 347 assertions, including the actual exit coordinator's resource,
+callback, Menu, foreground release, background, EXITING, ProcUI shutdown and HBL
+order. CPU tests have 51,796 assertions; optional ARM extension reference has
+2,048 independent cases. Current native/save and standard/guarded interactive
+RPX/WUHB builds are cross-compiled; interactive variants match all original exact
+frames/input/exit with zero fallback. Guarded execution must actually exercise
+unwind, not just compile with a different limit. See current builder receipts.
+Source and the four-app SD kit are under `artifacts/delivery/menu-exit-0.14.3/`.
+Physical menu return/input freeze resolution, save and WUP acceptance remain open.
+
+
 v0.14.2 verification is under `artifacts/reports/console-retest-v0142/`:
 required `make check` passes 155 Python tests and all normal/ASan/UBSan C suites;
 the guide/report/exit suite has 213 assertions per run, including all WUT HBL
@@ -426,8 +469,8 @@ existing Git checkout; do not reset, force-push or replace user changes.
   private `CTR2WUP-intake.zip`. The full original can stay local for later asset
   work. If it reports encryption, decrypted executable data is still needed.
   No commercial profile is enabled until actual private intake and runtime evidence.
-- **Wii U:** first run the short v0.14.2 native-exit/compiled-input retest per
-  `docs/console-retest.md`, upload the new TXT reports and note menu return/freeze.
+- **Wii U:** first run the short v0.14.3 native-exit/compiled-input retest per
+  `docs/console-retest.md`, upload the new TXT reports and note menu return/splash stall/system freeze.
   After both failures are resolved, complete the other guided/save tests. Native
   guided input/display/audio/stability and embedded self-tests have scoped evidence;
   full launcher/compiled/save/installation acceptance remains open. Return screen/input/audio/exit,

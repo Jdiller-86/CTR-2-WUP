@@ -1,12 +1,13 @@
-# Next acceptance gate and resume steps (0.14.2)
+# Next acceptance gate and resume steps (0.14.3)
 
-**October 11 console feedback:** the native guide's ten steps and nine self-tests
-pass and its report reaches resource cleanup, but Minus freezes during final
-return. The newer compiled app reportedly freezes after A's tone; its run log
-was not supplied. The older `.log` records a separate v0.14.0 compiled guest PASS.
-The save app was not tested. v0.14.2 corrects menu exit routing and SD ownership,
-isolates compiled A from native audio, and adds checkpoints/progress counters.
-Start with `console-retest.md`; fix verification is the immediate hardware gate.
+**October 11 follow-up:** native Minus requests the Menu splash/music, but the
+menu never loads; the console is not completely frozen. The compiled A-input
+freeze persists with no tone, confirming the newer build. Latest TXT evidence
+has not yet been uploaded. v0.14.3 changes resource cleanup/ProcUI shutdown order
+and supplies a guarded AOT comparison with call-depth/unwind/stack checkpoints.
+The earlier native report's ten guided passes/nine self-tests remain scoped
+positive evidence; exit, compiled input and saves remain unaccepted. Follow
+`console-retest.md` before repeating long guides or testing saves.
 
 Implementation continued through the verified shared-memory/synchronization,
 standard HID input, direct/shared GSP display, diagnostic VBlank, checked
@@ -57,7 +58,7 @@ No commercial profile or playable Mario build is enabled.
 
 Resume in this order when the evidence is available:
 
-1. Run the short v0.14.2 native-exit and compiled-input checks per
+1. Run the short v0.14.3 native-exit and compiled-input checks per
    `console-retest.md`, then return to full guides/save testing when both pass.
    Follow the prompts and upload the new `.txt` files
    under `sd:/ctr2wup/`, with firmware/homebrew/launcher versions. The guide records

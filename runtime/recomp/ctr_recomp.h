@@ -7,4 +7,5 @@
 bool ctr_recomp_attach(ctr_guest *guest,bool fallback);
 /* Diagnostic access to persistent VFP words for differential tests. */
 bool ctr_recomp_vfp(const ctr_guest *guest,unsigned word,uint32_t *value);
+bool ctr_recomp_depth_stats(const ctr_guest *guest,unsigned *maximum,uint64_t *unwinds);
 #endif

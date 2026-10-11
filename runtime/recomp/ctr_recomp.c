@@ -14,6 +14,8 @@ typedef struct {
     ctr_cpu *cpu;
     uint64_t code_generation;
     bool fallback;
+    unsigned maximum_depth;
+    uint64_t unwinds;
     /* The emitter writes an ARM LDM base before reads. Preserve the checked
        profile's original base on an abort while retaining earlier loaded words. */
     bool rollback_base;
@@ -53,6 +55,7 @@ _Noreturn void ctr_recomp_abort(Context *c,ctr_cpu_result result,uint32_t detail
 }
 int ctr_recomp_instruction(Context *c,uint32_t address,uint32_t opcode) {
     Engine *e=c->user;
+    if(c->depth>e->maximum_depth)e->maximum_depth=c->depth;
     e->rollback_base=false;
     c->r[15]=address;
     if (!c->budget) { c->exit=EXIT_BUDGET;return 0; }
@@ -183,7 +186,7 @@ static ctr_cpu_result execute(ctr_cpu *p,void *user,uint64_t budget) {
         } else code(c);
         if(c->exit==EXIT_SVC){export_cpu(e);return CTR_CPU_SVC;}
         if(c->exit==EXIT_BUDGET)break;
-        if(c->exit==EXIT_UNWIND) { c->exit=EXIT_NONE;c->depth=0; }
+        if(c->exit==EXIT_UNWIND) { ++e->unwinds;c->exit=EXIT_NONE;c->depth=0; }
     }
     export_cpu(e);return CTR_CPU_LIMIT;
 }
@@ -214,4 +217,8 @@ bool ctr_recomp_attach(ctr_guest *g,bool fallback) {
 bool ctr_recomp_vfp(const ctr_guest *g,unsigned word,uint32_t *value) {
     if(g->executor!=execute || word>=32 || !value)return false;
     *value=g->cpu.vfp[word];return true;
+}
+bool ctr_recomp_depth_stats(const ctr_guest *g,unsigned *maximum,uint64_t *unwinds) {
+    if(!g || g->executor!=execute || !maximum || !unwinds)return false;
+    const Engine *e=g->executor_context;*maximum=e->maximum_depth;*unwinds=e->unwinds;return true;
 }
