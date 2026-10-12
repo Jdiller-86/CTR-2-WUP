@@ -336,6 +336,8 @@ def validate_project(project):
     if 'Status' in fields:
         options = fields['Status'].get('options', [])
         unique_named(options, 'Status option')
+        if len({option['name'].casefold() for option in options}) != len(options):
+            raise SetupError('Status option names differ only by capitalization; preserve and review')
         identifiers = [option.get('id') for option in options]
         if None in identifiers or len(set(identifiers)) != len(identifiers):
             raise SetupError('Duplicate or missing Status option IDs')
@@ -418,9 +420,9 @@ def managed_items(context):
 
 def options_for(field):
     options = [dict(option) for option in field.get('options', [])] if field else []
-    names = {option['name'] for option in options}
+    names = {option['name'].casefold() for option in options}
     return options + [{'name': name, 'color': COLORS[name], 'description': ''}
-                      for name in STATUSES if name not in names]
+                      for name in STATUSES if name.casefold() not in names]
 
 
 def empty_value(item, key):
@@ -439,7 +441,7 @@ def plan(context, report):
     if not project or context['repository']['node_id'] not in {r['id'] for r in project['repositories']['nodes']}:
         operations.append({'kind': 'link-repository', 'repository': report['repository']})
     status = fields.get('Status')
-    missing = [name for name in STATUSES if not status or name not in {o['name'] for o in status['options']}]
+    missing = [name for name in STATUSES if not status or name.casefold() not in {o['name'].casefold() for o in status['options']}]
     if missing:
         operations.append({'kind': 'create-status-field' if not status else 'append-status-options', 'options': missing})
     for name in ('Milestone', 'Waiting resource'):
@@ -511,7 +513,7 @@ def apply(client, context, report):
                        'singleSelectOptions': options_for(None)},
                       'projectV2Field { ... on ProjectV2SingleSelectField { id } }')
         completed.append({'kind': 'create-status-field'})
-    elif any(name not in {o['name'] for o in status['options']} for name in STATUSES):
+    elif any(name.casefold() not in {o['name'].casefold() for o in status['options']} for name in STATUSES):
         client.mutate('updateProjectV2Field', 'UpdateProjectV2FieldInput',
                       {'fieldId': status['id'], 'singleSelectOptions': options_for(status)},
                       'projectV2Field { ... on ProjectV2SingleSelectField { id } }')
@@ -551,7 +553,7 @@ def apply(client, context, report):
         item = items.get(issue['node_id'])
         if not item or item.get('isArchived'):
             raise SetupError('Managed project item unavailable/archived after setup: ' + planned['id'])
-        status_option = next((o['id'] for o in fields['Status']['options'] if o['name'] == planned['initial_status']), None)
+        status_option = next((o['id'] for o in fields['Status']['options'] if o['name'].casefold() == planned['initial_status'].casefold()), None)
         if status_option is None:
             raise SetupError('Required Status option disappeared; preserve and review ' + planned['initial_status'])
         values = [('status', 'Status', {'singleSelectOptionId': status_option}),
@@ -568,7 +570,7 @@ def apply(client, context, report):
     final_fields, final_items, final_views = validate_project(final)
     if (repository['node_id'] not in {r['id'] for r in final['repositories']['nodes']}
             or any(tracker['issue']['node_id'] not in final_items for tracker in managed_items(context))
-            or any(name not in {o['name'] for o in final_fields['Status']['options']} for name in STATUSES)
+            or any(name.casefold() not in {o['name'].casefold() for o in final_fields['Status']['options']} for name in STATUSES)
             or VIEW_NAME not in final_views):
         raise SetupError('Final board verification failed; review completed operations')
     report.update(ok=True, applied=True, live_project_verified=True, project_url=final['url'])

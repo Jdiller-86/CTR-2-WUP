@@ -160,7 +160,7 @@ def status_value(row, options):
     name = options.get(value.get('optionId'))
     if name is None or value.get('name') != name:
         raise TrackingError('Project Status option identity changed during the read.')
-    return name if name in STATUSES[:8] else 'Other'
+    return next((canonical for canonical in STATUSES[:8] if canonical.casefold() == name.casefold()), 'Other')
 
 
 def resources(row):
@@ -197,7 +197,7 @@ def collect(project, source):
         if not isinstance(option.get('id'), str) or not isinstance(option.get('name'), str) or option['id'] in options:
             raise TrackingError('Project Status option definitions are ambiguous.')
         options[option['id']] = option['name']
-    if len(set(options.values())) != len(options):
+    if len({name.casefold() for name in options.values()}) != len(options):
         raise TrackingError('Project Status option names are ambiguous.')
     managed, item_ids, issue_ids, issue_numbers = {}, set(), set(), set()
     for row in project.get('items', []):

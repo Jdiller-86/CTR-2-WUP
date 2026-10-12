@@ -213,6 +213,16 @@ class ProjectExportTests(unittest.TestCase):
         self.assertEqual(result['milestones'][0]['waiting_resources']['Other resource'], 1)
         self.assertEqual(result['milestones'][0]['waiting_resources']['Console testing'], 1)
 
+    def test_default_option_capitalization_is_read_without_changing_it(self):
+        field = self.project['fields'][0]
+        option = next(row for row in field['options'] if row['name'] == 'In progress')
+        option['name'] = 'In Progress'
+        row = self.project['items'][1]
+        row['status'] = {'__typename': 'ProjectV2ItemFieldSingleSelectValue', 'optionId': option['id'], 'name': 'In Progress'}
+        result = self.aggregate()
+        self.assertEqual(result['work_items']['status_counts']['In progress'], 1)
+        self.assertEqual(row['status']['name'], 'In Progress')
+
     def test_unknown_and_unassigned_statuses_remain_visible(self):
         self.project['fields'][0]['options'].append({'id': 'custom', 'name': 'PRIVATE_STATUS_NAME'})
         self.project['items'][1]['status'] = {'__typename': 'ProjectV2ItemFieldSingleSelectValue', 'optionId': 'custom', 'name': 'PRIVATE_STATUS_NAME'}
