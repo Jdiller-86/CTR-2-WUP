@@ -26,11 +26,11 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 SDK_IMAGE = "devkitpro/devkitppc@sha256:44cb1a920e1ec3ec7c06767493c3b85f8d643d6137cc4661f0201895ac6e4967"
 LIBCTRU = "9b55eda44cf80b971503991e0c78f9bc8fe50425"
-SOURCE_DIRS = {".github", "docs", "host", "translator", "runtime", "renderer", "packaging", "profiles", "tests", "tools"}
-SOURCE_FILES = {".gitignore", "AGENTS.md", "CHANGELOG.md", "CONTRIBUTING.md", "LICENSE", "Makefile", "README.md", "SECURITY.md", "STATUS.md", "THIRD_PARTY_NOTICES", "pyproject.toml"}
+SOURCE_DIRS = {".github", ".githooks", "docs", "host", "translator", "runtime", "renderer", "packaging", "profiles", "tests", "tools"}
+SOURCE_FILES = {".gitignore", "AGENTS.md", "CHANGELOG.md", "CONTRIBUTING.md", "LICENSE", "Makefile", "README.md", "SECURITY.md", "STATUS.md", "THIRD_PARTY_NOTICES", "pyproject.toml", "mkdocs.yml", "docs-requirements.txt"}
 FORBIDDEN = {".3ds", ".cxi", ".cci", ".cia", ".3dsx", ".rom", ".sav", ".key", ".keys", ".cert", ".app", ".h3", ".tik", ".tmd", ".pyc", ".log", ".elf", ".o", ".rpx", ".wuhb", ".zip", ".exe", ".dll", ".so", ".pyd", ".whl", ".tar", ".gz", ".7z", ".wup", ".snapshot", ".trace"}
 REQUIRED_CHECKS = {"make-check", "make-prototype", "native-build", "transfer-validation", "wheel-build", "wheel-smoke"}
-CHECK_NAMES = REQUIRED_CHECKS | {"sdk-install", "arm-fixtures-install", "translator-install"}
+CHECK_NAMES = REQUIRED_CHECKS | {"sdk-install", "arm-fixtures-install", "translator-install", "docs-build", "docs-package"}
 NATIVE_NAMES = ("ctr2wup-prototype.rpx", "ctr2wup-prototype.wuhb")
 TRANSFER_NAMES = ("ctr2wup-libctru-transfer.rpx", "ctr2wup-libctru-transfer.wuhb")
 FRAME_NAMES = {f"frame-{i}-{screen}.ppm" for i in range(3) for screen in ("top", "bottom")}
@@ -138,6 +138,29 @@ def validate_zip(path: Path, source: bool = False, version: str | None = None) -
         return len(names)
 
 
+def check_documentation(folder: Path, version: str, commit: str, checks: list[dict]) -> tuple[dict, list[dict]]:
+    report = read_json(folder / "publication-report.json")
+    if (report.get("ok") is not True or report.get("version") != version
+            or report.get("source_commit") != commit
+            or report.get("all_maintained_article_pages_retained") is not True
+            or report.get("external_runtime_dependencies") is not False
+            or report.get("archive_contains_documentation_only") is not True
+            or report.get("application_source_bundled") is not False
+            or report.get("private_payloads_bundled") is not False
+            or report.get("zip_crc_verified") is not True
+            or not isinstance(report.get("internal_anchors_verified"), int)
+            or report["internal_anchors_verified"] <= 0
+            or not {"docs-build", "docs-package"} <= {row["name"] for row in checks}):
+        raise ValueError("Documentation must have passing build/package evidence for this source commit")
+    names = (f"CTR2WUP-Documentation-{version}.html", f"CTR2WUP-Public-Docs-{version}.zip")
+    records = check_records(report.get("artifacts"), names, folder)
+    html = regular(folder / names[0], 16 * 1024 * 1024).read_text(encoding="utf-8")
+    if "<!doctype html>" not in html[:100].lower() or commit not in html or "Windows GUI" not in html:
+        raise ValueError("Offline documentation lacks source identity or the product goal")
+    validate_zip(regular(folder / names[1]))
+    return report, records
+
+
 def package(options: argparse.Namespace) -> dict:
     root = options.source_root.resolve()
     commit = git(root, "rev-parse", "HEAD")
@@ -188,6 +211,10 @@ def package(options: argparse.Namespace) -> dict:
     if wheel.name != f"ctr2wup-{version}-py3-none-any.whl":
         raise ValueError("Expected the matching pure-Python wheel")
     wheel_entries = validate_zip(wheel, version=version)
+    documentation = None
+    documentation_records = []
+    if options.documentation_dir is not None:
+        documentation, documentation_records = check_documentation(options.documentation_dir, version, commit, checks)
     output = options.output.resolve()
     if output.exists():
         raise ValueError("Release output must not exist")
@@ -216,14 +243,17 @@ def package(options: argparse.Namespace) -> dict:
                 entries[f"reference/gx-transfer/{name}"] = regular(options.reference_dir / name).read_bytes()
             for name in src.namelist():
                 relative = name.removeprefix("CTR2WUP/")
-                if not name.endswith("/") and (relative in {"LICENSE", "THIRD_PARTY_NOTICES"} or relative.startswith("docs/") and (relative.endswith(".md") or relative.startswith("docs/licenses/"))):
+                root_document = "/" not in relative and relative.endswith(".md")
+                repository_document = relative.startswith(".github/") and relative.endswith(".md")
+                if not name.endswith("/") and (relative in {"LICENSE", "THIRD_PARTY_NOTICES", ".github/repository-settings.json"}
+                        or root_document or repository_document or relative.startswith("docs/")):
                     entries[relative] = src.read(name)
             for required in ("docs/gx-transfers.md", "docs/licenses/libctru.txt", "docs/licenses/COPYING.NEWLIB.ARM", "docs/licenses/devkitarm-crtls/3dsx_crt0.s", "docs/licenses/MPL-2.0.txt"):
                 if required not in entries:
                     raise ValueError("Required diagnostic guide or corresponding license/CRT source is missing")
             entries["source-commit.txt"] = (commit + "\n").encode()
             entries["sdk-image-digest.txt"] = (SDK_IMAGE + "\n").encode()
-            entries["README.txt"] = (f"CTR2WUP original diagnostics {version}\nSource commit: {commit}\n\nCopy sd-card contents to the SD root; launch the WUHB in Aroma.\nRPX files need an RPX-capable homebrew launcher. These are not WUP packages.\nGX Transfers: green/red/green TV, blue GamePad; R confirms the observed picture,\nL reports a problem, Minus exits. Results: sd:/ctr2wup/result-compiled-gx-transfer-{version}-*.txt.\nSee docs/gx-transfers.md. Preserve existing reports/saves.\nNo ROM/key is required. Console execution, commercial gameplay, PICA draws,\nguest audio and WUP installation are pending separate acceptance.\n").encode()
+            entries["README.txt"] = (f"CTR2WUP original diagnostics {version}\nSource commit: {commit}\n\nCopy sd-card contents to the SD root; launch the WUHB in Aroma.\nRPX files need an RPX-capable homebrew launcher. These are not WUP packages.\nGX Transfers: green/red/green TV, blue GamePad; R confirms the observed picture,\nL reports a problem, Minus exits. Results: sd:/ctr2wup/result-compiled-gx-transfer-{version}-*.txt.\nSee docs/gx-transfers.md. Preserve existing reports/saves.\nDeveloper builds require extracting the separate matching source ZIP.\nNo ROM/key is required. Console execution, commercial gameplay, PICA draws,\nguest audio and WUP installation are pending separate acceptance.\n").encode()
             for name, data in sorted(entries.items()):
                 entry = zipfile.ZipInfo(name, date_time=date)
                 entry.external_attr = 0o100644 << 16
@@ -231,7 +261,12 @@ def package(options: argparse.Namespace) -> dict:
                 archive.writestr(entry, data)
         diagnostic_entries = validate_zip(diagnostic)
         shutil.copyfile(wheel, stage / wheel.name)
+        if documentation is not None:
+            for record in documentation_records:
+                shutil.copyfile(options.documentation_dir / record["name"], stage / record["name"])
+            (stage / "documentation-report.json").write_text(json.dumps(documentation, indent=2) + "\n", encoding="utf-8")
         public_evidence = {"ok": True, "version": version, "source_commit": commit, "original_fixtures_only": True, "checks": checks, "sdk_image": SDK_IMAGE, "libctru_pin": LIBCTRU, "native_artifacts": native_records, "transfer_artifacts": transfer_records, "transfer_guest": {key: guest[key] for key in ("state", "fault", "instructions", "fallback", "frames", "gx")}, "reference_frames": frames, "zip_crc_verified": True, "wheel_source_modules_verified": True, "source_archive_entries": source_entries, "diagnostic_archive_entries": diagnostic_entries, "wheel_entries": wheel_entries, "console_verified": False, "wup_installation_verified": False, "commercial_gameplay_verified": False}
+        public_evidence["documentation_artifacts"] = documentation_records
         (stage / "validation-report.json").write_text(json.dumps(public_evidence, indent=2) + "\n", encoding="utf-8")
         published = [{"name": path.name, "size": path.stat().st_size, "sha256": sha256(path)} for path in sorted(stage.iterdir())]
         manifest = {"schema_version": 1, "version": version, "source_commit": commit, "prerelease": True, "original_fixtures_only": True, "artifacts": published}
@@ -239,6 +274,8 @@ def package(options: argparse.Namespace) -> dict:
         rows = published + [{"name": "manifest.json", "sha256": sha256(stage / "manifest.json")}]
         notes = f"# CTR2WUP {version} development diagnostics\n\nSource commit: `{commit}`.\n\nOriginal Native and GX Transfer WUHB/RPX diagnostics, exact reference frames,\nsource and a pure-Python developer wheel. Required host/C/sanitizer checks,\nWUT builds and original transfer execution passed for this source commit.\nZIP CRCs and SHA-256 checksums were verified before publication.\n\nCopy the diagnostic ZIP's `sd-card/` contents to the SD root and launch in Aroma.\nSee `docs/gx-transfers.md` inside the ZIP; preserve older SD reports and saves.\nThe wheel is a developer CLI, not the planned Windows injector GUI.\n\nPhysical-console acceptance, playable commercial games, PICA draw rendering,\nguest audio, installed WUP output and the Windows GUI remain pending.\nNo game dump, personal key, commercial asset or external reference implementation\nis included. SDK/runtime/CRT notices and corresponding startup source accompany\nthe original diagnostic.\n\n| Asset | SHA-256 |\n|---|---|\n"
         notes += "".join(f"| `{row['name']}` | `{row['sha256']}` |\n" for row in rows)
+        if documentation is not None:
+            notes += f"\nDownload `CTR2WUP-Documentation-{version}.html` and open it directly in a browser for offline navigation, search and printing. The public docs-only ZIP can be hosted with free GitHub Pages while application source stays private.\n"
         (stage / "release-notes.md").write_text(notes, encoding="utf-8")
         rows.append({"name": "release-notes.md", "sha256": sha256(stage / "release-notes.md")})
         (stage / "SHA256SUMS.txt").write_text("".join(f"{row['sha256']}  {row['name']}\n" for row in rows), encoding="utf-8")
@@ -261,6 +298,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-root", type=Path, default=ROOT)
     parser.add_argument("--version", required=True)
+    parser.add_argument("--documentation-dir", type=Path, help="Verified offline HTML and public docs-only export")
     for name in ("native-dir", "transfer-dir", "transfer-report", "reference-dir", "wheel", "evidence", "sdk-receipt", "output"):
         parser.add_argument("--" + name, type=Path, required=True)
     try:

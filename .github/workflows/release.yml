@@ -106,13 +106,24 @@ jobs:
             cd "$RUNNER_TEMP"
             "$RUNNER_TEMP/ctr2wup-release-wheel/bin/ctr2wup" --help
           ) 2>&1 | tee "$RELEASE_WORK/logs/wheel-smoke.log"
-      - name: Record passing evidence and verify publication contents
+      - name: Build and verify free documentation assets
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/ctr2wup-release-docs"
+          "$RUNNER_TEMP/ctr2wup-release-docs/bin/python" -m pip install -r docs-requirements.txt \
+            2>&1 | tee "$RELEASE_WORK/logs/docs-install.log"
+          "$RUNNER_TEMP/ctr2wup-release-docs/bin/python" tools/build-docs-site.py \
+            2>&1 | tee "$RELEASE_WORK/logs/docs-build.log"
+          "$RUNNER_TEMP/ctr2wup-release-docs/bin/python" tools/package-docs-site.py \
+            2>&1 | tee "$RELEASE_WORK/logs/docs-package.log"
+      - name: Record passing evidence and verify release assets
         run: |
           set -euo pipefail
           python - <<'PY'
           import json, os, pathlib, subprocess
           checks = ['make-check', 'make-prototype', 'native-build', 'transfer-validation',
-                    'wheel-build', 'wheel-smoke', 'sdk-install', 'arm-fixtures-install', 'translator-install']
+                    'wheel-build', 'wheel-smoke', 'sdk-install', 'arm-fixtures-install', 'translator-install',
+                    'docs-build', 'docs-package']
           work = pathlib.Path(os.environ['RELEASE_WORK'])
           assert all((work / 'logs' / f'{name}.log').is_file() for name in checks)
           evidence = {'ok': True, 'version': os.environ['RELEASE_VERSION'],
@@ -126,6 +137,7 @@ jobs:
             --transfer-report "$RELEASE_WORK/transfer/report.json" --reference-dir "$RELEASE_WORK/transfer/transfer" \
             --wheel "$RELEASE_WORK/wheel/ctr2wup-$RELEASE_VERSION-py3-none-any.whl" \
             --evidence "$RELEASE_WORK/evidence.json" --sdk-receipt "$DEVKITPRO/ctr2wup-image-digest.txt" \
+            --documentation-dir artifacts/docs-publication \
             --output "$RELEASE_WORK/publish" 2>&1 | tee "$RELEASE_WORK/logs/package.log"
           (cd "$RELEASE_WORK/publish" && sha256sum --check SHA256SUMS.txt)
       - name: Upload verified release assets
@@ -214,9 +226,10 @@ jobs:
                   raise SystemExit(0)
           else:
               # A missing release may still have a tag; never retarget that tag.
-              target = run('api', f'repos/{repo}/commits/{tag}')
+              target = run('api', f'repos/{repo}/git/ref/tags/{tag}')
               if target.returncode == 0:
-                  assert json.loads(target.stdout)['sha'] == source, 'Existing tag targets a different commit'
+                  resolved = json.loads(require('api', f'repos/{repo}/commits/{tag}'))['sha']
+                  assert resolved == source, 'Existing tag targets a different commit'
               elif 'HTTP 404' not in target.stderr:
                   raise SystemExit(target.stderr)
               require('release', 'create', tag, '--target', source, '--draft', '--prerelease', '--latest=false',

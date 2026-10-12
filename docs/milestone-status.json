@@ -101,11 +101,12 @@
       "summary": "Local decryption/assets, AOT builds and synthetic packing/verification exist; commercial conversion and installation remain unverified.",
       "verified_foundations": [
         "Original encrypted CIA to AOT/Wii U artifact proof",
-        "Checked private asset preparation and bounded synthetic packing"
+        "Checked private asset preparation and bounded synthetic packing",
+        "Hosted Windows host/C, actual external AOT/Unicode and WPF tooling checks"
       ],
       "acceptance_remaining": [
         "Complete selected-game conversion/rebuild/caching/cancellation",
-        "Verify native Windows tooling and actual WUP installation/Menu launch"
+        "Verify full native Windows conversion and actual WUP installation/Menu launch"
       ]
     },
     {
