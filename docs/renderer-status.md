@@ -21,6 +21,28 @@ in all Wii U builds. See `gsp-display.md` for scope and desktop reference images
 Console behavior remains pending. This does not execute PICA draws.
 
 Pending: GPU display transfers/coherency and graphics queues, vertex and
-geometry processing, shaders, textures/ETC/swizzling, lighting, TEV, draw
+geometry processing, shaders, texture sampling/mips/resource lifetime, lighting, TEV, draw
 submission, caching, trusted reference scene comparisons, and console timings.
 `execute_draw` raises an explicit unsupported error. Milestone 4 is incomplete.
+
+
+v0.16.0 adds an original portable base-texture decoder in
+`runtime/core/ctr_texture.c` and a Python reference in `renderer/texture.py`.
+All 14 PICA format IDs are implemented, including RGBA/RGB packed formats,
+luminance/alpha, RG8/HILO, ETC1 and ETC1A4. Base dimensions are powers of two
+in 8..1024; 8×8 Morton tiles decode into explicit row-major RGBA bytes without
+an implicit display-origin flip. Little-endian source words do not depend on
+host byte order. Compressed differential blocks and buffer ranges are validated
+before output changes; invalid ETC2-style modes, truncation and overlap fail.
+Mip tails, texture filtering/wrapping, caches, GPU allocation and draw submission
+remain unfinished. No PICA renderer or commercial compatibility is enabled.
+
+Golden layouts/selectors/alpha/clamping and failure atomicity have C normal/
+sanitizer and Python checks. `tools/validate-textures.py` compares 42 original
+images with the independent Python decoder and 39 with the clean audited
+Zakuro texture module at `76f17bf76cd9ea238a94f37d389fe701ab05a673`.
+Format 6 follows Azahar's RG8 convention `[byte1, byte0, 0, 255]`; Zakuro's
+`[0, byte1, byte0, 255]` differs and is explicitly excluded from that comparison.
+External emulator code is test-only in separate checkouts, never copied into or
+linked with the runtime/delivery. Actual PICA sampling/render scenes and GX2
+resource/coherency/performance checks still need Wii U/reference evidence.

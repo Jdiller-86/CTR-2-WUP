@@ -41,8 +41,8 @@ def encrypted_ncch(*, method=0, seeded=False, compressed=False, romfs=True, romf
                   ('icon', smdh()), ('extra', b'original asset bytes')], compressed=compressed)
     plain[:16] = bytes(range(16))
     if romfs:
-        payload = romfs_payload or b'CTR2WUP original RomFS fixture\n'
-        payload = payload.ljust(align(len(payload)), b'\0')
+        from tests.romfs_fixtures import level3_image, ivfc_image
+        payload = ivfc_image(level3_image() + (romfs_payload or b''))
         at = len(plain); plain += payload; plain[0x18F] &= ~2
         struct.pack_into('<I', plain, 0x104, len(plain) // 512)
         struct.pack_into('<III', plain, 0x1B0, at // 512, len(payload) // 512, 1)

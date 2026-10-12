@@ -31,7 +31,7 @@ games will grow as the shared runtime gains the features they require. See the
 
 ![Estimated implementation progress: approximately 20%; zero of seven full milestones accepted.](docs/images/progress.svg)
 
-**Assessment: October 12, 2026 · version 0.15.0.** About **20%** is a rough
+**Assessment: October 12, 2026 · version 0.16.0.** About **20%** is a rough
 engineering estimate toward the finished GUI-to-playable-WUP product, not a
 measured task percentage or a compatibility rating. **0 of 7 full milestones
 have met their acceptance criteria.** Most renderer, commercial-game, GUI, and
@@ -42,7 +42,7 @@ hardware validation work remains.
 | M1 · Wii U platform | Native guide/exit have evidence; three v0.14.5 apps reported passing | Verified new result files, save behavior and WUP installation |
 | M2 · CPU translation | Tested subset and AOT integration | Broader instruction support and Wii U performance |
 | M3 · Homebrew runtime | Seven original applications; saves and read-only RomFS assets | Broader services, retail integration and console acceptance |
-| M4 · PICA → GX2 graphics | Renderer not implemented | 3DS draws, shaders, textures, and reference scenes |
+| M4 · PICA → GX2 graphics | Texture decoding foundation; renderer not implemented | 3DS draws, shaders, sampling, and reference scenes |
 | M5 · First commercial game | Mario selected; dump analysis pending | Boot, gameplay, guest audio, and retail saves |
 | M6 · Automated WUP conversion | Local decryption, build and packaging foundations tested | Commercial end-to-end conversion, Windows, and installer acceptance |
 | M7 · Windows GUI | Workflow specified | Implement and verify the complete Inject experience |
@@ -55,6 +55,7 @@ or the [milestone checklist](docs/milestones.md) for detailed acceptance gates.
 - **Game preparation:** bounded 3DS/CXI/CIA inspection plus optional local
   decryption using user-supplied keys/seeds. Supported key database imports,
   recovered-code hashes and original encrypted pipeline tests are implemented.
+  Full RomFS hash verification and private asset preparation are implemented.
   Console extraction and native Windows key handling still need validation.
 - **Translation and runtime foundations:** ARM/Thumb/VFP subsets, external AOT
   integration, checked memory, guest threads, and scoped 3DS services.
@@ -66,9 +67,15 @@ or the [milestone checklist](docs/milestones.md) for detailed acceptance gates.
   passed on v0.14.5, but found no new reports and a save failure. v0.14.6 adds
   independent read-back-verified TXT results and safer save publication;
   their console checks are pending.
+- **Texture decoding:** all 14 base formats, tiled layouts and ETC1 compression
+  have original fixture/reference checks. This does not yet render 3DS game scenes.
 - **Packaging foundations:** original metadata/artwork staging and encrypted
   packing with independent decryption and file checks using synthetic test inputs.
   Actual WUP installation remains unverified.
+
+The v0.16.0 asset increment also builds an optional **Asset Files** diagnostic
+that reads a tiny original SD blob and records guided TXT results. Its console
+test is pending; see [asset preparation and testing](docs/romfs-assets.md).
 
 CPU-written framebuffer display is implemented; **3DS PICA rendering and guest
 audio are not**. Homebrew snapshot persistence does not establish commercial save

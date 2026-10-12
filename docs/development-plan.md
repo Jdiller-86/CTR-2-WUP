@@ -248,3 +248,13 @@ using earlier verbal confirmations. Reported environment: U.S. console, latest
 available firmware, latest Aroma and latest WUP Installer GX2. Exact build numbers
 and v0.14.6 result files remain pending. Positive v0.14.5 reports remain usable
 scoped user evidence; no unrelated long retest is requested.
+
+
+October 12 decryption-backend decision: the user's Batch CIA 3DS Decryptor request
+was investigated against pinned original/Redux/readable-engine sources. Its AES
+and seed methods fit the already implemented preparation stage. Retain the
+original local-key engine and validate decrypted CIA/CCI/CXI handoffs; do not
+add opaque Windows binaries, inherited-source license ambiguity, wildcard
+cleanup or network seed fetching to the GUI pipeline. A source-built external
+backend remains an option only if a concrete unmet requirement justifies it.
+See [the audit](batch-decryptor-audit.md) and its original CCI handoff proof.

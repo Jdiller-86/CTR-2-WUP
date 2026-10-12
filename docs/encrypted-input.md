@@ -1,4 +1,4 @@
-# Local encrypted-ROM preparation (0.15.0)
+# Local encrypted-ROM preparation (0.16.0)
 
 On October 12, 2026 the user expanded the intended injector to accept either
 already-decrypted dumps or encrypted dumps with locally supplied material from
@@ -31,8 +31,10 @@ and existing destinations remain unchanged; failed staging is removed.
 
 Wrong/missing keys or seeds, damaged content, malformed ranges, overlaps and
 unsupported modes fail visibly. Integrity checks do not authenticate Nintendo
-signatures. RomFS superblock verification is implemented; full IVFC verification
-and commercial asset/runtime integration remain unfinished. A derived CXI is not
+signatures. RomFS superblock and canonical three-level IVFC verification are implemented.
+All declared hash/data blocks, final padding and bounded Level-3 metadata are
+checked before preparation is published. Unsupported layouts fail explicitly;
+commercial asset/runtime integration remains unfinished. A derived CXI is not
 a playable Wii U game or a complete reconstruction of every cartridge/CIA content.
 
 ## A key set, rather than one personal master key
@@ -115,3 +117,11 @@ database or executable was incorporated. An actual locally exported key set and
 owned encrypted dump, clean Windows execution and broader integrity profiles
 remain acceptance work. PICA, guest audio, retail saves and installable commercial
 WUP conversion remain separate unfinished milestones.
+
+Use `prepare-assets` on the recovered CXI to prepare a private checked Level-3
+blob and manifest. Guest filenames remain virtual; no archive filenames are
+extracted onto host paths. See [romfs-assets.md](romfs-assets.md).
+
+[Batch CIA 3DS Decryptor investigation](batch-decryptor-audit.md) compares its
+methods, licenses and input/output handoff. Supported decrypted `.cci` (NCSD)
+can enter the same checked pipeline; no batch executable is bundled or executed.

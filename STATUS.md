@@ -9,12 +9,86 @@ game (decrypted or locally prepared with imported 3DS material), configure title
 and launch from Wii U Menu. The CLI is the shared engine, not the final product.
 
 **Overall implementation estimate: approximately 20%**, reassessed against the
-v0.15.0 GUI-to-playable-WUP target on October 12, 2026. This is a rough engineering
+v0.16.0 GUI-to-playable-WUP target on October 12, 2026. This is a rough engineering
 judgment, not measured task completion. **0/7 full milestones are accepted.**
 See [the completion assessment](docs/progress.md) for its basis, remaining work,
 and external testing gates; the README provides a concise progress overview.
 
-**Version 0.15.0 adds local encrypted-input preparation and key/seed import.**
+**Version 0.16.0 advances asset preparation and texture decoding while the user
+is away.** These are shared foundations for the GUI's future injection/runtime
+pipeline. No commercial profile, PICA draw renderer, Mario build or installed WUP
+is enabled. The earlier verbal console successes remain usable reported evidence;
+no new physical run is claimed. No ROM or key upload is requested now.
+
+- **Full RomFS preparation:** canonical NCCH IVFC header/master anchoring and
+  every hash/data block are verified, including final padding. Bounded Level-3
+  metadata validates Unicode names, hash/parent/sibling chains, duplicates,
+  cycles/orphans and file extents. `prepare-rom` now applies this when RomFS is
+  present; `prepare-assets` exports a private `romfs.bin` and manifest containing
+  source/code identity and file/blob hashes. Publication refuses replacement and
+  preserves the source. Virtual filenames never address host extraction paths.
+  Integrity is distinct from signature authenticity; unsupported layouts fail.
+- **File-backed runtime assets:** original portable SHA-256 and immutable file
+  provider require the configured blob hash before mounting into existing
+  read-only guest FS transport. Guest paths remain virtual. Live views/handles
+  block close; teardown closes guest ownership before the file. The standard-C
+  provider is limited to LONG_MAX (2 GiB minus one on 32-bit Wii U) and checks
+  integrity at open, assuming immutable backing. Console I/O cost is unmeasured.
+- **Texture foundation:** original C/Python decoding of all 14 base formats,
+  8×8 Morton tiles, packed channels, luminance/alpha, RG8/HILO, ETC1/ETC1A4.
+  Base dimensions are powers of two in 8..1024. Byte order is explicit; buffers,
+  aliases and invalid compressed differential blocks are preflighted before
+  output changes. Sampling/mips/cache/GX2 upload/draws remain unfinished.
+
+Validation is preserved under **`artifacts/reports/assets-textures-v016/`**:
+
+- Required `make check`: **206 Python tests**, including 16 new RomFS and six
+  texture cases, plus **sixteen C suites** normally and with ASan/UBSan.
+  New provider/SHA suite: **3,467 assertions**; texture suite: **7,959 checks**.
+- New C suites pass Clang normal/sanitizer and emulated big-endian PPC checks.
+  The texture matrix compares **42 original images** byte-for-byte with Python;
+  **39** also match pinned external Zakuro. HILO is explicitly excluded because
+  CTR2WUP follows Azahar's RG8 convention. The emulated PPC matrix has identical
+  source/output hashes to all 42 host vectors. No external emulator code is
+  linked or included in runtime/delivery.
+- The sanitizer-compiled original normal-CRT/libctru program reads identical
+  RAM/file-backed assets, exits after **49,550 instructions** with **zero
+  fallback**, and rejects a corrupt blob before execution while preserving it.
+  Three intentionally unavailable startup IPC requests remain recorded; a PASS
+  does not claim all services are implemented.
+- The original encrypted CIA -> local ROM preparation -> complete IVFC ->
+  private asset blob -> actual compiled guest read pipeline passes with unchanged
+  source, original asset bytes and transient synthetic keys. No game patch or
+  commercial content is involved.
+- Required `make prototype` and the optional Asset Files RPX/WUHB cross-build
+  carry v0.16.0. The installed wheel verifies preparation/assets/texture imports
+  outside the checkout with Unicode/space paths. Windows execution is pending.
+
+Delivery: **`artifacts/delivery/assets-textures-0.16.0/`**, with source, wheel,
+Native/Asset Files RPX/WUHB, original SD blob, guides and checksum/report manifest.
+The Asset Files diagnostic uses `sd:/ctr2wup/romfs-test.bin` and the existing
+short guided TXT report flow. Its console run is pending. When available, return
+`result-compiled-romfs-file-0.16.0-*.txt` and any full trace together in a ZIP.
+The earlier v0.14.6 Save/RomFS round remains pending; no completed long input
+round must be repeated for this host/runtime increment.
+
+The requested Batch CIA 3DS Decryptor investigation is recorded in
+`docs/batch-decryptor-audit.md`. Its published AES/seed methods fit the existing
+preparation engine; original decrypted CCI -> full verification/assets/intake
+passes with unchanged revision/source. Original MIT script, unlicensed Redux
+wrapper tree and GPL readable engine have distinct grants. A MIT-labelled fork
+contains byte-identical GPL-upstream decryption files, so it is not adopted on
+that label. No Windows binary/key database/network seed fetching is incorporated.
+The development plan retains the original local-key backend and validated
+external-output handoff; actual tool/game/Windows acceptance remains pending.
+
+This advances M3/M4/M6 foundations. **Approximately 20% implementation; 0/7 full
+milestone gates accepted.** Actual Mario executable/assets and required services,
+PICA scenes, guest audio/retail saves, Wii U SD/timings/install acceptance and
+native Windows/GUI remain the main unfinished work. See `docs/romfs-assets.md`
+and `docs/renderer-status.md` for precise limits.
+
+**Previous version 0.15.0 added local encrypted-input preparation and key/seed import.**
 The user expands the final GUI's scope to accept decrypted dumps or encrypted
 dumps using material obtained from their own 3DS. This amends the original
 brief's decrypted-only input scope without altering that historical document.
@@ -29,7 +103,8 @@ primary versus secondary keys, seed verification/derivation, mixed ExeFS keys an
 unaligned bounded CTR chunks are supported. Existing checked hashes/code
 inspection precede non-overwriting atomic publication. `game.cxi` preserves main
 RomFS bytes; auxiliary contents, tickets and key files are not exported with it.
-No authentic-signature, full IVFC or commercial compatibility claim follows.
+That release did not verify full IVFC; v0.16.0 adds canonical full-tree verification.
+Authentic signatures and commercial compatibility remain unverified.
 
 Plaintext AES-key database NCCH retail KeyX records, seeddb and explicitly declared
 decrypted title-key DB records can be imported into an explicitly private local
@@ -114,7 +189,7 @@ ROM/game patch. An original ordinary devkitARM/libctru/newlib application reads
 root/nested/Unicode assets, seeks/checks EOF, lists directories and rejects writes.
 Library parsing runs unchanged in guest code. Provider lifetimes, copied file
 handles, whole-buffer bounds/permissions, IPC aliases, >4 GiB length/offsets and
-failed-read atomicity are checked. NCCH/IVFC extraction/authentication, encrypted
+failed-read atomicity are checked. Signature authentication, commercial asset integration, encrypted
 cartridge access and commercial asset integration remain unfinished.
 
 That actual program required a synthetic read-only shared time page, defined
@@ -725,7 +800,7 @@ P2/P3: inspect the supplied Mario revision, then expand the kernel/IPC and
 CPU semantics beyond the tested shared startup subset. Implement memory
 control beyond the checked owned-heap/shared-object subsets, cross-process maps,
 broader thread/affinity/priority-inheritance behavior, PICA/GX2 state/shaders/textures/coherency,
-DSP/audio, NCCH/IVFC/commercial RomFS assets, retail saves and module behavior. CFG user/Mii/console-unique identity
+DSP/audio, commercial RomFS integration, retail saves and module behavior. CFG user/Mii/console-unique identity
 and broader configuration blocks remain pending. Complete CPU/FP correctness and
 measure real console costs. The original framebuffer harness uses custom I/O; the separate standard-HID
 consumer and direct/queued HID/GSP graphics guests supply standard-interface evidence.

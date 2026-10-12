@@ -4,6 +4,8 @@
 #include "ctr_gsp.h"
 #include "ctr_hid.h"
 #include "ctr_fs_snapshot.h"
+#include "ctr_romfs_file.h"
+#include "ctr_sha256.h"
 #include <string.h>
 #ifdef CTR_ROMFS_HOMEBREW
 #include "romfs-image.h"
@@ -74,8 +76,15 @@ int main(int argc,char **argv) {
     if(!ctr_fs_volume_init(&sd,9,false) || !ctr_fs_mount(&g,&sd)) { ctr_guest_close(&g);return 8; }
     ctr_fs_volume save;
 #ifdef CTR_ROMFS_HOMEBREW
-    ctr_fs_romfs assets={0};
-    if(!ctr_fs_romfs_init(&assets,sizeof(romfs_bytes),romfs_read,NULL) || !ctr_fs_mount_romfs(&g,&assets))return 9;
+    ctr_fs_romfs assets={0};ctr_romfs_file asset_file={0};
+    bool external_assets=argc==3 && !strcmp(argv[1],"--romfs-file");
+    ctr_sha256 hash;uint8_t digest[32];ctr_sha256_init(&hash);
+    bool asset_ok=external_assets?ctr_romfs_file_open(&asset_file,argv[2],romfs_sha256):
+        ctr_sha256_update(&hash,romfs_bytes,sizeof(romfs_bytes)) && ctr_sha256_final(&hash,digest) &&
+        !memcmp(digest,romfs_sha256,32) && ctr_fs_romfs_init(&assets,sizeof(romfs_bytes),romfs_read,NULL);
+    if(!asset_ok || !ctr_fs_mount_romfs(&g,external_assets?&asset_file.view:&assets)) {
+        ctr_guest_close(&g);ctr_fs_volume_close(&sd);ctr_romfs_file_close(&asset_file);return 9;
+    }
 #endif
     if(filesystem) {
         ctr_fs_volume_init(&save,4,true);
@@ -90,7 +99,7 @@ int main(int argc,char **argv) {
             fprintf(stderr,"ipc request=%llu service=%s target=%s header=%08x result=%08x pc=%08x\n",(unsigned long long)g.ipc_requests,g.ipc_service[0]?g.ipc_service:"-",g.ipc_target[0]?g.ipc_target:"-",g.ipc_header,g.ipc_result,g.cpu.r[15]);
             requests=g.ipc_requests;
         }
-        if(!capture(&g,!ipc_trace && !filesystem && argc>1?argv[1]:NULL)) { ctr_guest_close(&g);return 3; }
+        if(!capture(&g,!ipc_trace && !filesystem && argc>1 && strcmp(argv[1],"--romfs-file")?argv[1]:NULL)) { ctr_guest_close(&g);return 3; }
         if(pending_input>=0) {
             static const int cx[]={-30,100,0,0},cy[]={40,-100,0,0};
             static const uint16_t x[]={17,319,0,0},y[]={23,239,0,0};
@@ -106,7 +115,7 @@ int main(int argc,char **argv) {
     printf("],\"input_samples\":%u,\"save_commits\":%llu,\"aot_max_depth\":%u,\"aot_unwinds\":%llu}\n",input_samples,(unsigned long long)(filesystem?save.commits:0),depth,(unsigned long long)unwinds);
     ctr_guest_close(&g);if(!ctr_fs_volume_close(&sd) || (filesystem && !ctr_fs_volume_close(&save)))return 6;
 #ifdef CTR_ROMFS_HOMEBREW
-    if(!ctr_fs_romfs_close(&assets))return 10;
+    if(external_assets?!ctr_romfs_file_close(&asset_file):!ctr_fs_romfs_close(&assets))return 10;
 #endif
     return 0;
 }

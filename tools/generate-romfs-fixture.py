@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build an original small Level-3 RomFS service view (not an NCCH/IVFC image)."""
+"""Build an original Level-3 RomFS view and an unsigned canonical IVFC wrapper."""
 import argparse
 import hashlib
 import json
@@ -39,11 +39,30 @@ def image():
     header=struct.pack('<10I',40,40,12,52,len(directory),112,12,124,len(file_table),272)
     return header+struct.pack('<3I',*dir_hash)+directory+struct.pack('<3I',*file_hash)+file_table+payload
 
+def ivfc_image(level3, exponent=12):
+    """Original standard three-level IVFC fixture; no signed authenticity."""
+    block=1<<exponent
+    def hashes(data):
+        return b''.join(hashlib.sha256(data[i:i+block].ljust(block,b'\0')).digest()
+                        for i in range(0,len(data),block))
+    level2=hashes(level3);level1=hashes(level2);masters=hashes(level1)
+    header=bytearray(0x60);header[:8]=b'IVFC\0\0\x01\0'
+    struct.pack_into('<I',header,8,len(masters));logical=0
+    for i,data in enumerate((level1,level2,level3)):
+        struct.pack_into('<QQII',header,12+24*i,logical,len(data),exponent,0)
+        logical+=align(len(data),block)
+    struct.pack_into('<I',header,0x54,0x5c)
+    output=header+masters;output.extend(bytes(align(len(output),block)-len(output)))
+    for data in (level3,level1,level2):output.extend(data.ljust(align(len(data),block),b'\0'))
+    return bytes(output)
+
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--output',type=Path,required=True);a=p.parse_args()
     a.output.mkdir(parents=True,exist_ok=True);data=image()
     (a.output/'romfs-level3.bin').write_bytes(data)
-    (a.output/'romfs-image.h').write_text('#include <stdint.h>\nstatic const uint8_t romfs_bytes[]={'+','.join(map(str,data))+'};\n')
+    (a.output/'romfs-image.h').write_text('#include <stdint.h>\nstatic const uint8_t romfs_bytes[]={'+','.join(map(str,data))+'};\n'+
+        'static const uint8_t romfs_sha256[]={'+','.join(map(str,hashlib.sha256(data).digest()))+'};\n')
+    wrapped=ivfc_image(data);(a.output/'romfs-ivfc.bin').write_bytes(wrapped)
     report={'original_fixture':True,'service_view':'decrypted Level-3 only','bytes':len(data),'sha256':hashlib.sha256(data).hexdigest(),'IVFC_authenticated':False,'commercial_assets':False}
     (a.output/'romfs-fixture.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report))
 

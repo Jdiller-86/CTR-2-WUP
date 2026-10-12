@@ -136,3 +136,12 @@ The Windows .NET CIA helper is unchanged and does not decrypt; there is no GUI
 key wizard/device helper yet. Native Windows private-file behavior, credential
 storage and real-console key exports remain acceptance work. Never upload or
 bundle a real local key store. See `encrypted-input.md` for commands and limits.
+
+
+v0.16.0 includes pure-Python `prepare-assets`/full RomFS verification in the wheel
+and portable C SHA-256, file-provider and texture suites in the source bundle.
+Use `make -C tests/assets check` and `make -C tests/textures check` with native
+GCC/Make. `tools/validate-textures.py` optionally uses a clean audited Zakuro
+checkout and Rust for test-only comparisons; neither is a runtime dependency.
+Windows filesystem behavior and these native executable/reference checks still
+need Windows execution; Linux/PPC evidence is not Windows acceptance.

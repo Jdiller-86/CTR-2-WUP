@@ -13,6 +13,8 @@ check:
 	$(MAKE) -C tests/multiple check sanitize
 	$(MAKE) -C tests/threads check sanitize
 	$(MAKE) -C tests/filesystem check sanitize
+	$(MAKE) -C tests/assets check sanitize
+	$(MAKE) -C tests/textures check sanitize
 	$(MAKE) -C tests/apt check sanitize
 	$(MAKE) -C tests/report check sanitize
 	$(MAKE) -C tests/recomp-progress check sanitize

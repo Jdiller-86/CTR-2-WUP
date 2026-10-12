@@ -121,3 +121,22 @@ installer acceptance, certificate provenance/trust and Menu launch remain gates.
 - Implement and measure PICA-to-GX2, guest services, CRO behavior, audio and save semantics required by a controlled fixture.
 - Run physical-console platform diagnostics and PowerPC benchmarks; use those measurements before choosing a commercial game revision or promising performance.
 - Validate Windows installation/builds and a complete original homebrew packaging path with a suitable installer; then request the smallest specific console evidence or user-owned dump needed for subsequent milestones.
+
+
+## v0.16 asset/texture layout review (October 12, 2026)
+
+Read-only format references: GodMode9 `f3b9ec7a50b8c8459f62b87bfd7b7214b6f6bda2`
+(`arm9/source/game/romfs.c` and `romfs.h`), the already pinned Azahar texture/color
+sources, and Zakuro `76f17bf76cd9ea238a94f37d389fe701ab05a673` texture/format modules.
+Canonical NCCH IVFC physical/logical layout and Level-3 metadata facts informed
+original bounded host verification. No GodMode9 code or bundled key database was
+adopted, read for key material or redistributed. Its GPL license remains in its
+separate read-only reference checkout; it is not a runtime/build dependency.
+
+The original base texture decoder has independent golden vectors and a Python
+reference. A test-only Rust wrapper compiles the clean pinned Zakuro modules in
+that external checkout, compares original images, and remains outside source/
+delivery binaries. The known HILO channel-layout difference is documented in
+renderer-status.md rather than hidden in a blanket comparison claim. No Azahar
+implementation is copied or linked. These checks do not prove GX2 rendering,
+real-game assets or Wii U performance.

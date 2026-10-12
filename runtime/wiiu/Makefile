@@ -10,9 +10,10 @@ EXTERNAL_AOT ?= 0
 COMPILED_HOMEBREW ?= 0
 FILESYSTEM_HOMEBREW ?= 0
 ROMFS_HOMEBREW ?= 0
+ROMFS_FILE ?= 0
 UDP_LOG ?= 0
 CALL_LIMIT ?= 64
-APP_VERSION := 0.15.0
+APP_VERSION := 0.16.0
 UPSTREAM_DIR ?= ../../artifacts/generated-upstream-guest
 ifeq ($(GUEST_DEFAULT),1)
 APP_NAME := CTR2WUP ARM Guest $(APP_VERSION)
@@ -40,6 +41,10 @@ endif
 ifeq ($(ROMFS_HOMEBREW),1)
 CFLAGS += -DCTR_ROMFS_HOMEBREW
 APP_NAME := CTR2WUP Compiled RomFS $(APP_VERSION)
+ifeq ($(ROMFS_FILE),1)
+CFLAGS += -DCTR_ROMFS_FILE
+APP_NAME := CTR2WUP Asset Files $(APP_VERSION)
+endif
 endif
 LDFLAGS := -mcpu=750 -meabi -mhard-float -specs="$(WUT)/share/wut.specs" \
            -Wl,-Map,$(OUTPUT)/$(TARGET).map
@@ -53,7 +58,7 @@ CORE_SOURCES := ../core/ctr_memory.c ../core/ctr_cpu.c ../core/ctr_cpu_selftest.
                 ../core/ctr_hid_fixture.c \
                 ../core/ctr_gsp_fixture.c \
                 ../core/ctr_relay_fixture.c \
-                ../core/ctr_stack_fixture.c ../core/ctr_thread_fixture.c \
+                ../core/ctr_stack_fixture.c ../core/ctr_thread_fixture.c ../core/ctr_sha256.c ../core/ctr_romfs_file.c ../core/ctr_texture.c \
                 ../../tests/fixtures/threads/thread.generated.c ../../tests/fixtures/threads/thread-image.generated.c \
                 ../../tests/fixtures/stack/stack.generated.c ../../tests/fixtures/stack/stack-image.generated.c \
                 ../../tests/fixtures/relay/relay.generated.c ../../tests/fixtures/relay/relay-image.generated.c \

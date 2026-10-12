@@ -213,6 +213,11 @@ def prepare_rom(path, output, *, keys_config=None):
                 if container['format'] == 'CIA' and f"{u64(Reader(plain).read(0, 512), 0x118):016x}" != container['title_id']:
                     fail("cia_ncch_identity_mismatch", "Recovered NCCH and CIA title identities differ")
             ncch = decrypt_ncch(game, keys); checked = inspect(game)
+            ivfc = None
+            if 'romfs' in checked['partitions'][0]['sections']:
+                from .assets import verify_main_romfs
+                with game.open('rb') as assets:
+                    ivfc, _, _ = verify_main_romfs(Reader(assets), checked['partitions'][0])
             if reader.digest(0, reader.size) != source_hash:
                 fail("input_changed", "Source changed during preparation")
             after = os.fstat(handle.fileno())
@@ -225,7 +230,8 @@ def prepare_rom(path, output, *, keys_config=None):
                   "identity": checked['identity'], "executable_revision": checked['executable_revision'],
                   "romfs_preserved": 'romfs' in checked['partitions'][0]['sections'],
                   "other_contents_exported": False, "keys_exported": False,
-                  "signature_authenticity_verified": False, "full_ivfc_verified": False,
+                  "signature_authenticity_verified": False, "full_ivfc_verified": ivfc is not None,
+                  "romfs_integrity": ivfc,
                   "commercial_profile_enabled": False, "console_verified": False,
                   "inspection": checked}
         (stage / 'preparation-report.json').write_text(json.dumps(report, indent=2) + '\n')

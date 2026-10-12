@@ -1,6 +1,6 @@
 # Project completion assessment
 
-Updated **October 12, 2026**, against version **0.15.0** and the
+Updated **October 12, 2026**, against version **0.16.0** and the
 [product plan](development-plan.md).
 
 ## Estimated implementation: approximately 20%
@@ -55,7 +55,7 @@ These local artifacts are not a published playable-game release.
 
 - **PICA-to-GX2 renderer:** actual game draws, shaders, textures, transfers, and
   coherency. Displaying CPU-written pixels does not implement this renderer.
-- **Commercial runtime integration:** NCCH/IVFC and retail assets, required services/modules,
+- **Commercial runtime integration:** Retail asset integration, required services/modules,
   guest DSP/audio, retail saves, and any CPU behavior exercised by the first game.
 - **Selected-title proof:** exact Mario revision analysis, boot, menu, gameplay,
   audio, save/reload, stability, and useful Wii U performance.
@@ -100,3 +100,12 @@ WUP Installer GX2 setup and earlier successes allow continued independent work;
 exact versions/hard logs remain pending. Commercial rendering/runtime, installed
 WUP gameplay and GUI proof still dominate remaining work, so no full acceptance
 gate or percentage increase follows from the decryption increment.
+
+
+v0.16.0 adds full canonical RomFS IVFC/metadata verification, private asset blob
+preparation, a SHA-256 checked file provider and all 14 base texture formats.
+These advance reusable M3/M4/M6 foundations while the user is away. They do not
+establish game rendering, Mario gameplay, Wii U file I/O acceptance or installed
+WUP behavior. The approximately-20% estimate and 0/7 full gates remain unchanged.
+Current validation/delivery: `artifacts/reports/assets-textures-v016/` and
+`artifacts/delivery/assets-textures-0.16.0/`.

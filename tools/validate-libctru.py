@@ -2,7 +2,8 @@
 """Build original applications with pinned external libctru and run checked AOT.
 
 Uses normal devkitARM CRT/newlib/libctru startup with standalone APT and
-explicit private virtual filesystem volumes. Motion, ROMFS and applets are absent.
+explicit private virtual filesystem volumes and optional original RomFS assets.
+Motion and applets are absent.
 """
 import argparse
 import hashlib
@@ -48,11 +49,13 @@ def main():
     p.add_argument('--application',choices=('boot','threaded','graphics','input','interactive','filesystem','romfs'),help='Run only the selected original application')
     p.add_argument('--wiiu',action='store_true',help='Also build original interactive/filesystem applications as RPX/WUHB')
     p.add_argument('--wiiu-guarded',action='store_true',help='Also verify/build an interactive AOT comparison with call depth limited to 2')
+    p.add_argument('--romfs-file',action='store_true',help='Build the RomFS console diagnostic using a verified external asset blob')
     p.add_argument('--live-input',action='store_true',help='Replay held/released A with varied host clocks and console-sized budgets')
     p.add_argument('--trace-startup',action='store_true',help='Capture every IPC at single-instruction boundaries for the original boot application')
     a=p.parse_args()
     if a.trace_startup and a.application!='boot':p.error('--trace-startup requires --application boot')
     if a.wiiu_guarded and (not a.wiiu or a.application!='interactive'):p.error('--wiiu-guarded requires --wiiu --application interactive')
+    if a.romfs_file and (not a.wiiu or a.application!='romfs'):p.error('--romfs-file requires --wiiu --application romfs')
     if a.live_input and a.application!='interactive':p.error('--live-input requires --application interactive')
     out=a.output.resolve();out.mkdir(parents=True,exist_ok=False);checks=[]
     def run(name,command,**kw):
@@ -82,7 +85,7 @@ def main():
             if a.static:flags+=['-static','-mcpu=750']
             if a.sanitize:flags+=['-O1','-fno-omit-frame-pointer','-fsanitize=address,undefined']
             if name=='romfs':flags+=['-DCTR_ROMFS_HOMEBREW']
-            sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c','ctr_fs.c','ctr_apt.c','ctr_fs_snapshot.c')]+[ROOT/'runtime/recomp/ctr_recomp.c',ROOT/'tests/homebrew/runner.c']+[folder/'aot'/n for n in generation['sources']]
+            sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c','ctr_fs.c','ctr_apt.c','ctr_fs_snapshot.c','ctr_sha256.c','ctr_romfs_file.c')]+[ROOT/'runtime/recomp/ctr_recomp.c',ROOT/'tests/homebrew/runner.c']+[folder/'aot'/n for n in generation['sources']]
             run(name+'-host-compile',shlex.split(a.cc_prefix)+[a.cc,*flags,*map(str,sources),'-lm','-o',str(binary)])
             extra=['--trace-ipc'] if a.trace_startup else [str(folder)] if name in ('graphics','interactive') else ['--filesystem',str(folder/'save.snapshot')] if name=='filesystem' else []
             output=run(name+'-execute',shlex.split(a.run_prefix)+[str(binary)]+extra)
@@ -101,6 +104,16 @@ def main():
                     fields=dict(item.split('=',1) for item in line.split()[1:]);ipc.append({k:int(v,16) if k in ('header','result','pc') else int(v) if k=='request' else v for k,v in fields.items()})
             if a.trace_startup and sum(bool(event['result']) for event in ipc)!=result['ipc_failures']:raise RuntimeError('Incomplete startup failure trace')
             reports.append({'application':name,'guest':result,'frames':frames,'startup_ipc':ipc,'generation':generation,'allocated_bytes':image['allocated_bytes'],'executable_sha256':hashlib.sha256(image['code']).hexdigest()})
+            if name=='romfs':
+                blob=folder/'romfs-level3.bin'
+                file_result=json.loads(run('romfs-file-execute',shlex.split(a.run_prefix)+[str(binary),'--romfs-file',str(blob)]).splitlines()[-1])
+                if file_result!=result:raise RuntimeError('File-backed RomFS differs from the original memory-backed guest')
+                reports[-1]['file_backed_guest']=file_result
+                corrupt=folder/'corrupt-romfs.bin';damaged=bytearray(blob.read_bytes());damaged[-1]^=1;corrupt.write_bytes(damaged)
+                rejected=subprocess.run(shlex.split(a.run_prefix)+[str(binary),'--romfs-file',str(corrupt)],capture_output=True,text=True)
+                (out/'romfs-file-corrupt-reject.log').write_text(rejected.stdout+rejected.stderr)
+                checks.append({'name':'romfs-file-corrupt-reject','exit_code':rejected.returncode,'expected':9})
+                if rejected.returncode!=9 or corrupt.read_bytes()!=damaged:raise RuntimeError('Corrupt asset blob was not rejected/preserved')
             if a.wiiu_guarded:
                 guarded=folder/'runner-guarded';frames_folder=folder/'guarded-frames';frames_folder.mkdir()
                 run('interactive-guarded-host-compile',shlex.split(a.cc_prefix)+[a.cc,*flags,'-DCTR_RECOMP_CALL_LIMIT=2',*map(str,sources),'-lm','-o',str(guarded)])
@@ -147,8 +160,9 @@ def main():
                     work=Path(temporary);shutil.copytree(folder/'aot',work/'aot');shutil.copy2(folder/'boot-image.h',work/'boot-image.h')
                     if name=='romfs':shutil.copy2(folder/'romfs-image.h',work/'romfs-image.h')
                     prefix=os.path.relpath(work,recipe)
-                    run(name+'-wiiu-build',['make','-C',str(recipe),'OUTPUT='+prefix+'/wiiu','TARGET=ctr2wup-libctru-'+name,'FILESYSTEM_HOMEBREW='+('1' if name=='filesystem' else '0'),'ROMFS_HOMEBREW='+('1' if name=='romfs' else '0'),'GUEST_DEFAULT=2','EXTERNAL_AOT=1','COMPILED_HOMEBREW=1','COMPILED_IMAGE_DIR='+prefix,'UPSTREAM_DIR='+prefix+'/aot'],env=env)
-                    built=work/'wiiu';rpx=built/('ctr2wup-libctru-'+name+'.rpx');shortcut=rpx.with_suffix('.wuhb')
+                    target='ctr2wup-libctru-'+name+('-file' if a.romfs_file else '')
+                    run(name+'-wiiu-build',['make','-C',str(recipe),'OUTPUT='+prefix+'/wiiu','TARGET='+target,'FILESYSTEM_HOMEBREW='+('1' if name=='filesystem' else '0'),'ROMFS_HOMEBREW='+('1' if name=='romfs' else '0'),'ROMFS_FILE='+str(int(a.romfs_file)),'GUEST_DEFAULT=2','EXTERNAL_AOT=1','COMPILED_HOMEBREW=1','COMPILED_IMAGE_DIR='+prefix,'UPSTREAM_DIR='+prefix+'/aot'],env=env)
+                    built=work/'wiiu';rpx=built/(target+'.rpx');shortcut=rpx.with_suffix('.wuhb')
                     _validate_rpx(rpx)
                     if shortcut.read_bytes()[:4]!=b'WUHB':raise RuntimeError('Invalid compiled WUHB')
                     shutil.copy2(rpx,wiiu/rpx.name);shutil.copy2(shortcut,wiiu/shortcut.name)

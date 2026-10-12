@@ -1,4 +1,4 @@
-# Current-process read-only RomFS assets (0.14.6)
+# Current-process read-only RomFS assets (0.16.0)
 
 This shared M3 foundation lets ordinary libctru `romfsInit` and newlib code read
 an explicitly supplied **decrypted Level-3 RomFS view**. No game patch or host
@@ -25,7 +25,8 @@ file size may exceed 4 GiB. Unmounted/unknown archives fail visibly.
 Unmodified libctru resolves directories, filenames and Unicode **inside guest
 code** by reading Level-3 metadata. This is not a new implementation of generic
 FSUSER directory commands. `tools/generate-romfs-fixture.py` creates the original
-322-byte image, C header and manifest; it labels IVFC authentication false.
+322-byte image, SHA-256 C header, manifest and synthetic IVFC wrapper. Hash
+consistency does not establish signature authenticity.
 
 ## Original application and checks
 
@@ -59,9 +60,71 @@ changing the program's library implementation. Time starts at an explicitly
 synthetic Unix-zero epoch and advances with the guest clock; no real console RTC
 or timezone accuracy is claimed. See [cpu-stack.md](cpu-stack.md).
 
+## Host asset preparation
+
+`prepare-rom` now verifies the complete canonical three-level IVFC tree whenever
+RomFS exists. `prepare-assets` performs the same full verification after checked
+decrypted container inspection, validates Level-3 metadata, and exports a private
+blob and manifest:
+
+```sh
+python3 -m host prepare-assets "private/prepared/game.cxi" \
+  --output "private/mario-assets"
+```
+
+The output contains `romfs.bin` (Level-3 bytes) and `asset-manifest.json`, including
+source/code revision, full-tree integrity, blob SHA-256 and virtual file offsets,
+sizes and hashes. Directory parents/siblings/hash chains, Unicode components,
+cycles/orphans, duplicate names, ranges, alignment and bounded budgets are
+checked. Virtual names never become host extraction paths. Unsupported IVFC
+layouts and corruption outside the old NCCH superblock check fail explicitly.
+All declared physical blocks are checked, including zero final-block padding.
+NCCH's checked superblock must cover the complete master table. This establishes
+hash consistency, not authentic signatures or commercial compatibility.
+Output publication is atomic and refuses replacement; sources remain unchanged.
+
+## File-backed provider and optional Wii U test
+
+`ctr_romfs_file` opens an explicitly configured immutable blob, streams its
+SHA-256 and requires the expected manifest hash before mounting. It lends the
+same read-only callback contract to guest FS; libctru still resolves filenames.
+It closes after guest mounts/handles release and creates no extra SD mount/client.
+The current standard-C `fseek`/`ftell` provider is limited to **LONG_MAX** on the
+target (2 GiB minus one byte on 32-bit PPC), despite the abstract provider's
+64-bit/sparse-file support. Backing must remain immutable while mounted; this
+is an open-time hash check, not per-read authenticated storage. Actual SD startup
+cost, file access and lifecycle behavior still require console evidence.
+
+Build the optional original Asset Files diagnostic with:
+
+```sh
+python3 tools/validate-libctru.py --application romfs --wiiu --romfs-file \
+  --output artifacts/reports/my-romfs-file
+```
+
+The validator checks identical complete guest results for RAM/file providers and
+rejects a corrupted blob before execution. `tools/validate-asset-pipeline.py`
+reuses its `romfs/` directory to prove original encrypted CIA -> local preparation
+-> full IVFC -> private asset blob -> actual compiled libctru file access, with
+transient synthetic keys and zero interpreter fallback.
+
+The delivery ZIP places its WUHB in `sd-card/wiiu/apps/` and the tiny original
+blob in **`sd-card/ctr2wup/romfs-test.bin`**. Copy the contents of `sd-card` to SD
+root when available, launch **CTR2WUP Asset Files 0.16.0** in Aroma, and follow
+its short existing RomFS guide. It reads root/nested/Unicode files, lists/seeks,
+denies writes and exits. This test needs no ROM or key. A missing/changed blob
+fails visibly and is preserved.
+
+Reports appear under **`sd:/ctr2wup/`**, using
+**`result-compiled-romfs-file-0.16.0-*.txt`** plus any full trace. Return those TXT
+files together in a ZIP; include the observed exit result if it was not recorded.
+No new physical success is claimed, and the earlier Save/RomFS result round in
+[console-retest.md](console-retest.md) remains pending. Completed long native/
+input guides do not need to be repeated for this asset test.
+
 ## Remaining work
 
-Full NCCH RomFS/IVFC extraction and integrity checks, decryption, cartridge and
-other archive selectors, extdata/retail saves, assets for the selected commercial
-revision and Windows conversion integration remain unfinished. This diagnostic
-does not enable a retail profile, render PICA scenes or establish console speed.
+Actual Mario asset/revision integration, other cartridge/archive selectors,
+extdata/retail saves, console SD behavior and Windows conversion integration
+remain unfinished. Signature authenticity is unverified. This diagnostic does
+not enable a retail profile, render PICA scenes or establish console speed.

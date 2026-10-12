@@ -47,6 +47,8 @@ def parser():
     preparation=commands.add_parser("prepare-rom",help="Create a private checked decrypted main CXI using optional local 3DS keys; no commercial conversion")
     preparation.add_argument("path");preparation.add_argument("--output",required=True)
     preparation.add_argument("--keys-config",help="Local schema-1 key file references; never pass key values")
+    assets=commands.add_parser("prepare-assets",help="Verify the full main RomFS hash tree and write a private Level-3 blob/manifest")
+    assets.add_argument("path");assets.add_argument("--output",required=True)
     key_import=commands.add_parser("import-rom-keys",help="Import existing plaintext 3DS key/seed exports to a private local store; no device extraction")
     key_import.add_argument("--output",required=True)
     key_import.add_argument("--aeskeydb");key_import.add_argument("--seeddb")
@@ -102,6 +104,9 @@ def execute(args):
     if args.command == "prepare-rom":
         from .rom_prepare import prepare_rom
         return prepare_rom(args.path,args.output,keys_config=args.keys_config)
+    if args.command == "prepare-assets":
+        from .assets import prepare_assets
+        return prepare_assets(args.path,args.output)
     if args.command == "import-rom-keys":
         from .rom_key_import import import_keys
         return import_keys(args.output,aeskeydb=args.aeskeydb,seeddb=args.seeddb,decrypted_titlekeys=args.decrypted_titlekeys)

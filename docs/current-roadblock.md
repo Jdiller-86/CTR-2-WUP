@@ -1,4 +1,4 @@
-# Remaining acceptance gates (0.15.0)
+# Remaining acceptance gates (0.16.0)
 
 The final product remains an UWUVCI-style **Windows GUI → Inject → per-game WUP →
 Wii U Menu gameplay**. The CLI and original diagnostics are its shared foundations.
@@ -37,8 +37,9 @@ See [romfs-assets.md](romfs-assets.md) and [filesystem.md](filesystem.md).
 3. **Commercial renderer/runtime:** use that revision and private reference
    traces to implement required PICA-to-GX2 draws, services, modules, audio and
    retail saves, then prove boot/gameplay/save/reload/performance on Wii U.
-   The new Level-3 RomFS transport does not implement NCCH/IVFC extraction,
-   authentication, encrypted cartridge access or commercial asset integration.
+   Canonical NCCH/IVFC verification, local decryption, private asset preparation
+   and base texture decoding are now implemented. Signature authentication,
+   commercial integration and actual PICA draws remain open.
 4. **Installable WUP:** establish local packaging input provenance and record
    actual diagnostic install, Menu icon/launch/exit and removal without replacing
    an existing title. Synthetic offline packer checks do not prove installer acceptance.
@@ -62,3 +63,11 @@ the small executable intake without uploading keys. The existing v0.14.6 console
 kit still supplies the Save/RomFS report round; this host release does not require
 repeating completed long guides. Actual game bytes/requirements, renderer scenes,
 local key-export/Windows proof and console/install acceptance remain external gates.
+
+
+v0.16.0 completes further independent asset/texture work. The new optional
+Asset Files diagnostic uses a small original SD blob and existing guided TXT
+reporting; its physical file I/O/lifecycle test awaits the user's return.
+No completed long test must be repeated now. Further generic work is possible,
+but it cannot settle actual Mario requirements, GX2 reference scenes, console
+performance, native Windows or installed WUP acceptance without those resources.

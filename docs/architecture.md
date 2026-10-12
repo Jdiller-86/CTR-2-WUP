@@ -123,8 +123,8 @@ It does not execute PICA or supply commercial compatibility.
 v0.14.6 adds an explicit borrowed 64-bit read-only current-process Level-3 RomFS
 view. Checked FSFILE transport exposes bytes; unmodified libctru resolves nested
 and Unicode names/directories in guest code. Lifetime and read publication are
-checked, with no host path exposure. Full NCCH/IVFC extraction/authentication and
-commercial asset integration remain open; see `romfs-assets.md`.
+checked, with no host path exposure. v0.16 adds canonical NCCH/IVFC verification and asset preparation; signature
+authentication and commercial asset integration remain open; see `romfs-assets.md`.
 
 Save publication reserves `.pending`, moves a validated primary to absent
 `.previous`, publishes into the vacant primary name, then removes the backup.
@@ -188,9 +188,26 @@ failures/repr. Plaintext support-file imports create a separate explicitly priva
 store. CIA AES-CBC main-content hashes are checked before inner NCCH decryption;
 NCCH v2 primary/secondary CTR, seed/key derivation and extents are checked before
 publishing a derived CXI. Output includes the main RomFS, but not other contents,
-tickets or key files. Input/output identities and lack of signature/full-IVFC
-verification are explicit. Read-only sources, bounded chunks, input-change checks
+tickets or key files. Input/output identities and lack of signature authentication are explicit;
+v0.16 verifies the full canonical IVFC tree when RomFS is present. Read-only sources, bounded chunks, input-change checks
 and atomic non-overwriting publication reuse the existing host boundaries.
 The validated decrypted CXI enters the unchanged loader/lifter pipeline; key
 values never reach generated C, runtime binaries or WUP staging. See
 `encrypted-input.md` for profiles and pending hardware/Windows checks.
+
+
+v0.16 separates validated asset preparation from execution. The host verifies
+NCCH's anchored RomFS superblock, the complete canonical IVFC tree, every file
+hash and the bounded Level-3 directory/hash metadata. It atomically exports one
+Level-3 `romfs.bin` plus a manifest, never host paths derived from guest names.
+The file provider streams SHA-256 once at open, checks the configured expected
+hash and lends a read-only view to existing FS transport. It uses standard-C
+`fseek`/`ftell`, so the Wii U/32-bit limit is LONG_MAX, and requires immutable
+backing during execution. It owns no extra SD mount/client. Guest teardown
+releases mounts/references before provider close and system transition.
+
+The portable texture decoder converts bounded base-level PICA tiles to explicit
+RGBA bytes without native guest-word loads. It preflights compressed blocks,
+lengths and aliases before publication. The Python/reference tools and emulated
+PPC checks establish decoder behavior, not GX2 upload/sampling or draw execution.
+See `romfs-assets.md` and `renderer-status.md` for the supported contracts.

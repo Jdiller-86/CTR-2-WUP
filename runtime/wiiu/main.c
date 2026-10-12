@@ -45,6 +45,8 @@
 #include "ctr_stack_fixture.h"
 #include "ctr_thread_fixture.h"
 #include "ctr_fs_snapshot.h"
+#include "ctr_romfs_file.h"
+#include "ctr_sha256.h"
 #ifdef CTR_FILESYSTEM_HOMEBREW
 static ctr_fs_volume diagnostic_save;
 static bool diagnostic_save_ready;
@@ -61,12 +63,15 @@ static bool compiled_sd_ready;
 #ifdef CTR_ROMFS_HOMEBREW
 #include "romfs-image.h"
 static ctr_fs_romfs romfs_view;
+static ctr_romfs_file romfs_file;
 static bool romfs_view_ready;
+#ifndef CTR_ROMFS_FILE
 static bool read_romfs(void *context,uint64_t offset,void *output,uint32_t size) {
     (void)context;
     if(offset>sizeof(romfs_bytes) || size>sizeof(romfs_bytes)-offset)return false;
     memcpy(output,romfs_bytes+(size_t)offset,size);return true;
 }
+#endif
 #endif
 #endif
 
@@ -115,7 +120,9 @@ static bool left_stick_seen,right_stick_seen,guest_fault_seen,allocation_checked
 static bool allocation_failure_seen;
 static int alloc_ok_for_report;
 static uint16_t touch_min_x=UINT16_MAX,touch_min_y=UINT16_MAX,touch_max_x,touch_max_y;
-#ifdef CTR_ROMFS_HOMEBREW
+#ifdef CTR_ROMFS_FILE
+#define REPORT_APPLICATION "compiled-romfs-file"
+#elif defined(CTR_ROMFS_HOMEBREW)
 #define REPORT_APPLICATION "compiled-romfs"
 #elif defined(CTR_FILESYSTEM_HOMEBREW)
 #define REPORT_APPLICATION "compiled-save"
@@ -294,7 +301,15 @@ static void restart_guest(void) {
     ctr_guest_close(&gsp_guest);
 #ifdef CTR_ROMFS_HOMEBREW
     if(romfs_view_ready)ctr_fs_romfs_close(&romfs_view);
-    romfs_view_ready=ctr_fs_romfs_init(&romfs_view,sizeof(romfs_bytes),read_romfs,NULL);
+    ctr_romfs_file_close(&romfs_file);
+#ifdef CTR_ROMFS_FILE
+    romfs_view_ready=ctr_romfs_file_open(&romfs_file,"fs:/vol/external01/ctr2wup/romfs-test.bin",romfs_sha256);
+#else
+    ctr_sha256 hash;uint8_t digest[32];ctr_sha256_init(&hash);
+    romfs_view_ready=ctr_sha256_update(&hash,romfs_bytes,sizeof(romfs_bytes)) && ctr_sha256_final(&hash,digest) &&
+        !memcmp(digest,romfs_sha256,32) && ctr_fs_romfs_init(&romfs_view,sizeof(romfs_bytes),read_romfs,NULL);
+#endif
+    WHBLogPrintf("romfs_provider open=%u errno=%d sha256_verified=%u",romfs_view_ready,romfs_view_ready?0:errno,romfs_view_ready);
 #endif
 #ifdef CTR_FILESYSTEM_HOMEBREW
     if(diagnostic_save_ready)ctr_fs_volume_close(&diagnostic_save);
@@ -310,7 +325,17 @@ static void restart_guest(void) {
     compiled_sd_ready=ctr_fs_volume_init(&compiled_sd,9,false);
     gsp_ready=gsp_ready && compiled_sd_ready && ctr_apt_configure(&gsp_guest) && ctr_fs_mount(&gsp_guest,&compiled_sd);
 #ifdef CTR_ROMFS_HOMEBREW
-    gsp_ready=gsp_ready && romfs_view_ready && ctr_fs_mount_romfs(&gsp_guest,&romfs_view);
+    gsp_ready=gsp_ready && romfs_view_ready && ctr_fs_mount_romfs(&gsp_guest,
+#ifdef CTR_ROMFS_FILE
+        &romfs_file.view
+#else
+        &romfs_view
+#endif
+    );
+    if(!gsp_ready) {
+        gsp_guest.state=CTR_GUEST_FAULTED;gsp_guest.fault=CTR_CPU_MEMORY_FAULT;
+        snprintf(latest_guest_message,sizeof(latest_guest_message),"RomFS provider/load failed errno=%d",errno);
+    }
 #endif
 #else
     gsp_ready=ctr_relay_fixture_open(&gsp_guest);
@@ -619,6 +644,7 @@ static void cleanup_resources(void *context) {
     ctr_guest_close(&gsp_guest);
 #ifdef CTR_ROMFS_HOMEBREW
     if(romfs_view_ready)ctr_fs_romfs_close(&romfs_view);
+    ctr_romfs_file_close(&romfs_file);
 #endif
 #ifdef CTR_FILESYSTEM_HOMEBREW
     if(diagnostic_save_ready)ctr_fs_volume_close(&diagnostic_save);
