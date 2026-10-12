@@ -1,0 +1,9 @@
+#!/bin/sh
+# Only explicit Codex commits receive attribution; human commits are untouched.
+[ "${CTR2WUP_CODEX_COMMIT:-}" = "1" ] || exit 0
+if command -v python3 >/dev/null 2>&1; then
+    ctr_python=python3
+else
+    ctr_python=python
+fi
+exec "$ctr_python" "$(dirname "$0")/../tools/codex-attribution.py" message "$@"
