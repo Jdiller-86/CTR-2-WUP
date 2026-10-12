@@ -122,9 +122,20 @@ void ctr_test_guide_update(ctr_test_guide *g,const ctr_guide_input *in) {
         }
     } else {
         if(type==VIEW_GUEST && in->guest_frame_available)g->observed=1;
-        if((type==COLOR_A || type==AUDIO) && ((in->pressed|in->held)&CTR_GUIDE_A))g->observed=1;
+        if((type==COLOR_A || type==AUDIO) && ((in->pressed|in->held)&CTR_GUIDE_A) && !(g->observed&1)) {
+            g->observed=1;g->input_frame_serial=in->input_frame_serial;g->button_started=in->milliseconds;
+            if(type==COLOR_A)log_line(g,"GUIDE A input recorded: frame_before=%llu; waiting for a new green guest frame",
+                (unsigned long long)g->input_frame_serial);
+        }
         if((type==COLOR_A || type==AUDIO) && !g->observed)return;
+        if(type==COLOR_A && in->guest_green_frame && in->guest_frame_serial>g->input_frame_serial && !(g->observed&2)) {
+            g->observed|=2;
+            log_line(g,"GUIDE green guest frame detected: serial=%llu A_to_green_ms=%llu; visual confirmation still required",
+                (unsigned long long)in->guest_frame_serial,
+                (unsigned long long)(in->milliseconds>=g->button_started?in->milliseconds-g->button_started:0));
+        }
         if(in->pressed&CTR_GUIDE_L)finish_step(g,"FAIL","User reported a picture/touch/sound/stability problem");
+        else if(type==COLOR_A && !(g->observed&2))return;
         else if((in->pressed&CTR_GUIDE_R) && (type!=VIEW_GUEST || in->guest_frame_available))
             finish_step(g,"PASS","User confirmed the displayed observation prompt");
     }
@@ -174,7 +185,11 @@ void ctr_test_guide_view(const ctr_test_guide *g,uint64_t milliseconds,char rows
         static const uint32_t bits[]={1,2,4,8,16};
         static const char *const names[]={"TOP-LEFT","TOP-RIGHT","BOTTOM-LEFT","BOTTOM-RIGHT","CENTER"};
         remaining(rows[4],g->observed,bits,names,5);
-    } else if(list[g->step].type==COLOR_A || list[g->step].type==AUDIO) {
+    } else if(list[g->step].type==COLOR_A) {
+        if(!(g->observed&1))snprintf(rows[4],72,"Hold A; wait for the guest to finish its frame.");
+        else if(!(g->observed&2))snprintf(rows[4],72,"A recorded. WAITING FOR GREEN; keep holding A.");
+        else snprintf(rows[4],72,"NEW GREEN FRAME DETECTED. R: correct / L: problem.");
+    } else if(list[g->step].type==AUDIO) {
         snprintf(rows[4],72,g->observed?"A recorded. Now confirm with R or L.":"Try A first; then confirm the observed result.");
     } else if(list[g->step].type==GUEST_RESTART || list[g->step].type==SAVE_RELOAD) {
         snprintf(rows[4],72,g->restart_waiting?"Restart recorded. Waiting for new guest PASS.":"Waiting for your PLUS press.");

@@ -31,6 +31,7 @@
 #include "test_report.h"
 #include "test_guide.h"
 #include "test_lifecycle.h"
+#include "image_scale.h"
 #include "ctr_cpu.h"
 #include "ctr_guest_fixture.h"
 #include "ctr_service_fixture.h"
@@ -67,6 +68,13 @@ static ctr_test_guide test_guide;
 static ctr_test_lifecycle lifecycle;
 static atomic_uint home_exit_requested;
 static unsigned freeze_trace_frames;
+static ctr_scale_plan tv_scale,drc_scale;
+static bool guest_green_frame;
+#ifdef CTR_COMPILED_HOMEBREW
+static OSTime a_request_time;
+static uint64_t a_request_frame;
+#endif
+static bool a_response_pending;
 static bool gsp_pass_seen,fresh_save_reload_seen;
 static bool report_handler_added,report_error_announced;
 static OSTime session_started;
@@ -194,6 +202,7 @@ static void restart_guest(void) {
     WHBLogPrintf("filesystem_load result=%d ok=%u path=%s console_result_required=1",loaded,gsp_ready,diagnostic_save_path);
 #endif
     gsp_origin=OSGetTime();gsp_presented=0;
+    guest_green_frame=false;a_response_pending=false;
 #ifdef CTR_COMPILED_HOMEBREW
 #ifdef CTR_FILESYSTEM_HOMEBREW
     WHBLogPrintf("gsp_guest_open ok=%u profile=original_compiled_libctru_filesystem mode=external_AOT PICA=unavailable",gsp_ready);
@@ -240,7 +249,7 @@ static void guide_log(void *context,const char *message) {
 static void session_summary(int result) {
     WHBLogPrintf("===== SESSION SUMMARY =====");
     ctr_test_guide_summary(&test_guide);
-    WHBLogPrintf("Application: %s | Build: 0.14.3 | Entering cleanup: result=%d",REPORT_APPLICATION,result);
+    WHBLogPrintf("Application: %s | Build: 0.14.4 | Entering cleanup: result=%d",REPORT_APPLICATION,result);
     WHBLogPrintf("Elapsed milliseconds: %llu | Completed display frames: %u | Guest sessions: %u",
         (unsigned long long)(OSTicksToMicroseconds(OSGetTime()-session_started)/1000),completed_frames,guest_sessions);
     WHBLogPrintf("Display frame microseconds: minimum=%u average=%llu maximum=%u (diagnostic workload, not game FPS)",
@@ -290,23 +299,11 @@ static int surface_create(GX2Surface *s, const GX2Surface *target) {
 
 /* A CPU diagnostic image copied to GX2 is intentionally separate from any
  * guest PICA emulation. No proprietary shader compiler or assets are used. */
-static void scale_image(GX2Surface *s, const CtrViewport *v, const uint32_t *image) {
-    unsigned char *pixels=s->image;
-    memset(pixels, 0, s->imageSize);
-    for (uint32_t y=0; y<v->height; ++y) {
-        uint32_t sy=(uint32_t)((uint64_t)y*v->guest_height/v->height);
-        unsigned char *row=pixels+((size_t)(v->y+y)*s->pitch+v->x)*4;
-        for (uint32_t x=0; x<v->width; ++x) {
-            uint32_t sx=(uint32_t)((uint64_t)x*v->guest_width/v->width);
-            uint32_t rgba=image[sy*v->guest_width+sx];
-            row[x*4]=(unsigned char)(rgba>>24);
-            row[x*4+1]=(unsigned char)(rgba>>16);
-            row[x*4+2]=(unsigned char)(rgba>>8);
-            row[x*4+3]=(unsigned char)rgba;
-        }
-    }
+static bool scale_image(GX2Surface *s,const ctr_scale_plan *plan,const uint32_t *image,size_t pixels) {
+    if(!ctr_scale_rgba(plan,image,pixels,s->image,s->imageSize,s->pitch))return false;
     DCFlushRange(s->image, s->imageSize);
     GX2Invalidate(GX2_INVALIDATE_MODE_CPU_TEXTURE, s->image, s->imageSize);
+    return true;
 }
 
 static int allocation_test(void) {
@@ -502,6 +499,7 @@ static void cleanup_resources(void *context) {
     if (exit->tv->image) MEMFreeToDefaultHeap(exit->tv->image);
     if (exit->drc->image) MEMFreeToDefaultHeap(exit->drc->image);
     if (exit->gfx_ready) WHBGfxShutdown();
+    ctr_scale_plan_close(&tv_scale);ctr_scale_plan_close(&drc_scale);
     WHBLogPrintf("EXIT stage=graphics_cleanup_done");
 #if CTR_DIAGNOSTIC_UDP
     WHBLogPrintf("EXIT stage=udp_cleanup_begin");
@@ -566,13 +564,13 @@ int main(int argc, char **argv) {
 #ifdef CTR_FILESYSTEM_HOMEBREW
         if(directory_ok)snprintf(diagnostic_save_path,sizeof(diagnostic_save_path),"%s/filesystem-test.snapshot",directory);
 #endif
-        if(directory_ok && ctr_test_report_open(&test_report,directory,REPORT_APPLICATION,"0.14.3",(uint64_t)session_started)) {
+        if(directory_ok && ctr_test_report_open(&test_report,directory,REPORT_APPLICATION,"0.14.4",(uint64_t)session_started)) {
             WHBAddLogHandler(file_log);report_handler_added=true;
         } else if(!directory_ok) {
             test_report.failed=true;test_report.error_code=errno;
         }
     }
-    WHBLogPrintf("CTR2WUP native diagnostic version=0.14.3 application=%s pointer_bits=%u endian=big UDP=%u TXT_report=%u",
+    WHBLogPrintf("CTR2WUP native diagnostic version=0.14.4 application=%s pointer_bits=%u endian=big UDP=%u TXT_report=%u",
                   REPORT_APPLICATION,(unsigned)(8*sizeof(void *)),udp_ready,report_handler_added);
     WHBLogPrintf("Platform title_id=%016llx exit_route=%s SD_owner=WUT_devoptab",
         (unsigned long long)lifecycle.title_id,ctr_test_from_hbl(lifecycle.title_id)?"HBL_relaunch":"system_menu");
@@ -623,7 +621,8 @@ int main(int argc, char **argv) {
     GX2Surface *drc_target=&WHBGfxGetDRCColourBuffer()->surface;
     if (!surface_create(&tv_source,tv_target) || !surface_create(&drc_source,drc_target) ||
         !ctr_viewport_fit(&tv_view,tv_target->width,tv_target->height,TOP_W,GUEST_H) ||
-        !ctr_viewport_fit(&drc_view,drc_target->width,drc_target->height,BOTTOM_W,GUEST_H)) {
+        !ctr_viewport_fit(&drc_view,drc_target->width,drc_target->height,BOTTOM_W,GUEST_H) ||
+        !ctr_scale_plan_init(&tv_scale,&tv_view) || !ctr_scale_plan_init(&drc_scale,&drc_view)) {
         WHBLogPrintf("FAIL native surface allocation or viewport"); goto cleanup;
     }
     WHBLogPrintf("TV surface=%ux%u viewport=%u,%u %ux%u allocation_bytes=%u pitch=%u",
@@ -689,8 +688,14 @@ int main(int argc, char **argv) {
             ctr_test_guide_update(&test_guide,&stop);
             WHBLogPrintf("EXIT trigger=Minus; cleaning resources before system transition");break;
         }
+        uint64_t input_frame_serial=gsp_presented;
 #ifdef CTR_COMPILED_HOMEBREW
         if(pad.trigger&(VPAD_BUTTON_A|VPAD_BUTTON_B|VPAD_BUTTON_PLUS))freeze_trace_frames=64;
+        if(pad.trigger&VPAD_BUTTON_A) {
+            a_request_time=OSGetTime();a_request_frame=gsp_presented;a_response_pending=true;
+            WHBLogPrintf("A response pending: frame_before=%llu instructions_before=%llu",
+                (unsigned long long)gsp_presented,(unsigned long long)gsp_guest.cpu.instructions);
+        }
         freeze_checkpoint("input_read");
 #else
         if (pad.trigger&VPAD_BUTTON_A) play_tone();
@@ -738,6 +743,20 @@ int main(int argc, char **argv) {
                     WHBLogPrintf("GSP presentation FAIL top=%s bottom=%s",ctr_mem_result_name(top),ctr_mem_result_name(bottom));
                 }
                 gsp_presented=gsp_guest.gsp.swaps[0];
+                guest_green_frame=top==CTR_MEM_OK;
+                for(unsigned i=0;guest_green_frame && i<TOP_W*GUEST_H;++i)
+                    if(top_image[i]!=0x00ff00ff)guest_green_frame=false;
+#ifdef CTR_COMPILED_HOMEBREW
+                WHBLogPrintf("GUEST FRAME serial=%llu top_first=%08x green_pixels=%u host_elapsed_ms=%llu",
+                    (unsigned long long)gsp_presented,top_image[0],guest_green_frame,
+                    (unsigned long long)(OSTicksToMicroseconds(OSGetTime()-session_started)/1000));
+                if(a_response_pending && guest_green_frame && gsp_presented>a_request_frame) {
+                    WHBLogPrintf("A RESPONSE new_green_serial=%llu latency_ms=%llu",
+                        (unsigned long long)gsp_presented,
+                        (unsigned long long)(OSTicksToMicroseconds(OSGetTime()-a_request_time)/1000));
+                    a_response_pending=false;
+                }
+#endif
                 freeze_checkpoint("guest_pixels_done");
             }
             for(unsigned i=TOP_W*102;i<TOP_W*144;++i)top_image[i]=0x162d4fff;
@@ -804,6 +823,8 @@ int main(int argc, char **argv) {
         guide_input.guest_fault=gsp_guest.state==CTR_GUEST_FAULTED;
         guide_input.guest_pass=gsp_pass_seen;guide_input.guest_sessions=guest_sessions;
         guide_input.guest_frame_available=gsp_presented>0;
+        guide_input.guest_green_frame=guest_green_frame;
+        guide_input.guest_frame_serial=gsp_presented;guide_input.input_frame_serial=input_frame_serial;
         guide_input.fresh_save_reload=fresh_save_reload_seen;
         ctr_test_guide_update(&test_guide,&guide_input);
         if(ctr_test_guide_take_restart(&test_guide))restart_guest();
@@ -831,8 +852,10 @@ int main(int argc, char **argv) {
         freeze_checkpoint("gx2_wait_begin");
         GX2DrawDone();
         freeze_checkpoint("scale_begin");
-        scale_image(&tv_source,&tv_view,top_image);
-        scale_image(&drc_source,&drc_view,bottom_image);
+        if(!scale_image(&tv_source,&tv_scale,top_image,TOP_W*GUEST_H) ||
+           !scale_image(&drc_source,&drc_scale,bottom_image,BOTTOM_W*GUEST_H)) {
+            WHBLogPrintf("FAIL cached image scale bounds");result=1;goto cleanup;
+        }
         freeze_checkpoint("render_begin");
         WHBGfxBeginRender();
         WHBGfxBeginRenderTV();

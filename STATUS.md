@@ -14,6 +14,32 @@ judgment, not measured task completion. **0/7 full milestones are accepted.**
 See [the completion assessment](docs/progress.md) for its basis, remaining work,
 and external testing gates; the README provides a concise progress overview.
 
+**Version 0.14.4 follows confirmed native exit and inconsistent guarded A input.**
+The user confirms Minus now returns normally. The first v0.14.3 guarded run
+produced green late, after L/advancement, and exited; a second launch froze the
+whole console while holding A. This is a delayed response plus an intermittent
+stability failure, not a successful guarded acceptance test. The two latest
+TXT reports have not been supplied. Return both `compiled-guarded-*.txt` files
+before another console run (`docs/console-retest.md`). Save testing remains deferred.
+Feedback is saved privately; no new ROM/intake or installation evidence exists.
+
+Cached nearest-neighbor coordinate maps/repeated rows remove per-pixel 64-bit
+scaling divisions and preserve all RGBA bytes/borders/padding in desktop tests.
+The guide requires a fresh decoded green frame after A before enabling R and
+logs response delay; user confirmation remains separate from pixel evidence.
+The old AOT engine can dispatch forever without charging an instruction budget;
+a 64-idle-dispatch guard now yields a visible missing-block fault. The old engine
+fails a deadline regression and the new engine passes. This has not been linked
+to the console freeze. Eight live-input timing replays of the original compiled
+guest (standard/guarded, 1 ms to 1 s clocks, 10,000/50,000 budgets) complete repeated
+red/green transitions and exit. At 285 ms host pacing the response takes about
+7.1 s; initial blank frames are counted separately, with no mixed frames in these
+cases. No physical performance improvement or freeze resolution is claimed.
+
+Native exit is positive scoped evidence for v0.14.3. v0.14.4 code/build validation
+does not establish console stability. Implementation remains approximately 20%
+and all seven full milestone gates stay open.
+
 **Version 0.14.3 corrects shutdown ordering and adds a compiled-input comparison.**
 The user clarifies that Minus reaches the Menu splash and keeps playing its music,
 but never reaches the actual menu. This is a transition stall, not a complete
@@ -326,6 +352,20 @@ is unverified; no milestone requiring physical-console evidence is complete.
   external developer dependencies.
 
 ## Reports and deliverables
+
+v0.14.4 verification is under `artifacts/reports/input-delay-v0144/`: required
+`make check` covers 155 Python tests and all normal/ASan/UBSan C suites. The
+lifecycle/guide/scale/report suite has 425 assertions, including a delayed fresh
+frame, stale-frame rejection and pixel-by-pixel equivalent viewport/pitch/border
+output. AOT progress tests have 19 assertions per run, preserving valid sparse
+progress while rejecting empty/unwinding/cyclic dispatches; the old engine's
+observed deadline failure is recorded independently. Original interactive and
+save validators/cross-builds pass; eight live-input replays run standard and
+2-deep guarded AOT through held/released A, repeated red/green and guest exit.
+Source and the SD kit are under `artifacts/delivery/input-delay-0.14.4/`.
+The actual intermittent console freeze requires the user's two guarded TXT
+reports; the diagnostic update is not a verified hardware fix.
+
 
 v0.14.3 evidence is under `artifacts/reports/menu-exit-v0143/`: required `make check`
 passes 155 Python tests and all normal/ASan/UBSan C suites. The guide/report/lifecycle

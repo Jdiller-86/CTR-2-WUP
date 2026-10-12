@@ -1,13 +1,14 @@
 CC ?= cc
 CFLAGS := -std=c11 -O2 -g -Wall -Wextra -Werror -I../../runtime/wiiu
-SOURCES := test_report.c ../../runtime/wiiu/test_report.c ../../runtime/wiiu/test_guide.c ../../runtime/wiiu/test_lifecycle.c
+SOURCES := test_report.c ../../runtime/wiiu/test_report.c ../../runtime/wiiu/test_guide.c ../../runtime/wiiu/test_lifecycle.c ../../runtime/wiiu/image_scale.c ../../runtime/wiiu/viewport.c
 OUT := ../../artifacts/report-tests
+HEADERS := $(wildcard ../../runtime/wiiu/*.h)
 .PHONY: check sanitize clean
 $(OUT):
 	mkdir -p "$@"
-$(OUT)/report-test: $(SOURCES) ../../runtime/wiiu/test_report.h | $(OUT)
+$(OUT)/report-test: $(SOURCES) $(HEADERS) | $(OUT)
 	$(CC) $(CFLAGS) $(SOURCES) -o "$@"
-$(OUT)/report-test-san: $(SOURCES) ../../runtime/wiiu/test_report.h | $(OUT)
+$(OUT)/report-test-san: $(SOURCES) $(HEADERS) | $(OUT)
 	$(CC) $(CFLAGS) -O1 -fno-omit-frame-pointer -fsanitize=address,undefined $(SOURCES) -o "$@"
 check: $(OUT)/report-test
 	"$(OUT)/report-test"

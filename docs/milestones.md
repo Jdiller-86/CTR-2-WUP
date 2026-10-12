@@ -35,7 +35,7 @@ different things. See [progress.md](progress.md) for the assessment and evidence
 
 | Milestone | Verified portion | Remaining acceptance |
 |---|---|---|
-| M1 | RPX/WUHB built; native report records nine self-tests and ten guided picture/input/touch/audio/stability checks passed; resource cleanup reached | Menu splash/music stalls; v0.14.3 lifecycle retest and independently installed WUP |
+| M1 | RPX/WUHB built; native report records nine self-tests and ten guided picture/input/touch/audio/stability checks passed; resource cleanup reached; v0.14.3 Minus exit user-confirmed | Compiled stability and independently installed WUP |
 | M2 | Original CPU/AOT subset plus stack/register transfers, BLX, user CP15 TLS, byte media, barriers and scoped FP; external generation/checked ABI; GCC/sanitizers/Clang/emulated big-endian PPC checks; 870 independent ARM1176 cases and nested-call trace | Complete ARM/VFP semantics, workload memory/fallback costs and actual Espresso timings |
 | M3 | Checked NCCH loading and eight single-core contexts; CPU/TLS/VFP/FPSCR ownership, priorities/quanta, joins/locks/arbiters/quotas; SRV/CFG/heap/shared/HID/GSP/VBlank; six normal-CRT/libctru applications including exact CPU framebuffer pixels, private FS save/fresh-process reload and standalone APT lifecycle; interactive and fifth save RPX/WUHB built | Physical guest/input/display/thread/SD/stability evidence; broader services, applets, ROMFS/assets/retail saves, cross-process semantics, motion, GX commands/PICA and guest audio |
 | M4 | Bounded command references, standard direct/shared GSP display and five tested rotated CPU display formats | Actual PICA-to-GX2 features, scene comparisons and console timings |
@@ -46,13 +46,13 @@ different things. See [progress.md](progress.md) for the assessment and evidence
 These are partial implementation outcomes. None of the full milestone checkboxes
 is satisfied by source/build/test artifacts alone.
 
-v0.14.3 records the clarified Menu-splash stall and persistent compiled A freeze
-with no tone. Resource cleanup now precedes ProcUI shutdown/request handoff;
-a guarded AOT comparison and lifecycle/call-depth checkpoints support diagnosis.
-Desktop checks/cross-builds pass, including actual guarded unwind and identical
-frames/input/exit. Four ARMv6 interpreter extension forms have 2,048 independent
-cases; complete compiled-interpreter startup is still unsupported. Save tests are
-deferred and no full gate is closed. See [the focused retest](console-retest.md).
+v0.14.4 records native Minus exit as user-confirmed. Guarded A produced delayed
+green once, then froze on relaunch; its stability is unaccepted. Cached scaling,
+fresh-green confirmation/latency logs and a tested idle-dispatch fault guard are
+implemented. Eight varied-clock live-input replays pass on desktop, including
+7.1 s delay under old 285 ms host pacing; no physical speed/freeze improvement is
+claimed. Return the two guarded TXT files before more console tests. No full
+milestone is closed. See [the follow-up](console-retest.md).
 
 v0.14.1 added controller-driven guided native/compiled/save tests and checked
 per-launch TXT evidence, with upload guidance. Automatic observations, user

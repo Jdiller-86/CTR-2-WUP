@@ -1,13 +1,12 @@
-# Next acceptance gate and resume steps (0.14.3)
+# Next acceptance gate and resume steps (0.14.4)
 
-**October 11 follow-up:** native Minus requests the Menu splash/music, but the
-menu never loads; the console is not completely frozen. The compiled A-input
-freeze persists with no tone, confirming the newer build. Latest TXT evidence
-has not yet been uploaded. v0.14.3 changes resource cleanup/ProcUI shutdown order
-and supplies a guarded AOT comparison with call-depth/unwind/stack checkpoints.
-The earlier native report's ten guided passes/nine self-tests remain scoped
-positive evidence; exit, compiled input and saves remain unaccepted. Follow
-`console-retest.md` before repeating long guides or testing saves.
+**October 11 latest feedback:** native Minus exit now works. The first guarded
+run produced green late after L/advancement and exited; the next froze on A.
+Compiled stability is unaccepted. The two latest guarded TXT files are the next
+needed input (`console-retest.md`); do not repeat native exit or save tests yet.
+v0.14.4 adds cached scaling, fresh-green confirmation/latency logs and a tested
+no-progress dispatch fault. Desktop timing replay reproduces delay and exits;
+its guard is not proven to explain the physical freeze.
 
 Implementation continued through the verified shared-memory/synchronization,
 standard HID input, direct/shared GSP display, diagnostic VBlank, checked
@@ -58,14 +57,11 @@ No commercial profile or playable Mario build is enabled.
 
 Resume in this order when the evidence is available:
 
-1. Run the short v0.14.3 native-exit and compiled-input checks per
-   `console-retest.md`, then return to full guides/save testing when both pass.
-   Follow the prompts and upload the new `.txt` files
-   under `sd:/ctr2wup/`, with firmware/homebrew/launcher versions. The guide records
-   inputs, user observations, timing, restart and save/reload results. Fix reproducible console
-   failures before drawing performance conclusions. Common runtime implementation
-   can proceed independently; it must retain explicit unsupported states and
-   original fixtures rather than guess the selected game's requirements.
+1. Return both v0.14.3 `compiled-guarded-*.txt` reports per `console-retest.md`,
+   including the frozen run's partial report. Native Minus exit is now passing;
+   the final guest/render checkpoint is needed to diagnose the repeated freeze.
+   v0.14.4 software checks/builds are ready, but another console run is deferred
+   until these logs are reviewed. Full compiled/save/WUP acceptance remains open.
 2. Use `CTR2WUP-CIA-Intake` with a decrypted local CIA and privately return its
    small `CTR2WUP-intake.zip` per `cia-intake.md`. Analyze actual hashes/segments/
    allowlists and pinned-lifter coverage; establish the exact Mario revision.

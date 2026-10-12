@@ -2,7 +2,7 @@
 
 | Input/workflow | Current state | Evidence and limit |
 |---|---|---|
-| Original native diagnostic | Partial console evidence; exit failure | v0.14.1 native report records all ten guided checks/nine embedded self-tests and cleanup; user clarifies indefinite Menu splash/music; v0.14.3 cleanup order awaits retest |
+| Original native diagnostic | Partial console evidence; exit failure | v0.14.1 native report records all ten guided checks/nine embedded self-tests and cleanup; v0.14.3 Minus exit now user-confirmed; full installation/compiled stability remains open |
 | Synthetic ARM/Thumb fixture | Desktop verified bounded subset | Interpreter/generated-C state matches; linked into diagnostic RPX, console run pending |
 | Original framebuffer NCCH fixture | Desktop execution verified; awaiting Wii U | Checked loader, sleep/event SVC runtime, ARM-written frames/input/exit, AOT/interpreter matches; console RPX/WUHB built; explicit harness I/O, not HID/GSP/PICA |
 | Original TLS/SRV/CFG ARM startup probe | Desktop verified; awaiting Wii U | Standard TLS and restricted service commands; interpreter/original/external AOT match; original self-test embedded in diagnostics |
@@ -13,7 +13,7 @@
 | Original shared-GSP/VBlank graphics fixture | Desktop verified; awaiting Wii U | Relay registration/shared framebuffer queues, exclusive retry, IRQ ring and cleanup match three backends; original AOT runs in standard diagnostic mode; GX/PICA absent |
 | Original ARM/Thumb nested stack-call fixture | Desktop verified; awaiting Wii U | 47 instructions/one SVC, restored registers/stack, three-backend state/memory match, independent ARM1176 trace, partial-fault parity; embedded diagnostic |
 | Original three-thread fixture | Desktop verified; awaiting Wii U | Three-backend CPU/TLS/ownership/wait/quantum parity; embedded 345-instruction/eight-switch self-test; single emulated CPU, no priority inheritance |
-| Original compiled libctru applications | Scoped desktop execution verified; newer console A-input freeze unresolved | Older v0.14.0 console log records guest PASS; newer run reportedly shows red/blue then freezes on A, without its log; newer run has no tone and still freezes; v0.14.3 guarded AOT and checkpoints await retest. Desktop normal CRT/newlib, threads/TLS/HID/GSP/FS/APT pass; ROMFS/retail saves/GX/PICA/audio absent |
+| Original compiled libctru applications | Scoped desktop execution verified; newer console A-input freeze unresolved | Older v0.14.0 console log records guest PASS; newer run reportedly shows red/blue then freezes on A, without its log; v0.14.3 guarded produced green late once, then froze on relaunch; v0.14.4 timing/guard changes await console evidence. Desktop normal CRT/newlib, threads/TLS/HID/GSP/FS/APT pass; ROMFS/retail saves/GX/PICA/audio absent |
 | Original compiled savedata program | Desktop save/reload verified; console build awaiting hardware | Normal newlib file I/O, Japanese paths, commit, separate-process reload, snapshot corruption rejection; bounded private archives only |
 | Decrypted base-application CIA | Intake supported | Checked index-0 NCCH, metadata/bitmap/content hashes and loader offsets; small executable export supported |
 | Decrypted NCCH v2 `.cxi` | Inspection supported | Bounds, sections/ExeFS hashes, code decompression and metadata tested with original fixtures |

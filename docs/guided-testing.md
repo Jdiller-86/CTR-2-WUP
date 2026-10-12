@@ -1,19 +1,20 @@
-# Guided Wii U testing and TXT reports (0.14.3)
+# Guided Wii U testing and TXT reports (0.14.4)
 
-Use the **0.14.3 console testing kit** for the current test round. It supplies
+Use the **0.14.4 console testing kit** for the current test round. It supplies
 four original homebrew diagnostic variants with prompts and automatic plain-text
 recording. No ROM is required and these builds are RPX/WUHB, not WUP packages.
 
-**Current round: follow [the short menu/input retest](console-retest.md) first.**
-Check native Minus exit, then compiled A input; postpone the save app and long
-stability loops until both work. The same `console-retest.md` is in the kit.
+**Current round: [return the two existing guarded TXT reports](console-retest.md)
+before further console tests.** Native Minus exit is user-confirmed; guarded A
+was delayed on one run and froze on another. No full stability acceptance follows.
+The same `console-retest.md` is in the kit.
 
 ## Start
 
 1. Extract the kit on your PC. For Aroma, copy the contents of `sd-card/` to
    your SD card root. The four WUHB files belong in `sd:/wiiu/apps/`.
-2. For this round use **Native 0.14.3**, then **Guarded AOT 0.14.3**, then
-   **Compiled AOT 0.14.3** per the short retest. Leave **Compiled Save** for later.
+2. For this round use **Native 0.14.4**, then **Guarded AOT 0.14.4**, then
+   **Compiled AOT 0.14.4** per the short retest. Leave **Compiled Save** for later.
    For complete acceptance rounds, follow each app's on-screen guide.
 3. For an RPX-capable launcher, use the matching files under `rpx/` through
    that launcher's normal workflow. Use your existing homebrew environment.
@@ -37,6 +38,8 @@ available partial file. Logging cannot work without accessible writable SD stora
 
 Only the native app plays the diagnostic tone on A. The compiled apps reserve A
 for guest input and show progress counters. They do not implement guest audio.
+The A-button prompt waits for a new green guest frame and records its latency;
+R remains a confirmation of what you saw, distinct from decoded-pixel evidence.
 
 The native and interactive tests include a ten-minute countdown. Their final
 stability prompt asks whether you observed problems. The interval and your

@@ -48,10 +48,12 @@ def main():
     p.add_argument('--application',choices=('boot','threaded','graphics','input','interactive','filesystem'),help='Run only the selected original application')
     p.add_argument('--wiiu',action='store_true',help='Also build original interactive/filesystem applications as RPX/WUHB')
     p.add_argument('--wiiu-guarded',action='store_true',help='Also verify/build an interactive AOT comparison with call depth limited to 2')
+    p.add_argument('--live-input',action='store_true',help='Replay held/released A with varied host clocks and console-sized budgets')
     p.add_argument('--trace-startup',action='store_true',help='Capture every IPC at single-instruction boundaries for the original boot application')
     a=p.parse_args()
     if a.trace_startup and a.application!='boot':p.error('--trace-startup requires --application boot')
     if a.wiiu_guarded and (not a.wiiu or a.application!='interactive'):p.error('--wiiu-guarded requires --wiiu --application interactive')
+    if a.live_input and a.application!='interactive':p.error('--live-input requires --application interactive')
     out=a.output.resolve();out.mkdir(parents=True,exist_ok=False);checks=[]
     def run(name,command,**kw):
         r=subprocess.run(command,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,errors='replace',**kw)
@@ -107,6 +109,17 @@ def main():
                 for frame in frames:
                     if hashlib.sha256((frames_folder/frame['name']).read_bytes()).hexdigest()!=frame['sha256']:raise RuntimeError('Guarded AOT pixels differ')
                 reports[-1]['guarded']={'call_limit':2,'guest':guarded_result,'exact_frames_match':True}
+            if a.live_input:
+                live_sources=[s for s in sources if s!=ROOT/'tests/homebrew/runner.c']+[ROOT/'tests/homebrew/live_replay.c']
+                live_results=[]
+                for limit in (64,2) if a.wiiu_guarded else (64,):
+                    live=folder/('runner-live-'+str(limit))
+                    run('live-'+str(limit)+'-compile',shlex.split(a.cc_prefix)+[a.cc,*flags,'-DCTR_RECOMP_CALL_LIMIT='+str(limit),*map(str,live_sources),'-lm','-o',str(live)])
+                    for delta,budget,delay in ((1000000,10000,0),(16666667,50000,2),(285000000,50000,0),(1000000000,50000,5)):
+                        row=json.loads(run('live-'+str(limit)+'-'+str(delta),shlex.split(a.run_prefix)+[str(live),str(delta),str(budget),str(delay)]).splitlines()[-1])
+                        if not row['ok'] or row['transitions']!=4 or row['partial_samples'] or row['depth']>limit:raise RuntimeError('Live input timing replay failed')
+                        live_results.append(dict(row,call_limit=limit))
+                reports[-1]['live_input_replays']=live_results
             if name=='filesystem':
                 reports[-1]['reload']=reloaded
                 snapshot=(folder/'save.snapshot').read_bytes()

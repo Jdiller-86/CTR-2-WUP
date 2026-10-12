@@ -43,6 +43,16 @@ see `upstream-integration.md`. Its desktop runtime is not a Wii U dependency.
 
 The native WUT backend provides independent TV and GamePad diagnostic output,
 input, sound, process lifecycle, timing, and CPU self-test instrumentation.
+v0.14.4 caches bounded nearest-neighbor coordinate maps and reuses scaled rows,
+with byte-order-independent RGBA output, checked source/output capacity and black
+borders/padding. The native backend flushes/invalidates the produced GX2 surfaces.
+The guide waits for a fresh decoded green frame after input before offering R,
+and records A-to-green delay separately from user visual confirmation.
+AOT execution returns a missing-block fault after 64 consecutive dispatches with
+no guest instruction progress, so empty/unwinding entries cannot consume unlimited
+host time without spending their budget. This guard cannot recover GPU/platform
+hangs and has not been attributed to the console freeze. Varied-clock live-input
+replay checks original compiled red/green transitions and exit on desktop.
 v0.14.3 polls ProcUI directly, suspends input/rendering outside foreground and
 releases guest/owned AX/GX2/report resources before ProcUIShutdown. On Minus it
 cleans up, clears stale graphics callbacks while retaining save acknowledgement,

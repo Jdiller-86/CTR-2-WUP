@@ -175,7 +175,9 @@ static ctr_cpu_result execute(ctr_cpu *p,void *user,uint64_t budget) {
     import_cpu(e);c->budget=(int32_t)(budget>INT32_MAX?INT32_MAX:budget);c->exit=EXIT_NONE;c->depth=0;
     e->rollback_base=false;
     if (setjmp(e->escape)) return e->fault;
+    unsigned idle_dispatches=0;
     while(c->budget>0) {
+        uint64_t before=p->instructions;
         Code code=lookup(c,c->r[15]|c->thumb);
         if(!code) {
             e->rollback_base=false;
@@ -187,6 +189,11 @@ static ctr_cpu_result execute(ctr_cpu *p,void *user,uint64_t budget) {
         if(c->exit==EXIT_SVC){export_cpu(e);return CTR_CPU_SVC;}
         if(c->exit==EXIT_BUDGET)break;
         if(c->exit==EXIT_UNWIND) { ++e->unwinds;c->exit=EXIT_NONE;c->depth=0; }
+        /* Empty/misrouted generated entries can otherwise unwind forever with
+           an unchanged budget and prevent host input/exit from being polled. */
+        if(p->instructions==before) {
+            if(++idle_dispatches>=64)ctr_recomp_abort(c,CTR_CPU_MISSING_BLOCK,c->r[15]);
+        } else idle_dispatches=0;
     }
     export_cpu(e);return CTR_CPU_LIMIT;
 }

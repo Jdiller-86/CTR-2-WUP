@@ -1,6 +1,6 @@
 # Project completion assessment
 
-Updated **October 11, 2026**, against runtime version **0.14.3** and the
+Updated **October 11, 2026**, against runtime version **0.14.4** and the
 [product plan](development-plan.md).
 
 ## Estimated implementation: approximately 20%
@@ -35,7 +35,7 @@ while every full acceptance checkbox remains open. See the
 | CPU and shared runtime | Bounded ARM/Thumb/VFP support, checked AOT boundary, memory, eight single-core guest thread contexts, scoped services | Incomplete CPU/HLE coverage; actual game and Wii U timing requirements unknown |
 | Homebrew execution | Six original normal-CRT/libctru applications, checked input and exact CPU-written frames; filesystem save/reload and standalone lifecycle | Desktop/emulated PPC evidence; older console log records compiled guest PASS, newer A-button freeze unresolved |
 | Packaging | Original encrypted writer and independent decrypt/hash/FST/file verification, including real diagnostic RPX payloads | Synthetic credentials; no installer acceptance or retained installable package |
-| Wii U platform | Five diagnostic variants; native guided picture/input/touch/audio/stability checks passed on console | Menu splash stalls; v0.14.3 shutdown order and AOT comparison await retest; save and installation untested |
+| Wii U platform | Five diagnostic variants; native guided picture/input/touch/audio/stability checks passed on console | Native Minus exit now passes; guarded A was delayed once and froze on relaunch; save and installation untested |
 
 The completed v0.14 regression report records **155 Python tests and 38 passing
 workflow checks**. Normal and sanitized runs cover six compiled homebrew
@@ -71,12 +71,13 @@ private executable view for revision and code analysis when the user's computer
 is available. An encrypted executable needs decrypted data. That export excludes
 game assets; commercial asset integration will require access to those separately.
 
-The first native console report records all ten guided checks and resource
-cleanup, but the user clarifies that the Menu splash/music continues indefinitely.
-The compiled run still freezes after A, with no tone; save testing was deferred.
-v0.14.3 cleans resources before ProcUI shutdown and adds a guarded AOT comparison.
-Follow the [short retest](console-retest.md) without a ROM. Successful corrected
-exit, compiled input, SD save/reload and installation evidence remain needed.
+The native guide and later Minus exit now have user-provided console evidence.
+The guarded app displayed green late once, then froze on a second launch. Its
+stability remains unaccepted. Return the two guarded TXT files before more runs.
+v0.14.4 improves scaling and waiting/latency reporting, and rejects an AOT
+no-progress loop in local tests; the hard freeze's cause is still unknown.
+The [follow-up instructions](console-retest.md) separate delay from stability.
+
 Actual WUP installation also needs the documented console environment and local
 packaging prerequisites. Native Windows tests remain pending.
 

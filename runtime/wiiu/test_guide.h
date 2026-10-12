@@ -16,7 +16,8 @@ typedef struct {
     uint64_t milliseconds;
     uint32_t pressed,held;
     float left_x,left_y,right_x,right_y;
-    bool touch_inside,touch_border,guest_exited,guest_fault,guest_pass,guest_frame_available,fresh_save_reload;
+    bool touch_inside,touch_border,guest_exited,guest_fault,guest_pass,guest_frame_available,fresh_save_reload,guest_green_frame;
+    uint64_t guest_frame_serial,input_frame_serial;
     uint16_t touch_x,touch_y;
     unsigned guest_sessions;
 } ctr_guide_input;
@@ -26,6 +27,7 @@ typedef struct {
     unsigned step,passed,failed,skipped,expected_session;
     uint32_t observed;
     uint64_t step_started,last_time;
+    uint64_t input_frame_serial,button_started;
     bool started,done,cancelled,restart_requested,restart_waiting,fresh_reload_confirmed;
     ctr_guide_log log;
     void *context;

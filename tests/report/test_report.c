@@ -2,6 +2,7 @@
 #include "test_report.h"
 #include "test_guide.h"
 #include "test_lifecycle.h"
+#include "image_scale.h"
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
@@ -82,7 +83,14 @@ static void guide_tests(void) {
     in.pressed=CTR_GUIDE_R;ctr_test_guide_update(&g,&in);CHECK(g.step==0); /* No rendered frame yet. */
     in.guest_frame_available=true;ctr_test_guide_update(&g,&in);CHECK(g.step==1);
     ctr_test_guide_update(&g,&in);CHECK(g.step==1); /* A must be exercised before confirmation. */
-    in.held=CTR_GUIDE_A;ctr_test_guide_update(&g,&in);CHECK(g.step==2);in.held=0;
+    in.held=CTR_GUIDE_A;in.input_frame_serial=1;in.guest_frame_serial=1;
+    ctr_test_guide_update(&g,&in);CHECK(g.step==1); /* R cannot pass before a new green frame. */
+    ctr_test_guide_view(&g,0,view);CHECK(strstr(view[4],"WAITING FOR GREEN")!=NULL);
+    in.guest_green_frame=true;ctr_test_guide_update(&g,&in);CHECK(g.step==1); /* Stale green cannot pass. */
+    in.guest_frame_serial=2;in.milliseconds=12000;in.pressed=0;ctr_test_guide_update(&g,&in);CHECK(g.step==1);
+    ctr_test_guide_view(&g,12000,view);CHECK(strstr(view[4],"NEW GREEN FRAME DETECTED")!=NULL);
+    CHECK(strstr(guide_log_text,"A_to_green_ms=12000")!=NULL);
+    in.pressed=CTR_GUIDE_R;ctr_test_guide_update(&g,&in);CHECK(g.step==2);in.held=0;
     touches(&g,&in);CHECK(g.step==3);
     in.pressed=CTR_GUIDE_R;ctr_test_guide_update(&g,&in);CHECK(g.step==4);
     in.pressed=0;in.guest_sessions=1;in.guest_exited=true;in.guest_pass=true;
@@ -90,10 +98,42 @@ static void guide_tests(void) {
     in.pressed=CTR_GUIDE_PLUS;ctr_test_guide_update(&g,&in);CHECK(ctr_test_guide_take_restart(&g));
     in.pressed=0;ctr_test_guide_update(&g,&in);CHECK(g.step==5);
     in.guest_sessions=2;ctr_test_guide_update(&g,&in);CHECK(g.step==6 && ctr_test_guide_take_restart(&g));
-    in.guest_exited=false;in.guest_pass=false;in.milliseconds=600000;ctr_test_guide_update(&g,&in);CHECK(g.step==7);
+    in.guest_exited=false;in.guest_pass=false;in.milliseconds=612000;ctr_test_guide_update(&g,&in);CHECK(g.step==7);
     in.pressed=CTR_GUIDE_R;ctr_test_guide_update(&g,&in);CHECK(g.done && g.passed==8);
     ctr_test_guide_init(&g,CTR_GUIDE_INTERACTIVE,capture,NULL);in.pressed=0;in.guest_fault=true;
     ctr_test_guide_update(&g,&in);CHECK(g.failed==1 && !g.passed);
+}
+
+static void scale_tests(void) {
+    const unsigned sizes[][5]={{1920,1080,1920,400,240},{854,480,896,320,240},
+        {1280,720,1280,400,240},{31,19,37,7,5},{3,2,5,320,240},{7,11,12,1,1}};
+    for(unsigned test=0;test<6;++test) {
+        unsigned ow=sizes[test][0],oh=sizes[test][1],pitch=sizes[test][2],gw=sizes[test][3],gh=sizes[test][4];
+        size_t pixels=(size_t)gw*gh,bytes=(size_t)pitch*oh*4+17;
+        uint32_t *source=malloc(pixels*sizeof(*source));unsigned char *actual=malloc(bytes),*reference=calloc(bytes,1);
+        CHECK(source && actual && reference);
+        for(size_t i=0;i<pixels;++i)source[i]=(uint32_t)(i*UINT32_C(2654435761));
+        CtrViewport v;CHECK(ctr_viewport_fit(&v,ow,oh,gw,gh));ctr_scale_plan plan={0};
+        CHECK(ctr_scale_plan_init(&plan,&v));CHECK(!ctr_scale_plan_init(&plan,&v));
+        CHECK(ctr_scale_rgba(&plan,source,pixels,actual,bytes,pitch));
+        for(unsigned y=0;y<v.height;++y)for(unsigned x=0;x<v.width;++x) {
+            uint32_t color=source[(size_t)((uint64_t)y*gh/v.height)*gw+(uint64_t)x*gw/v.width];
+            size_t at=((size_t)(v.y+y)*pitch+v.x+x)*4;
+            for(unsigned byte=0;byte<4;++byte)reference[at+byte]=(unsigned char)(color>>(24-byte*8));
+        }
+        CHECK(memcmp(actual,reference,bytes)==0); /* All pixels, borders, pitch padding and tail bytes. */
+        CHECK(!ctr_scale_rgba(&plan,source,pixels-1,actual,bytes,pitch));
+        CHECK(!ctr_scale_rgba(&plan,source,pixels,actual,(size_t)pitch*oh*4-1,pitch));
+        CHECK(!ctr_scale_rgba(&plan,source,pixels,actual,bytes,ow-1));
+        ctr_scale_plan_close(&plan);ctr_scale_plan_close(&plan);
+        CHECK(!plan.columns && !plan.rows);
+        CHECK(!ctr_scale_rgba(&plan,source,pixels,actual,bytes,pitch));
+        free(source);free(actual);free(reference);
+    }
+    ctr_scale_plan plan={0};CtrViewport bad={1,0,1,1,1,1,1,1};
+    CHECK(!ctr_scale_plan_init(&plan,&bad));bad.x=0;bad.guest_width=65536;
+    CHECK(!ctr_scale_plan_init(&plan,&bad));bad.guest_width=1;bad.output_width=8193;
+    CHECK(!ctr_scale_plan_init(&plan,&bad));CHECK(!ctr_scale_plan_init(NULL,&bad));
 }
 
 static void read_file(const char *path, char *buffer, size_t size) {
@@ -216,6 +256,7 @@ int main(void) {
     guide_tests();
     lifecycle_tests();
     exit_order_tests();
+    scale_tests();
     char directory[] = "/tmp/ctr2wup-report-XXXXXX", text[4096];
     CHECK(mkdtemp(directory) != NULL);
     ctr_test_report first = {0}, second = {0}, bad = {0};
