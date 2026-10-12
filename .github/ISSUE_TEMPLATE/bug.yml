@@ -1,0 +1,69 @@
+name: Bug report
+description: Report a reproducible problem in a developer tool or diagnostic build.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        CTR2WUP is in early development; commercial gameplay and the Windows GUI are not available yet.
+        Read [current boundaries](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/STATUS.md) first.
+        Never attach ROMs, keys, extracted game assets, translated commercial code, saves or WUP packages.
+        Report vulnerabilities through [SECURITY.md](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/SECURITY.md).
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Include the application version, commit SHA and build or release source.
+      placeholder: "v0.x.y / commit SHA / release or local build"
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected component
+      options:
+        - Host inspection, input preparation or packaging
+        - CPU translation or portable runtime
+        - Graphics or asset decoding
+        - Wii U diagnostic, storage or lifecycle
+        - Documentation or GitHub automation
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Desktop OS/tool versions, or console region, exact firmware, Aroma and launcher/installer versions. Write unknown for unavailable values.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Prefer an original synthetic fixture. Replace private paths, title data and credentials with placeholders.
+      placeholder: |
+        1. Build or launch ...
+        2. Run ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+      description: Include the first failure, whether it repeats and whether a reboot was needed.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized evidence
+      description: Attach original diagnostic TXT results or paste a minimal error excerpt after checking it contains no private data. If no log was saved, say so.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Submission check
+      options:
+        - label: I reviewed the submission and attachments for ROMs, keys, commercial assets, saves and credentials.
+          required: true

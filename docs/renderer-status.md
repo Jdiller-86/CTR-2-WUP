@@ -20,7 +20,7 @@ all five linear display formats, and an original ARM HID-to-RGB565 display guest
 in all Wii U builds. See `gsp-display.md` for scope and desktop reference images.
 Console behavior remains pending. This does not execute PICA draws.
 
-Pending: GPU display transfers/coherency and graphics queues, vertex and
+Pending: asynchronous GPU transfer/coherency, vertex and
 geometry processing, shaders, texture sampling/mips/resource lifetime, lighting, TEV, draw
 submission, caching, trusted reference scene comparisons, and console timings.
 `execute_draw` raises an explicit unsupported error. Milestone 4 is incomplete.
@@ -46,3 +46,11 @@ Format 6 follows Azahar's RG8 convention `[byte1, byte0, 0, 255]`; Zakuro's
 External emulator code is test-only in separate checkouts, never copied into or
 linked with the runtime/delivery. Actual PICA sampling/render scenes and GX2
 resource/coherency/performance checks still need Wii U/reference evidence.
+
+
+v0.17.0 implements a bounded standard GSP GX ring and CPU-backed DMA/fill/display
+conversion/raw texture copy/cache checks. Equal-sized unscaled transfers support
+all five display formats, layout/swizzling and flip. Stock libctru produces exact
+three-frame outputs with zero fallback. PICA lists/draws remain unsupported; GPU
+resource/sampling/TEV/shader/coherency work and actual console scene/timing proof
+are still required. See [gx-transfers.md](gx-transfers.md).

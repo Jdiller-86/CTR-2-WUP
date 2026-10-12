@@ -37,8 +37,8 @@ different things. See [progress.md](progress.md) for the assessment and evidence
 |---|---|---|
 | M1 | RPX/WUHB built; older native report records ten guide/nine self-test passes; Minus exit confirmed; Native/Guarded/Compiled completion reported for v0.14.5 | New result-file/save console evidence, full lifecycle acceptance and installed WUP |
 | M2 | Original CPU/AOT subset plus stack/register transfers, BLX, user CP15 TLS, byte media, barriers and scoped FP; external generation/checked ABI; GCC/sanitizers/Clang/emulated big-endian PPC checks; 944 independent ARM1176 cases (U=1/A=0 single-data semantics and defined base-in-list stores) and nested-call trace | Complete ARM/VFP semantics, workload memory/fallback costs and actual Espresso timings |
-| M3 | Checked NCCH loading and eight single-core contexts; CPU/TLS/VFP/FPSCR ownership, priorities/quanta, joins/locks/arbiters/quotas; SRV/CFG/heap/shared/HID/GSP/VBlank; seven normal-CRT/libctru applications including exact CPU framebuffer pixels, private FS save/reload, APT lifecycle and read-only Level-3 RomFS assets; five current diagnostic variants built | Verified new result-file/save/RomFS console evidence; broader services, applets and commercial asset integration/retail saves, cross-process semantics, motion, GX commands/PICA and guest audio |
-| M4 | Bounded command references, standard direct/shared GSP display, five rotated CPU display formats and all 14 base texture format decoders | Actual PICA-to-GX2 features, scene comparisons and console timings |
+| M3 | Checked NCCH loading and eight single-core contexts; CPU/TLS/VFP/FPSCR ownership, priorities/quanta, joins/locks/arbiters/quotas; SRV/CFG/heap/shared/HID/GSP/VBlank; eight normal-CRT/libctru applications including exact CPU framebuffer pixels, private FS save/reload, APT lifecycle and read-only Level-3 RomFS assets; five current diagnostic variants built | Verified new result-file/save/RomFS console evidence; broader services, applets and commercial asset integration/retail saves, cross-process semantics, motion, broader GX/PICA and guest audio |
+| M4 | Bounded command references, standard direct/shared GSP display, five rotated CPU display formats and all 14 base texture format decoders and scoped CPU-backed GX queue operations | Actual PICA-to-GX2 features, scene comparisons and console timings |
 | M5 | Mario selected; original attachment exceeds 32 MiB; October 11 small intake receipt reports outer-encrypted executable content and contains no executable; intake/export helper tested; shared runtime foundations | Decrypted private executable export/revision, title-specific runtime/renderer/services/save/audio implementation and console gameplay |
 | M6 | Local key/seed import and CIA/NCCH preparation, original encrypted-input→intake→AOT→RPX/WUHB proof; external C generation/static compilation, staging/artwork/intake, original encrypted writer and independent decrypt/FST/file checks with synthetic inputs, atomic output/wheel; Windows workflow prepared | Actual local certificate/key provenance and installer acceptance, full commercial conversion, caches/traces/rebuild, Windows execution and console install checks |
 | M7 | Deliberately deferred | Proven pipeline before responsive Windows GUI implementation |
@@ -190,3 +190,11 @@ file access and all 14 base texture decoders. Independent original fixtures,
 external texture references and cross-target checks support these boundaries.
 They neither implement PICA draw execution nor establish actual game/console
 assets or installed WUP behavior. Full acceptance remains 0/7.
+
+
+v0.17.0 advances M3/M4 with standard GX queue DMA/fill/transfer/raw-copy/cache
+operations and a stock-libctru application. Its exact frames/16 commands/zero
+fallback are desktop evidence; new console and PICA draw gates remain open.
+GitHub's seven milestone issues now show partial foundations and remaining full
+acceptance separately. Their generated sections synchronize from versioned source
+without auto-closing gates. See [GitHub development](github-development.md).

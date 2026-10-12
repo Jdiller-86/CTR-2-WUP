@@ -46,6 +46,11 @@ ctr_mem_result ctr_memory_write(ctr_memory *memory, uint32_t address,
    guest mappings are allowed; permissions/overflow are checked without writes. */
 ctr_mem_result ctr_memory_check_range(const ctr_memory *memory, uint32_t address,
                                      uint32_t size, unsigned permissions);
+/* Owned host buffers must not alias any guest backing. Validate the entire
+ * guest range before copying, including adjacent mappings. Bulk writes update
+ * exclusive/code generations once and detect executable storage aliases. */
+ctr_mem_result ctr_memory_read_bytes(const ctr_memory *memory,uint32_t address,void *output,uint32_t size);
+ctr_mem_result ctr_memory_write_bytes(ctr_memory *memory,uint32_t address,const void *input,uint32_t size);
 /* Atomically split a fully mapped range to change permissions or remove it.
    Zero permissions create a guard mapping. A hole/capacity failure changes nothing. */
 ctr_mem_result ctr_memory_change_range(ctr_memory *memory, uint32_t address,

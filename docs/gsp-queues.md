@@ -67,9 +67,11 @@ See `console-testing.md` for physical checks and reference images.
 
 Public interface facts were checked against pinned libctru
 `9b55eda44cf80b971503991e0c78f9bc8fe50425` (`gspgpu.h/c`, `gfx.c`). No upstream
-implementation was copied. Stock libctru additionally uses service threads,
-LightEvent/address arbitration, barriers and hardware initialization paths that
-this subset does not supply. GX commands, DMA/display transfers, physical/VRAM
-translation, PICA rendering, DSP/audio and saves remain unimplemented. Wider
+implementation was copied. Later runtime work supplies the scoped service
+threads, address arbitration and standalone graphics startup used by the
+original compiler-built applications. Version 0.17 adds synchronous GX DMA,
+fills, display transfers and raw texture copies; see [gx-transfers.md](gx-transfers.md).
+Physical/VRAM address translation, PICA rendering and guest DSP/audio remain
+unimplemented. Private diagnostic saves are described in [filesystem.md](filesystem.md). Wider
 shared runtime development can continue without a ROM; exact Mario requirements
 and physical acceptance still need private intake and console results.

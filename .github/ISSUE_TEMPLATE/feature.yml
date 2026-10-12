@@ -1,0 +1,45 @@
+name: Feature or milestone proposal
+description: Propose work toward the GUI-to-playable-WUP product with verifiable acceptance criteria.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The target product is a Windows injector GUI that creates a playable per-game Wii U WUP.
+        Check the [milestones](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/docs/milestones.md) and existing issues first.
+        The GUI follows a working execution pipeline; homebrew diagnostic success alone does not establish commercial compatibility.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and proposed behavior
+      description: Explain the concrete user or developer need and the behavior that would address it.
+    validations:
+      required: true
+  - type: dropdown
+    id: milestone
+    attributes:
+      label: Main milestone or area
+      options:
+        - M1 - Wii U platform
+        - M2 - CPU translation and correctness
+        - M3 - Homebrew runtime and services
+        - M4 - PICA-to-GX2 graphics
+        - M5 - First commercial game
+        - M6 - Automated WUP conversion
+        - M7 - Windows GUI
+        - Documentation, tooling or project maintenance
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance evidence
+      description: Describe a testable outcome and distinguish desktop checks, cross-builds, Windows execution and physical-console checks.
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies and scope
+      description: Name required runtime features, tools, licenses or unavailable hardware/input. Link public references; do not attach ROMs or key material.

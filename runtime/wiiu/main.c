@@ -95,6 +95,7 @@ static struct {
     ctr_mem_result memory_fault;
     uint32_t pc,detail;
     uint64_t instructions,fallback;
+    ctr_guest_gsp gx;
 } final_guest;
 static ctr_report_storage report_storage={.client=-1};
 static uint64_t report_sync_max_us;
@@ -120,7 +121,9 @@ static bool left_stick_seen,right_stick_seen,guest_fault_seen,allocation_checked
 static bool allocation_failure_seen;
 static int alloc_ok_for_report;
 static uint16_t touch_min_x=UINT16_MAX,touch_min_y=UINT16_MAX,touch_max_x,touch_max_y;
-#ifdef CTR_ROMFS_FILE
+#ifdef CTR_GX_HOMEBREW
+#define REPORT_APPLICATION "compiled-gx-transfer"
+#elif defined(CTR_ROMFS_FILE)
 #define REPORT_APPLICATION "compiled-romfs-file"
 #elif defined(CTR_ROMFS_HOMEBREW)
 #define REPORT_APPLICATION "compiled-romfs"
@@ -183,6 +186,7 @@ static bool result_snapshot(const char *stage) {
         "Input: samples=%u errors=%u A_presses=%u Minus_presses=%u\n"
         "Guest: state=%s pc=%08x instructions=%llu fallback=%llu fault=%s detail=%08x memory=%s\n"
         "Frames: host=%u guest=%llu | new_green_after_A=%u latency_ms=%llu\n"
+        "GX: completed=%llu DMA=%llu fill=%llu display=%llu texture_copy=%llu cache=%llu last_header=%08x last_detail=%08x\n"
         "Host frame us: min=%u mean=%llu max=%u (diagnostic overhead, not game performance)\n"
         "Latest guest message: %s\nSave: load_status=%d persist_errno=%d\n"
         "Full trace: %s | file=%s errno=%d operation=%s FSA=%d commits=%llu\n"
@@ -202,6 +206,14 @@ static bool result_snapshot(const char *stage) {
         final_guest.captured?final_guest.detail:gsp_guest.fault_detail,
         ctr_mem_result_name(final_guest.captured?final_guest.memory_fault:gsp_guest.cpu.memory_fault),
         completed_frames,(unsigned long long)gsp_presented,green_response_seen,(unsigned long long)green_response_ms,
+        (unsigned long long)(final_guest.captured?final_guest.gx.gx_commands:gsp_guest.gsp.gx_commands),
+        (unsigned long long)(final_guest.captured?final_guest.gx.gx_dma:gsp_guest.gsp.gx_dma),
+        (unsigned long long)(final_guest.captured?final_guest.gx.gx_fills:gsp_guest.gsp.gx_fills),
+        (unsigned long long)(final_guest.captured?final_guest.gx.gx_transfers:gsp_guest.gsp.gx_transfers),
+        (unsigned long long)(final_guest.captured?final_guest.gx.gx_copies:gsp_guest.gsp.gx_copies),
+        (unsigned long long)(final_guest.captured?final_guest.gx.gx_cache:gsp_guest.gsp.gx_cache),
+        final_guest.captured?final_guest.gx.last_gx_header:gsp_guest.gsp.last_gx_header,
+        final_guest.captured?final_guest.gx.last_gx_detail:gsp_guest.gsp.last_gx_detail,
         completed_frames?frame_min_us:0,(unsigned long long)(completed_frames?frame_total_us/completed_frames:0),frame_max_us,
         latest_guest_message[0]?latest_guest_message:"none",snapshot_load_result,snapshot_errno,
         report_handler_added && !test_report.failed?"SAVING":"FAILED",test_report.filename,test_report.error_code,
@@ -256,6 +268,7 @@ static void guest_debug(void *context,const char *message) {
             if(latest_guest_message[i]=='\n' || latest_guest_message[i]=='\r')latest_guest_message[i]=' ';
     }
     if(strstr(message,"CTR2WUP compiled interactive PASS") ||
+       strstr(message,"CTR2WUP compiled GX transfers PASS") ||
        strstr(message,"CTR2WUP compiled RomFS PASS") ||
        strstr(message,"CTR2WUP compiled filesystem SAVE 1 PASS") ||
        strstr(message,"CTR2WUP compiled filesystem RELOAD PASS"))gsp_pass_seen=true;
@@ -623,6 +636,7 @@ static void cleanup_resources(void *context) {
     final_guest.state=gsp_guest.state;final_guest.fault=gsp_guest.fault;
     final_guest.memory_fault=gsp_guest.cpu.memory_fault;final_guest.pc=gsp_guest.cpu.r[15];final_guest.detail=gsp_guest.fault_detail;
     final_guest.instructions=gsp_guest.cpu.instructions;final_guest.fallback=gsp_guest.cpu.fallback_instructions;
+    final_guest.gx=gsp_guest.gsp;
     app_exit_result=result;result_snapshot("resource_cleanup_begin");
     WHBLogPrintf("shutdown begin result=%d",result);
     session_summary(result);
@@ -752,7 +766,9 @@ int main(int argc, char **argv) {
         report_handler_added?"SAVING":"FAILED",test_report.error_code);
     if(report_handler_added)report_commit("startup");
     result_snapshot("startup");
-#ifdef CTR_ROMFS_HOMEBREW
+#ifdef CTR_GX_HOMEBREW
+    ctr_test_guide_init(&test_guide,CTR_GUIDE_GX,guide_log,NULL);
+#elif defined(CTR_ROMFS_HOMEBREW)
     ctr_test_guide_init(&test_guide,CTR_GUIDE_ASSETS,guide_log,NULL);
 #elif defined(CTR_FILESYSTEM_HOMEBREW)
     ctr_test_guide_init(&test_guide,CTR_GUIDE_SAVE,guide_log,NULL);
@@ -962,12 +978,19 @@ int main(int argc, char **argv) {
             image_text(top_image,TOP_W,10,"CTR2WUP HID / GSP QUEUE / VBLANK");
 #endif
             snprintf(text,sizeof(text),"FRAME %llu / STATE %s",(unsigned long long)gsp_presented,ctr_guest_state_name(gsp_guest.state));
-            image_text(top_image,TOP_W,11,text);image_text(top_image,TOP_W,12,"A: GREEN / TOUCH: WHITE / B: EXIT");
+            image_text(top_image,TOP_W,11,text);
+#ifdef CTR_GX_HOMEBREW
+            image_text(top_image,TOP_W,12,"GX FILL / DMA / TILED TRANSFER / COPY");
+            snprintf(text,sizeof(text),"GX DONE %llu / PASS %u / PICA ABSENT",(unsigned long long)gsp_guest.gsp.gx_commands,gsp_pass_seen);
+            image_text(top_image,TOP_W,13,text);
+#else
+            image_text(top_image,TOP_W,12,"A: GREEN / TOUCH: WHITE / B: EXIT");
 #ifdef CTR_FILESYSTEM_HOMEBREW
             image_text(top_image,TOP_W,12,filesystem_message);
             image_text(top_image,TOP_W,13,"PLUS: RELOAD SAVE / MINUS: EXIT");
 #else
             image_text(top_image,TOP_W,13,"Y: CYCLE / PLUS: RESET / PICA ABSENT");
+#endif
 #endif
         } else {
             if (guest_ready && frame_guest.state!=CTR_GUEST_FAULTED && frame_guest.state!=CTR_GUEST_EXITED) {

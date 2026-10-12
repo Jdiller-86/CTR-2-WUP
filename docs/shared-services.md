@@ -112,8 +112,9 @@ Mario revision and appropriate reference/console tests. FS/APT/GSP/PICA,
 multi-thread kernel behavior, audio, saves and CROs remain implementation work.
 HID pad/touch support is now defined in `hid-input.md`; motion remains absent.
 The restricted direct GSP display interface is defined in `gsp-display.md`;
-shared framebuffer/relay support is defined in `gsp-queues.md`; GX commands,
-PICA and stock graphics startup remain absent.
+shared framebuffer/relay support is defined in `gsp-queues.md`. Stock graphics
+startup and the scoped synchronous GX commands are implemented; see
+[gx-transfers.md](gx-transfers.md). PICA rendering remains absent.
 
 v0.11.0 extends GSP with one local retained relay event/shared page, checked
 framebuffer queues and diagnostic VBlank/IRQ delivery; see `gsp-queues.md`.

@@ -1,0 +1,93 @@
+# Contributing to CTR2WUP
+
+CTR2WUP targets a Windows GUI that converts an owned 3DS game into a playable
+Wii U WUP. Current builds are development tools and original diagnostics; the
+commercial execution pipeline and GUI are still being implemented. Read
+[STATUS.md](STATUS.md), the [milestones](docs/milestones.md) and
+[AGENTS.md](AGENTS.md) before proposing compatibility or acceptance changes.
+
+## Choose verifiable work
+
+Check existing issues and the milestone checklist. For a bug, provide a minimal
+reproduction with original data. For a feature, describe the resulting behavior,
+its milestone and acceptance evidence. The issue forms also accept Wii U test
+results, including missing reports, failed storage checks and hangs.
+
+Do not upload ROMs, key databases, personal keys, extracted game assets, saves,
+translated commercial code, game packages or credentials. Keep them under
+ignored `private/` directories locally. Original diagnostic TXT files are useful
+after reviewing them for private paths or data. Use [SECURITY.md](SECURITY.md)
+for vulnerability reports instead of a normal issue.
+
+## Build and check
+
+Use Python 3.12+, Make and a C compiler. Install the verified Wii U SDK with the
+repository script; the first installation requires Docker. Optional encrypted
+input/packaging tests use the `cryptography` dependency. The target SDK uses
+devkitPro's devkitPPC, WUT and Wii U tools; the host compiler runs desktop tests.
+
+```sh
+python3 -m venv .venv
+. .venv/bin/activate
+python3 -m pip install -e '.[packaging]'
+export CTR2WUP_SDK_ROOT="$PWD/../ctr2wup-sdk"
+bash tools/install-wiiu-sdk.sh
+export DEVKITPRO="$CTR2WUP_SDK_ROOT"
+export DEVKITPPC="$DEVKITPRO/devkitPPC"
+make check
+make prototype
+```
+
+`make check` runs Python and portable C suites with sanitizer checks.
+`make prototype` builds RPX/WUHB diagnostics. Neither command proves physical
+Wii U behavior or WUP installation. An existing official devkitPro installation
+can be used by setting `DEVKITPRO` and `DEVKITPPC` to its SDK paths. For Windows,
+use devkitPro's MSYS2 environment and signed `wiiu-dev` packages; the extracted
+Linux SDK cannot run natively on Windows. Consult [Windows build notes](docs/build-windows.md),
+[upstream integration](docs/upstream-integration.md) and the focused test suites
+for requirements specific to your change. SDK installation must preserve
+checksum, signature and TLS verification.
+
+## Console evidence and diagnostic releases
+
+Use the versioned original diagnostic build and instructions for the requested
+test round. Record its release tag or commit, displayed application version and
+artifact checksum where available. A newer source version does not establish
+that an older console result tested the new behavior.
+
+For Aroma, copy a diagnostic kit's `sd-card/` contents to the SD root; WUHB apps
+belong under `sd:/wiiu/apps/`. Matching RPX files require an RPX-capable launcher.
+These files are homebrew applications, not WUP installation directories. Follow
+[guided testing](docs/guided-testing.md) for controls and the expected
+`sd:/ctr2wup/` TXT results. Preserve failed-run reports and explicitly report
+when no new file appeared. Include exact firmware, Aroma and launcher versions
+when known, plus observed exit/Menu behavior.
+
+Published diagnostic releases and CI build artifacts demonstrate only their
+documented original fixture/build checks. Commercial games, guest PICA rendering,
+guest audio and installed playable WUP output still have separate acceptance
+gates in the milestone checklist.
+
+## Submit a pull request
+
+Keep the change focused and explain the concrete before/after behavior. Link its
+issue or milestone, record relevant checks and identify unavailable prerequisites.
+Use the pull request template. Update affected status, architecture, compatibility
+and build documentation when behavior or evidence changes; do not claim console
+execution from compilation. Record evidence in versioned reports where the
+existing workflow calls for them.
+
+New fixtures must be original and reproducible from source. Guest memory is
+little-endian even on big-endian PowerPC; avoid native guest-word loads and keep
+unsupported states explicit. Review licenses and notices before adding a
+dependency or redistributing an executable. Generated builds belong under
+ignored `artifacts/`; inspect release contents for private data before publication.
+
+## Agent-assisted work
+
+[Repository Copilot instructions](.github/copilot-instructions.md) and specialist
+profiles under [.github/agents](.github/agents) provide CPU/runtime, host-pipeline,
+graphics and console-evidence context. Supported clients can select them when
+Copilot access is available. These files do not turn on paid services or autonomous
+jobs. Agent changes receive the same review and validation as any contribution;
+their summaries must identify pending physical and commercial acceptance checks.

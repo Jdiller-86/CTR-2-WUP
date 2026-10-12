@@ -1,0 +1,57 @@
+name: Optional CodeQL analysis
+
+# The repository is private. This does not enable or buy Advanced Security.
+# Run only after independently confirming existing CodeQL scanning eligibility.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_eligible:
+        description: 'Existing repository CodeQL eligibility has been confirmed (no purchase or enablement)'
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  analyze:
+    name: CodeQL ${{ matrix.language }}
+    if: inputs.confirm_eligible
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: python
+            build_mode: none
+          - language: c-cpp
+            build_mode: manual
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build_mode }}
+          queries: security-and-quality
+      - name: Compile original portable C fixtures for extraction
+        if: matrix.build_mode == 'manual'
+        shell: bash
+        run: make check-c-portable
+      - name: Analyze and upload security results
+        uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          category: /language:${{ matrix.language }}
+          upload-database: false

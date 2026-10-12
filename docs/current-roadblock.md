@@ -1,4 +1,4 @@
-# Remaining acceptance gates (0.16.0)
+# Remaining acceptance gates (0.17.0)
 
 The final product remains an UWUVCI-style **Windows GUI → Inject → per-game WUP →
 Wii U Menu gameplay**. The CLI and original diagnostics are its shared foundations.
@@ -45,7 +45,8 @@ See [romfs-assets.md](romfs-assets.md) and [filesystem.md](filesystem.md).
    an existing title. Synthetic offline packer checks do not prove installer acceptance.
 5. **Windows and GUI:** validate the real conversion pipeline, caches/rebuild/
    cancellation and clean Windows execution, then implement the specified GUI.
-   The pre-existing unapproved Windows workflow remains local and unpublished.
+   Reviewed Windows CI and validation workflows are included and authorized for
+   publication; their actual hosted results must establish Windows acceptance.
 
 No console is attached. Further generic CPU/service/renderer work is possible;
 it cannot replace these physical gates or reveal the selected game's actual
@@ -71,3 +72,10 @@ reporting; its physical file I/O/lifecycle test awaits the user's return.
 No completed long test must be repeated now. Further generic work is possible,
 but it cannot settle actual Mario requirements, GX2 reference scenes, console
 performance, native Windows or installed WUP acceptance without those resources.
+
+
+v0.17.0 adds standard CPU-backed GX operations and the original GX Transfers
+console diagnostic while awaiting resources. PICA draw lists remain unsupported.
+GitHub now has live milestone/issues tracking and reviewed CI/artifact/agent/docs
+setup. Projects and repository administration changes are blocked by the GitHub
+integration's permissions; the desired setup is recorded without claiming it live.

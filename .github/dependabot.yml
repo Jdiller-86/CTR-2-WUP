@@ -1,0 +1,26 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '13:00'
+      timezone: America/New_York
+    open-pull-requests-limit: 5
+    labels: [dependencies, automation]
+    commit-message:
+      prefix: ci
+    groups:
+      github-actions:
+        patterns: ['*']
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: monthly
+      time: '13:00'
+      timezone: America/New_York
+    open-pull-requests-limit: 3
+    labels: [dependencies, automation]
+    commit-message:
+      prefix: deps

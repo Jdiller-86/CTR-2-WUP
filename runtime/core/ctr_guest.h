@@ -50,6 +50,8 @@ typedef struct {
     bool registered;
     unsigned relay_owner, relay_shared, relay_event;
     uint64_t next_vblank_ns, vblanks, coalesced_vblanks, dropped_interrupts, failures;
+    uint64_t gx_commands,gx_dma,gx_fills,gx_transfers,gx_copies,gx_cache;
+    uint32_t last_gx_header,last_gx_detail;
 } ctr_guest_gsp;
 #define CTR_GUEST_MAX_THREADS 8u
 #define CTR_GUEST_THREAD_QUANTUM 32u

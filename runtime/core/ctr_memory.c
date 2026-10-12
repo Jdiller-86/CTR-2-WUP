@@ -106,6 +106,56 @@ const char *ctr_mem_result_name(ctr_mem_result result) {
     return (unsigned)result < sizeof(names) / sizeof(names[0]) ? names[result] : "unknown";
 }
 
+static bool host_alias(const ctr_memory *memory,const void *buffer,uint32_t size) {
+    uintptr_t start=(uintptr_t)buffer;
+    if(size>UINTPTR_MAX-start)return true;
+    for(size_t i=0;i<memory->count;++i) {
+        uintptr_t base=(uintptr_t)memory->maps[i].storage;
+        if(start<base+memory->maps[i].size && base<start+size)return true;
+    }
+    return false;
+}
+static void copy_bytes(const ctr_memory *memory,uint32_t address,void *buffer,uint32_t size,bool write) {
+    uint64_t cursor=address,end=cursor+size;uint8_t *bytes=buffer;
+    while(cursor<end)for(size_t i=0;i<memory->count;++i) {
+        const ctr_mapping *map=&memory->maps[i];uint64_t stop=(uint64_t)map->base+map->size;
+        if(cursor<map->base || cursor>=stop)continue;
+        size_t count=(size_t)((stop<end?stop:end)-cursor);
+        uint8_t *backing=map->storage+(size_t)(cursor-map->base);
+        if(write)memcpy(backing,bytes,count);else memcpy(bytes,backing,count);
+        bytes+=count;cursor+=count;break;
+    }
+}
+ctr_mem_result ctr_memory_read_bytes(const ctr_memory *memory,uint32_t address,void *output,uint32_t size) {
+    ctr_mem_result result=ctr_memory_check_range(memory,address,size,CTR_MEM_READ);
+    if(result!=CTR_MEM_OK)return result;
+    if(!size)return CTR_MEM_OK;
+    if(!output)return CTR_MEM_OVERFLOW;
+    if(host_alias(memory,output,size))return CTR_MEM_OVERLAP;
+    copy_bytes(memory,address,output,size,false);return CTR_MEM_OK;
+}
+ctr_mem_result ctr_memory_write_bytes(ctr_memory *memory,uint32_t address,const void *input,uint32_t size) {
+    ctr_mem_result result=ctr_memory_check_range(memory,address,size,CTR_MEM_WRITE);
+    if(result!=CTR_MEM_OK)return result;
+    if(!size)return CTR_MEM_OK;
+    if(!input)return CTR_MEM_OVERFLOW;
+    if(host_alias(memory,input,size))return CTR_MEM_OVERLAP;
+    bool code=false;uint64_t end=(uint64_t)address+size;
+    for(size_t i=0;i<memory->count;++i) {
+        const ctr_mapping *map=&memory->maps[i];uint64_t stop=(uint64_t)map->base+map->size;
+        if(address>=stop || map->base>=end)continue;
+        uint64_t begin=address>map->base?address:map->base,finish=end<stop?end:stop;
+        uintptr_t first=(uintptr_t)map->storage+(size_t)(begin-map->base),last=first+(size_t)(finish-begin);
+        for(size_t j=0;j<memory->count;++j) {
+            const ctr_mapping *other=&memory->maps[j];uintptr_t base=(uintptr_t)other->storage;
+            if((other->permissions&CTR_MEM_EXEC) && first<base+other->size && base<last)code=true;
+        }
+    }
+    copy_bytes(memory,address,(void*)input,size,true);++memory->generation;
+    if(code)++memory->code_generation;
+    return CTR_MEM_OK;
+}
+
 ctr_mem_result ctr_memory_check_range(const ctr_memory *memory, uint32_t address,
                                      uint32_t size, unsigned permissions) {
     uint64_t at=address, end=at+size;

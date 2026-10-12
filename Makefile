@@ -1,7 +1,9 @@
 PYTHON ?= python3
-.PHONY: check prototype regenerate doctor upstream-check
-check:
+.PHONY: check check-python check-c check-c-portable prototype regenerate doctor upstream-check
+check: check-python check-c
+check-python:
 	$(PYTHON) -m unittest discover -s tests -v
+check-c:
 	$(MAKE) -C tests/cpu check sanitize
 	$(MAKE) -C tests/guest check sanitize
 	$(MAKE) -C tests/services check sanitize
@@ -9,6 +11,7 @@ check:
 	$(MAKE) -C tests/kernel check sanitize
 	$(MAKE) -C tests/hid check sanitize
 	$(MAKE) -C tests/gsp check sanitize
+	$(MAKE) -C tests/gx check sanitize
 	$(MAKE) -C tests/relay check sanitize
 	$(MAKE) -C tests/multiple check sanitize
 	$(MAKE) -C tests/threads check sanitize
@@ -18,6 +21,8 @@ check:
 	$(MAKE) -C tests/apt check sanitize
 	$(MAKE) -C tests/report check sanitize
 	$(MAKE) -C tests/recomp-progress check sanitize
+check-c-portable:
+	@set -e; for suite in cpu guest services heap kernel hid gsp gx relay multiple threads filesystem assets textures apt report recomp-progress; do $(MAKE) -C tests/$$suite check; done
 prototype:
 	$(MAKE) -C runtime/wiiu -j 3
 doctor:

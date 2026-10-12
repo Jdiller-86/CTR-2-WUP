@@ -63,7 +63,7 @@ static void rejection(void) {
         if(kind==10)request[8]=1;
         if(kind==11)request[3]=request[4]=0xfffffff0;
         if(kind==12)request[3]=request[4]=0xdead0000;
-        if(kind==13)request[0]=0xc0000; /* No generic-success command queue. */
+        if(kind==13)request[0]=0xd0000; /* Direct SetDisplayTransfer remains unsupported. */
         if(kind==14)request[0]=0x130042;
         ctr_guest_gsp before=g.gsp;send(&g,session,request,9);
         CHECK(g.state==CTR_GUEST_FAULTED && g.ipc_failures==1 && !memcmp(&before,&g.gsp,sizeof(before)));

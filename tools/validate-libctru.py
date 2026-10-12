@@ -46,7 +46,7 @@ def main():
     p.add_argument('--libctru-source',type=Path,default=ROOT.parent/'ctr2wup-deps/libctru')
     p.add_argument('--devkitarm',type=Path,default=Path(os.environ.get('DEVKITARM',str(Path(os.environ.get('DEVKITPRO','/workspace/ctr2wup-sdk'))/'devkitARM'))))
     p.add_argument('--cc',default='gcc');p.add_argument('--cc-prefix',default='');p.add_argument('--run-prefix',default='');p.add_argument('--static',action='store_true');p.add_argument('--sanitize',action='store_true')
-    p.add_argument('--application',choices=('boot','threaded','graphics','input','interactive','filesystem','romfs'),help='Run only the selected original application')
+    p.add_argument('--application',choices=('boot','threaded','graphics','input','interactive','filesystem','romfs','transfer'),help='Run only the selected original application')
     p.add_argument('--wiiu',action='store_true',help='Also build original interactive/filesystem applications as RPX/WUHB')
     p.add_argument('--wiiu-guarded',action='store_true',help='Also verify/build an interactive AOT comparison with call depth limited to 2')
     p.add_argument('--romfs-file',action='store_true',help='Build the RomFS console diagnostic using a verified external asset blob')
@@ -74,7 +74,7 @@ def main():
         run('libctru-build',['make','-C',str(library),'lib/libctru.a','-j','4'],env=env)
         library_hash=hashlib.sha256((library/'lib/libctru.a').read_bytes()).hexdigest()
         reports=[]
-        for name in (a.application,) if a.application else ('boot','threaded','graphics','input','interactive','filesystem','romfs'):
+        for name in (a.application,) if a.application else ('boot','threaded','graphics','input','interactive','filesystem','romfs','transfer'):
             folder=out/name;folder.mkdir();elf=folder/'application.elf'
             run(name+'-arm-compile',[str(arm),'-march=armv6k','-mtune=mpcore','-mfloat-abi=hard','-mfpu=vfp','-mtp=soft','-O2','-g','-ffunction-sections','-fdata-sections','-D__3DS__','-I'+str(library/'include'),'-L'+str(library/'lib'),'-specs=3dsx.specs',str(ROOT/'tests/homebrew'/(name+'.c')),'-lctru','-lm','-o',str(elf)])
             rom=folder/'original.cxi';rom.write_bytes(container(elf));image=load_image(rom);generation=generate_into(rom,folder/'aot')
@@ -85,13 +85,14 @@ def main():
             if a.static:flags+=['-static','-mcpu=750']
             if a.sanitize:flags+=['-O1','-fno-omit-frame-pointer','-fsanitize=address,undefined']
             if name=='romfs':flags+=['-DCTR_ROMFS_HOMEBREW']
-            sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c','ctr_fs.c','ctr_apt.c','ctr_fs_snapshot.c','ctr_sha256.c','ctr_romfs_file.c')]+[ROOT/'runtime/recomp/ctr_recomp.c',ROOT/'tests/homebrew/runner.c']+[folder/'aot'/n for n in generation['sources']]
+            sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c','ctr_gx.c','ctr_transfer.c','ctr_fs.c','ctr_apt.c','ctr_fs_snapshot.c','ctr_sha256.c','ctr_romfs_file.c')]+[ROOT/'runtime/recomp/ctr_recomp.c',ROOT/'tests/homebrew/runner.c']+[folder/'aot'/n for n in generation['sources']]
             run(name+'-host-compile',shlex.split(a.cc_prefix)+[a.cc,*flags,*map(str,sources),'-lm','-o',str(binary)])
-            extra=['--trace-ipc'] if a.trace_startup else [str(folder)] if name in ('graphics','interactive') else ['--filesystem',str(folder/'save.snapshot')] if name=='filesystem' else []
+            extra=['--trace-ipc'] if a.trace_startup else [str(folder)] if name in ('graphics','interactive','transfer') else ['--filesystem',str(folder/'save.snapshot')] if name=='filesystem' else []
             output=run(name+'-execute',shlex.split(a.run_prefix)+[str(binary)]+extra)
-            result=json.loads(output.splitlines()[-1]);expected='CTR2WUP compiled libctru boot PASS' if name=='boot' else 'CTR2WUP compiled thread/TLS/LightLock PASS' if name=='threaded' else 'CTR2WUP compiled graphics PASS' if name=='graphics' else 'CTR2WUP compiled input PASS' if name=='input' else 'CTR2WUP compiled filesystem SAVE 1 PASS' if name=='filesystem' else 'CTR2WUP compiled RomFS PASS' if name=='romfs' else 'CTR2WUP compiled interactive PASS'
+            result=json.loads(output.splitlines()[-1]);expected='CTR2WUP compiled libctru boot PASS' if name=='boot' else 'CTR2WUP compiled thread/TLS/LightLock PASS' if name=='threaded' else 'CTR2WUP compiled graphics PASS' if name=='graphics' else 'CTR2WUP compiled input PASS' if name=='input' else 'CTR2WUP compiled filesystem SAVE 1 PASS' if name=='filesystem' else 'CTR2WUP compiled RomFS PASS' if name=='romfs' else 'CTR2WUP compiled GX transfers PASS' if name=='transfer' else 'CTR2WUP compiled interactive PASS'
             if result['state']!='exited' or result['fallback'] or expected not in result['messages']:raise RuntimeError(name+' did not complete its real guest assertions')
-            if name in ('graphics','interactive') and result['frames']!=[0x00ff00ff,0xff0000ff,0x00ff00ff]:raise RuntimeError('Require all three exact two-screen RGB565 frames')
+            if name in ('graphics','interactive','transfer') and result['frames']!=[0x00ff00ff,0xff0000ff,0x00ff00ff]:raise RuntimeError('Require all three exact two-screen RGB565 frames')
+            if name=='transfer' and result['gx']!={'commands':16,'dma':3,'fills':8,'transfers':3,'copies':1,'cache':1}:raise RuntimeError('Original application did not execute all expected GX operations')
             if name=='input' and result['input_samples']!=3:raise RuntimeError('Require all three standard HID publications')
             if name=='interactive' and result['input_samples']!=4:raise RuntimeError('Require three input-driven frames and the guest B-button exit')
             if name=='filesystem':
@@ -150,7 +151,7 @@ def main():
                 checks.append({'name':'filesystem-corrupt-reject','exit_code':rejected.returncode,'expected':5})
                 if rejected.returncode!=5 or corrupt.read_bytes()!=bad:raise RuntimeError('Corrupt save was not preserved/rejected')
                 reports[-1]['snapshot_sha256']=hashlib.sha256(snapshot).hexdigest()
-            if a.wiiu and name in ('interactive','filesystem','romfs'):
+            if a.wiiu and name in ('interactive','filesystem','romfs','transfer'):
                 wiiu=folder/'wiiu';wiiu.mkdir();recipe=ROOT/'runtime/wiiu'
                 # GNU Make tokenizes source/prerequisite lists. Keep its relative
                 # names free of user-path whitespace, as the main build engine
@@ -161,7 +162,7 @@ def main():
                     if name=='romfs':shutil.copy2(folder/'romfs-image.h',work/'romfs-image.h')
                     prefix=os.path.relpath(work,recipe)
                     target='ctr2wup-libctru-'+name+('-file' if a.romfs_file else '')
-                    run(name+'-wiiu-build',['make','-C',str(recipe),'OUTPUT='+prefix+'/wiiu','TARGET='+target,'FILESYSTEM_HOMEBREW='+('1' if name=='filesystem' else '0'),'ROMFS_HOMEBREW='+('1' if name=='romfs' else '0'),'ROMFS_FILE='+str(int(a.romfs_file)),'GUEST_DEFAULT=2','EXTERNAL_AOT=1','COMPILED_HOMEBREW=1','COMPILED_IMAGE_DIR='+prefix,'UPSTREAM_DIR='+prefix+'/aot'],env=env)
+                    run(name+'-wiiu-build',['make','-C',str(recipe),'OUTPUT='+prefix+'/wiiu','TARGET='+target,'FILESYSTEM_HOMEBREW='+('1' if name=='filesystem' else '0'),'ROMFS_HOMEBREW='+('1' if name=='romfs' else '0'),'ROMFS_FILE='+str(int(a.romfs_file)),'GX_HOMEBREW='+('1' if name=='transfer' else '0'),'GUEST_DEFAULT=2','EXTERNAL_AOT=1','COMPILED_HOMEBREW=1','COMPILED_IMAGE_DIR='+prefix,'UPSTREAM_DIR='+prefix+'/aot'],env=env)
                     built=work/'wiiu';rpx=built/(target+'.rpx');shortcut=rpx.with_suffix('.wuhb')
                     _validate_rpx(rpx)
                     if shortcut.read_bytes()[:4]!=b'WUHB':raise RuntimeError('Invalid compiled WUHB')

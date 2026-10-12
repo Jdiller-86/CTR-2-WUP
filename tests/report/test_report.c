@@ -72,6 +72,10 @@ static void guide_tests(void) {
     in.guest_exited=true;ctr_test_guide_update(&g,&in);CHECK(g.done && g.failed==1 && !g.passed);
     ctr_test_guide_init(&g,CTR_GUIDE_ASSETS,capture,NULL);
     in.guest_pass=true;ctr_test_guide_update(&g,&in);CHECK(g.done && g.passed==1 && !g.failed);
+    ctr_test_guide_init(&g,CTR_GUIDE_GX,capture,NULL);
+    in.pressed=CTR_GUIDE_R;ctr_test_guide_update(&g,&in);CHECK(!g.step);
+    in.guest_frame_available=true;ctr_test_guide_update(&g,&in);CHECK(g.step==1 && g.passed==1);
+    in.pressed=0;ctr_test_guide_update(&g,&in);CHECK(g.done && g.passed==2);
     memset(&in,0,sizeof(in));
     ctr_test_guide_init(&g,CTR_GUIDE_NATIVE,capture,NULL);
     in.pressed=CTR_GUIDE_R;ctr_test_guide_update(&g,&in);CHECK(g.step==1);

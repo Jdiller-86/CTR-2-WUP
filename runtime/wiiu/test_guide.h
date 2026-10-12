@@ -12,7 +12,7 @@ enum {
     CTR_GUIDE_L=1u<<9, CTR_GUIDE_X=1u<<10, CTR_GUIDE_Y=1u<<11,
     CTR_GUIDE_SKIP=1u<<12, CTR_GUIDE_FAIL=1u<<13
 };
-typedef enum { CTR_GUIDE_NATIVE, CTR_GUIDE_INTERACTIVE, CTR_GUIDE_SAVE, CTR_GUIDE_ASSETS } ctr_guide_kind;
+typedef enum { CTR_GUIDE_NATIVE, CTR_GUIDE_INTERACTIVE, CTR_GUIDE_SAVE, CTR_GUIDE_ASSETS, CTR_GUIDE_GX } ctr_guide_kind;
 typedef struct {
     uint64_t milliseconds;
     uint32_t pressed,held;

@@ -51,7 +51,11 @@ The applications test:
   write denial and unmount through unmodified libctru's Level-3 parser. Its
   current-process view contains only original assets; see `romfs-assets.md`.
 
-The default validator now runs all **seven** applications. The current console
+- `transfer`: standard GX DMA, fill, tiled display transfer, raw texture copy
+  and cache commands with checked pixels, padding and event waits; see
+  [GX transfers](gx-transfers.md).
+
+The default validator now runs all **eight** applications. The current console
 kit includes Native, interactive, guarded interactive, Save and RomFS variants.
 The RomFS guest also passes under ASan/UBSan and emulated big-endian PPC Linux;
 this does not establish physical Wii U execution.

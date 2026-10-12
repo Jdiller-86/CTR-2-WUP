@@ -59,7 +59,7 @@ audited source with Rust 1.95.0 and writes the provenance receipt. Use
 The script/workflow are prepared; they have not yet executed on Windows.
 The manual workflow at `.github/workflows/windows-validation.yml` also tests
 actual external ARM/Thumb/VFP execution and Unicode output, then builds a WPF
-tooling probe. Publishing/one run await the earlier requested approval.
+tooling probe. Publication is now authorized by the user; consult actual hosted run evidence.
 
 Version 0.4.0 adds optional encrypted packaging. From source, run
 `python -m pip install '.[packaging]'` and follow `packaging.md` for local file-based inputs.
@@ -95,7 +95,9 @@ packing gates are demonstrated, as required by the brief.
 Version 0.11 source/builds include the shared GSP relay probe and API suite.
 `make check` runs its sanitizer checks; `tools/validate-upstream.py --relay-api`
 runs nine probes and shared queue API checks. Native Windows execution remains
-pending; no local unapproved workflow is published or included in source bundles.
+pending until the hosted Windows jobs pass. The reviewed Windows workflows
+are now included in the repository and source bundles; see
+[GitHub development](github-development.md).
 
 Version 0.12 adds `make -C tests/multiple check` and
 `python tools/validate-upstream.py --multiple-api --output artifacts/windows-stack`.
@@ -145,3 +147,11 @@ GCC/Make. `tools/validate-textures.py` optionally uses a clean audited Zakuro
 checkout and Rust for test-only comparisons; neither is a runtime dependency.
 Windows filesystem behavior and these native executable/reference checks still
 need Windows execution; Linux/PPC evidence is not Windows acceptance.
+
+
+v0.17.0 adds an automatic Windows host/normal portable-C baseline and reviewed
+manual deep Windows AOT/WPF workflow. Use `make check-c-portable` in UCRT64 for
+all 17 normal C suites; Linux sanitizer behavior is not assumed on Windows.
+Workflow/agent/documentation publication is now explicitly authorized; no old
+permission question blocks it. See [GitHub development](github-development.md)
+for hosted artifacts, current results and the remaining native SDK/GUI gates.

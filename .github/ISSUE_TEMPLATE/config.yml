@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security reporting
+    url: https://github.com/Jdiller-86/CTR-2-WUP/blob/main/SECURITY.md
+    about: Use the private reporting guidance for vulnerabilities or leaked private data.
+  - name: Progress and current testing gates
+    url: https://github.com/Jdiller-86/CTR-2-WUP/blob/main/docs/current-roadblock.md
+    about: Check what is implemented and which input, Windows or console evidence is still needed.
