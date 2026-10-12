@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare the private milestone board; dry-run by default.
+"""Prepare the private milestone and actionable-work board; dry-run by default.
 
 Uses normal gh authentication. --apply changes only Projects: it never changes
 repository visibility/settings, issue bodies, paid features or token storage.
@@ -17,8 +17,13 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-STATUSES = ('Planned', 'In progress', 'Awaiting evidence', 'Accepted')
-COLORS = dict(zip(STATUSES, ('GRAY', 'BLUE', 'YELLOW', 'GREEN')))
+STATUSES = ('Planned', 'In progress', 'Awaiting evidence', 'Blocked',
+            'Ready for review', 'Done', 'Closed', 'Accepted')
+COLORS = dict(zip(STATUSES, ('GRAY', 'BLUE', 'YELLOW', 'RED',
+                             'PURPLE', 'GREEN', 'GRAY', 'GREEN')))
+WORK_ITEM_STATUSES = {'planned': 'Planned', 'in_progress': 'In progress',
+                      'awaiting_evidence': 'Awaiting evidence', 'blocked': 'Blocked'}
+MANAGED_MARKER = re.compile(r'<!--\s*ctr2wup:(milestone|work-item):([^\s<>]+)\s*-->')
 RESOURCE_NAMES = {'needs-console': 'Wii U console results',
                   'needs-input': 'Owned decrypted executable and assets',
                   'needs-windows': 'Native Windows conversion validation'}
@@ -192,6 +197,7 @@ def configuration(settings, state):
     accepted = state.get('full_milestones_accepted')
     if type(accepted) is not int or not 0 <= accepted <= 7:
         raise SetupError('Invalid full milestone acceptance count')
+    work_items = []
     for milestone in milestones:
         if set(milestone.get('waiting_labels', [])) - RESOURCE_NAMES.keys():
             raise SetupError('Unknown waiting resource label: ' + milestone['id'])
@@ -199,6 +205,50 @@ def configuration(settings, state):
             raise SetupError('Unknown project status: ' + milestone['id'])
         if milestone.get('project_status') == 'Accepted' and milestone.get('accepted') is not True:
             raise SetupError('Accepted status requires explicit accepted evidence: ' + milestone['id'])
+        tasks = milestone.get('work_items', [])
+        if not isinstance(tasks, list):
+            raise SetupError('Work items must be a list: ' + milestone['id'])
+        for task in tasks:
+            identifier = task.get('id') if isinstance(task, dict) else None
+            if (not isinstance(identifier, str) or len(identifier) > 96
+                    or not re.fullmatch(re.escape(milestone['id']) + r'-[a-z0-9]+(?:-[a-z0-9]+)*', identifier)):
+                raise SetupError('Invalid actionable work-item ID: ' + milestone['id'])
+            if not isinstance(task.get('title'), str) or not task['title'].strip():
+                raise SetupError('Actionable work item requires a title: ' + identifier)
+            if task.get('state') not in WORK_ITEM_STATUSES:
+                raise SetupError('Unknown actionable work-item state: ' + identifier)
+            if task.get('project_status') == 'Accepted' or task.get('accepted') is True:
+                raise SetupError('Accepted is reserved for full milestone evidence: ' + identifier)
+            labels = task.get('waiting_labels', [])
+            if not isinstance(labels, list) or any(label not in RESOURCE_NAMES for label in labels):
+                raise SetupError('Unknown actionable waiting resource: ' + identifier)
+            dependencies = task.get('depends_on', [])
+            if (not isinstance(dependencies, list)
+                    or any(not isinstance(dep, str) for dep in dependencies)
+                    or len(set(dependencies)) != len(dependencies)):
+                raise SetupError('Invalid actionable dependencies: ' + identifier)
+            work_items.append(task)
+    identifiers = [task['id'] for task in work_items]
+    if len(set(identifiers)) != len(identifiers) or set(identifiers) & {m['id'] for m in milestones}:
+        raise SetupError('Duplicate managed work-item IDs; review before writes')
+    known_ids = set(identifiers) | {m['id'] for m in milestones}
+    graph = {task['id']: task.get('depends_on', []) for task in work_items}
+    for task in work_items:
+        if task['id'] in task.get('depends_on', []) or set(task.get('depends_on', [])) - known_ids:
+            raise SetupError('Unknown or self-referencing actionable dependency: ' + task['id'])
+    visited, visiting = set(), set()
+    def visit(identifier):
+        if identifier in visiting:
+            raise SetupError('Cyclic actionable dependency: ' + identifier)
+        if identifier in visited or identifier not in graph:
+            return
+        visiting.add(identifier)
+        for dependency in graph[identifier]:
+            visit(dependency)
+        visiting.remove(identifier)
+        visited.add(identifier)
+    for identifier in graph:
+        visit(identifier)
     return repo
 
 
@@ -225,9 +275,16 @@ def base_report(settings, state):
                        'preserve_existing_option_ids_and_extra_options': True,
                        'initialize_empty_managed_values_only': True,
                        'change_repository_settings_visibility_or_paid_features': False},
-            'trackers': [{'id': m['id'], 'title': m['title'], 'initial_status': initial_status(m),
+            'trackers': [{'id': m['id'], 'title': m['title'], 'kind': 'milestone',
+                          'milestone_id': m['id'], 'milestone_title': m['title'],
+                          'initial_status': initial_status(m),
                           'waiting_resource': '; '.join(RESOURCE_NAMES[label] for label in m['waiting_labels'])}
                          for m in state['milestones']],
+            'work_items': [{'id': task['id'], 'title': task['title'], 'kind': 'work-item',
+                            'milestone_id': m['id'], 'milestone_title': m['title'],
+                            'initial_status': WORK_ITEM_STATUSES[task['state']],
+                            'waiting_resource': '; '.join(RESOURCE_NAMES[label] for label in task.get('waiting_labels', []))}
+                           for m in state['milestones'] for task in m.get('work_items', [])],
             'operations': [], 'completed_operations': [], 'project_url': None,
             'live_project_verified': False}
 
@@ -286,32 +343,45 @@ def preflight(client, settings, state, report):
     owner = repository['owner']
     if not owner.get('node_id') or not owner.get('login'):
         raise SetupError('Repository owner identity is missing')
-    issues, trackers = client.issues(repo), []
-    for milestone, planned in zip(state['milestones'], report['trackers']):
-        marker = '<!-- ctr2wup:milestone:' + milestone['id'] + ' -->'
+    issues, trackers, work_items, managed_node_ids = client.issues(repo), [], [], set()
+    milestones = {m['id']: m for m in state['milestones']}
+    for planned in [*report['trackers'], *report['work_items']]:
+        milestone = milestones[planned['milestone_id']]
+        marker = '<!-- ctr2wup:' + planned['kind'] + ':' + planned['id'] + ' -->'
         matched = [i for i in issues if 'pull_request' not in i and marker in (i.get('body') or '')]
         if len(matched) != 1 or not matched[0].get('node_id'):
-            raise SetupError('Require one existing managed issue for ' + milestone['id'])
+            raise SetupError('Require one existing managed ' + planned['kind'] + ' issue for '
+                             + planned['id'] + '; run the issue sync before board setup')
         issue = matched[0]
-        if issue.get('body', '').count(marker) != 1:
-            raise SetupError('Duplicate managed issue marker: ' + milestone['id'])
+        markers = MANAGED_MARKER.findall(issue.get('body') or '')
+        if markers != [(planned['kind'], planned['id'])]:
+            raise SetupError('Duplicate or ambiguous managed issue marker: ' + planned['id'])
+        if issue['node_id'] in managed_node_ids:
+            raise SetupError('Multiple managed work items resolve to one issue: ' + planned['id'])
+        managed_node_ids.add(issue['node_id'])
         if not issue.get('milestone') or issue['milestone'].get('title') != milestone['title']:
-            raise SetupError('Managed issue milestone association needs review: ' + milestone['id'])
+            raise SetupError('Managed issue milestone association needs review: ' + planned['id'])
         planned.update(number=issue['number'], url=issue['html_url'])
-        trackers.append({'issue': issue, 'milestone': milestone, 'planned': planned})
+        (trackers if planned['kind'] == 'milestone' else work_items).append(
+            {'issue': issue, 'milestone': milestone, 'planned': planned})
     projects = [p for p in client.projects(owner['login']) if p['title'] == settings['project_requested']['title']]
     if len(projects) > 1:
         raise SetupError('Duplicate project titles; select/resolve them before writes')
     project = client.snapshot(projects[0]['id']) if projects else None
     if project:
         _, items, _ = validate_project(project)
-        for tracker in trackers:
+        for tracker in [*trackers, *work_items]:
             item = items.get(tracker['issue']['node_id'])
             if item and item.get('isArchived'):
-                raise SetupError('Managed tracker is archived; preserve and review ' + tracker['milestone']['id'])
+                raise SetupError('Managed item is archived; preserve and review ' + tracker['planned']['id'])
         report['project_url'] = project['url']
         report['live_project_verified'] = True
-    return {'repository': repository, 'owner': owner, 'project': project, 'trackers': trackers}
+    return {'repository': repository, 'owner': owner, 'project': project,
+            'trackers': trackers, 'work_items': work_items}
+
+
+def managed_items(context):
+    return [*context['trackers'], *context['work_items']]
 
 
 def options_for(field):
@@ -351,14 +421,14 @@ def plan(context, report):
         visible = {node['id'] for node in view['configuration']['visibleFields']['nodes']}
         if any(name not in fields or fields[name]['id'] not in visible for name in ('Title', 'Status', 'Milestone', 'Waiting resource')):
             operations.append({'kind': 'append-visible-board-fields', 'name': VIEW_NAME})
-    for tracker in context['trackers']:
+    for tracker in managed_items(context):
         issue, planned = tracker['issue'], tracker['planned']
         item = items.get(issue['node_id'])
         if not item:
             operations.append({'kind': 'add-existing-issue', 'id': planned['id'], 'number': issue['number']})
         initialize = []
         for key, name in (('status', 'Status'), ('waiting', 'Waiting resource')):
-            if empty_value(item, key):
+            if empty_value(item, key) and (key != 'waiting' or planned['waiting_resource']):
                 initialize.append(name)
         if (not project or 'Milestone' not in fields or fields['Milestone']['dataType'] == 'TEXT') and empty_value(item, 'milestone'):
             initialize.append('Milestone')
@@ -437,7 +507,7 @@ def apply(client, context, report):
                           {'viewId': view['id'], 'configuration': {'visibleFieldIds': merged}},
                           'projectV2View { id }')
             completed.append({'kind': 'append-visible-board-fields'})
-    for tracker in context['trackers']:
+    for tracker in managed_items(context):
         issue, planned = tracker['issue'], tracker['planned']
         if issue['node_id'] not in items:
             client.mutate('addProjectV2ItemById', 'AddProjectV2ItemByIdInput',
@@ -455,9 +525,9 @@ def apply(client, context, report):
         values = [('status', 'Status', {'singleSelectOptionId': status_option}),
                   ('waiting', 'Waiting resource', {'text': planned['waiting_resource']})]
         if fields['Milestone']['dataType'] == 'TEXT':
-            values.append(('milestone', 'Milestone', {'text': planned['title']}))
+            values.append(('milestone', 'Milestone', {'text': planned['milestone_title']}))
         for key, name, value in values:
-            if empty_value(item, key):
+            if empty_value(item, key) and (key != 'waiting' or planned['waiting_resource']):
                 client.mutate('updateProjectV2ItemFieldValue', 'UpdateProjectV2ItemFieldValueInput',
                               {'projectId': project_id, 'itemId': item['id'], 'fieldId': fields[name]['id'], 'value': value},
                               'projectV2Item { id }')
@@ -465,7 +535,7 @@ def apply(client, context, report):
     final = client.snapshot(project_id)
     final_fields, final_items, final_views = validate_project(final)
     if (repository['node_id'] not in {r['id'] for r in final['repositories']['nodes']}
-            or any(tracker['issue']['node_id'] not in final_items for tracker in context['trackers'])
+            or any(tracker['issue']['node_id'] not in final_items for tracker in managed_items(context))
             or any(name not in {o['name'] for o in final_fields['Status']['options']} for name in STATUSES)
             or VIEW_NAME not in final_views):
         raise SetupError('Final board verification failed; review completed operations')

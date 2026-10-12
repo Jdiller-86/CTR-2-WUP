@@ -18,6 +18,8 @@ do not establish commercial-game compatibility or installable WUP acceptance.
   docs-only Pages bundle; preserve private application source.
 - Add an opt-in verified Codex commit hook and documented PR/CI maintenance practices.
 - Verify real external AOT/Unicode execution and WPF tooling on hosted Windows.
+- Expand the seven milestone overviews into 35 linked work issues with dependency,
+  acceptance and evidence criteria; add exclusive status labels and branch reports.
 - PICA draws, commercial profiles, GUI, console/install and protected GitHub settings
   acceptance remain pending; consult current status and actual workflow results.
 
