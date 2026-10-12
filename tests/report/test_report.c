@@ -491,9 +491,11 @@ int main(int argc,char **argv) {
     CHECK(bad.error_code == ENAMETOOLONG);
     ctr_test_report full = {0};
 #ifdef _WIN32
-    /* A valid read-only stream provides a native deterministic write error;
-       Windows has no /dev/full. The same sticky-write/close checks still run. */
-    full.file = fopen(first.path,"rb");
+    /* A native pipe with its reader closed produces a real write/flush error.
+       Windows has no /dev/full and does not raise POSIX SIGPIPE. */
+    int failed_pipe[2];CHECK(ctr_test_pipe(failed_pipe)==0);
+    full.file=ctr_test_fdopen(failed_pipe[1],"wb");
+    CHECK(ctr_test_close(failed_pipe[0])==0);
 #else
     full.file = fopen("/dev/full", "w");
 #endif

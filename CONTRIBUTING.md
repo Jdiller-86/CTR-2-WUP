@@ -29,7 +29,7 @@ devkitPro's devkitPPC, WUT and Wii U tools; the host compiler runs desktop tests
 ```sh
 python3 -m venv .venv
 . .venv/bin/activate
-python3 -m pip install -e '.[packaging]'
+python3 -m pip install -e '.[packaging,decryption]'
 export CTR2WUP_SDK_ROOT="$PWD/../ctr2wup-sdk"
 bash tools/install-wiiu-sdk.sh
 export DEVKITPRO="$CTR2WUP_SDK_ROOT"

@@ -68,6 +68,25 @@ work to an external service. Current development also used independent parallel
 runtime and workflow/documentation reviews; actual findings were corrected and
 checks rerun.
 
+## Board setup
+
+`tools/setup-github-project.py` produces a read-only plan by default. It resolves
+the existing seven tracker issues and checks project names, field types and
+access before applying changes. Once management access is available, `--apply`
+creates the private **CTR2WUP Development** board and links those issues. Existing
+notes, other items, option IDs and nonempty manual values are retained. The
+built-in Milestone field reflects each issue's milestone; Waiting resource
+explains its pending console, input or Windows evidence.
+
+```sh
+python3 tools/setup-github-project.py --output artifacts/github-project-plan.json
+python3 tools/setup-github-project.py --apply --output artifacts/github-project-result.json
+```
+
+A plan or mocked test does not prove a board exists. Read the actual result's
+`applied` / `live_project_verified` fields. Source synchronization currently updates
+issue descriptions; manually maintained board values are preserved.
+
 ## Settings requiring additional access
 
 The connected integration can push code, work with issues/milestones and read

@@ -110,6 +110,9 @@ Make, and a C compiler; the SDK installer provisions the Wii U toolchain.
 The first SDK installation also requires Docker.
 
 ```sh
+python3 -m venv .venv
+. .venv/bin/activate
+python3 -m pip install -e '.[packaging,decryption]'
 bash tools/install-wiiu-sdk.sh
 python3 -m host doctor
 make check
