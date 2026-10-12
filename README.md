@@ -98,7 +98,9 @@ named WUHB in Aroma. Guided TXT results are saved under `sd:/ctr2wup/`.
 See [getting started](docs/getting-started.md) for prerequisites, launch routes
 and the exact files to return. No ROM or key is needed for original diagnostics.
 
-GitHub now tracks each milestone with an issue and acceptance checklist. CI
+GitHub groups 35 focused work issues under seven milestone overviews. Status,
+area, resource and priority labels show each task’s state; PR checks and workflow
+reports also show branch readiness. CI
 provides versioned build/test artifacts; [the GitHub guide](docs/github-development.md)
 explains automatic checks, manual Windows validation and agent profiles.
 Searchable [documentation builds](https://github.com/Jdiller-86/CTR-2-WUP/actions/workflows/docs.yml)

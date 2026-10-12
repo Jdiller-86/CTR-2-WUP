@@ -39,7 +39,7 @@ services or Wii U rendering are implemented. [The GX contract](docs/gx-transfers
 records alignment/size/format/layout limits and the optional two-step console guide.
 
 Independent review found and corrected missing fill-trigger validation and
-signaling for dropped interrupts. Required `make check` passes **237 Python tests
+signaling for dropped interrupts. Required `make check` passes **290 Python tests
 and 17 C suites**, normal and ASan/UBSan. GX has **1,102 assertions**; report/guide
 has **587**. The transfer matrix has **400 original C/Python/reference color/layout
 comparisons** and matching emulated big-endian PowerPC hashes. Reference color/
@@ -55,20 +55,25 @@ the actual [Actions run status](https://github.com/Jdiller-86/CTR-2-WUP/actions)
 ## GitHub development
 
 Seven [milestone issues](https://github.com/Jdiller-86/CTR-2-WUP/issues?q=is%3Aissue+label%3Amilestone)
-and [milestones](https://github.com/Jdiller-86/CTR-2-WUP/milestones) now show verified
-foundations and remaining gates. Managed sections synchronize from
+and [milestones](https://github.com/Jdiller-86/CTR-2-WUP/milestones) group 35 focused
+work issues with acceptance criteria, dependencies and waiting resources. The
+overviews coordinate full gates rather than substituting for implementation tasks. Managed sections synchronize from
 `docs/milestone-status.json`; comments/manual notes are retained and no acceptance
 gate is auto-closed. Contribution/console-result forms, ownership, security
-reporting guidance and four specialist Copilot profiles support review.
+reporting guidance and four specialist Copilot profiles support review. Exclusive
+status labels, priority/component tags and trusted API-only automation report
+issue, PR and associated branch state. This follows the requested Odysseus model;
+merged code never automatically accepts console or full-milestone gates.
 
 Automatic CI covers Python 3.12/3.14, GCC/Clang sanitizers, Windows host/portable-C,
 workflow lint and immutable-SDK native Wii U artifacts. **Required CI** aggregates
 those checks. Deep Windows AOT/WPF and eligibility-gated CodeQL are manual;
 agent profiles do not enable a paid subscription or run unattended.
-[Hosted main CI passed](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38295253188)
-on source `9feab1b`: all eight checks, including Python 3.12/3.14, GCC/Clang
-sanitizers, the Windows baseline and Wii U build. Windows runs 230 Python cases
+[Hosted main CI passed](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38297581496)
+on source `d280dad`: all eight CI checks, including Python 3.12/3.14, GCC/Clang
+sanitizers, the Windows baseline and Wii U build. Windows runs 237 Python cases
 with three documented filesystem/privilege skips plus all 17 normal C suites.
+The separate [Documentation build passed](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38297581490).
 [Deep Windows validation passed](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38289835013),
 including real pinned external AOT, Unicode execution and .NET 10 WPF tooling.
 This verifies development tools; full Windows conversion and GUI remain unfinished.

@@ -1,0 +1,41 @@
+name: Focused milestone task
+description: Propose one implementation or validation task beneath a milestone.
+title: "[Task]: "
+labels: [work-item, "status:planned"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check the existing work issues before proposing a task. Keep the change focused and link its parent milestone overview.
+        Milestone acceptance is separate from task completion. Keep game dumps, keys, commercial assets and private saves out of GitHub.
+  - type: input
+    id: parent
+    attributes:
+      label: Parent milestone and related issue
+      placeholder: "M4 / #4; related task #..."
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Concrete problem and resulting behavior
+      description: Identify one reviewable delivery or evidence gap.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: List observable outcomes and the commands or test route that establish them.
+    validations:
+      required: true
+  - type: textarea
+    id: prerequisites
+    attributes:
+      label: Dependencies and waiting resources
+      description: Link prerequisite issues and distinguish console, owned input and Windows evidence.
+  - type: textarea
+    id: validation
+    attributes:
+      label: Existing evidence and validation still needed
+      description: State versions, tested behavior and unavailable checks. Do not infer console execution from a build.

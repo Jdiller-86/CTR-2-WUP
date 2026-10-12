@@ -16,12 +16,21 @@ def source():
             json.loads((ROOT / 'docs/milestone-status.json').read_text()))
 
 
+def managed(state):
+    trackers = [dict(m, kind='milestone', milestone_title=m['title']) for m in state['milestones']]
+    tasks = [dict(task, kind='work-item', milestone_title=m['title'], milestone_id=m['id'])
+             for m in state['milestones'] for task in m.get('work_items', [])]
+    return trackers + tasks
+
+
 def issues(state):
     return [{'node_id': 'issue-' + m['id'], 'number': i + 1, 'title': m['title'],
              'html_url': f'https://github.com/example/fixture/issues/{i + 1}',
-             'body': '<!-- ctr2wup:milestone:' + m['id'] + ' -->\nMaintainer notes preserved',
-             'milestone': {'title': m['title']}}
-            for i, m in enumerate(state['milestones'])]
+             'body': '<!-- ctr2wup:' + m['kind'] + ':' + m['id'] + ' -->\nMaintainer notes preserved'
+                     + ('\n<!-- ctr2wup:parent-milestone:' + m['milestone_id'] + ' -->'
+                        if m['kind'] == 'work-item' else ''),
+             'milestone': {'title': m['milestone_title']}}
+            for i, m in enumerate(managed(state))]
 
 
 def project(state):
@@ -38,7 +47,7 @@ def project(state):
               'status': {'__typename': 'ProjectV2ItemFieldSingleSelectValue', 'optionId': 'manual-option'},
               'waiting': {'__typename': 'ProjectV2ItemFieldTextValue', 'text': 'Maintainer resource note'},
               'milestone': {'__typename': 'ProjectV2ItemFieldMilestoneValue'}}
-             for m in state['milestones']]
+             for m in managed(state)]
     items.append({'id': 'manual-item', 'isArchived': False,
                   'content': {'id': 'manual-draft', '__typename': 'DraftIssue'},
                   'status': None, 'waiting': None, 'milestone': None})
@@ -136,14 +145,32 @@ class GithubProjectTests(unittest.TestCase):
         setup.plan(context, report)
         return context, report
 
-    def test_new_project_dry_run_reuses_seven_issues_without_writes(self):
+    def add_actionable_fixture(self):
+        tasks = [
+            {'id': 'm1-project-alpha', 'title': 'Verify lifecycle evidence', 'summary': 'Original fixture',
+             'acceptance_criteria': ['Record the lifecycle result'], 'depends_on': ['m2'],
+             'waiting_labels': ['needs-console'], 'state': 'awaiting_evidence'},
+            {'id': 'm1-project-beta', 'title': 'Verify resource cleanup', 'summary': 'Original fixture',
+             'acceptance_criteria': ['Record cleanup result'], 'depends_on': ['m1-project-alpha'],
+             'waiting_labels': [], 'state': 'blocked'},
+            {'id': 'm2-project-gamma', 'title': 'Review CPU trace', 'summary': 'Original fixture',
+             'acceptance_criteria': ['Compare trace'], 'depends_on': [],
+             'waiting_labels': [], 'state': 'in_progress'},
+        ]
+        self.state['milestones'][0].setdefault('work_items', []).extend(tasks[:2])
+        self.state['milestones'][1].setdefault('work_items', []).append(tasks[2])
+        self.api = FakeGitHub(self.state)
+        return tasks
+
+    def test_new_project_dry_run_reuses_all_source_issues_without_writes(self):
         self.api.remote_project = None
         _, report = self.preflight()
         self.assertTrue(report['ok'])
         self.assertFalse(report['applied'])
         self.assertFalse(report['live_project_verified'])
         self.assertEqual([m['number'] for m in report['trackers']], list(range(1, 8)))
-        self.assertEqual(sum(o['kind'] == 'add-existing-issue' for o in report['operations']), 7)
+        self.assertEqual(sum(o['kind'] == 'add-existing-issue' for o in report['operations']), len(managed(self.state)))
+        self.assertEqual(len(report['work_items']), len(managed(self.state)) - 7)
         self.assertEqual(self.api.writes, [])
 
     def test_matching_board_is_idempotent_and_preserves_all_manual_content(self):
@@ -156,16 +183,16 @@ class GithubProjectTests(unittest.TestCase):
         self.assertEqual(self.api.writes, [])
         self.assertEqual(self.api.remote_project, before)
 
-    def test_new_board_apply_uses_four_options_seven_existing_issues_and_is_idempotent(self):
+    def test_new_board_apply_uses_all_options_and_issues_and_is_idempotent(self):
         self.api.remote_project = None
         context, report = self.preflight()
         setup.apply(self.api, context, report)
         self.assertTrue(report['applied'])
         self.assertFalse(self.api.remote_project['public'])
         self.assertEqual([option['name'] for option in self.api.remote_project['fields'][1]['options']], list(setup.STATUSES))
-        self.assertEqual(len(self.api.remote_project['items']), 7)
+        self.assertEqual(len(self.api.remote_project['items']), len(managed(self.state)))
         self.assertEqual({item['content']['id'] for item in self.api.remote_project['items']},
-                         {'issue-' + m['id'] for m in self.state['milestones']})
+                         {'issue-' + m['id'] for m in managed(self.state)})
         before = copy.deepcopy(self.api.remote_project)
         self.api.writes = []
         context, report = self.preflight()
@@ -183,8 +210,8 @@ class GithubProjectTests(unittest.TestCase):
         payload = self.api.writes[0][1]
         self.assertEqual(payload['singleSelectOptions'][:2], prior)
         self.assertEqual([name for name, _ in self.api.writes], ['updateProjectV2Field'])
-        self.assertEqual(len(field['options']), 5)
-        for item in self.api.remote_project['items'][:7]:
+        self.assertEqual(len(field['options']), len(setup.STATUSES) + 1)
+        for item in self.api.remote_project['items'][:-1]:
             self.assertEqual(item['status']['optionId'], 'manual-option')
 
     def test_only_empty_managed_values_are_initialized(self):
@@ -278,6 +305,122 @@ class GithubProjectTests(unittest.TestCase):
         self.state['milestones'][0]['project_status'] = 'Accepted'
         with self.assertRaisesRegex(setup.SetupError, 'explicit accepted evidence'):
             setup.base_report(self.settings, self.state)
+
+    def test_multiple_tasks_in_one_milestone_have_independent_items_and_statuses(self):
+        tasks = self.add_actionable_fixture()
+        self.api.remote_project = None
+        context, report = self.preflight()
+        setup.apply(self.api, context, report)
+        options = {o['id']: o['name'] for o in self.api.remote_project['fields'][1]['options']}
+        board_items = {i['content']['id']: i for i in self.api.remote_project['items']}
+        for task in tasks:
+            item = board_items['issue-' + task['id']]
+            self.assertEqual(options[item['status']['optionId']], setup.WORK_ITEM_STATUSES[task['state']])
+        self.assertNotEqual(board_items['issue-' + tasks[0]['id']]['id'],
+                            board_items['issue-' + tasks[1]['id']]['id'])
+        self.assertEqual([t['milestone_id'] for t in report['work_items'] if t['id'] in {x['id'] for x in tasks[:2]}],
+                         ['m1', 'm1'])
+        self.api.writes = []
+        _, repeated = self.preflight()
+        self.assertEqual(repeated['operations'], [])  # Empty waiting-resource requirements stay empty.
+        self.assertEqual(self.api.writes, [])
+
+    def test_actionable_manual_notes_values_options_and_items_are_preserved(self):
+        self.add_actionable_fixture()
+        before = copy.deepcopy(self.api.remote_project)
+        prior_issues = copy.deepcopy(self.api.remote_issues)
+        context, report = self.preflight()
+        self.assertEqual(report['operations'], [])
+        setup.apply(self.api, context, report)
+        self.assertEqual(self.api.remote_project, before)
+        self.assertEqual(self.api.remote_issues, prior_issues)
+        self.assertEqual(self.api.writes, [])
+
+    def test_text_milestone_field_uses_parent_title_for_every_actionable_issue(self):
+        tasks = self.add_actionable_fixture()
+        self.api.remote_project['fields'][2]['dataType'] = 'TEXT'
+        task_ids = {'issue-' + t['id'] for t in tasks}
+        for item in self.api.remote_project['items']:
+            if item.get('content', {}).get('id') in task_ids:
+                item['milestone'] = None
+            elif item.get('content', {}).get('__typename') == 'Issue':
+                item['milestone'] = {'__typename': 'ProjectV2ItemFieldTextValue',
+                                     'text': 'Maintainer milestone note'}
+        context, report = self.preflight()
+        setup.apply(self.api, context, report)
+        actual = {i['content']['id']: i['milestone']['text'] for i in self.api.remote_project['items']
+                  if i.get('content', {}).get('id') in task_ids}
+        self.assertEqual(actual['issue-' + tasks[0]['id']], self.state['milestones'][0]['title'])
+        self.assertEqual(actual['issue-' + tasks[1]['id']], self.state['milestones'][0]['title'])
+        self.assertEqual(actual['issue-' + tasks[2]['id']], self.state['milestones'][1]['title'])
+        self.assertEqual(len(self.api.writes), 3)
+
+    def test_missing_actionable_issue_fails_before_project_reads_or_writes(self):
+        tasks = self.add_actionable_fixture()
+        self.api.remote_issues = [i for i in self.api.remote_issues if i['node_id'] != 'issue-' + tasks[1]['id']]
+        self.api.denied = True  # A missing source issue is diagnosed before Projects access.
+        with self.assertRaisesRegex(setup.SetupError, 'm1-project-beta; run the issue sync'):
+            self.preflight()
+        self.assertEqual(self.api.writes, [])
+        self.assertEqual(self.api.snapshot_count, 0)
+
+    def test_duplicate_or_ambiguous_actionable_markers_fail_before_writes(self):
+        tasks = self.add_actionable_fixture()
+        for duplicate in ('issue', 'marker', 'other-task-marker', 'tracker-marker', 'node-id'):
+            with self.subTest(duplicate=duplicate):
+                self.api = FakeGitHub(self.state)
+                a = next(i for i in self.api.remote_issues if i['node_id'] == 'issue-' + tasks[0]['id'])
+                b = next(i for i in self.api.remote_issues if i['node_id'] == 'issue-' + tasks[1]['id'])
+                if duplicate == 'issue':
+                    self.api.remote_issues.append(copy.deepcopy(a))
+                elif duplicate == 'marker':
+                    a['body'] += '\n<!-- ctr2wup:work-item:' + tasks[0]['id'] + ' -->'
+                elif duplicate == 'other-task-marker':
+                    a['body'] += '\n<!-- ctr2wup:work-item:' + tasks[1]['id'] + ' -->'
+                elif duplicate == 'tracker-marker':
+                    a['body'] += '\n<!-- ctr2wup:milestone:m1 -->'
+                else:
+                    b['node_id'] = a['node_id']
+                with self.assertRaises(setup.SetupError):
+                    self.preflight()
+                self.assertEqual(self.api.writes, [])
+                self.assertEqual(self.api.snapshot_count, 0)
+
+    def test_actionable_issue_requires_parent_association_and_unarchived_item(self):
+        tasks = self.add_actionable_fixture()
+        issue = next(i for i in self.api.remote_issues if i['node_id'] == 'issue-' + tasks[0]['id'])
+        issue['milestone'] = {'title': tasks[0]['title']}
+        with self.assertRaisesRegex(setup.SetupError, 'milestone association'):
+            self.preflight()
+        self.api = FakeGitHub(self.state)
+        item = next(i for i in self.api.remote_project['items'] if i.get('content', {}).get('id') == 'issue-' + tasks[0]['id'])
+        item['isArchived'] = True
+        with self.assertRaisesRegex(setup.SetupError, 'archived'):
+            self.preflight()
+        self.assertEqual(self.api.writes, [])
+
+    def test_actionable_configuration_cannot_accept_or_complete_a_milestone(self):
+        tasks = self.add_actionable_fixture()
+        for invalid in ('accepted', 'status', 'state', 'duplicate-id', 'dependency', 'cycle'):
+            with self.subTest(invalid=invalid):
+                state = copy.deepcopy(self.state)
+                a, b = state['milestones'][0]['work_items'][-2:]
+                if invalid == 'accepted':
+                    a['accepted'] = True
+                elif invalid == 'status':
+                    a['project_status'] = 'Accepted'
+                elif invalid == 'state':
+                    a['state'] = 'done'
+                elif invalid == 'duplicate-id':
+                    b['id'] = a['id']
+                elif invalid == 'dependency':
+                    a['depends_on'] = ['missing-work-item']
+                else:
+                    a['depends_on'] = [b['id']]
+                with self.assertRaises(setup.SetupError):
+                    setup.base_report(self.settings, state)
+                self.assertEqual(self.api.writes, [])
+        self.assertEqual(self.state['full_milestones_accepted'], 0)
 
 
 if __name__ == '__main__':

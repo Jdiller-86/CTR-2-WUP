@@ -8,13 +8,17 @@ commercial gameplay or physical-console acceptance.
 ## Roadmap and evidence
 
 Each of the seven [milestones](https://github.com/Jdiller-86/CTR-2-WUP/milestones)
-has a [tracker issue](https://github.com/Jdiller-86/CTR-2-WUP/issues?q=is%3Aissue+label%3Amilestone).
+has an [overview tracker](https://github.com/Jdiller-86/CTR-2-WUP/issues?q=is%3Aissue+label%3Amilestone)
+and five [focused work issues](https://github.com/Jdiller-86/CTR-2-WUP/issues?q=is%3Aissue+label%3Awork-item).
+The 35 work issues carry acceptance criteria, prerequisite links and required
+evidence; the seven overviews coordinate full milestone acceptance.
 Area and waiting labels identify CPU/runtime/graphics/host work and console,
 input or Windows gates. Checked foundations and open full-acceptance items are
 separate. Add test evidence in comments; maintainers update the versioned source
 assessment after reviewing it.
 
-`docs/milestone-status.json` supplies managed tracker sections. The Roadmap
+`docs/milestone-status.json` supplies managed milestone descriptions, overviews
+and work-issue sections. The Roadmap
 synchronization workflow updates those sections on main without deleting comments
 or manual notes, duplicating trackers or automatically closing acceptance gates.
 To preview or explicitly apply a source update with normal `gh` authentication:
@@ -23,6 +27,54 @@ To preview or explicitly apply a source update with normal `gh` authentication:
 python3 tools/sync-github-progress.py
 python3 tools/sync-github-progress.py --apply
 ```
+
+## Labels and branch status
+
+| Labels | Meaning |
+|---|---|
+| `status:planned` | Defined work awaiting implementation or triage. |
+| `status:in-progress` | Active/partial work, a draft PR or checks still pending. |
+| `status:blocked` | Missing prerequisites or current failed checks. |
+| `status:awaiting-evidence` | Scoped implementation awaits required evidence; also an explicit PR hold. |
+| `status:ready-for-review` | Current PR head has passing Required CI and Documentation checks; maintainer review remains. |
+| `status:done` | A task was closed as completed or a PR was merged. |
+| `status:closed` | A task was abandoned or a PR closed without merging. |
+| `area:*`, `documentation`, `bug`, `enhancement` | Component and kind of work. |
+| `needs-console`, `needs-input`, `needs-windows` | Specific waiting resources. |
+| `p0` / `p1` / `p2` / `p3` | Emergency / urgent / normal / low triage priority. |
+
+One status label is active per issue/PR. New source tasks receive their planned
+state and normal priority; existing manual statuses/priorities and other labels
+are preserved. Closing a task or merging code never accepts a full milestone.
+Use `status:awaiting-evidence` to hold a PR for missing validation; CI does not
+remove that hold. Record runtime and visual evidence in the issue/PR, using
+original reference frames, browser captures or guided console TXT observations.
+
+The **Work-item statuses** workflow responds to issue/PR lifecycle, deliberate
+status-label changes and completed CI/Documentation runs. It executes trusted
+immutable main code and reads API data; it never executes a contributor's branch
+or downloads untrusted build artifacts. Status writes touch only managed status
+labels. Current merge checks must include the actual PR head, so old results
+cannot mark newly pushed code ready. The Actions summary/artifact reports branch
+names, associated PRs, states, checks and reasons.
+
+```sh
+python3 tools/sync-github-status.py --output artifacts/github-status.json
+python3 tools/sync-github-status.py --number 12 --status awaiting_evidence --apply
+```
+
+GitHub labels apply to issues and PRs. Use focused names such as
+`feature/m4-pica-commands`, `fix/m1-result-write` or `docs/testing-guide`; their
+status is visible through the linked PR, CI checks and the workflow report.
+Release Git tags identify versions and remain separate from task status.
+
+The structure adapts [Odysseus's coordination milestone](https://github.com/odysseus-dev/odysseus/milestone/1),
+[label taxonomy](https://github.com/odysseus-dev/odysseus/labels) and
+[review template](https://github.com/odysseus-dev/odysseus/blob/dev/.github/pull_request_template.md):
+focused tasks, explicit blockers/evidence, triage priority and reproducible review.
+CTR2WUP's acceptance criteria remain specific to Wii U execution and the planned
+injector; unavailable console/game tests stay pending. The user's GitHub Free,
+private-source and no-branch-protection choices remain in force.
 
 ## Pull requests and CI
 
@@ -133,9 +185,10 @@ These maintenance practices are team conventions; GitHub does not enforce them.
 ## Board setup
 
 `tools/setup-github-project.py` produces a read-only plan by default. It resolves
-the existing seven tracker issues and checks project names, field types and
+the seven overviews and their 35 work issues and checks project names, field types and
 access before applying changes. Once management access is available, `--apply`
-creates the private **CTR2WUP Development** board and links those issues. Existing
+creates the private **CTR2WUP Development** board and links all 42 issues.
+Multiple tasks share their parent milestone; manual items and values stay intact. Existing
 notes, other items, option IDs and nonempty manual values are retained. The
 built-in Milestone field reflects each issue's milestone; Waiting resource
 explains its pending console, input or Windows evidence.
@@ -159,8 +212,10 @@ GitHub access denials, not failed source checks or an automatic approval review.
 The prepared desired setup is:
 
 - Private project **CTR2WUP Development**, linked to this repository, containing
-  the seven milestone issues, with Status columns Planned / In progress /
-  Awaiting evidence / Accepted and fields for milestone and waiting resource.
+  seven overviews plus 35 work issues, with Planned / In progress / Awaiting
+  evidence / Blocked / Ready for review / Done / Closed / Accepted columns and
+  fields for milestone and waiting resource. Accepted remains reserved for
+  explicitly reviewed full milestones.
 - About description/topics reflecting early development; optional Discussions,
   delete merged topic branches and free dependency-alert settings.
 

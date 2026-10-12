@@ -55,6 +55,17 @@ body:
       description: Include the first failure, whether it repeats and whether a reboot was needed.
     validations:
       required: true
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Observed impact
+      description: Describe the observed scope; maintainers assign p0–p3 after triage.
+      options:
+        - Minor behavior or documentation problem
+        - Reproducible bounded failure with a workaround
+        - Core workflow fails without a usable workaround
+        - Data loss, exposed private data or broad release failure
+        - Unknown or still investigating
   - type: textarea
     id: evidence
     attributes:
