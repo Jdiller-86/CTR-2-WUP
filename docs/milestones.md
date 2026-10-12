@@ -1,6 +1,6 @@
 # Milestones and remaining work
 
-Updated **October 12, 2026** for **v0.17.0**. The product is an UWUVCI-style
+Updated **October 12, 2026** for **v0.19.0**. The product is an UWUVCI-style
 Windows GUI: **Select owned 3DS ROM → configure title/artwork → Inject →
 install its WUP → play from the Wii U Menu**. The CLI is the shared engine.
 Super Mario 3D Land is the first candidate; its exact revision remains unverified.
@@ -19,8 +19,11 @@ receipts remain in [development history](development-history.md).
 
 The existing seven GitHub milestone issues remain overview trackers. Each work
 item below is a separate implementation or evidence task feeding its milestone.
-[milestone-status.json](milestone-status.json) is the machine-readable source for
-their managed issue sections; manual issue notes and evidence remain reviewable.
+[Project #2](https://github.com/users/Jdiller-86/projects/2) is the authority for
+status, blockers and reviewed full acceptance. [milestone-status.json](milestone-status.json)
+records versioned scope/evidence and initial seed values; it cannot overwrite
+existing Project values. The states below are a dated evidence snapshot. Manual
+issue notes and acceptance checkmarks remain reviewable.
 
 | State | Meaning |
 |---|---|

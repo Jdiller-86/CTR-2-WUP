@@ -3,7 +3,16 @@
   "repository": "Jdiller-86/CTR-2-WUP",
   "application_status": "experimental; no commercial game support",
   "description": "Experimental 3DS-to-Wii U static translation and Windows WUP injector project. Original homebrew diagnostics; commercial gameplay is not supported yet.",
-  "topics": ["wiiu", "homebrew", "3ds", "static-recompilation", "powerpc", "devkitpro", "aroma", "windows"],
+  "topics": [
+    "wiiu",
+    "homebrew",
+    "3ds",
+    "static-recompilation",
+    "powerpc",
+    "devkitpro",
+    "aroma",
+    "windows"
+  ],
   "delete_branch_on_merge": true,
   "discussions_requested": true,
   "dependency_alerts_requested": true,
@@ -19,8 +28,32 @@
     "existing_url": "https://github.com/users/Jdiller-86/projects/2",
     "public": false,
     "items": "milestone overviews and their actionable work issues",
-    "status_columns": ["Planned", "In progress", "Awaiting evidence", "Blocked", "Ready for review", "Done", "Closed", "Accepted"],
-    "extra_fields": ["Milestone", "Waiting resource"]
+    "status_columns": [
+      "Planned",
+      "In progress",
+      "Awaiting evidence",
+      "Blocked",
+      "Ready for review",
+      "Done",
+      "Closed",
+      "Accepted"
+    ],
+    "extra_fields": [
+      "Milestone",
+      "Waiting resource"
+    ],
+    "tracking_authority": "Project Status and Waiting resource fields; Accepted overview status requires reviewed full-gate evidence",
+    "readme_template": "docs/github-project-overview.md",
+    "filtered_views": [
+      "Delivery gates",
+      "Implementation work",
+      "Evidence handoff",
+      "Pull requests"
+    ],
+    "additional_fields": [
+      "Work type",
+      "Priority"
+    ]
   },
   "pages_requested": {
     "repository": "Jdiller-86/CTR-2-WUP-docs",
@@ -35,5 +68,5 @@
   "paid_features_enabled": false,
   "visibility_change_requested": false,
   "live_settings_verified": false,
-  "blocked_reason": "Owner supplied existing Project #2; current GitHub integration denied its read access and other Projects operations, public docs-repository creation and repository Administration/Pages access. Branch protection is explicitly declined."
+  "blocked_reason": "Personal management-token requirement is saved, but the environment reports has_saved_binding:false and current Project #2 reads are denied. User must securely save/apply/publish the value before live setup; scheduled Actions also need their own secret binding."
 }

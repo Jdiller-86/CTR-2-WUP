@@ -1,7 +1,12 @@
 # Project completion assessment
 
-Updated **October 12, 2026**, against version **0.18.0** and the
+Updated **October 12, 2026**, against version **0.19.0** and the
 [product plan](development-plan.md).
+
+The [live Project](https://github.com/users/Jdiller-86/projects/2) owns current
+task states, waiting resources and reviewed acceptance. This article is a dated
+engineering assessment and evidence record. Its rough implementation estimate
+is independent of the Project's task counts.
 
 ## Estimated implementation: approximately 20%
 

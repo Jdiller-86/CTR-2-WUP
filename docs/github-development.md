@@ -1,6 +1,7 @@
 # GitHub development
 
-GitHub is the development record: current source, reviewable changes, milestone
+[Project #2](https://github.com/users/Jdiller-86/projects/2) is the authority for
+status, waiting resources and reviewed acceptance. GitHub also records source, reviewable changes, milestone
 issues, CI logs/artifacts and versioned original diagnostic releases. Keep the
 product goal and [current limits](../STATUS.md) visible; no badge establishes
 commercial gameplay or physical-console acceptance.
@@ -17,9 +18,11 @@ input or Windows gates. Checked foundations and open full-acceptance items are
 separate. Add test evidence in comments; maintainers update the versioned source
 assessment after reviewing it.
 
-`docs/milestone-status.json` supplies managed milestone descriptions, overviews
-and work-issue sections. The Roadmap
-synchronization workflow updates those sections on main without deleting comments
+`docs/milestone-status.json` supplies versioned requirements and evidence for
+managed milestone descriptions, overviews and work-issue sections. Its state
+fields seed empty values at initial setup; existing Project states and waiting
+resources always win. The Project tracking workflow updates evidence sections
+on trusted main without deleting comments
 or manual notes, duplicating trackers or automatically closing acceptance gates.
 To preview or explicitly apply a source update with normal `gh` authentication:
 
@@ -37,21 +40,25 @@ python3 tools/sync-github-progress.py --apply
 | `status:blocked` | Missing prerequisites or current failed checks. |
 | `status:awaiting-evidence` | Scoped implementation awaits required evidence; also an explicit PR hold. |
 | `status:ready-for-review` | Current PR head has passing Required CI and Documentation checks; maintainer review remains. |
-| `status:done` | A task was closed as completed or a PR was merged. |
+| `status:done` | A Project task was reviewed as Done, an unmanaged task completed, or a PR merged. |
+| `status:accepted` | A Project overview was explicitly Accepted after full-gate evidence review; never a task or merged PR. |
 | `status:closed` | A task was abandoned or a PR closed without merging. |
 | `area:*`, `documentation`, `bug`, `enhancement` | Component and kind of work. |
 | `needs-console`, `needs-input`, `needs-windows` | Specific waiting resources. |
 | `p0` / `p1` / `p2` / `p3` | Emergency / urgent / normal / low triage priority. |
 
-One status label is active per issue/PR. New source tasks receive their planned
-state and normal priority; existing manual statuses/priorities and other labels
-are preserved. Closing a task or merging code never accepts a full milestone.
+Managed roadmap issues mirror Project Status and recognized Waiting resource
+categories. Edit the board fields to change them; an issue closure or manual
+label does not change canonical Project state. PRs and unmanaged issues retain
+their lifecycle/check-based status automation. Other labels, priorities and
+manual notes are preserved. Closing a task or merging code never accepts a full milestone.
 Use `status:awaiting-evidence` to hold a PR for missing validation; CI does not
 remove that hold. Record runtime and visual evidence in the issue/PR, using
 original reference frames, browser captures or guided console TXT observations.
 
 The **Work-item statuses** workflow responds to issue/PR lifecycle, deliberate
-status-label changes and completed CI/Documentation runs. It executes trusted
+status-label changes and completed CI/Documentation runs. It skips Project-managed
+roadmap issues and leaves their mirrors to Project tracking. It executes trusted
 immutable main code and reads API data; it never executes a contributor's branch
 or downloads untrusted build artifacts. Status writes touch only managed status
 labels. Current merge checks must include the actual PR head, so old results
@@ -184,27 +191,74 @@ These maintenance practices are team conventions; GitHub does not enforce them.
 
 ## Board setup
 
-`tools/setup-github-project.py` produces a read-only plan by default. It resolves
-the seven overviews and their 35 work issues and checks project names, field types and
-access before applying changes. Once management access is available, `--apply`
-populates the owner-created [CTR2WUP Development Project #2](https://github.com/users/Jdiller-86/projects/2) and links all 42 issues.
-The saved explicit URL selects that existing board; an inaccessible or missing
-board fails before writes and never falls back to creating a duplicate.
-Multiple tasks share their parent milestone; manual items and values stay intact. Existing
-notes, other items, option IDs and nonempty manual values are retained. The
-built-in Milestone field reflects each issue's milestone; Waiting resource
-explains its pending console, input or Windows evidence.
+The owner-selected [Project #2](https://github.com/users/Jdiller-86/projects/2)
+is the tracking source of truth. Setup resolves that exact board and all 42
+managed issues. It fails before writes on inaccessible/ambiguous data and never
+creates a replacement board. Existing title, notes, option IDs, manual items,
+nonempty field values and existing view filters/layouts are preserved.
+
+The detailed overview explains the seven deliverables and acceptance boundaries,
+status policy, private evidence and next console handoff. Work type and Priority
+supplement Status, Milestone and Waiting resource. New filtered views cover
+Delivery gates, Implementation work, Evidence handoff and Pull requests. Source
+requirements initialize empty fields only; Accepted is reserved for reviewed full
+milestone overviews. See the [overview template](github-project-overview.md).
 
 ```sh
-python3 tools/setup-github-project.py --output artifacts/github-project-plan.json
-python3 tools/setup-github-project.py --apply --output artifacts/github-project-result.json
+python3 tools/flesh-github-project.py --output artifacts/github-project-plan.json
+python3 tools/flesh-github-project.py --apply --output artifacts/github-project-result.json
 ```
 
-The owner supplied Project #2, but the current integration rejects its direct
-read with **Resource not accessible by integration**. Its fields/items/population
-remain unverified. Read the actual result's
-`applied` / `live_project_verified` fields. Source synchronization currently updates
-issue descriptions; manually maintained board values are preserved.
+`applied`, `live_project_verified`, completed operations and partial-change flags
+state what actually happened. A denied read cannot establish a live board. As of
+this source increment the personal secret requirement is saved, but the environment
+reports `has_saved_binding:false`; its Project read still uses the limited
+integration and returns **Resource not accessible by integration**.
+
+## Project-backed progress
+
+`tools/export-github-project.py` reads live Project Status/Waiting resource values.
+It verifies all seven overview and 35 task identities, paginates within explicit
+budgets and rejects missing, archived, duplicate or ambiguous managed items. It
+never substitutes historical source states for a failed read. Project values
+mirror managed issue status and known resource tags; PR readiness remains based
+on current checks. No tool automatically closes issues or accepts a gate.
+
+The dashboard refreshes its aggregate JSON every minute, supports milestone-status
+filtering, shows the snapshot timestamp and marks data older than two hours stale.
+A failed refresh is visible and cannot turn unavailable tracking into zero progress.
+Only overview **Accepted** counts as a full gate; work Done/Closed/Other remains
+separate. The implementation estimate is not calculated from task counts.
+
+```sh
+python3 tools/export-github-project.py --output artifacts/project-progress
+python3 tools/publish-project-progress.py --input artifacts/project-progress
+```
+
+The generated `index.html`, `progress.json` and timestamped `gates.svg` can be
+published under `progress/` in the public docs-only repository. The dashboard's
+expected URL is `https://jdiller-86.github.io/CTR-2-WUP-docs/progress/` **after a
+successful Pages deployment**; that deployment is not yet verified. The README
+links the actual Project instead of displaying a static progress drawing or
+claiming that a pending website is live. GitHub README Markdown cannot execute
+interactive JavaScript; a hosted dashboard is the interactive view.
+
+The public export is an explicit allowlist: seven already-documented milestone
+names, state/category counts, the Project link and freshness metadata. Private
+issue titles, numbers, bodies, IDs and free-form waiting notes are excluded.
+No browser receives a token. Publication changes only those three progress files
+on the existing public docs repository's main branch, without a force push.
+A concurrent publication fails visibly rather than discarding another change.
+
+The **Project tracking** workflow executes immutable trusted main code on hourly,
+manual and scoped main updates. Its optional manual bootstrap populates the
+existing board. The separate repository Actions secret
+`CTR2WUP_GITHUB_MANAGEMENT_TOKEN` needs personal Projects access, private Issues
+write and public docs Contents write; the cloud environment binding cannot be
+copied or extracted into it. Missing/access-denied credentials produce an honest
+failure receipt and leave prior published data aging visibly stale. Configure
+the Actions secret securely in repository settings if unattended updates are
+wanted; successful cloud API access alone does not prove Actions access.
 
 ## Settings requiring additional access
 

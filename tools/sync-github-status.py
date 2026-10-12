@@ -262,6 +262,11 @@ def reconcile(client, repo, apply=False, selected=None, explicit=None, event=Non
 
     for target in targets or []:
         item, is_pr, checks = snapshot(target)
+        if not is_pr and re.search(r'<!-- ctr2wup:(milestone|work-item):[a-z0-9-]+ -->', item.get('body') or ''):
+            results.append({'number': target, 'kind': 'issue', 'state': None,
+                            'label': None, 'reason': 'Project #2 owns managed roadmap status; Project synchronization mirrors its labels',
+                            'skipped': 'Update the Project Status field rather than a separate issue-label state'})
+            continue
         state, reason = pr_state(item, checks, explicit) if is_pr else issue_state(item, explicit, action)
         outcome = {'number': target, 'kind': 'pull_request' if is_pr else 'issue', 'state': state,
                    'label': STATES[state] if state else None, 'reason': reason}

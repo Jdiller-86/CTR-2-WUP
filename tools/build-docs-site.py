@@ -196,11 +196,12 @@ def verify_site(site: Path, site_url: str) -> dict:
         raise ValueError("Search index is empty")
     for row in search["docs"]:
         verify(site / "index.html", row["location"])
-    if not (site / "docs/images/progress.svg").is_file():
-        raise ValueError("Maintained progress image is missing")
+    project_url = "https://github.com/users/Jdiller-86/projects/2"
+    if project_url not in pages[(site / "index.html").resolve()].links:
+        raise ValueError("The overview must link the authoritative live Project")
     return {"html_pages": len(pages), "checked_internal_links_and_assets": checked,
             "external_links_not_network_checked": external, "search_entries": len(search["docs"]),
-            "progress_svg_present": True, "all_rendered_internal_links_resolve": True}
+            "authoritative_project_link_present": True, "all_rendered_internal_links_resolve": True}
 
 
 def build(options: argparse.Namespace) -> dict:

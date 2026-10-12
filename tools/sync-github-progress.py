@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Synchronize milestone overviews and actionable work issues from source evidence.
+"""Synchronize milestone scope, criteria and evidence; Project #2 owns status.
 
 Dry-run by default. --apply creates missing labels/milestones/managed issues and
 updates only their managed section. All source/remote ambiguities are checked
@@ -24,7 +24,8 @@ COLORS = {'milestone': '5319e7', 'work-item': '0e8a16', 'console-testing': '1d76
           'area:docs': '0075ca', 'area:github': '24292e',
           'p0': 'b60205', 'p1': 'd93f0b', 'p2': 'fbca04', 'p3': 'c5def5',
           'status:planned': 'c5def5', 'status:in-progress': '1d76db', 'status:awaiting-evidence': 'fbca04',
-          'status:blocked': 'd93f0b', 'status:ready-for-review': '0e8a16', 'status:done': '6f42c1', 'status:closed': '6a737d'}
+          'status:blocked': 'd93f0b', 'status:ready-for-review': '0e8a16', 'status:done': '6f42c1', 'status:closed': '6a737d',
+          'status:accepted': '238636'}
 DESCRIPTIONS = {'milestone': 'Milestone overview and full acceptance gate; separate work issues feed this tracker.',
                 'work-item': 'Actionable milestone work with scope, prerequisites, acceptance criteria and evidence.',
                 'area:docs': 'Documentation, project explanation and evidence records.',
@@ -39,7 +40,8 @@ DESCRIPTIONS = {'milestone': 'Milestone overview and full acceptance gate; separ
                 'status:blocked': 'Work awaiting a prerequisite or external resource.',
                 'status:ready-for-review': 'Ready for review after the required checks and tracked prerequisites.',
                 'status:done': 'Maintainer-confirmed completed work; full milestone acceptance remains separate.',
-                'status:closed': 'Closed work that is not being represented as accepted implementation.'}
+                'status:closed': 'Closed work that is not being represented as accepted implementation.',
+                'status:accepted': 'Explicit full-gate acceptance mirrored from the authoritative GitHub Project.'}
 STATES = {'planned', 'in_progress', 'awaiting_evidence', 'blocked'}
 WAITING = {'needs-console', 'needs-input', 'needs-windows'}
 ROLE_RE = re.compile(r'<!-- ctr2wup:(milestone|work-item):([a-z0-9-]+) -->')
@@ -163,7 +165,7 @@ def milestone_description(repo, state, milestone, refs):
         return value if len(value) <= limit else value[:limit - 1].rstrip() + '…'
     criteria = milestone['acceptance_remaining']
     content = [MILESTONE_BEGIN, '**Goal:** ' + brief(milestone['summary'], 220), '',
-               '**Planning state:** ' + milestone.get('state', 'planned').replace('_', ' ')
+               '**Tracking authority:** [Project #2](https://github.com/users/Jdiller-86/projects/2)'
                + ' · **Focused work:** ' + str(len(milestone.get('work_items', []))) + ' issues.', '',
                '**Remaining full acceptance:**']
     content += ['- ' + brief(criterion, 150) for criterion in criteria[:3]]
@@ -207,9 +209,9 @@ def body(repo, state, milestone, refs=None):
     refs = refs or {}
     base = 'https://github.com/' + repo
     content = ['## Current evidence', '', milestone['summary'], '',
-               'Updated ' + state['updated'] + ' for **v' + state['version'] + '**. Approximately **'
-               + str(state['approximate_implementation_percent']) + '% implementation**, **'
-               + str(state['full_milestones_accepted']) + '/7 full gates accepted**; these are separate measures.', '',
+               'Evidence updated ' + state['updated'] + ' for **v' + state['version'] + '**. '
+               '[Project #2](https://github.com/users/Jdiller-86/projects/2) owns current status, waiting resources '
+               'and explicit full-gate acceptance. This source refresh never changes them.', '',
                '### Implemented foundations', '']
     content += ['- [x] ' + item for item in milestone['verified_foundations']]
     content += ['', '### Remaining acceptance', ''] + ['- [ ] ' + item for item in milestone['acceptance_remaining']]
@@ -219,7 +221,8 @@ def body(repo, state, milestone, refs=None):
         content += ['', 'These separate issues feed this milestone. Closing a work issue never automatically accepts the full gate or closes this overview.']
     content += ['', '[Current status](' + base + '/blob/main/STATUS.md) · [Acceptance checklist]('
                 + base + '/blob/main/docs/milestones.md) · [Documentation](' + base + '/blob/main/docs/README.md)', '',
-                'This section is generated from versioned progress files. Keep evidence in comments or the maintainer notes. '
+                'This scope and evidence section is generated from versioned requirements/evidence files. '
+                'Their historical planning states are not applied to tracking. Keep evidence in comments or the maintainer notes. '
                 'Desktop builds and CI never establish console/game acceptance. Do not attach ROMs, keys, saves or extracted commercial assets.']
     return '<!-- ctr2wup:milestone:' + milestone['id'] + ' -->\n\n' + managed(content) + '\n\n## Maintainer notes\n\n'
 
@@ -235,7 +238,8 @@ def work_body(repo, state, milestone, item, refs, old=''):
     checked = checked_criteria(old)
     content = ['## Work scope', '', item['summary'], '',
                '**Milestone overview:** ' + reference(milestone['id'], refs, milestone['title']), '',
-               '**Source planning state:** ' + item['state'].replace('_', ' ') + ' · **Source:** v' + state['version'] + ' (' + state['updated'] + ')', '',
+               '**Tracking authority:** [Project #2](https://github.com/users/Jdiller-86/projects/2) · **Evidence source:** v'
+               + state['version'] + ' (' + state['updated'] + ')', '',
                '### Context', '', milestone['summary'], '', '### Prerequisites', '']
     content += ['- ' + reference(dependency, refs) for dependency in item['depends_on']] or ['- No tracked prerequisite.']
     content += ['', '### Acceptance criteria', '']
@@ -285,13 +289,10 @@ def validate_identity(old, role, identifier, parent=None):
 
 def desired_labels(milestone, item=None, issue=None):
     source = item or milestone
-    labels = ['work-item' if item else 'milestone', milestone['area'], *source['waiting_labels']]
+    labels = ['work-item' if item else 'milestone', milestone['area']]
     existing = label_names(issue or {})
     if item and not any(re.fullmatch(r'p\d+', label.casefold()) for label in existing):
         labels.append(item.get('priority', 'p2'))
-    if not any(label.casefold().startswith('status:') for label in existing):
-        initial = source.get('state', 'awaiting_evidence' if source['waiting_labels'] else 'planned')
-        labels.append('status:closed' if issue and issue.get('state') == 'closed' else 'status:' + initial.replace('_', '-'))
     return labels
 
 

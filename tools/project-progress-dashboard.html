@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>CTR2WUP live development progress</title>
+<style>
+  :root{font:16px/1.6 system-ui,sans-serif;color:#202b36;background:#f4f7fa}
+  body{max-width:1080px;margin:auto;padding:clamp(16px,4vw,44px)}
+  a{color:#0969da}h1{font-size:clamp(1.8rem,4vw,2.7rem);line-height:1.2;margin-bottom:8px}
+  h2{font-size:1.35rem}.intro{max-width:760px}.muted{color:#576573}
+  .notice{padding:12px 16px;border-left:4px solid #0969da;background:#e7f0fc;border-radius:4px}
+  .warning{border-color:#9a6700;background:#fff3cf}button,select{font:inherit;padding:7px 12px;border:1px solid #a9b6c2;border-radius:6px;background:#fff;color:#202b36}
+  button{cursor:pointer}button:focus-visible,select:focus-visible,a:focus-visible{outline:3px solid #0969da;outline-offset:3px}
+  #summary{display:flex;gap:16px;flex-wrap:wrap;margin:22px 0}.metric{padding:12px 20px;background:white;border:1px solid #d8e0e8;border-radius:8px}
+  .metric strong{display:block;font-size:1.7rem}.controls{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+  table{width:100%;border-collapse:collapse;margin:16px 0;background:white}th,td{text-align:left;padding:10px;border-bottom:1px solid #d8e0e8}th{font-weight:600}caption{text-align:left;font-weight:600;margin:12px 0}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,310px),1fr));gap:16px;margin:20px 0}
+  article{padding:20px;border:1px solid #d8e0e8;border-radius:10px;background:white}article h2{margin:0 0 10px}article p{margin:8px 0}
+  .status{font-weight:600}.counts{padding:0;list-style:none}.counts li{display:flex;justify-content:space-between;gap:12px}
+  .table-wrap{overflow:auto}footer{margin-top:32px;font-size:.9rem}#message{min-height:2em}
+  @media(prefers-color-scheme:dark){:root{color:#e6edf3;background:#0d1117}a{color:#79c0ff}.muted{color:#aab8c6}.metric,article,table,button,select{background:#161b22;color:#e6edf3;border-color:#384454}th,td{border-color:#384454}.notice{background:#14243c}.warning{background:#362900}}
+</style>
+<body>
+<header>
+  <p class="muted">CTR2WUP development</p>
+  <h1>Live project progress</h1>
+  <p class="intro">Select an owned 3DS game, click Inject, and install its individual playable Wii U WUP. This is the product goal; current builds are original homebrew diagnostics.</p>
+  <p><a href="https://github.com/users/Jdiller-86/projects/2">Open the authoritative GitHub Project #2</a> <span class="muted">(repository access required)</span> · <a href="../">Documentation</a></p>
+</header>
+<main>
+  <p class="notice">Only an overview marked <strong>Accepted</strong> counts as a full milestone. Work-item counts show tracking status; they do not measure product implementation or establish commercial game support.</p>
+  <p id="message" role="status" aria-live="polite">Loading the latest Project snapshot…</p>
+  <p id="timestamp" class="muted"></p>
+  <div class="controls"><button id="refresh" type="button">Refresh now</button><label for="filter">Milestone status <select id="filter"><option value="All">All statuses</option></select></label></div>
+  <section id="summary" aria-label="Project totals" hidden></section>
+  <div id="detail" hidden>
+    <div class="table-wrap"><table><caption>Managed work items by Project status</caption><thead><tr><th scope="col">Status</th><th scope="col">Work items</th></tr></thead><tbody id="work"></tbody></table></div>
+    <section aria-label="Milestone overview"><div id="milestones" class="cards"></div><p id="empty" hidden>No milestone has this status.</p></section>
+  </div>
+  <noscript><p class="notice">JavaScript is needed for live refresh. <a href="progress.json">Read the current aggregate JSON</a> or open Project #2 above.</p></noscript>
+</main>
+<footer class="muted">The private Project remains the source of truth. This public view publishes milestone names and aggregate counts only. Snapshots refresh hourly and after trusted main updates; this page checks for updates every minute. Values older than two hours are clearly marked stale.</footer>
+<script>
+  'use strict';
+  const statuses=['Planned','In progress','Awaiting evidence','Blocked','Ready for review','Done','Closed','Accepted','Unassigned','Other'];
+  const resources=['Console testing','Owned game input','Windows testing','Other resource'];
+  const project='https://github.com/users/Jdiller-86/projects/2';
+  const el=id=>document.getElementById(id);
+  let snapshot=null,loading=false,refreshFailed=false;
+  function node(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
+  function number(v,max=1000){if(!Number.isSafeInteger(v)||v<0||v>max)throw Error('Invalid count');return v;}
+  function counts(v,total){if(!v||typeof v!=='object'||statuses.reduce((n,s)=>n+number(v[s]),0)!==total)throw Error('Invalid status counts');}
+  function validate(data){
+    if(!data||data.schema_version!==1||data.project_url!==project||!['available','unavailable'].includes(data.state))throw Error('Invalid snapshot identity');
+    const generated=Date.parse(data.generated_at);if(!Number.isFinite(generated)||generated>Date.now()+300000)throw Error('Invalid snapshot timestamp');
+    if(data.stale_after_seconds!==7200)throw Error('Invalid freshness policy');
+    if(data.state==='unavailable')return data;
+    if(data.last_success_at!==data.generated_at||data.full_gates.total!==7||data.work_items.total!==35||!Array.isArray(data.milestones)||data.milestones.length!==7)throw Error('Invalid totals');
+    number(data.full_gates.accepted,7);counts(data.work_items.status_counts,35);
+    const totals=Object.fromEntries(statuses.map(s=>[s,0]));let accepted=0;
+    data.milestones.forEach((m,i)=>{
+      if(m.position!==i+1||typeof m.title!=='string'||m.title.length>120||!m.title.startsWith('M'+(i+1)+': ')||!statuses.includes(m.status)||m.accepted!==(m.status==='Accepted')||m.work_total!==5)throw Error('Invalid milestone');
+      counts(m.status_counts,5);if(m.status_counts.Accepted!==0)throw Error('Accepted child task');resources.forEach(r=>number(m.waiting_resources[r],5));
+      statuses.forEach(s=>totals[s]+=m.status_counts[s]);accepted+=Number(m.accepted);
+    });
+    if(accepted!==data.full_gates.accepted||statuses.some(s=>totals[s]!==data.work_items.status_counts[s]))throw Error('Inconsistent totals');
+    return data;
+  }
+  function render(){
+    const data=snapshot;if(!data)return;
+    el('summary').replaceChildren();el('work').replaceChildren();el('milestones').replaceChildren();
+    el('summary').hidden=data.state!=='available';el('detail').hidden=data.state!=='available';
+    const age=Math.max(0,(Date.now()-Date.parse(data.generated_at))/1000);
+    el('timestamp').textContent='Snapshot: '+new Date(data.generated_at).toLocaleString()+' · '+Math.floor(age/60)+' minutes old';
+    el('message').className='notice';
+    if(data.state!=='available'){el('message').classList.add('warning');el('message').textContent='Live Project tracking is unavailable. Open Project #2 or review the tracking workflow access.';return;}
+    if(refreshFailed){el('message').classList.add('warning');el('message').textContent='Refresh failed. Displayed counts are from the previous snapshot'+(age>data.stale_after_seconds?' and are stale':'')+'; open Project #2 for current status.';}
+    else if(age>data.stale_after_seconds){el('message').classList.add('warning');el('message').textContent='This snapshot is stale. The counts below are the last successful Project read; open Project #2 for current status.';}
+    else el('message').textContent='Loaded the latest published Project snapshot. Project #2 owns these statuses.';
+    [['Full milestones accepted',data.full_gates.accepted+'/7'],['Managed work items',String(data.work_items.total)]].forEach(([label,value])=>{const item=node('div',undefined,'metric');item.append(node('strong',value),node('span',label));el('summary').append(item);});
+    statuses.filter(s=>data.work_items.status_counts[s]>0).forEach(s=>{const tr=node('tr');const th=node('th',s);th.scope='row';tr.append(th,node('td',String(data.work_items.status_counts[s])));el('work').append(tr);});
+    const filtered=data.milestones.filter(m=>el('filter').value==='All'||m.status===el('filter').value);el('empty').hidden=filtered.length!==0;
+    filtered.forEach(m=>{
+      const card=node('article');card.append(node('h2',m.title),node('p',m.status+(m.accepted?' · Full gate accepted':' · Full gate remains open'),'status'));
+      const list=node('ul',undefined,'counts');statuses.filter(s=>m.status_counts[s]>0).forEach(s=>{const li=node('li');li.append(node('span',s),node('strong',String(m.status_counts[s])));list.append(li);});card.append(list);
+      const waiting=resources.filter(r=>m.waiting_resources[r]>0).map(r=>r+': '+m.waiting_resources[r]).join(' · ');if(waiting)card.append(node('p','Waiting resources — '+waiting,'muted'));el('milestones').append(card);
+    });
+  }
+  async function refresh(){
+    if(loading)return;loading=true;el('refresh').disabled=true;
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);
+    try{const response=await fetch('./progress.json?t='+Date.now(),{cache:'no-store',credentials:'omit',signal:controller.signal});if(!response.ok)throw Error('HTTP failure');snapshot=validate(await response.json());refreshFailed=false;render();}
+    catch(error){refreshFailed=true;if(snapshot)render();else{el('message').className='notice warning';el('message').textContent='Live tracking could not be loaded. Open Project #2 for current status.';}}
+    finally{clearTimeout(timer);loading=false;el('refresh').disabled=false;}
+  }
+  statuses.forEach(s=>{const option=node('option',s);option.value=s;el('filter').append(option);});
+  el('filter').addEventListener('change',render);el('refresh').addEventListener('click',refresh);
+  refresh();setInterval(()=>{if(!document.hidden)refresh();},60000);
+</script>
+</body>
+</html>

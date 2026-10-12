@@ -169,7 +169,7 @@ class GitHub:
 
     def snapshot(self, project_id):
         query = '''query($id:ID!) { node(id:$id) { ... on ProjectV2 {
-          id title number url public closed viewerCanUpdate
+          id title number url public closed viewerCanUpdate readme
           repositories(first:100) { nodes { id } pageInfo { hasNextPage } }
         } } }'''
         project = self.graphql(query, {'id': project_id}).get('node')

@@ -16,6 +16,8 @@ for the free docs-only site and build receipts.
 - [Troubleshooting](troubleshooting.md): missing reports, storage failures and hangs.
 - [Testing](testing.md): which checks establish desktop, Windows and console evidence.
 - [Current status](../STATUS.md) and [progress assessment](progress.md).
+- [Live development Project](https://github.com/users/Jdiller-86/projects/2) for
+  authoritative task status, blockers and reviewed milestone acceptance.
 - [GitHub development](github-development.md): CI, releases, issues, agents and permissions.
 - [Contributing](../CONTRIBUTING.md) and [security reports](../SECURITY.md).
 

@@ -3,6 +3,22 @@
 All releases are development increments. RPX/WUHB diagnostics and desktop passes
 do not establish commercial-game compatibility or installable WUP acceptance.
 
+## 0.19.0 — 2026-10-12
+
+- Add an original bounded vertex-stream decoder for the four published PICA
+  component formats, explicit input permutation, defaults and transactional
+  finite-float/range/alias validation. Loader registers, shaders and draws remain
+  unsupported.
+- Make the selected existing GitHub Project the status/acceptance authority;
+  source synchronization now updates scope/evidence only. Add preserved Project
+  overview, priority/work-type fields, filtered views and a secure aggregate
+  dashboard/export/publication workflow. Live setup requires working credentials.
+- Replace the README's static progress image with the authoritative Project
+  entry point; keep the implementation estimate separate from task/gate counts.
+- Deliver a focused, hash-verified console handoff combining current GX/PICA
+  diagnostics with the retained Save/result/RomFS fixes and optional SD assets.
+  Individual app versions are explicit; no new physical success is inferred.
+
 ## 0.18.0 — 2026-10-12
 
 - Add original bounded native PICA inspection and transactional finalized raw
