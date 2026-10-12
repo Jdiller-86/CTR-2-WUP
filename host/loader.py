@@ -14,7 +14,7 @@ def load_image(path):
     main = report["partitions"][0]
     segments = main["segments"]
     regions = []
-    total = 2 * PAGE + main["stack_size"]
+    total = 3 * PAGE + main["stack_size"]
     if not main["stack_size"] or main["stack_size"] % PAGE or main["stack_size"] >= 0x10000000:
         raise HostError("invalid_stack", "Guest stack must be nonempty, page-aligned and fit below 0x10000000", stage="load")
     for name, segment in segments.items():
@@ -33,6 +33,7 @@ def load_image(path):
     bss = main["bss_size"]
     regions += [(0x10000000 - main["stack_size"], main["stack_size"], "stack"),
                 (0x1FF80000, PAGE, "kernel-config"),
+                (0x1FF81000, PAGE, "shared-time-config"),
                 (0x1FF82000, PAGE, "tls")]
     if total > MAX_MEMORY or any(address + size > 2**32 for address, size, _ in regions):
         raise HostError("guest_memory_limit", "Guest layout exceeds the supported 64 MiB allocation limit", stage="load")

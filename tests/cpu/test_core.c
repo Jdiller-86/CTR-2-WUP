@@ -133,8 +133,8 @@ static void instruction_tests(void) {
     CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && data[4]==0x12 && data[7]==0x78);
     setup(0xe4910004); cpu.r[1]=0x2000; data[0]=99;
     CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[0]==99 && cpu.r[1]==0x2004);
-    setup(0xe5910001); cpu.r[1]=0x2000;
-    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_MEMORY_FAULT && cpu.memory_fault==CTR_MEM_ALIGNMENT && cpu.r[15]==0x1000);
+    setup(0xe5910001); cpu.r[1]=0x2000;data[1]=0x11;data[2]=0x22;data[3]=0x33;data[4]=0x44;
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[0]==0x44332211 && cpu.r[15]==0x1004);
     setup(0xe5910000); cpu.r[1]=0x3000;
     CHECK(ctr_cpu_step(&cpu)==CTR_CPU_MEMORY_FAULT && cpu.memory_fault==CTR_MEM_UNMAPPED);
     setup(0xef000003); cpu.module_hash="test-module";
@@ -181,11 +181,11 @@ static void halfword_tests(void) {
     CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[2]==0xffff && cpu.r[1]==0x2004);
     setup(0x01c100b2);cpu.r[1]=0xdead0000;
     CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[15]==0x1004 && !logs);
-    setup(0xe1c100b1);cpu.r[1]=0x2000;
-    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_MEMORY_FAULT && cpu.memory_fault==CTR_MEM_ALIGNMENT && cpu.r[15]==0x1000);
+    setup(0xe1c100b1);cpu.r[1]=0x2000;cpu.r[0]=0x1234;
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[15]==0x1004 && data[1]==0x34 && data[2]==0x12);
     setup(0xe1c100b0);cpu.r[1]=0x1000;
     CHECK(ctr_cpu_step(&cpu)==CTR_CPU_MEMORY_FAULT && cpu.memory_fault==CTR_MEM_PERMISSION && cpu.r[15]==0x1000);
-    const uint32_t unsupported[]={0xe0c100b0,0xe18100b0,0xe1e100b0,0xe1c1f0b0};
+    const uint32_t unsupported[]={0xe0c100b0,0xe18100bf,0xe1e100b0,0xe1c1f0b0};
     for(unsigned i=0;i<4;++i){setup(unsupported[i]);CHECK(ctr_cpu_step(&cpu)==CTR_CPU_UNSUPPORTED && cpu.r[15]==0x1000);}
 }
 static void extend_tests(void) {

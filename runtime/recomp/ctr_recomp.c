@@ -14,6 +14,7 @@ typedef struct {
     ctr_cpu *cpu;
     uint64_t code_generation;
     bool fallback;
+    bool single_data;
     unsigned maximum_depth;
     uint64_t unwinds;
     /* The emitter writes an ARM LDM base before reads. Preserve the checked
@@ -57,6 +58,13 @@ int ctr_recomp_instruction(Context *c,uint32_t address,uint32_t opcode) {
     Engine *e=c->user;
     if(c->depth>e->maximum_depth)e->maximum_depth=c->depth;
     e->rollback_base=false;
+    if(c->thumb)e->single_data=(opcode&0xf000u)==0x5000u || (opcode&0xe000u)==0x6000u ||
+        (opcode&0xf000u)==0x8000u || (opcode&0xf000u)==0x9000u || (opcode&0xf800u)==0x4800u;
+    else {
+        unsigned kind=(opcode>>5)&3u;
+        e->single_data=((opcode&0x0c000000u)==0x04000000u && !((opcode&0x100000u) && ((opcode>>12)&15u)==15u)) ||
+            ((opcode&0x0e000090u)==0x00000090u && kind && (kind==1 || (opcode&0x100000u)));
+    }
     c->r[15]=address;
     if (!c->budget) { c->exit=EXIT_BUDGET;return 0; }
     if (e->cpu->memory->code_generation!=e->code_generation)
@@ -134,13 +142,13 @@ int ctr_recomp_instruction(Context *c,uint32_t address,uint32_t opcode) {
 }
 static uint32_t read_value(Context *c,uint32_t a,unsigned width) {
     Engine *e=c->user;uint32_t n;
-    ctr_mem_result r=ctr_memory_read(e->cpu->memory,a,width,CTR_MEM_READ,&n);
+    ctr_mem_result r=e->single_data?ctr_memory_read_data(e->cpu->memory,a,width,&n):ctr_memory_read(e->cpu->memory,a,width,CTR_MEM_READ,&n);
     if (r!=CTR_MEM_OK) { e->cpu->memory_fault=r;ctr_recomp_abort(c,CTR_CPU_MEMORY_FAULT,a); }
     return n;
 }
 static void write_value(Context *c,uint32_t a,unsigned width,uint32_t n) {
     Engine *e=c->user;
-    ctr_mem_result r=ctr_memory_write(e->cpu->memory,a,width,n);
+    ctr_mem_result r=e->single_data?ctr_memory_write_data(e->cpu->memory,a,width,n):ctr_memory_write(e->cpu->memory,a,width,n);
     if (r!=CTR_MEM_OK) { e->cpu->memory_fault=r;ctr_recomp_abort(c,CTR_CPU_MEMORY_FAULT,a); }
     c->exclusive=0;
     if (e->cpu->memory->code_generation!=e->code_generation)

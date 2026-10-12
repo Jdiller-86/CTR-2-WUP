@@ -34,6 +34,21 @@ typedef struct ctr_fs_volume {
 } ctr_fs_volume;
 struct ctr_guest;
 
+/* Platform-owned immutable Level-3 RomFS service view. This is file transport,
+   not NCCH decryption or IVFC authentication. Reader fills the exact requested
+   range; failure never partially publishes guest output. No guest host paths. */
+/* Initialize a zeroed view; its reader/context remain borrowed until close. */
+typedef struct ctr_fs_romfs {
+    bool (*read)(void *context,uint64_t offset,void *output,uint32_t size);
+    void *context;
+    uint64_t size;
+    unsigned mounts,references;
+} ctr_fs_romfs;
+bool ctr_fs_romfs_init(ctr_fs_romfs *view,uint64_t size,
+                       bool (*read)(void *,uint64_t,void *,uint32_t),void *context);
+bool ctr_fs_romfs_close(ctr_fs_romfs *view);
+bool ctr_fs_mount_romfs(struct ctr_guest *guest,ctr_fs_romfs *view);
+
 /* Explicit configured private volumes: savedata(4) or virtual SDMC(9).
    No default SD-card exposure, cartridge data, directories or ROMFS claims. */
 bool ctr_fs_volume_init(ctr_fs_volume *volume,uint32_t archive_id,bool writable);

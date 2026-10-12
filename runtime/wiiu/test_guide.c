@@ -34,8 +34,12 @@ static const step save_steps[]={
     {SAVE_FIRST,"Initial save / reload","Wait for the guest's save or reload PASS.","An existing snapshot is allowed and preserved."},
     {SAVE_RELOAD,"Snapshot reload","Press PLUS to restart from the saved snapshot.","The new guest PASS and exit are checked."}
 };
+static const step asset_steps[]={
+    {GUEST_EXIT,"RomFS asset reads","Wait for root/nested/Unicode/read-only checks.","The original guest's own PASS and exit are checked."}
+};
 
 static const step *steps(const ctr_test_guide *g, unsigned *count) {
+    if(g->kind==CTR_GUIDE_ASSETS) { *count=sizeof(asset_steps)/sizeof(*asset_steps);return asset_steps; }
     if(g->kind==CTR_GUIDE_SAVE) { *count=sizeof(save_steps)/sizeof(*save_steps);return save_steps; }
     if(g->kind==CTR_GUIDE_INTERACTIVE) { *count=sizeof(interactive_steps)/sizeof(*interactive_steps);return interactive_steps; }
     *count=sizeof(native_steps)/sizeof(*native_steps);return native_steps;
@@ -64,6 +68,8 @@ void ctr_test_guide_init(ctr_test_guide *g,ctr_guide_kind kind,ctr_guide_log log
 }
 static void finish_step(ctr_test_guide *g,const char *result,const char *evidence) {
     unsigned count;const step *list=steps(g,&count);
+    g->outcomes[g->step]=strcmp(result,"PASS")==0?'P':strcmp(result,"FAIL")==0?'F':'S';
+    g->evidence[g->step]=evidence;
     log_line(g,"GUIDE RESULT: step=%u name=%s result=%s elapsed_ms=%llu observed=%08x evidence=%s",
         g->step+1,list[g->step].name,result,(unsigned long long)(g->last_time-g->step_started),g->observed,evidence);
     if(strcmp(result,"PASS")==0)++g->passed;
@@ -204,4 +210,17 @@ void ctr_test_guide_summary(const ctr_test_guide *g) {
     log_line(g,"GUIDE SUMMARY: state=%s passed=%u failed=%u skipped=%u not_finished=%u",
         g->done?"COMPLETE":g->cancelled?"CANCELLED":"INCOMPLETE",g->passed,g->failed,g->skipped,count-g->step);
     if(g->kind==CTR_GUIDE_SAVE)log_line(g,"Fresh-launch save reload confirmed: %s",g->fresh_reload_confirmed?"YES":"NO / NOT YET OBSERVED");
+}
+bool ctr_test_guide_results(const ctr_test_guide *g,char *output,size_t capacity) {
+    if(!g || !output || !capacity)return false;
+    unsigned count;const step *list=steps(g,&count);size_t used=0;output[0]=0;
+    for(unsigned i=0;i<count;++i) {
+        char outcome=g->outcomes[i];
+        const char *result=outcome=='P'?"PASS":outcome=='F'?"FAIL":"NOT TESTED";
+        const char *evidence=g->evidence[i]?g->evidence[i]:"Step not completed";
+        int n=snprintf(output+used,capacity-used,"%u. %s: %s | %s\n",i+1,list[i].name,result,evidence);
+        if(n<0 || (size_t)n>=capacity-used)return false;
+        used+=(size_t)n;
+    }
+    return true;
 }

@@ -23,6 +23,7 @@ void ctr_guest_close(ctr_guest *guest) {
     for(unsigned i=0;i<16;++i)if(guest->sessions[i].active)ctr_fs_session_closed(guest,i);
     ctr_apt_close(guest);
     for(unsigned i=0;i<2;++i)if(guest->fs_volumes[i] && guest->fs_volumes[i]->mounts)--guest->fs_volumes[i]->mounts;
+    if(guest->fs_romfs && guest->fs_romfs->mounts)--guest->fs_romfs->mounts;
     for (unsigned i=0;i<CTR_GUEST_STORAGE_COUNT;++i) free(guest->storage[i]);
     for (unsigned i=0;i<CTR_GUEST_MAX_ALLOCATIONS;++i) free(guest->allocations[i].storage);
     for (unsigned i=0;i<8;++i) if (guest->shared[i].owned) free(guest->shared[i].storage);
@@ -37,12 +38,24 @@ static bool region(ctr_guest *g,unsigned index,uint32_t address,uint32_t size,un
     if (source_size) memcpy(g->storage[index],source,source_size);
     return ctr_memory_map(&g->memory,address,size,permissions,g->storage[index],size)==CTR_MEM_OK;
 }
+static void shared_time_reference(ctr_guest *g) {
+    uint8_t *page=g->storage[6];
+    uint32_t sequence=(uint32_t)page[0]|(uint32_t)page[1]<<8|(uint32_t)page[2]<<16|(uint32_t)page[3]<<24;
+    ++sequence;uint8_t *bank=page+0x20+(sequence&1u)*0x20;
+    uint64_t ticks=(g->now_ns/1000000000u)*UINT64_C(268111856)+
+                   ((g->now_ns%1000000000u)*UINT64_C(268111856))/1000000000u;
+    /* Explicit diagnostic epoch: Unix zero, expressed in 3DS milliseconds
+       since 1900. No actual RTC/timezone or authenticated firmware claim. */
+    const uint64_t values[]={UINT64_C(2208988800000)+g->now_ns/1000000u,ticks,268111856,0};
+    for(unsigned i=0;i<4;++i)for(unsigned b=0;b<8;++b)bank[i*8+b]=(uint8_t)(values[i]>>(8*b));
+    for(unsigned b=0;b<4;++b)page[b]=(uint8_t)(sequence>>(8*b));
+}
 bool ctr_guest_open(ctr_guest *g,const ctr_guest_image *image,const ctr_block *blocks,size_t block_count) {
     memset(g,0,sizeof(*g)); g->state=CTR_GUEST_FAULTED; g->fault=CTR_CPU_MEMORY_FAULT;
     if (!image || !image->code || !image->module_hash || !image->text.size || image->text.size%4 || !image->stack_size ||
         image->stack_size%CTR_GUEST_PAGE || image->stack_size>STACK_TOP || (!blocks && block_count)) return false;
     ctr_guest_segment segments[]={image->text,image->rodata,image->data};
-    uint64_t total=(uint64_t)image->stack_size+2u*CTR_GUEST_PAGE, code_pages=0;
+    uint64_t total=(uint64_t)image->stack_size+3u*CTR_GUEST_PAGE, code_pages=0;
     for (unsigned i=0;i<3;++i) {
         const ctr_guest_segment *s=&segments[i];
         uint64_t bytes=(uint64_t)s->pages*CTR_GUEST_PAGE;
@@ -73,12 +86,14 @@ bool ctr_guest_open(ctr_guest *g,const ctr_guest_image *image,const ctr_block *b
     }
     if (!region(g,3,STACK_TOP-image->stack_size,image->stack_size,CTR_MEM_READ|CTR_MEM_WRITE,NULL,0) ||
         !region(g,4,TLS_ADDRESS,CTR_GUEST_PAGE,CTR_MEM_READ|CTR_MEM_WRITE,NULL,0) ||
-        !region(g,5,0x1ff80000u,CTR_GUEST_PAGE,CTR_MEM_READ,NULL,0)) goto failure;
+        !region(g,5,0x1ff80000u,CTR_GUEST_PAGE,CTR_MEM_READ,NULL,0) ||
+        !region(g,6,0x1ff81000u,CTR_GUEST_PAGE,CTR_MEM_READ,NULL,0)) goto failure;
     /* Public userspace ABI selection and this runtime's application budget;
        this synthetic page is not a dump or an authentic firmware claim. */
     const uint32_t config[][2]={{0,CTR_GUEST_KERNEL_VERSION},{0x10,2},{0x40,CTR_GUEST_MAX_BYTES},{0x60,CTR_GUEST_KERNEL_VERSION},{0x64,2}};
     for(unsigned i=0;i<sizeof(config)/sizeof(*config);++i)
         for(unsigned b=0;b<4;++b)g->storage[5][config[i][0]+b]=(uint8_t)(config[i][1]>>(8*b));
+    shared_time_reference(g);
     ctr_cpu_init(&g->cpu,&g->memory); g->cpu.module_hash=image->module_hash;
     g->cpu.r[13]=STACK_TOP; g->cpu.r[15]=image->text.address; g->cpu.cpsr=0x10; /* User ARM mode. */
     g->program=(ctr_program){blocks,block_count,image->module_hash,g->memory.code_generation};
@@ -292,6 +307,7 @@ ctr_guest_state ctr_guest_run(ctr_guest *g,uint64_t budget,uint64_t now_ns,bool 
         (g->state==CTR_GUEST_EXITED && !g->threads_enabled)) return g->state;
     if (now_ns<g->now_ns) return unsupported(g,0xffffffffu);
     g->now_ns=now_ns;
+    shared_time_reference(g);
     if(!ctr_gsp_poll(g,now_ns))return g->state;
     if(g->threads_enabled) {
         if(!ctr_thread_schedule(g,false))return g->state;

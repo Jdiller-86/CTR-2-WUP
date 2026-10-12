@@ -1,4 +1,4 @@
-# Private filesystem and standalone application lifecycle (0.14.0)
+# Private filesystem and standalone application lifecycle (0.14.6)
 
 This is shared runtime implementation, independent of any game patch. The original
 compiled program uses normal libctru/newlib `fopen`, `fread`, `fwrite`, `fflush`,
@@ -12,9 +12,9 @@ The portable runtime opens `fs:USER`, initializes its session and supports:
 
 | Interface | Commands |
 |---|---|
-| FSUSER | Initialize / InitializeWithSdkVersion; OpenArchive / CloseArchive; OpenFile; CreateFile / DeleteFile; GetFreeBytes; ControlArchive(commit) |
+| FSUSER | Initialize / InitializeWithSdkVersion; OpenArchive / CloseArchive; OpenFile; CreateFile / DeleteFile; GetFreeBytes; ControlArchive(commit); scoped read-only OpenFileDirectly |
 | FSFILE | Read / Write; GetSize / SetSize; Flush / Close |
-| Explicit archives | Savedata (4) and a private virtual SDMC (9), each supplied by the platform |
+| Explicit archives | Savedata (4), private virtual SDMC (9), and current-process read-only RomFS view (3), supplied by the platform |
 
 No guest path names a host file. The platform owns a volume until guest teardown;
 mounts and file sessions retain its lifetime. Archive IDs are generation checked
@@ -38,12 +38,31 @@ volume only when its platform persistence callback succeeds. A failed flush can
 leave dirty buffered data but does not claim a successful save. The original
 snapshot adapter uses explicit little-endian framing, bounded whole-input
 validation and a CRC32 corruption check. CRC32 provides no authenticity. It
-publishes through an exclusive sibling `.pending` file and rename, preserving
-an existing snapshot if staging fails and refusing to overwrite a stale sibling.
-There is no power-loss durability claim. SD rename/exclusive-write behavior needs
-physical Wii U evidence. ROMFS/IVFC/cartridge assets, directories/enumeration,
-rename, subfiles, extdata, timestamps, secure values, retail save formatting and
-commercial save identity/integration are not implemented.
+publishes through an exclusive sibling `.pending` file. v0.14.6 validates any
+existing primary, moves it to an absent `.previous`, then renames the stage into
+the vacant primary name. Successful publication removes the old backup. A failed
+publish attempts rollback; if rollback fails, both siblings remain available.
+This avoids relying on POSIX replacement semantics: WUT passes rename directly
+to FSA. The exact console failure stage is unknown; a no-overwrite filesystem
+model reproduces the assumption and exercises the corrected publisher.
+
+If the primary is missing, a validated `.previous` can be loaded with the explicit
+RECOVERED status. A corrupt primary is never masked by a backup or reset. Stale
+`.pending` or ambiguous existing backup blocks another update visibly; preserve
+both for investigation. There is no concurrent-writer or power-loss durability
+guarantee. Failure/abrupt-process/rollback/recovery cases run under sanitizers.
+
+The user's uploaded snapshot is CRC-valid, with `/progress.dat` and `/記録.dat`
+at visit 1. A private copy advances to visits 2 and 3 in the updated desktop
+runner while the original remains unchanged. Console update/reload acceptance
+is pending. The guest now names its failing phase; the independent result TXT
+records guest message, load status and persistence errno even if full tracing fails.
+
+Read-only Level-3 RomFS assets are implemented separately; ordinary libctru
+handles nested names and directory listing in guest code. See
+[romfs-assets.md](romfs-assets.md). NCCH/IVFC extraction/authentication, cartridge
+assets, generic FSUSER directories, rename/subfiles, extdata, secure values,
+retail save formatting and commercial integration remain unfinished.
 
 ## Standalone APT
 
@@ -80,11 +99,12 @@ python3 tools/validate-libctru.py --application boot --trace-startup \
 
 The additional `ctr2wup-libctru-filesystem.rpx` / `.wuhb` executes the same original
 ARM program through external AOT. Launch with an accessible mounted SD card; the existing diagnostic creates
-its `ctr2wup` directory under the WHB SD mount.
+its `ctr2wup` directory on the WUT-owned SD mount.
 On a fresh diagnostic save it must display/log `SAVE 1 PASS` and `state=exited`.
 Plus restarts from the snapshot and must display/log `RELOAD PASS`; exit/relaunch
 must also reload. The private path is
-`sd:/ctr2wup/filesystem-test.snapshot`. Keep an existing file or stale
-`.pending` for investigation if the test fails; never replace a failed load with
+`sd:/ctr2wup/filesystem-test.snapshot`. Keep the existing file and any
+`.pending` / `.previous` for investigation if the test fails; never replace a failed load with
 an empty save. Minus exits the host. This is an original diagnostic save and
-RPX/WUHB, not a Mario save or an installable WUP. Physical results are pending.
+RPX/WUHB, not a Mario save or an installable WUP. The initial snapshot is received; successful physical update/reload is pending.
+Use the current [console retest](console-retest.md) and return its new result TXT.

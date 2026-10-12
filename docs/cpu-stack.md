@@ -1,8 +1,9 @@
-# ARM/Thumb stack and register transfers (0.12.0)
+# ARM/Thumb stack and register transfers (0.14.6)
 
 The shared CPU runtime now executes ordinary function stack frames and transfers
 of multiple registers. This is ROM-independent work toward M2/M3/P3; it does not
-enable a commercial profile, threading or the GUI Inject-to-WUP pipeline.
+enable a commercial profile or the GUI Inject-to-WUP pipeline. Guest threading
+is implemented separately in `guest-threads.md`.
 
 Supported instructions:
 
@@ -32,7 +33,10 @@ CPU logs contain the failed address/opcode; guest fault detail retains the PC.
 
 v0.13 supports ARM STM's PC source as PC+8, checked independently against ARM1176.
 Empty lists, PC as base, Thumb stores of PC, user register banks/SPSR returns and ARM
-writeback with its base in the list are rejected before effects. Thumb STM with
+loads with writeback and base-in-list, or stores with a lower listed register,
+are rejected before effects. v0.14.6 permits the defined ARM STM writeback form
+when its base is the lowest listed register: it stores the original base then
+writes back, including GCC `__aeabi_ldivmod` stack entry. Thumb STM with
 a non-first base and BLX PC are rejected. The external instruction guard rejects
 the same empty/unpredictable transfer forms, including empty Thumb operations
 that the emitter otherwise turns into successful no-ops. This is an explicit
@@ -55,16 +59,24 @@ addresses and the interpreter/original-AOT nested call self-test.
 runs eleven external probes plus this API (24 checks).
 
 `tools/reference-multiple.py --output artifacts/my-reference` independently
-compares 220 instruction cases through interpreter and original AOT with pinned
+compares 944 instruction cases through interpreter and original AOT with pinned
 Unicorn 2.1.4 configured as ARM1176. It checks all registers, CPSR and all 4096
 data bytes, then verifies the nested program's 47-instruction trace, golden output
 and restored stack. Unicorn and a native GCC/shared-library toolchain are optional
 developer requirements; production has no Unicorn dependency. In the managed
-environment, set `PYTHONPATH=/workspace/ctr2wup-tools/environment/python-packages`
+environment, set `PYTHONPATH=/workspace/ctr2wup-tools/reference-python`
 for this optional tool. The reference report is
-`artifacts/reports/multiple-oracle-final-v12/report.json`.
+`artifacts/reports/console-results-v0146/arm1176-data-validated/report.json`.
+The reference uses ARM1176 SCTLR U=1/A=0. Checked bytewise unaligned halfword/word
+single-data accesses are supported across fully validated ranges; failed ranges
+produce no partial stores. Instruction fetch, multiple-register, exclusive and
+FP accesses retain strict alignment. The checked external ABI selects this
+policy per instruction; raw span shortcuts remain disabled. Preindexed ARM
+register-offset halfword forms used by unmodified `romfsUnmount` are supported.
+This is a fixed userspace policy, not a privileged SCTLR implementation.
 
 All Wii U builds embed `ARM/THUMB STACK CALLS` and `stack_selftest`.
 Compilation, reference checks and emulated PPC prove only the stated checks.
-Physical PowerPC correctness, workload speed, conventional homebrew/commercial
-startup and the user's selected Mario revision remain unverified.
+Workload speed, full physical PowerPC acceptance, commercial startup and the
+user's selected Mario revision remain unverified. Scoped normal compiled
+homebrew has separate desktop/sanitizer/emulated-PPC evidence.

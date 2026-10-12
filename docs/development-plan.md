@@ -214,3 +214,15 @@ to choose ROMFS/retail-save/module/PICA/audio implementation. Physical save and
 interactive tests remain required, alongside installer and Windows acceptance.
 General unimplemented features are not presumed impossible; this increment does
 not activate a commercial profile or replace the GUI-to-installable-WUP goal.
+
+
+v0.14.6 continues M2/M3/P3 with independent read-back-verified test result files,
+portable save publication/rollback/recovery and read-only current-process RomFS
+asset transport. Normal libctru reads nested/Unicode assets, enumerates directories
+and denies writes in an original fixture, verified on desktop/sanitizers and
+emulated big-endian PPC. Shared time and scoped ARM data semantics were required
+by the actual program. The user reports v0.14.5 Native/Guarded/Compiled success;
+new trace absence and later save failure remain unconfirmed causes. Next physical
+checks are Save and RomFS, followed by actual decrypted Mario revision/asset
+analysis and required PICA/audio/services integration. No GUI, commercial profile
+or full acceptance milestone is enabled by these diagnostics.

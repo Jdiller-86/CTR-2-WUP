@@ -59,6 +59,8 @@ uint32_t ctr_cpu_shift(uint32_t value, unsigned type, unsigned amount, bool imme
 void ctr_cpu_branch_exchange(ctr_cpu *cpu, uint32_t address);
 ctr_cpu_result ctr_cpu_load(ctr_cpu *cpu, uint32_t address, unsigned width, uint32_t *value);
 ctr_cpu_result ctr_cpu_store(ctr_cpu *cpu, uint32_t address, unsigned width, uint32_t value);
+ctr_cpu_result ctr_cpu_load_data(ctr_cpu *cpu,uint32_t address,unsigned width,uint32_t *value);
+ctr_cpu_result ctr_cpu_store_data(ctr_cpu *cpu,uint32_t address,unsigned width,uint32_t value);
 /* Decoded user-mode word transfers; no register-bank/exception-return forms.
    Earlier successful words remain visible on a fault; base writeback occurs last. */
 bool ctr_cpu_multiple_supported(unsigned base,uint16_t registers,bool writeback,bool load,bool thumb);

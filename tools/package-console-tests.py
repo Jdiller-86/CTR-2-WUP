@@ -28,6 +28,7 @@ def main():
     parser.add_argument('--interactive-report',type=Path,required=True)
     parser.add_argument('--filesystem-report',type=Path,required=True)
     parser.add_argument('--include-guarded',action='store_true')
+    parser.add_argument('--romfs-report',type=Path,help='Include the verified original read-only asset diagnostic')
     parser.add_argument('--output',type=Path,required=True)
     a=parser.parse_args();out=a.output.resolve()
     native=a.native.resolve();report=json.loads((native/'build-report.json').read_text())
@@ -56,6 +57,18 @@ def main():
                 if digest(f)!=entry['sha256']:raise RuntimeError('Guarded artifact mismatch')
                 inputs.append((f,('rpx/' if f.suffix=='.rpx' else 'sd-card/wiiu/apps/')+f.name))
     if len(inputs)!=(8 if a.include_guarded else 6):raise RuntimeError('Require every requested RPX/WUHB pair')
+    if a.romfs_report:
+        path=a.romfs_report.resolve();r=json.loads(path.read_text())
+        if not r['ok'] or r['version']!=__version__:raise RuntimeError('Require verified current RomFS')
+        app=next(x for x in r['applications'] if x['application']=='romfs')
+        if app['guest']['state']!='exited' or app['guest']['fallback'] or 'CTR2WUP compiled RomFS PASS' not in app['guest']['messages']:raise RuntimeError('Require the original RomFS guest assertions')
+        folder=path.parent/'romfs/wiiu'
+        for entry in app['wiiu_artifacts']:
+            f=folder/entry['name']
+            if digest(f)!=entry['sha256']:raise RuntimeError('RomFS artifact mismatch')
+            inputs.append((f,('rpx/' if f.suffix=='.rpx' else 'sd-card/wiiu/apps/')+f.name))
+        reports.append((path,'build-reports/romfs.json'))
+        if len(inputs)!=(10 if a.include_guarded else 8):raise RuntimeError('Require the RomFS RPX/WUHB pair')
     for f,_ in inputs:
         if f.suffix=='.rpx':_validate_rpx(f)
         elif f.read_bytes()[:4]!=b'WUHB':raise RuntimeError('Invalid WUHB')

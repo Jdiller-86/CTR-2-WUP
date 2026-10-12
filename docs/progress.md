@@ -1,6 +1,6 @@
 # Project completion assessment
 
-Updated **October 11, 2026**, against runtime version **0.14.5** and the
+Updated **October 11, 2026**, against runtime version **0.14.6** and the
 [product plan](development-plan.md).
 
 ## Estimated implementation: approximately 20%
@@ -33,28 +33,29 @@ while every full acceptance checkbox remains open. See the
 |---|---|---|
 | Host preparation | Decrypted container inspection, executable loading, private intake, external code generation, static builds, original metadata/artwork staging | No complete commercial conversion or clean Windows execution |
 | CPU and shared runtime | Bounded ARM/Thumb/VFP support, checked AOT boundary, memory, eight single-core guest thread contexts, scoped services | Incomplete CPU/HLE coverage; actual game and Wii U timing requirements unknown |
-| Homebrew execution | Six original normal-CRT/libctru applications, checked input and exact CPU-written frames; filesystem save/reload and standalone lifecycle | Desktop/emulated PPC evidence; older console log records compiled guest PASS, newer A-button freeze unresolved |
+| Homebrew execution | Seven original normal-CRT/libctru applications, input/exact CPU-written frames, save/reload, standalone lifecycle and read-only RomFS assets | Desktop/sanitizer/emulated PPC evidence; v0.14.5 interactive/guarded completion user-reported, new file/save/asset acceptance pending |
 | Packaging | Original encrypted writer and independent decrypt/hash/FST/file verification, including real diagnostic RPX payloads | Synthetic credentials; no installer acceptance or retained installable package |
-| Wii U platform | Five diagnostic variants; native guided picture/input/touch/audio/stability checks passed on console | Native Minus exit now passes; guarded A was delayed once and froze on relaunch; save and installation untested |
+| Wii U platform | Current five-app kit; older native guide/exit evidence and user-reported v0.14.5 Native/Guarded/Compiled success | Missing new traces; visit-1 snapshot received, later save step failed; v0.14.6 reports/saves/assets and installation pending |
 
-The completed v0.14 regression report records **155 Python tests and 38 passing
-workflow checks**. Normal and sanitized runs cover six compiled homebrew
-applications and fourteen external probes. Independent Clang and emulated
-big-endian PowerPC tests include exact save/reload snapshots. These are supporting
-correctness checks, not a measurement of product completion or a console result.
+v0.14.6 passes **155 Python tests** and fourteen C suites normally and with
+ASan/UBSan, including 1,892 FS and 574 report/guide assertions in each mode.
+Fourteen external AOT probes pass 28 compile/execute checks; 944 independent
+ARM1176 cases verify the scoped CPU additions. The new RomFS program passes
+normally, under sanitizers and on emulated big-endian PowerPC with zero fallback.
+The compiled save/interactive regressions and guarded/live-input replays pass.
+These are supporting checks, not a measurement of product completion.
 
-Evidence paths, toolchain pins, and the separately consolidated fresh-artifact
-report are recorded in [STATUS.md](../STATUS.md). That document also distinguishes
-the completed regression run from a retry whose outer exit was not observed.
-Reports and generated builds are local ignored artifacts, not published releases.
-The v0.14 source bundle remains a verified snapshot from before this documentation
-update; the repository carries the latest README and assessment.
+Current reports are under `artifacts/reports/console-results-v0146/`; the
+five-app kit and matching source are under
+`artifacts/delivery/console-results-0.14.6/`. Private uploaded logs/snapshots are
+excluded. [STATUS.md](../STATUS.md) records validation and the remaining gates.
+These local artifacts are not a published playable-game release.
 
 ## Largest unfinished work
 
 - **PICA-to-GX2 renderer:** actual game draws, shaders, textures, transfers, and
   coherency. Displaying CPU-written pixels does not implement this renderer.
-- **Commercial runtime integration:** RomFS/assets, required services/modules,
+- **Commercial runtime integration:** NCCH/IVFC and retail assets, required services/modules,
   guest DSP/audio, retail saves, and any CPU behavior exercised by the first game.
 - **Selected-title proof:** exact Mario revision analysis, boot, menu, gameplay,
   audio, save/reload, stability, and useful Wii U performance.
@@ -71,15 +72,14 @@ private executable view for revision and code analysis when the user's computer
 is available. An encrypted executable needs decrypted data. That export excludes
 game assets; commercial asset integration will require access to those separately.
 
-The native guide and later Minus exit now have user-provided console evidence.
-The guarded app displayed green late once, then froze on a second launch. Its
-stability remains unaccepted. The first report is reviewed and reaches shutdown;
-the user confirms that the frozen second launch left no file. v0.14.5 adds file
-sync/close and mounted-volume sync with visible failure/guest pause. One short
-guarded retest is requested; physical recovery and freeze resolution are open.
-v0.14.4 improves scaling and waiting/latency reporting, and rejects an AOT
-no-progress loop in local tests; the hard freeze's cause is still unknown.
-The [follow-up instructions](console-retest.md) separate delay from stability.
+The native guide and later Minus exit have user-provided console evidence.
+The user now reports Native/Guarded/Compiled completed without errors on 0.14.5.
+No new logs were saved; supplied logs have older build headers. Save failed,
+though a valid two-record visit-1 snapshot was received. v0.14.6 supplies an
+independent named TXT result with closed-file read-back and portable save
+publication/rollback/recovery. The exact prior console failure causes remain
+unconfirmed. The [follow-up](console-retest.md) requests Save, then a quick
+original RomFS test, with no long native/input repetition.
 
 Actual WUP installation also needs the documented console environment and local
 packaging prerequisites. Native Windows tests remain pending.

@@ -34,15 +34,20 @@ static void parity(void) {
 static void faults(void) {
     for(unsigned kind=0;kind<3;++kind) {
         ctr_guest g;CHECK(ctr_frame_open(&g));
-        g.cpu.r[15]=0x10006c;g.cpu.r[0]=0x12345678;g.cpu.r[4]=kind==0?0xdead0000:kind==1?CTR_FRAME_TOP+1:0x100000;
+        uint32_t address=kind==0?0xdead0000:kind==1?ctr_frame_image.data.address+(uint32_t)g.storage_size[2]-1:0x100000;
+        g.cpu.r[15]=0x10006c;g.cpu.r[0]=0x12345678;g.cpu.r[4]=address;
         uint64_t generation=g.memory.generation;
         CHECK(ctr_guest_run(&g,128,0,true)==CTR_GUEST_FAULTED);
         CHECK(g.fault==CTR_CPU_MEMORY_FAULT);CHECK(g.cpu.r[15]==0x10006c);
-        CHECK(g.cpu.memory_fault==(kind==0?CTR_MEM_UNMAPPED:kind==1?CTR_MEM_ALIGNMENT:CTR_MEM_PERMISSION));
-        CHECK(g.memory.generation==generation);CHECK(g.cpu.instructions==1);CHECK(g.cpu.r[4]==(kind==0?0xdead0000:kind==1?CTR_FRAME_TOP+1:0x100000));
+        CHECK(g.cpu.memory_fault==(kind<2?CTR_MEM_UNMAPPED:CTR_MEM_PERMISSION));
+        CHECK(g.memory.generation==generation);CHECK(g.cpu.instructions==1);CHECK(g.cpu.r[4]==address);
         ctr_guest_close(&g);
     }
     ctr_guest g;CHECK(ctr_frame_open(&g));
+    g.cpu.r[15]=0x10006c;g.cpu.r[4]=CTR_FRAME_TOP+1;g.cpu.r[0]=0x12345678;
+    CHECK(ctr_guest_run(&g,1,0,true)==CTR_GUEST_READY && g.cpu.instructions==1 && g.cpu.r[15]==0x100070);
+    uint32_t data;CHECK(ctr_memory_read_data(&g.memory,CTR_FRAME_TOP+1,4,&data)==CTR_MEM_OK && data==0x12345678);
+    ctr_guest_close(&g);CHECK(ctr_frame_open(&g));
     ++g.memory.code_generation;
     CHECK(ctr_guest_run(&g,128,0,true)==CTR_GUEST_FAULTED);
     CHECK(g.fault==CTR_CPU_CODE_INVALIDATED);CHECK(g.cpu.instructions==0);

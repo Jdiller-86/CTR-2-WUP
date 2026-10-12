@@ -13,14 +13,15 @@
 | Original shared-GSP/VBlank graphics fixture | Desktop verified; awaiting Wii U | Relay registration/shared framebuffer queues, exclusive retry, IRQ ring and cleanup match three backends; original AOT runs in standard diagnostic mode; GX/PICA absent |
 | Original ARM/Thumb nested stack-call fixture | Desktop verified; awaiting Wii U | 47 instructions/one SVC, restored registers/stack, three-backend state/memory match, independent ARM1176 trace, partial-fault parity; embedded diagnostic |
 | Original three-thread fixture | Desktop verified; awaiting Wii U | Three-backend CPU/TLS/ownership/wait/quantum parity; embedded 345-instruction/eight-switch self-test; single emulated CPU, no priority inheritance |
-| Original compiled libctru applications | Scoped desktop execution verified; newer console A-input freeze unresolved | Older v0.14.0 console log records guest PASS; v0.14.3 guarded TXT records failed A observation, continued execution/rendering and shutdown; the next launch froze and saved nothing. v0.14.4 timing/guard and v0.14.5 sync/close/volume-sync changes await console evidence. Desktop normal CRT/newlib, threads/TLS/HID/GSP/FS/APT pass; ROMFS/retail saves/GX/PICA/audio absent |
-| Original compiled savedata program | Desktop save/reload verified; console build awaiting hardware | Normal newlib file I/O, Japanese paths, commit, separate-process reload, snapshot corruption rejection; bounded private archives only |
+| Original compiled libctru applications | Seven original applications verified; interactive/guarded v0.14.5 completion user-reported | Supplied text logs are older; new independent TXT results await hardware evidence. Normal CRT/newlib, threads/TLS/HID/GSP/FS/APT and Level-3 RomFS reads pass; retail saves/GX/PICA/audio absent |
+| Original compiled savedata program | Desktop save/reload verified; console first-write evidence, later failure reported | Uploaded snapshot has two valid visit-1 records; its private desktop copy reloads to visits 2 and 3. v0.14.6 backup/publication/rollback fixes a tested rename assumption; console update/reload acceptance pending |
+| Original compiled RomFS program | Desktop/sanitized/emulated PPC verified; console pending | Original Level-3 image, root/nested/Unicode reads, seek/EOF, directory listing and write denial; no NCCH/IVFC authentication or commercial asset integration |
 | Decrypted base-application CIA | Intake supported | Checked index-0 NCCH, metadata/bitmap/content hashes and loader offsets; small executable export supported |
 | Decrypted NCCH v2 `.cxi` | Inspection supported | Bounds, sections/ExeFS hashes, code decompression and metadata tested with original fixtures |
 | Decrypted NCSD `.3ds` | Inspection supported | Cartridge partition bounds and all present NCCH partitions checked; no NAND loader |
 | Encrypted dump | Unsupported | Clear rejection; no decryption/key acquisition implemented |
 | `.3dsx`, update/DLC merges | Unsupported | No corresponding loader/pipeline; renamed input is not accepted as NCCH |
-| Any commercial revision | Unsupported/unverified | Mario CIA supplied but transfer is blocked; required HLE/GPU/audio/save implementation and Wii U gameplay evidence remain absent |
+| Any commercial revision | Unsupported/unverified | Mario CIA exceeds transfer limit; small intake reports encrypted executable and contains no code; required HLE/GPU/audio/save implementation and Wii U gameplay evidence remain absent |
 | WUP installation | Unverified/unavailable | Original encrypted writer and independent verification pass synthetic-input checks; installer acceptance and actual installable output remain pending |
 
 Stable inspection identity uses the 3DS program ID for save identity. Executable
@@ -36,7 +37,7 @@ desktop compatibility reports never set CTR2WUP's console-verified status.
 
 The October 11 native report provides scoped physical evidence for its embedded
 CPU/services/heap/objects/HID/GSP/relay/stack/thread self-tests. It does not
-establish full live guest graphics, save persistence, launcher return or commercial
+establish full live guest graphics, save update/reload, full lifecycle acceptance or commercial
 compatibility. Full console acceptance remains open; see `console-retest.md`.
 
 Deferred: New 3DS exclusives, stereo output, online services, cameras, microphone,

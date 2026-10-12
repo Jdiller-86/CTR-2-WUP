@@ -31,6 +31,25 @@ static void loader_tests(void) {
     bad=ctr_frame_image; bad.data.address=0xfffff000u; CHECK(!ctr_guest_open(&guest,&bad,NULL,0)); ctr_guest_close(&guest);
     bad=ctr_frame_image; bad.stack_size=128u*1024u*1024u; CHECK(!ctr_guest_open(&guest,&bad,NULL,0)); ctr_guest_close(&guest);
 }
+static uint64_t read64(ctr_guest *g,uint32_t address) {
+    uint32_t lo,hi;CHECK(ctr_memory_read(&g->memory,address,4,CTR_MEM_READ,&lo)==CTR_MEM_OK);
+    CHECK(ctr_memory_read(&g->memory,address+4,4,CTR_MEM_READ,&hi)==CTR_MEM_OK);return (uint64_t)lo|(uint64_t)hi<<32;
+}
+static void shared_clock_tests(void) {
+    ctr_guest g;CHECK(ctr_frame_open(&g));
+    CHECK(ctr_memory_write(&g.memory,0x1ff81000,4,0)==CTR_MEM_PERMISSION);
+    const uint64_t times[]={0,3300000100u,UINT64_MAX};
+    for(unsigned i=0;i<3;++i) {
+        CHECK(ctr_guest_run(&g,0,times[i],false)==CTR_GUEST_READY);
+        uint32_t sequence;CHECK(ctr_memory_read(&g.memory,0x1ff81000,4,CTR_MEM_READ,&sequence)==CTR_MEM_OK);
+        uint32_t bank=0x1ff81020+(sequence&1u)*0x20;
+        CHECK(read64(&g,bank)==UINT64_C(2208988800000)+times[i]/1000000);
+        uint64_t ticks=(times[i]/1000000000)*268111856+(times[i]%1000000000)*268111856/1000000000;
+        CHECK(read64(&g,bank+8)==ticks && read64(&g,bank+16)==268111856 && read64(&g,bank+24)==0);
+        ctr_guest_svc(&g,0x28);CHECK(((uint64_t)g.cpu.r[0]|(uint64_t)g.cpu.r[1]<<32)==ticks);
+    }
+    ctr_guest_close(&g);
+}
 static uint32_t event(ctr_guest *g,unsigned reset) {
     g->cpu.r[1]=reset; CHECK(ctr_guest_svc(g,0x17)==CTR_GUEST_READY && g->cpu.r[0]==0); return g->cpu.r[1];
 }
@@ -109,7 +128,7 @@ static void execution_tests(void) {
     ctr_guest_close(&interpreted); ctr_guest_close(&translated);
 }
 int main(void) {
-    loader_tests(); kernel_tests(); execution_tests();
+    loader_tests(); shared_clock_tests(); kernel_tests(); execution_tests();
     printf("{\"ok\":true,\"assertions\":%u,\"fixture_frames_per_path\":2,\"aot_interpreter_memory_match\":true,\"console_verified\":false}\n",checks);
     return 0;
 }

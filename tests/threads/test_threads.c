@@ -149,7 +149,8 @@ static void resource_limits(void) {
     const uint32_t limits[]={0x18,64*1024*1024,8,32,16,16,0,8,8};uint32_t value;
     for(unsigned i=0;i<9;++i) { CHECK(ctr_memory_read(&g.memory,0x08000300+i*8,4,1,&value)==CTR_MEM_OK && value==limits[i]);CHECK(ctr_memory_read(&g.memory,0x08000304+i*8,4,1,&value)==CTR_MEM_OK && !value); }
     g.cpu.r[0]=0x08000300;g.cpu.r[1]=handle;g.cpu.r[2]=0x08000200;g.cpu.r[3]=9;ctr_guest_svc(&g,0x3a);CHECK(!g.cpu.r[0]);
-    CHECK(ctr_memory_read(&g.memory,0x08000308,4,1,&value)==CTR_MEM_OK && value==32768);
+    /* The diagnostic shared-time page adds one 4 KiB mapping. */
+    CHECK(ctr_memory_read(&g.memory,0x08000308,4,1,&value)==CTR_MEM_OK && value==36864);
     CHECK(ctr_memory_read(&g.memory,0x08000310,4,1,&value)==CTR_MEM_OK && value==1);
     /* Preflight the complete type list before any output, including aliases. */
     CHECK(ctr_memory_write(&g.memory,0x08000220,4,9)==CTR_MEM_OK);uint64_t generation=g.memory.generation;

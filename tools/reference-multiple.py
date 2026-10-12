@@ -33,6 +33,20 @@ def cases():
                             rows.append((opcode,False,flags))
     # ARM base in list without writeback, and interworking PC loads to ARM/Thumb.
     for load in (False,True):rows.append((0xe88c1003|load<<20,False,0x28050010))
+    # ARMv6 defined base-in-list stores: base is the lowest listed register.
+    # Includes the compiler's STMDB SP!,{SP,LR} division-routine prologue.
+    for base,mask in ((12,0x1000),(12,0x5000),(13,0x6000)):
+        for up in (False,True):
+            for pre in (False,True):
+                for cond,flags in ((14,0xa80f0010),(0,0x68050010),(0,0x08050010)):
+                    rows.append((cond<<28|0x08200000|base<<16|up<<23|pre<<24|mask,False,flags))
+    for width in (2,4):
+        for load in (False,True):
+            for offset in (1,2,3):
+                for cond,flags in ((14,0xa80f0010),(0,0x68050010),(0,0x08050010)):
+                    op=(0x01cc40b0 if width==2 else 0x058c4000)|load<<20|offset
+                    rows.append((cond<<28|op,False,flags))
+    rows.extend(((0xe18230b7,False,0xa80f0010),(0xe19230b7,False,0xa80f0010)))
     rows.extend(((0xe8bd8001,False,0x180a0010),(0xe8bd8001,False,0x180a0010)))
     for load in (False,True):
         for extra in (False,True):
@@ -90,6 +104,7 @@ def main():
     seed=random.Random(0xc712);results=[]
     for index,(opcode,thumb,flags) in enumerate(rows):
         initial=[seed.getrandbits(32) for _ in range(16)];initial[12]=DATA+2048;initial[13]=DATA+2048;initial[15]=TEXT
+        if opcode in (0xe18230b7,0xe19230b7):initial[2]=DATA+2048;initial[7]=1
         initial_fp=0xa3000000 if opcode&0x0fff0fff in (0x0ee10a10,0x0ef10a10) or opcode&0x0f200f00 in (0x0d000a00,0x0d000b00) else 0
         initial_vfp=[seed.getrandbits(32) for _ in range(32)]
         if opcode&0x0fff0fff==0x0ee10a10:initial[(opcode>>12)&15]=seed.getrandbits(32)&0xf3000000
@@ -100,6 +115,8 @@ def main():
         link=(thumb and opcode&0xff07==0x4700) or (not thumb and opcode&0x0ffffff0==0x012fff30)
         if link:initial[((opcode>>3)&15) if thumb else (opcode&15)]=TEXT+0x100+(index&1)
         reference=u.Uc(u.UC_ARCH_ARM,u.UC_MODE_ARM);reference.ctl_set_cpu_model(ac.UC_CPU_ARM_1176)
+        control=(15,0,0,1,0,0,0)
+        reference.reg_write(ac.UC_ARM_REG_CP_REG,(*control,(reference.reg_read(ac.UC_ARM_REG_CP_REG,control)|(1<<22))&~2))
         reference.reg_write(ac.UC_ARM_REG_FPEXC,0x40000000);reference.reg_write(ac.UC_ARM_REG_FPSCR,initial_fp)
         reference.mem_map(TEXT,4096);reference.mem_write(TEXT,struct.pack('<H' if thumb else '<I',opcode));reference.mem_map(DATA,4096);reference.mem_write(DATA,memory)
         for i,value in enumerate(initial_vfp):reference.reg_write(getattr(ac,f'UC_ARM_REG_S{i}'),value)
@@ -128,6 +145,6 @@ def main():
     assert len(trace)==47 and reference.reg_read(ac.UC_ARM_REG_SP)==0x10000000
     assert struct.unpack('<8I',reference.mem_read(DATA,32))==EXPECTED
     assert not reference.reg_read(ac.UC_ARM_REG_CPSR)&0x20
-    report={'ok':True,'reference':'Unicorn '+u.__version__,'cpu_model':'ARM1176','cases':len(rows),'interpreter_and_original_aot_match':True,'nested_arm_thumb_program_instructions':len(trace),'console_verified':False,'results':results}
+    report={'ok':True,'reference':'Unicorn '+u.__version__,'cpu_model':'ARM1176','data_alignment_policy':'SCTLR U=1 A=0','cases':len(rows),'interpreter_and_original_aot_match':True,'nested_arm_thumb_program_instructions':len(trace),'console_verified':False,'results':results}
     (out/'report.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps({k:v for k,v in report.items() if k!='results'}));return 0
 if __name__=='__main__':raise SystemExit(main())

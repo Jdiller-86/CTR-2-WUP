@@ -4,7 +4,7 @@
 
 #define CTR_GUEST_PAGE 4096u
 #define CTR_GUEST_MAX_BYTES (64u*1024u*1024u)
-#define CTR_GUEST_STORAGE_COUNT 6u
+#define CTR_GUEST_STORAGE_COUNT 7u
 #define CTR_GUEST_KERNEL_VERSION UINT32_C(0x023a0000)
 typedef struct { uint32_t address, pages, size; } ctr_guest_segment;
 typedef struct {
@@ -24,7 +24,7 @@ typedef enum { CTR_SERVICE_SRV, CTR_SERVICE_CFG, CTR_SERVICE_HID, CTR_SERVICE_GS
                CTR_SERVICE_FS, CTR_SERVICE_FILE, CTR_SERVICE_APT } ctr_guest_service;
 typedef struct { uint32_t generation; unsigned object; bool active; ctr_guest_handle_type type; } ctr_guest_handle;
 typedef struct { bool active, registered; unsigned references; ctr_guest_service service;
-                 unsigned fs_volume, fs_file, fs_flags; bool fs_closed; } ctr_guest_session;
+                 unsigned fs_volume, fs_file, fs_flags; bool fs_closed,fs_romfs; } ctr_guest_session;
 enum { CTR_GUEST_MODEL_3DS=0, CTR_GUEST_MODEL_3DSXL=1, CTR_GUEST_MODEL_2DS=3 };
 typedef struct { uint8_t region, language, model; } ctr_guest_configuration;
 #define CTR_GUEST_MAX_ALLOCATIONS 16u
@@ -84,6 +84,7 @@ typedef struct ctr_guest {
     ctr_guest_session sessions[16];
     /* Platform-owned virtual archives; never maps a guest path to a host path. */
     struct ctr_fs_volume *fs_volumes[2];
+    struct ctr_fs_romfs *fs_romfs;
     struct { uint32_t generation; unsigned volume, owner; bool active; } fs_archives[8];
     uint32_t fs_generation;
     struct { bool available, lock, initialized, enabled, pending, notified, closing;

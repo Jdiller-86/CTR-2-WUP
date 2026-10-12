@@ -26,7 +26,7 @@ def register(index: int, pc: int, thumb: bool = False) -> str:
 def multiple(rn, registers, increment, before, writeback, load, is_thumb, opcode, next_pc):
     if rn==15 or not registers or (is_thumb and not load and registers&0x8000):
         raise ValueError("unsupported multiple-register list/base")
-    if writeback and registers&(1<<rn) and (load or not is_thumb or registers&((1<<rn)-1)):
+    if writeback and registers&(1<<rn) and (load or registers&((1<<rn)-1)):
         raise ValueError("unpredictable multiple-transfer base/writeback combination")
     flags=', '.join('true' if flag else 'false' for flag in (increment,before,writeback,load,is_thumb))
     result=[f"ctr_cpu_result result = ctr_cpu_multiple(cpu, {rn}u, {literal(registers)}, {flags}, {literal(opcode)});",
@@ -109,12 +109,13 @@ def arm(insn: int, pc: int) -> list[str]:
                      f"cpu->r[15] = {next_pc};", "return CTR_CPU_OK;"]
     if insn & 0x0e0000f0 == 0x000000b0:
         rd,rn=(insn>>12)&15,(insn>>16)&15
-        if not insn&0x01000000 or not insn&0x00400000 or insn&0x00200000 or rd==15:
-            raise ValueError("only preindexed immediate halfwords without writeback are supported")
-        offset=((insn>>4)&0xf0)|(insn&15)
+        immediate=bool(insn&0x00400000)
+        if not insn&0x01000000 or insn&0x00200000 or rd==15 or (not immediate and (insn&0xf00 or insn&15==15)):
+            raise ValueError("only preindexed halfwords without writeback are supported")
+        offset=literal(((insn>>4)&0xf0)|(insn&15)) if immediate else f"cpu->r[{insn&15}]"
         sign='+' if insn&0x00800000 else '-'
-        action=f"ctr_cpu_load(cpu, address, 2u, &cpu->r[{rd}])" if insn&0x00100000 else f"ctr_cpu_store(cpu, address, 2u, cpu->r[{rd}])"
-        return body+[f"uint32_t address = {register(rn,pc)} {sign} {literal(offset)};",
+        action=f"ctr_cpu_load_data(cpu, address, 2u, &cpu->r[{rd}])" if insn&0x00100000 else f"ctr_cpu_store_data(cpu, address, 2u, cpu->r[{rd}])"
+        return body+[f"uint32_t address = {register(rn,pc)} {sign} {offset};",
                      f"ctr_cpu_result result = {action};","if (result != CTR_CPU_OK) return result;",
                      f"cpu->r[15] = {next_pc};","return CTR_CPU_OK;"]
     if insn & 0x0c000000 == 0:
@@ -168,7 +169,7 @@ def arm(insn: int, pc: int) -> list[str]:
             raise ValueError("AOT memory PC destination/source is unsupported")
         sign = "+" if insn & 0x00800000 else "-"
         address = f"{register(rn, pc)} {sign} {literal(insn & 0xfff)}"
-        action = f"ctr_cpu_load(cpu, address, {width}u, &cpu->r[{rd}])" if load else f"ctr_cpu_store(cpu, address, {width}u, cpu->r[{rd}])"
+        action = f"ctr_cpu_load_data(cpu, address, {width}u, &cpu->r[{rd}])" if load else f"ctr_cpu_store_data(cpu, address, {width}u, cpu->r[{rd}])"
         return body + [f"uint32_t address = {address};", f"ctr_cpu_result result = {action};",
                        "if (result != CTR_CPU_OK) return result;", f"cpu->r[15] = {next_pc};", "return CTR_CPU_OK;"]
     raise ValueError("instruction outside the documented AOT subset")

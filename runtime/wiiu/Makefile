@@ -9,9 +9,10 @@ GUEST_DEFAULT ?= 0
 EXTERNAL_AOT ?= 0
 COMPILED_HOMEBREW ?= 0
 FILESYSTEM_HOMEBREW ?= 0
+ROMFS_HOMEBREW ?= 0
 UDP_LOG ?= 0
 CALL_LIMIT ?= 64
-APP_VERSION := 0.14.5
+APP_VERSION := 0.14.6
 UPSTREAM_DIR ?= ../../artifacts/generated-upstream-guest
 ifeq ($(GUEST_DEFAULT),1)
 APP_NAME := CTR2WUP ARM Guest $(APP_VERSION)
@@ -36,9 +37,13 @@ ifeq ($(FILESYSTEM_HOMEBREW),1)
 CFLAGS += -DCTR_FILESYSTEM_HOMEBREW
 APP_NAME := CTR2WUP Compiled Save $(APP_VERSION)
 endif
+ifeq ($(ROMFS_HOMEBREW),1)
+CFLAGS += -DCTR_ROMFS_HOMEBREW
+APP_NAME := CTR2WUP Compiled RomFS $(APP_VERSION)
+endif
 LDFLAGS := -mcpu=750 -meabi -mhard-float -specs="$(WUT)/share/wut.specs" \
            -Wl,-Map,$(OUTPUT)/$(TARGET).map
-SOURCES := main.c viewport.c diagnostic_font.c test_report.c test_guide.c test_lifecycle.c image_scale.c report_storage.c
+SOURCES := main.c viewport.c diagnostic_font.c test_report.c test_guide.c test_lifecycle.c image_scale.c report_storage.c test_result.c
 OBJECTS := $(addprefix $(BUILD)/,$(SOURCES:.c=.o))
 CORE_SOURCES := ../core/ctr_memory.c ../core/ctr_cpu.c ../core/ctr_cpu_selftest.c \
                 ../core/ctr_guest.c ../core/ctr_ipc.c ../core/ctr_heap.c ../core/ctr_kernel.c ../core/ctr_hid.c ../core/ctr_gsp.c ../core/ctr_fs.c ../core/ctr_apt.c ../core/ctr_fs_snapshot.c ../core/ctr_guest_fixture.c \

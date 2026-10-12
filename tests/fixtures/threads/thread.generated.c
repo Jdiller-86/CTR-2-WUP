@@ -47,7 +47,7 @@ static ctr_cpu_result ctr_thread_main_at_00100010(ctr_cpu *cpu) {
 static ctr_cpu_result ctr_thread_main_at_00100014(ctr_cpu *cpu) {
     ++cpu->instructions;
     uint32_t address = cpu->r[10] + UINT32_C(0x00000000);
-    ctr_cpu_result result = ctr_cpu_store(cpu, address, 4u, cpu->r[0]);
+    ctr_cpu_result result = ctr_cpu_store_data(cpu, address, 4u, cpu->r[0]);
     if (result != CTR_CPU_OK) return result;
     cpu->r[15] = UINT32_C(0x00100018);
     return CTR_CPU_OK;
@@ -83,7 +83,7 @@ static ctr_cpu_result ctr_thread_main_at_00100020(ctr_cpu *cpu) {
 static ctr_cpu_result ctr_thread_main_at_00100024(ctr_cpu *cpu) {
     ++cpu->instructions;
     uint32_t address = cpu->r[4] + UINT32_C(0x00000000);
-    ctr_cpu_result result = ctr_cpu_store(cpu, address, 4u, cpu->r[5]);
+    ctr_cpu_result result = ctr_cpu_store_data(cpu, address, 4u, cpu->r[5]);
     if (result != CTR_CPU_OK) return result;
     cpu->r[15] = UINT32_C(0x00100028);
     return CTR_CPU_OK;
@@ -119,7 +119,7 @@ static ctr_cpu_result ctr_thread_main_at_00100030(ctr_cpu *cpu) {
 static ctr_cpu_result ctr_thread_main_at_00100034(ctr_cpu *cpu) {
     ++cpu->instructions;
     uint32_t address = cpu->r[4] + UINT32_C(0x00000004);
-    ctr_cpu_result result = ctr_cpu_store(cpu, address, 4u, cpu->r[6]);
+    ctr_cpu_result result = ctr_cpu_store_data(cpu, address, 4u, cpu->r[6]);
     if (result != CTR_CPU_OK) return result;
     cpu->r[15] = UINT32_C(0x00100038);
     return CTR_CPU_OK;
@@ -136,7 +136,7 @@ static ctr_cpu_result ctr_thread_main_at_00100038(ctr_cpu *cpu) {
 static ctr_cpu_result ctr_thread_main_at_0010003c(ctr_cpu *cpu) {
     ++cpu->instructions;
     uint32_t address = UINT32_C(0x00100044) + UINT32_C(0x000006ac);
-    ctr_cpu_result result = ctr_cpu_load(cpu, address, 4u, &cpu->r[1]);
+    ctr_cpu_result result = ctr_cpu_load_data(cpu, address, 4u, &cpu->r[1]);
     if (result != CTR_CPU_OK) return result;
     cpu->r[15] = UINT32_C(0x00100040);
     return CTR_CPU_OK;
@@ -255,7 +255,7 @@ static ctr_cpu_result ctr_thread_main_at_00100070(ctr_cpu *cpu) {
 static ctr_cpu_result ctr_thread_main_at_00100074(ctr_cpu *cpu) {
     ++cpu->instructions;
     uint32_t address = cpu->r[4] + UINT32_C(0x00000008);
-    ctr_cpu_result result = ctr_cpu_store(cpu, address, 4u, cpu->r[7]);
+    ctr_cpu_result result = ctr_cpu_store_data(cpu, address, 4u, cpu->r[7]);
     if (result != CTR_CPU_OK) return result;
     cpu->r[15] = UINT32_C(0x00100078);
     return CTR_CPU_OK;
@@ -272,7 +272,7 @@ static ctr_cpu_result ctr_thread_main_at_00100078(ctr_cpu *cpu) {
 static ctr_cpu_result ctr_thread_main_at_0010007c(ctr_cpu *cpu) {
     ++cpu->instructions;
     uint32_t address = UINT32_C(0x00100084) + UINT32_C(0x00000670);
-    ctr_cpu_result result = ctr_cpu_load(cpu, address, 4u, &cpu->r[1]);
+    ctr_cpu_result result = ctr_cpu_load_data(cpu, address, 4u, &cpu->r[1]);
     if (result != CTR_CPU_OK) return result;
     cpu->r[15] = UINT32_C(0x00100080);
     return CTR_CPU_OK;
@@ -391,7 +391,7 @@ static ctr_cpu_result ctr_thread_main_at_001000b0(ctr_cpu *cpu) {
 static ctr_cpu_result ctr_thread_main_at_001000b4(ctr_cpu *cpu) {
     ++cpu->instructions;
     uint32_t address = cpu->r[4] + UINT32_C(0x0000000c);
-    ctr_cpu_result result = ctr_cpu_store(cpu, address, 4u, cpu->r[8]);
+    ctr_cpu_result result = ctr_cpu_store_data(cpu, address, 4u, cpu->r[8]);
     if (result != CTR_CPU_OK) return result;
     cpu->r[15] = UINT32_C(0x001000b8);
     return CTR_CPU_OK;
@@ -443,7 +443,7 @@ static ctr_cpu_result ctr_thread_main_at_001000c8(ctr_cpu *cpu) {
 static ctr_cpu_result ctr_thread_main_at_001000cc(ctr_cpu *cpu) {
     ++cpu->instructions;
     uint32_t address = cpu->r[4] + UINT32_C(0x00000010);
-    ctr_cpu_result result = ctr_cpu_store(cpu, address, 4u, cpu->r[0]);
+    ctr_cpu_result result = ctr_cpu_store_data(cpu, address, 4u, cpu->r[0]);
     if (result != CTR_CPU_OK) return result;
     cpu->r[15] = UINT32_C(0x001000d0);
     return CTR_CPU_OK;
@@ -535,7 +535,7 @@ static ctr_cpu_result ctr_thread_main_at_001000f4(ctr_cpu *cpu) {
 static ctr_cpu_result ctr_thread_main_at_001000f8(ctr_cpu *cpu) {
     ++cpu->instructions;
     uint32_t address = cpu->r[4] + UINT32_C(0x00000014);
-    ctr_cpu_result result = ctr_cpu_store(cpu, address, 4u, cpu->r[0]);
+    ctr_cpu_result result = ctr_cpu_store_data(cpu, address, 4u, cpu->r[0]);
     if (result != CTR_CPU_OK) return result;
     cpu->r[15] = UINT32_C(0x001000fc);
     return CTR_CPU_OK;
@@ -627,7 +627,7 @@ static ctr_cpu_result ctr_thread_main_at_00100120(ctr_cpu *cpu) {
 static ctr_cpu_result ctr_thread_main_at_00100124(ctr_cpu *cpu) {
     ++cpu->instructions;
     uint32_t address = cpu->r[4] + UINT32_C(0x00000018);
-    ctr_cpu_result result = ctr_cpu_store(cpu, address, 4u, cpu->r[0]);
+    ctr_cpu_result result = ctr_cpu_store_data(cpu, address, 4u, cpu->r[0]);
     if (result != CTR_CPU_OK) return result;
     cpu->r[15] = UINT32_C(0x00100128);
     return CTR_CPU_OK;
@@ -719,7 +719,7 @@ static ctr_cpu_result ctr_thread_main_at_0010014c(ctr_cpu *cpu) {
 static ctr_cpu_result ctr_thread_main_at_00100150(ctr_cpu *cpu) {
     ++cpu->instructions;
     uint32_t address = cpu->r[4] + UINT32_C(0x0000001c);
-    ctr_cpu_result result = ctr_cpu_store(cpu, address, 4u, cpu->r[0]);
+    ctr_cpu_result result = ctr_cpu_store_data(cpu, address, 4u, cpu->r[0]);
     if (result != CTR_CPU_OK) return result;
     cpu->r[15] = UINT32_C(0x00100154);
     return CTR_CPU_OK;
@@ -728,7 +728,7 @@ static ctr_cpu_result ctr_thread_main_at_00100150(ctr_cpu *cpu) {
 static ctr_cpu_result ctr_thread_main_at_00100154(ctr_cpu *cpu) {
     ++cpu->instructions;
     uint32_t address = cpu->r[10] + UINT32_C(0x00000000);
-    ctr_cpu_result result = ctr_cpu_load(cpu, address, 4u, &cpu->r[0]);
+    ctr_cpu_result result = ctr_cpu_load_data(cpu, address, 4u, &cpu->r[0]);
     if (result != CTR_CPU_OK) return result;
     cpu->r[15] = UINT32_C(0x00100158);
     return CTR_CPU_OK;
@@ -737,7 +737,7 @@ static ctr_cpu_result ctr_thread_main_at_00100154(ctr_cpu *cpu) {
 static ctr_cpu_result ctr_thread_main_at_00100158(ctr_cpu *cpu) {
     ++cpu->instructions;
     uint32_t address = cpu->r[4] + UINT32_C(0x00000020);
-    ctr_cpu_result result = ctr_cpu_store(cpu, address, 4u, cpu->r[0]);
+    ctr_cpu_result result = ctr_cpu_store_data(cpu, address, 4u, cpu->r[0]);
     if (result != CTR_CPU_OK) return result;
     cpu->r[15] = UINT32_C(0x0010015c);
     return CTR_CPU_OK;
@@ -746,7 +746,7 @@ static ctr_cpu_result ctr_thread_main_at_00100158(ctr_cpu *cpu) {
 static ctr_cpu_result ctr_thread_main_at_0010015c(ctr_cpu *cpu) {
     ++cpu->instructions;
     uint32_t address = cpu->r[4] + UINT32_C(0x00000024);
-    ctr_cpu_result result = ctr_cpu_store(cpu, address, 4u, cpu->r[10]);
+    ctr_cpu_result result = ctr_cpu_store_data(cpu, address, 4u, cpu->r[10]);
     if (result != CTR_CPU_OK) return result;
     cpu->r[15] = UINT32_C(0x00100160);
     return CTR_CPU_OK;
@@ -981,7 +981,7 @@ static ctr_cpu_result ctr_thread_worker_at_0010030c(ctr_cpu *cpu) {
 static ctr_cpu_result ctr_thread_worker_at_00100310(ctr_cpu *cpu) {
     ++cpu->instructions;
     uint32_t address = cpu->r[10] + UINT32_C(0x00000000);
-    ctr_cpu_result result = ctr_cpu_store(cpu, address, 4u, cpu->r[0]);
+    ctr_cpu_result result = ctr_cpu_store_data(cpu, address, 4u, cpu->r[0]);
     if (result != CTR_CPU_OK) return result;
     cpu->r[15] = UINT32_C(0x00100314);
     return CTR_CPU_OK;
@@ -990,7 +990,7 @@ static ctr_cpu_result ctr_thread_worker_at_00100310(ctr_cpu *cpu) {
 static ctr_cpu_result ctr_thread_worker_at_00100314(ctr_cpu *cpu) {
     ++cpu->instructions;
     uint32_t address = cpu->r[4] + UINT32_C(0x00000028);
-    ctr_cpu_result result = ctr_cpu_store(cpu, address, 4u, cpu->r[10]);
+    ctr_cpu_result result = ctr_cpu_store_data(cpu, address, 4u, cpu->r[10]);
     if (result != CTR_CPU_OK) return result;
     cpu->r[15] = UINT32_C(0x00100318);
     return CTR_CPU_OK;
@@ -999,7 +999,7 @@ static ctr_cpu_result ctr_thread_worker_at_00100314(ctr_cpu *cpu) {
 static ctr_cpu_result ctr_thread_worker_at_00100318(ctr_cpu *cpu) {
     ++cpu->instructions;
     uint32_t address = cpu->r[4] + UINT32_C(0x00000000);
-    ctr_cpu_result result = ctr_cpu_load(cpu, address, 4u, &cpu->r[5]);
+    ctr_cpu_result result = ctr_cpu_load_data(cpu, address, 4u, &cpu->r[5]);
     if (result != CTR_CPU_OK) return result;
     cpu->r[15] = UINT32_C(0x0010031c);
     return CTR_CPU_OK;
@@ -1008,7 +1008,7 @@ static ctr_cpu_result ctr_thread_worker_at_00100318(ctr_cpu *cpu) {
 static ctr_cpu_result ctr_thread_worker_at_0010031c(ctr_cpu *cpu) {
     ++cpu->instructions;
     uint32_t address = cpu->r[4] + UINT32_C(0x00000004);
-    ctr_cpu_result result = ctr_cpu_load(cpu, address, 4u, &cpu->r[6]);
+    ctr_cpu_result result = ctr_cpu_load_data(cpu, address, 4u, &cpu->r[6]);
     if (result != CTR_CPU_OK) return result;
     cpu->r[15] = UINT32_C(0x00100320);
     return CTR_CPU_OK;
@@ -1036,7 +1036,7 @@ static ctr_cpu_result ctr_thread_worker_at_00100324(ctr_cpu *cpu) {
 static ctr_cpu_result ctr_thread_worker_at_00100328(ctr_cpu *cpu) {
     ++cpu->instructions;
     uint32_t address = cpu->r[4] + UINT32_C(0x0000002c);
-    ctr_cpu_result result = ctr_cpu_store(cpu, address, 4u, cpu->r[0]);
+    ctr_cpu_result result = ctr_cpu_store_data(cpu, address, 4u, cpu->r[0]);
     if (result != CTR_CPU_OK) return result;
     cpu->r[15] = UINT32_C(0x0010032c);
     return CTR_CPU_OK;
@@ -1128,7 +1128,7 @@ static ctr_cpu_result ctr_thread_worker_at_00100350(ctr_cpu *cpu) {
 static ctr_cpu_result ctr_thread_worker_at_00100354(ctr_cpu *cpu) {
     ++cpu->instructions;
     uint32_t address = cpu->r[4] + UINT32_C(0x00000030);
-    ctr_cpu_result result = ctr_cpu_store(cpu, address, 4u, cpu->r[0]);
+    ctr_cpu_result result = ctr_cpu_store_data(cpu, address, 4u, cpu->r[0]);
     if (result != CTR_CPU_OK) return result;
     cpu->r[15] = UINT32_C(0x00100358);
     return CTR_CPU_OK;
@@ -1196,7 +1196,7 @@ static ctr_cpu_result ctr_thread_worker_at_00100370(ctr_cpu *cpu) {
 static ctr_cpu_result ctr_thread_worker_at_00100374(ctr_cpu *cpu) {
     ++cpu->instructions;
     uint32_t address = cpu->r[4] + UINT32_C(0x00000034);
-    ctr_cpu_result result = ctr_cpu_store(cpu, address, 4u, cpu->r[0]);
+    ctr_cpu_result result = ctr_cpu_store_data(cpu, address, 4u, cpu->r[0]);
     if (result != CTR_CPU_OK) return result;
     cpu->r[15] = UINT32_C(0x00100378);
     return CTR_CPU_OK;
@@ -1264,7 +1264,7 @@ static ctr_cpu_result ctr_thread_worker_at_00100390(ctr_cpu *cpu) {
 static ctr_cpu_result ctr_thread_worker_at_00100394(ctr_cpu *cpu) {
     ++cpu->instructions;
     uint32_t address = cpu->r[4] + UINT32_C(0x00000038);
-    ctr_cpu_result result = ctr_cpu_store(cpu, address, 4u, cpu->r[1]);
+    ctr_cpu_result result = ctr_cpu_store_data(cpu, address, 4u, cpu->r[1]);
     if (result != CTR_CPU_OK) return result;
     cpu->r[15] = UINT32_C(0x00100398);
     return CTR_CPU_OK;
@@ -1365,7 +1365,7 @@ static ctr_cpu_result ctr_thread_busy_at_0010050c(ctr_cpu *cpu) {
 static ctr_cpu_result ctr_thread_busy_at_00100510(ctr_cpu *cpu) {
     ++cpu->instructions;
     uint32_t address = cpu->r[10] + UINT32_C(0x00000000);
-    ctr_cpu_result result = ctr_cpu_store(cpu, address, 4u, cpu->r[0]);
+    ctr_cpu_result result = ctr_cpu_store_data(cpu, address, 4u, cpu->r[0]);
     if (result != CTR_CPU_OK) return result;
     cpu->r[15] = UINT32_C(0x00100514);
     return CTR_CPU_OK;
@@ -1374,7 +1374,7 @@ static ctr_cpu_result ctr_thread_busy_at_00100510(ctr_cpu *cpu) {
 static ctr_cpu_result ctr_thread_busy_at_00100514(ctr_cpu *cpu) {
     ++cpu->instructions;
     uint32_t address = cpu->r[4] + UINT32_C(0x0000003c);
-    ctr_cpu_result result = ctr_cpu_store(cpu, address, 4u, cpu->r[10]);
+    ctr_cpu_result result = ctr_cpu_store_data(cpu, address, 4u, cpu->r[10]);
     if (result != CTR_CPU_OK) return result;
     cpu->r[15] = UINT32_C(0x00100518);
     return CTR_CPU_OK;
@@ -1406,7 +1406,7 @@ static ctr_cpu_result ctr_thread_busy_at_00100520(ctr_cpu *cpu) {
 static ctr_cpu_result ctr_thread_busy_at_00100524(ctr_cpu *cpu) {
     ++cpu->instructions;
     uint32_t address = cpu->r[4] + UINT32_C(0x00000040);
-    ctr_cpu_result result = ctr_cpu_store(cpu, address, 4u, cpu->r[0]);
+    ctr_cpu_result result = ctr_cpu_store_data(cpu, address, 4u, cpu->r[0]);
     if (result != CTR_CPU_OK) return result;
     cpu->r[15] = UINT32_C(0x00100528);
     return CTR_CPU_OK;

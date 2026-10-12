@@ -118,6 +118,16 @@ ctr_cpu_result ctr_cpu_store(ctr_cpu *cpu, uint32_t address, unsigned width, uin
 static uint32_t read_register(const ctr_cpu *cpu, unsigned reg, bool thumb) {
     return cpu->r[reg] + (reg == 15u ? (thumb ? 4u : 8u) : 0u);
 }
+ctr_cpu_result ctr_cpu_load_data(ctr_cpu *cpu,uint32_t address,unsigned width,uint32_t *value) {
+    ctr_mem_result result=ctr_memory_read_data(cpu->memory,address,width,value);
+    if(result==CTR_MEM_OK)return CTR_CPU_OK;
+    cpu->memory_fault=result;return ctr_cpu_stop(cpu,CTR_CPU_MEMORY_FAULT,address);
+}
+ctr_cpu_result ctr_cpu_store_data(ctr_cpu *cpu,uint32_t address,unsigned width,uint32_t value) {
+    ctr_mem_result result=ctr_memory_write_data(cpu->memory,address,width,value);
+    if(result==CTR_MEM_OK) { cpu->exclusive_valid=false;return CTR_CPU_OK; }
+    cpu->memory_fault=result;return ctr_cpu_stop(cpu,CTR_CPU_MEMORY_FAULT,address);
+}
 
 void ctr_cpu_barrier(void) { atomic_thread_fence(memory_order_seq_cst); }
 ctr_cpu_result ctr_cpu_fp_transfer(ctr_cpu *cpu,unsigned first,unsigned words,uint32_t address,bool load,uint32_t opcode) {
@@ -146,7 +156,7 @@ uint32_t ctr_cpu_byte_select(const ctr_cpu *cpu,uint32_t left,uint32_t right) {
 bool ctr_cpu_multiple_supported(unsigned base,uint16_t registers,bool writeback,bool load,bool thumb) {
     if(base>=15 || !registers || (thumb && !load && (registers&0x8000u)))return false;
     if(writeback && (registers&(1u<<base))) {
-        if(load || !thumb || (registers&((1u<<base)-1u)))return false;
+        if(load || (registers&((1u<<base)-1u)))return false;
     }
     return true;
 }
@@ -303,12 +313,13 @@ static ctr_cpu_result arm_step(ctr_cpu *cpu, uint32_t insn) {
     }
     if ((insn & UINT32_C(0x0e0000f0)) == UINT32_C(0x000000b0)) {
         unsigned rn=(insn>>16)&15u,rd=(insn>>12)&15u;
-        if(!(insn&UINT32_C(0x01000000)) || !(insn&UINT32_C(0x00400000)) ||
+        bool immediate=(insn&UINT32_C(0x00400000))!=0;
+        if(!(insn&UINT32_C(0x01000000)) || (!immediate && ((insn&0xf00u) || (insn&15u)==15)) ||
             (insn&UINT32_C(0x00200000)) || rd==15u)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
-        uint32_t offset=((insn>>4)&0xf0u)|(insn&15u),base=read_register(cpu,rn,false);
+        uint32_t offset=immediate?((insn>>4)&0xf0u)|(insn&15u):cpu->r[insn&15u],base=read_register(cpu,rn,false);
         uint32_t address=(insn&UINT32_C(0x00800000))?base+offset:base-offset;
         bool load=(insn&UINT32_C(0x00100000))!=0;uint32_t value=cpu->r[rd];
-        ctr_cpu_result result=load?ctr_cpu_load(cpu,address,2u,&value):ctr_cpu_store(cpu,address,2u,value);
+        ctr_cpu_result result=load?ctr_cpu_load_data(cpu,address,2u,&value):ctr_cpu_store_data(cpu,address,2u,value);
         if(result!=CTR_CPU_OK)return result;
         if(load)cpu->r[rd]=value;
         cpu->r[15]=next;return CTR_CPU_OK;
@@ -332,7 +343,7 @@ static ctr_cpu_result arm_step(ctr_cpu *cpu, uint32_t insn) {
         uint32_t base = read_register(cpu, rn, false);
         uint32_t adjusted = (insn & UINT32_C(0x00800000)) != 0u ? base + offset : base - offset;
         uint32_t address = pre ? adjusted : base, value = cpu->r[rd];
-        ctr_cpu_result result = load ? ctr_cpu_load(cpu, address, width, &value) : ctr_cpu_store(cpu, address, width, value);
+        ctr_cpu_result result = load ? (rd==15u?ctr_cpu_load(cpu,address,width,&value):ctr_cpu_load_data(cpu,address,width,&value)) : ctr_cpu_store_data(cpu,address,width,value);
         if (result != CTR_CPU_OK) return result;
         if (writeback) cpu->r[rn] = adjusted;
         if (load) cpu->r[rd] = value;
@@ -447,14 +458,14 @@ static ctr_cpu_result thumb_step(ctr_cpu *cpu, uint32_t insn) {
         unsigned rd = insn & 7u, rn = (insn >> 3) & 7u;
         unsigned width = (insn & 0xf000u) == 0x8000u ? 2u : ((insn & 0x1000u) != 0u ? 1u : 4u);
         uint32_t address = cpu->r[rn] + ((insn >> 6) & 31u) * width;
-        ctr_cpu_result result = (insn & 0x800u) != 0u ? ctr_cpu_load(cpu, address, width, &cpu->r[rd]) :
-                                                                    ctr_cpu_store(cpu, address, width, cpu->r[rd]);
+        ctr_cpu_result result = (insn & 0x800u) != 0u ? ctr_cpu_load_data(cpu, address, width, &cpu->r[rd]) :
+                                                                    ctr_cpu_store_data(cpu, address, width, cpu->r[rd]);
         if (result != CTR_CPU_OK) return result;
     } else if ((insn & 0xf000u) == 0x9000u) {
         unsigned rd = (insn >> 8) & 7u;
         uint32_t address = cpu->r[13] + (insn & 255u) * 4u;
-        ctr_cpu_result result = (insn & 0x800u) != 0u ? ctr_cpu_load(cpu, address, 4u, &cpu->r[rd]) :
-                                                                    ctr_cpu_store(cpu, address, 4u, cpu->r[rd]);
+        ctr_cpu_result result = (insn & 0x800u) != 0u ? ctr_cpu_load_data(cpu, address, 4u, &cpu->r[rd]) :
+                                                                    ctr_cpu_store_data(cpu, address, 4u, cpu->r[rd]);
         if (result != CTR_CPU_OK) return result;
     } else if ((insn & 0xf000u) == 0xa000u) {
         cpu->r[(insn >> 8) & 7u] = ((insn & 0x800u) != 0u ? cpu->r[13] : (pc + 4u) & ~UINT32_C(3)) + (insn & 255u) * 4u;

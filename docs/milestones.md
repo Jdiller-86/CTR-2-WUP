@@ -35,9 +35,9 @@ different things. See [progress.md](progress.md) for the assessment and evidence
 
 | Milestone | Verified portion | Remaining acceptance |
 |---|---|---|
-| M1 | RPX/WUHB built; native report records nine self-tests and ten guided picture/input/touch/audio/stability checks passed; resource cleanup reached; v0.14.3 Minus exit user-confirmed | Compiled stability and independently installed WUP |
-| M2 | Original CPU/AOT subset plus stack/register transfers, BLX, user CP15 TLS, byte media, barriers and scoped FP; external generation/checked ABI; GCC/sanitizers/Clang/emulated big-endian PPC checks; 870 independent ARM1176 cases and nested-call trace | Complete ARM/VFP semantics, workload memory/fallback costs and actual Espresso timings |
-| M3 | Checked NCCH loading and eight single-core contexts; CPU/TLS/VFP/FPSCR ownership, priorities/quanta, joins/locks/arbiters/quotas; SRV/CFG/heap/shared/HID/GSP/VBlank; six normal-CRT/libctru applications including exact CPU framebuffer pixels, private FS save/fresh-process reload and standalone APT lifecycle; interactive and fifth save RPX/WUHB built | Physical guest/input/display/thread/SD/stability evidence; broader services, applets, ROMFS/assets/retail saves, cross-process semantics, motion, GX commands/PICA and guest audio |
+| M1 | RPX/WUHB built; older native report records ten guide/nine self-test passes; Minus exit confirmed; Native/Guarded/Compiled completion reported for v0.14.5 | New result-file/save console evidence, full lifecycle acceptance and installed WUP |
+| M2 | Original CPU/AOT subset plus stack/register transfers, BLX, user CP15 TLS, byte media, barriers and scoped FP; external generation/checked ABI; GCC/sanitizers/Clang/emulated big-endian PPC checks; 944 independent ARM1176 cases (U=1/A=0 single-data semantics and defined base-in-list stores) and nested-call trace | Complete ARM/VFP semantics, workload memory/fallback costs and actual Espresso timings |
+| M3 | Checked NCCH loading and eight single-core contexts; CPU/TLS/VFP/FPSCR ownership, priorities/quanta, joins/locks/arbiters/quotas; SRV/CFG/heap/shared/HID/GSP/VBlank; seven normal-CRT/libctru applications including exact CPU framebuffer pixels, private FS save/reload, APT lifecycle and read-only Level-3 RomFS assets; five current diagnostic variants built | Verified new result-file/save/RomFS console evidence; broader services, applets, NCCH/IVFC and commercial assets/retail saves, cross-process semantics, motion, GX commands/PICA and guest audio |
 | M4 | Bounded command references, standard direct/shared GSP display and five tested rotated CPU display formats | Actual PICA-to-GX2 features, scene comparisons and console timings |
 | M5 | Mario selected; original attachment exceeds 32 MiB; October 11 small intake receipt reports outer-encrypted executable content and contains no executable; intake/export helper tested; shared runtime foundations | Decrypted private executable export/revision, title-specific runtime/renderer/services/save/audio implementation and console gameplay |
 | M6 | External C generation/static compilation, staging/artwork/intake, original encrypted writer and independent decrypt/FST/file checks with synthetic inputs, atomic output/wheel; Windows workflow prepared | Actual local certificate/key provenance and installer acceptance, full commercial conversion, caches/traces/rebuild, Windows execution and console install checks |
@@ -46,17 +46,16 @@ different things. See [progress.md](progress.md) for the assessment and evidence
 These are partial implementation outcomes. None of the full milestone checkboxes
 is satisfied by source/build/test artifacts alone.
 
-v0.14.4 records native Minus exit as user-confirmed. Guarded A produced delayed
-green once, then froze on relaunch; its stability is unaccepted. Cached scaling,
-fresh-green confirmation/latency logs and a tested idle-dispatch fault guard are
-implemented. Eight varied-clock live-input replays pass on desktop, including
-7.1 s delay under old 285 ms host pacing; no physical speed/freeze improvement is
-claimed. The first guarded TXT now records continued execution/rendering and
-complete shutdown, with A response marked failed. The user confirms the second
-run saved nothing. v0.14.5 syncs/closes checkpoints and flushes the mounted SD
-volume, with sticky errors and guest pause. One short guarded retest is requested;
-physical crash recovery and intermittent stability remain open. No full
-milestone is closed. See [the follow-up](console-retest.md).
+v0.14.6 records the user's latest **Native/Guarded/Compiled v0.14.5 completion
+without errors**, separately from the supplied older text logs. Missing new TXT
+reports remain unexplained. The valid visit-1 snapshot proves initial record
+persistence, not the failed update/reload. Independent read-back-verified TXT
+results and portable backup/publication/rollback now have desktop/sanitizer
+checks; a quick Save then RomFS console round is requested. The new original
+RomFS application verifies root/nested/Unicode reads, directory listing and
+write denial, including emulated big-endian PPC, without interpreter fallback.
+These advance M2/M3 foundations; no full milestone is closed.
+See [console-retest.md](console-retest.md) and [romfs-assets.md](romfs-assets.md).
 
 v0.14.1 added controller-driven guided native/compiled/save tests and checked
 per-launch TXT evidence, with upload guidance. Automatic observations, user

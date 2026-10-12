@@ -49,7 +49,8 @@ static void allocation_tests(void) {
     CHECK(ctr_memory_read(&g.memory,base,4,CTR_MEM_READ,&v)==CTR_MEM_OK && v==0x87654321);
     control(&g,1,base,0,0x3000,0,0);
     for(unsigned i=0;i<CTR_GUEST_MAX_ALLOCATIONS;++i) CHECK(!g.allocations[i].storage);
-    CHECK(g.memory.code_generation==code && g.memory.count==5);
+    CHECK(g.memory.code_generation==code && g.memory.count==6);
+    CHECK(ctr_memory_check_range(&g.memory,0x1ff81000,4096,CTR_MEM_READ)==CTR_MEM_OK);
     uint32_t linear=control(&g,0x10103,0,0,0x2000,3,0);CHECK(linear==CTR_LINEAR_BASE);
     query(&g,linear+0x1fff,linear,0x2000,3,7);
     control(&g,3,0x08100000,0,0x1000,2,0);query(&g,0x08100080,0x08100000,0x1000,2,5);

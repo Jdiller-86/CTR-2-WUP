@@ -47,7 +47,7 @@ static ctr_cpu_result ctr_arm_fixture_at_00001010(ctr_cpu *cpu) {
 static ctr_cpu_result ctr_arm_fixture_at_00001014(ctr_cpu *cpu) {
     ++cpu->instructions;
     uint32_t address = cpu->r[3] + UINT32_C(0x00000000);
-    ctr_cpu_result result = ctr_cpu_store(cpu, address, 4u, cpu->r[0]);
+    ctr_cpu_result result = ctr_cpu_store_data(cpu, address, 4u, cpu->r[0]);
     if (result != CTR_CPU_OK) return result;
     cpu->r[15] = UINT32_C(0x00001018);
     return CTR_CPU_OK;
@@ -56,7 +56,7 @@ static ctr_cpu_result ctr_arm_fixture_at_00001014(ctr_cpu *cpu) {
 static ctr_cpu_result ctr_arm_fixture_at_00001018(ctr_cpu *cpu) {
     ++cpu->instructions;
     uint32_t address = cpu->r[3] + UINT32_C(0x00000000);
-    ctr_cpu_result result = ctr_cpu_load(cpu, address, 4u, &cpu->r[2]);
+    ctr_cpu_result result = ctr_cpu_load_data(cpu, address, 4u, &cpu->r[2]);
     if (result != CTR_CPU_OK) return result;
     cpu->r[15] = UINT32_C(0x0000101c);
     return CTR_CPU_OK;

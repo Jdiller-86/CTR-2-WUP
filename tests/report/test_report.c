@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 #include "test_report.h"
+#include "test_result.h"
 #include "report_storage.h"
 #include "test_guide.h"
 #include "test_lifecycle.h"
@@ -67,6 +68,11 @@ static void touches(ctr_test_guide *g,ctr_guide_input *in) {
 }
 static void guide_tests(void) {
     ctr_test_guide g;ctr_guide_input in={0};char view[7][72];
+    ctr_test_guide_init(&g,CTR_GUIDE_ASSETS,capture,NULL);
+    in.guest_exited=true;ctr_test_guide_update(&g,&in);CHECK(g.done && g.failed==1 && !g.passed);
+    ctr_test_guide_init(&g,CTR_GUIDE_ASSETS,capture,NULL);
+    in.guest_pass=true;ctr_test_guide_update(&g,&in);CHECK(g.done && g.passed==1 && !g.failed);
+    memset(&in,0,sizeof(in));
     ctr_test_guide_init(&g,CTR_GUIDE_NATIVE,capture,NULL);
     in.pressed=CTR_GUIDE_R;ctr_test_guide_update(&g,&in);CHECK(g.step==1);
     ctr_test_guide_view(&g,0,view);CHECK(strstr(view[4],"Need: A B X Y L R")!=NULL);
@@ -91,6 +97,13 @@ static void guide_tests(void) {
     CHECK(strstr(view[4],"Upload")!=NULL);
     CHECK(strstr(guide_log_text,"User confirmed")!=NULL && strstr(guide_log_text,"ten requested buttons")!=NULL);
     ctr_test_guide_summary(&g);CHECK(strstr(guide_log_text,"not_finished=0")!=NULL);
+    char results[1536];
+    CHECK(ctr_test_guide_results(&g,results,sizeof(results)));
+    CHECK(strstr(results,"1. Picture check: PASS | User confirmed")!=NULL);
+    CHECK(strstr(results,"2. Buttons: PASS | All ten requested buttons observed")!=NULL);
+    CHECK(strstr(results,"10. Stability observation: PASS")!=NULL);
+    CHECK(strstr(results,"NOT TESTED")==NULL);
+    CHECK(!ctr_test_guide_results(&g,results,8));
 
     guide_log_text[0]=0;memset(&in,0,sizeof(in));
     ctr_test_guide_init(&g,CTR_GUIDE_NATIVE,capture,NULL);
@@ -98,6 +111,10 @@ static void guide_tests(void) {
     in.pressed=CTR_GUIDE_SKIP;ctr_test_guide_update(&g,&in);CHECK(g.skipped==1 && g.step==2);
     in.pressed=CTR_GUIDE_MINUS;ctr_test_guide_update(&g,&in);CHECK(g.cancelled && !g.done);
     ctr_test_guide_summary(&g);CHECK(strstr(guide_log_text,"NOT TESTED")!=NULL && strstr(guide_log_text,"not_finished=8")!=NULL);
+    CHECK(ctr_test_guide_results(&g,results,sizeof(results)));
+    CHECK(strstr(results,"1. Picture check: FAIL | User reported")!=NULL);
+    CHECK(strstr(results,"2. Buttons: NOT TESTED | User pressed ZL to skip")!=NULL);
+    CHECK(strstr(results,"3. Left stick: NOT TESTED | Step not completed")!=NULL);
 
     guide_log_text[0]=0;memset(&in,0,sizeof(in));
     ctr_test_guide_init(&g,CTR_GUIDE_SAVE,capture,NULL);
@@ -268,6 +285,45 @@ static void commit_tests(const char *directory) {
     CHECK(strstr(text,"UNCOMMITTED BUFFER")==NULL && strstr(text,"===== END OF REPORT:")==NULL);
     CHECK(unlink(path)==0);
 }
+static void result_tests(const char *directory) {
+    ctr_test_result first={0},second={0};char text[CTR_TEST_RESULT_BYTES+2];
+    CHECK(ctr_test_result_open(&first,directory,"compiled-save","0.14.6",100));
+    CHECK(first.ready && !first.failed && first.verified_writes==1);
+    CHECK(strstr(first.filename,"result-compiled-save-0.14.6-")!=NULL);
+    read_file(first.path,text,sizeof(text));CHECK(strlen(text)==CTR_TEST_RESULT_BYTES);
+    CHECK(strstr(text,"Build: 0.14.6") && strstr(text,"Session: STARTED"));
+    CHECK(ctr_test_result_update(&first,"Guide: COMPLETE | passed=2 failed=0\nGuest: exited\n"));
+    CHECK(first.verified_writes==2);
+    read_file(first.path,text,sizeof(text));CHECK(strstr(text,"passed=2 failed=0") && strstr(text,"Power-loss recovery unverified"));
+    CHECK(ctr_test_result_open(&second,directory,"compiled-save","0.14.6",100));
+    CHECK(strcmp(first.path,second.path)!=0 && strcmp(first.identity,second.identity)!=0);
+    CHECK(ctr_test_result_update(&first,"Stage: input_read\n"));
+    read_file(first.path,text,sizeof(text));CHECK(strstr(text,"passed=2 failed=0")==NULL); /* Full fixed-size replacement, no stale tail. */
+    char other[CTR_TEST_RESULT_BYTES+1];read_file(second.path,other,sizeof(other));
+    FILE *file=fopen(first.path,"wb");CHECK(file && fwrite(other,1,CTR_TEST_RESULT_BYTES,file)==CTR_TEST_RESULT_BYTES && fclose(file)==0);
+    CHECK(!ctr_test_result_update(&first,"Never overwrite another reserved result"));
+    CHECK(first.failed && first.error_code==EIO && strcmp(first.error_stage,"read_verify")==0);
+    read_file(first.path,text,sizeof(text));CHECK(memcmp(text,other,CTR_TEST_RESULT_BYTES)==0);
+    CHECK(!ctr_test_result_update(&first,"Sticky failure"));CHECK(unlink(first.path)==0);
+    CHECK(unlink(second.path)==0);
+    CHECK(!ctr_test_result_update(&second,"Do not recreate a missing receipt"));
+    CHECK(second.failed && second.error_code==ENOENT && access(second.path,F_OK)!=0);
+    ctr_test_result bad={0};CHECK(!ctr_test_result_open(&bad,directory,"../escape","0.14.6",1) && bad.error_code==EINVAL);
+    CHECK(!ctr_test_result_open(&bad,"/missing/ctr2wup-results","native","0.14.6",1));
+    CHECK(!ctr_test_result_open(NULL,directory,"native","0.14.6",1));
+    CHECK(!ctr_test_result_update(NULL,"body"));
+    char path[512];CHECK(snprintf(path,sizeof(path),"%s/result-native-0.14.6-%016llx-00.txt",directory,101ULL)>0);
+    pid_t child=fork();CHECK(child>=0);
+    if(!child) {
+        ctr_test_result interrupted={0};
+        if(!ctr_test_result_open(&interrupted,directory,"native","0.14.6",101) ||
+           !ctr_test_result_update(&interrupted,"Stage: compiled_guest_begin\nGuide: RUNNING\n"))_exit(1);
+        _exit(77);
+    }
+    int status;CHECK(waitpid(child,&status,0)==child && WIFEXITED(status) && WEXITSTATUS(status)==77);
+    read_file(path,text,sizeof(text));CHECK(strstr(text,"compiled_guest_begin") && strstr(text,"Guide: RUNNING"));
+    CHECK(unlink(path)==0);
+}
 
 static void lifecycle_tests(void) {
     const uint64_t hbl[]={UINT64_C(0x0005000013374842),UINT64_C(0x000500101004a000),
@@ -384,6 +440,7 @@ int main(void) {
     scale_tests();
     char directory[] = "/tmp/ctr2wup-report-XXXXXX", text[4096];
     CHECK(mkdtemp(directory) != NULL);
+    result_tests(directory);
     commit_tests(directory);
     ctr_test_report first = {0}, second = {0}, bad = {0};
     CHECK(ctr_test_report_open(&first, directory, "native", "0.14.1", 1));

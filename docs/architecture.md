@@ -43,17 +43,23 @@ see `upstream-integration.md`. Its desktop runtime is not a Wii U dependency.
 
 The native WUT backend provides independent TV and GamePad diagnostic output,
 input, sound, process lifecycle, timing, and CPU self-test instrumentation.
-v0.14.5 commits critical TXT checkpoints with `fflush`/`fsync`, checked close,
-`FSAFlushVolume` on the existing SD mount, then `r+` reopen/seek without creation.
-Startup, guest start and periodic summaries also commit. Only acknowledged file/
-volume commits are counted; first failures remain sticky and pause guest input/
-execution, with operation/errno/FSA status on screen. A diagnostic-owned FSA
-client is released before system transitions; subsequent exit checkpoints only
-sync/close their file. WUT retains mount ownership.
-Desktop abrupt-process-exit tests do not establish SD power-loss durability or
-recover a GPU/OS/storage hang. Sync cost is diagnostic overhead. The received
-v0.14.3 report records the completed first run; the next frozen launch saved
-nothing. See [console-evidence.md](console-evidence.md).
+v0.14.6 reserves a separate fixed-size 4 KiB result TXT independently of WHB
+trace handlers. Every update checks the reserved identity, writes, closes and
+reads back all bytes; named guide outcomes persist in the result even if the
+full trace fails. First errors are sticky; result-storage failure pauses guest
+input/execution, while full-trace failure is reported independently. Result
+writes happen at startup/self-tests/guest/checkpoint/guide/save/periodic/cleanup
+boundaries. Guest state is captured before close so cleanup cannot erase its
+final stats. Final result writes precede system transition.
+
+The longer trace retains v0.14.5 `fflush`/`fsync`, checked close, mounted-volume
+flush and existing-file reopen. Handler registration is now checked. WUT owns
+the SD mount; the diagnostic releases its extra FSA client before transition.
+Neither exact read-back nor desktop abrupt-exit tests establish SD power-loss
+durability. The user reports successful v0.14.5 Native/Guarded/Compiled runs but
+no new logs; the uploaded text reports are older. Cause is unknown. See
+[console-evidence.md](console-evidence.md).
+
 v0.14.4 caches bounded nearest-neighbor coordinate maps and reuses scaled rows,
 with byte-order-independent RGBA output, checked source/output capacity and black
 borders/padding. The native backend flushes/invalidates the produced GX2 surfaces.
@@ -113,6 +119,27 @@ archive/file sessions and snapshot commits. Guest filenames never address the
 host filesystem. The original compiled test proves save/read/fresh-process reload;
 see `filesystem.md` for supported commands and remaining commercial boundaries.
 It does not execute PICA or supply commercial compatibility.
+
+v0.14.6 adds an explicit borrowed 64-bit read-only current-process Level-3 RomFS
+view. Checked FSFILE transport exposes bytes; unmodified libctru resolves nested
+and Unicode names/directories in guest code. Lifetime and read publication are
+checked, with no host path exposure. Full NCCH/IVFC extraction/authentication and
+commercial asset integration remain open; see `romfs-assets.md`.
+
+Save publication reserves `.pending`, moves a validated primary to absent
+`.previous`, publishes into the vacant primary name, then removes the backup.
+Failed publish attempts rollback; absent-primary load can recover a validated
+backup. Corruption and ambiguous siblings remain visible failures. This avoids
+requiring FSA rename replacement; it is not a concurrent-writer/power-loss guarantee.
+
+A read-only shared time page at 1ff81000 uses two banks and a published sequence,
+explicit synthetic Unix-zero epoch, guest-clock progression and matching 268111856
+Hz ticks. It is separate from kernel policy/TLS and counts as an additional 4 KiB
+backing allocation. ARM single-data byte/halfword/word accesses use checked
+little-endian U=1/A=0 unaligned semantics; other instruction classes stay strictly
+aligned. Defined lowest-base STM writeback is supported. Reference and generated
+original/external AOT checks are recorded in `cpu-stack.md`.
+
 
 `renderer/` contains bounded command inspection and small format/presentation
 references. Capturing PICA register writes does not execute a draw. An explicit

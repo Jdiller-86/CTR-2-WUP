@@ -9,10 +9,93 @@ decrypted game, configure title/artwork, click Inject, install its per-game WUP
 and launch from Wii U Menu. The CLI is the shared engine, not the final product.
 
 **Overall implementation estimate: approximately 20%**, reassessed against the
-v0.14 GUI-to-playable-WUP target on October 9, 2026. This is a rough engineering
+v0.14.6 GUI-to-playable-WUP target on October 11, 2026. This is a rough engineering
 judgment, not measured task completion. **0/7 full milestones are accepted.**
 See [the completion assessment](docs/progress.md) for its basis, remaining work,
 and external testing gates; the README provides a concise progress overview.
+
+**Version 0.14.6 reviews the latest evidence and advances shared RomFS support.**
+The user reports **Native, Guarded and Compiled completed without errors on
+0.14.5**, but no new TXT reports were found and Save failed. These observations
+are recorded separately from the supplied text headers, which identify
+0.14.0–0.14.3. The six originals and SHA-256 receipt remain under ignored
+`private/console-followup-20261011/`; none is bundled/published. The 88-byte
+snapshot is CRC-valid with both expected visit-1 records. It proves initial
+persistence, not a successful later update or reload. A private desktop copy now
+reloads and advances both records to visits 2 and 3 with zero fallback while the
+original stays unchanged. See `docs/console-evidence.md`.
+
+A separate fixed-size **`result-<app>-0.14.6-<session>-<suffix>.txt`** now bypasses
+the full trace handler. Exclusive launch identity, checked write/flush/close and
+exact 4 KiB read-back precede **RESULT VERIFIED**. Named guide outcomes/evidence,
+self-tests, guest state/PC/fault/fallback, save status/errno, green latency and
+full-trace errors are retained independently. Missing/replaced files fail visibly
+without recreation; first errors pause guest execution. Handler registration is
+checked. Guest statistics are captured before cleanup, and result writes finish
+before system transition. Existing trace sync/close/volume commits and WUT mount
+ownership remain. Read-back is not a physical power-loss durability guarantee.
+The exact cause of the missing v0.14.5 logs is **unknown**.
+
+Save publication no longer depends on rename replacing a destination: it stages
+exclusively, validates/moves the old primary to `.previous`, publishes into the
+vacant primary, and removes the backup after success. Failed publication attempts
+rollback; missing-primary load can recover validated `.previous`. Corrupt primary,
+stale `.pending` and ambiguous backup fail visibly and remain preserved. Tests
+model no-overwrite rename, repeat updates, rollback failure and abrupt interruption.
+This corrects an identified WUT/FSA assumption; it is **not a confirmed diagnosis
+of the user's exact console save failure**. The guest names its failing phase.
+See `docs/filesystem.md`.
+
+New current-process **read-only Level-3 RomFS transport** advances M3 without a
+ROM/game patch. An original ordinary devkitARM/libctru/newlib application reads
+root/nested/Unicode assets, seeks/checks EOF, lists directories and rejects writes.
+Library parsing runs unchanged in guest code. Provider lifetimes, copied file
+handles, whole-buffer bounds/permissions, IPC aliases, >4 GiB length/offsets and
+failed-read atomicity are checked. NCCH/IVFC extraction/authentication, encrypted
+cartridge access and commercial asset integration remain unfinished.
+
+That actual program required a synthetic read-only shared time page, defined
+lowest-base ARM STM writeback and ARMv6 U=1/A=0 unaligned single-data access.
+These are shared implementations with strict alignment retained for fetch/multiple/
+exclusive/FP operations, not library patches. The time epoch is explicitly
+synthetic; no actual RTC/timezone accuracy is claimed. See `docs/romfs-assets.md`,
+`docs/cpu-stack.md` and `docs/guest-memory.md`.
+
+v0.14.6 verification is under **`artifacts/reports/console-results-v0146/`**:
+
+- Required `make check`: **155 Python tests and fourteen C suites**, normal and
+  ASan/UBSan. Each mode includes 51,796 CPU, 1,892 filesystem, 574 report/guide,
+  200 multiple-transfer and 19 no-progress-guard assertions. Required
+  `make prototype` and the fresh native builder complete successfully.
+- `upstream-final/report.json`: fourteen external AOT probes, **28 checks**, all
+  compile/run successfully; real faults, alias invalidation and bounded resume
+  remain tested. `arm1176-data-validated/report.json`: **944 independent Unicorn
+  ARM1176 cases** plus the original 47-instruction nested ARM/Thumb program.
+- `interactive-final/report.json`: exact guest frames, guarded depth-2 comparison
+  and eight live-input timing replays pass. `filesystem-final/report.json`:
+  initial/fresh-process save/reload passes; corrupted snapshot rejection exits
+  with **expected status 5**, preserving bytes.
+- `romfs-complete/report.json` and `romfs-sanitized/report.json`: the new original
+  guest passes and exits after **49,550 instructions**, zero fallback, with three
+  unavailable optional/privileged startup requests still reported. The same
+  program passes **QEMU emulated big-endian PPC Linux** in `romfs-powerpc/`.
+- `final-source-builds.json`: all four compiled variants rebuilt from recorded
+  current source; native rebuilt separately. Packaged RPX/WUHB headers, hashes,
+  ZIP CRC and source bytes are checked. Earlier failed diagnostic logs are
+  preserved; only the completed final runs support these claims.
+
+Delivery: **`artifacts/delivery/console-results-0.14.6/`**, containing the five-app
+console testing kit, matching source ZIP, notices, build receipts and hashes.
+The current kit includes Native, Compiled AOT, Guarded AOT, Save and RomFS;
+older raw/custom ARM diagnostic variants remain available from earlier artifacts.
+[The short retest](docs/console-retest.md) now requests **Save, then RomFS** and
+their new result TXT/snapshot. No long native/guarded/compiled repeat is needed.
+Result persistence, save update/reload and RomFS acceptance on Wii U are pending.
+Mario's decrypted executable/assets, PICA-to-GX2, guest audio/retail saves, actual
+WUP installation, native Windows and the final GUI remain unfinished.
+**Approximately 20% implementation; 0/7 full acceptance milestones.**
+
+## Earlier checkpoints (historical)
 
 **Version 0.14.5 hardens reports after a freeze left no file.** The uploaded
 v0.14.3 guarded TXT matches the first run: picture confirmed, A response marked
@@ -550,17 +633,12 @@ existing Git checkout; do not reset, force-push or replace user changes.
   private `CTR2WUP-intake.zip`. The full original can stay local for later asset
   work. If it reports encryption, decrypted executable data is still needed.
   No commercial profile is enabled until actual private intake and runtime evidence.
-- **Wii U:** first run the short v0.14.3 native-exit/compiled-input retest per
-  `docs/console-retest.md`, upload the new TXT reports and note menu return/splash stall/system freeze.
-  After both failures are resolved, complete the other guided/save tests. Native
-  guided input/display/audio/stability and embedded self-tests have scoped evidence;
-  full launcher/compiled/save/installation acceptance remains open. Return screen/input/audio/exit,
-  TLS/SRV/CFG, heap, shared/sync, stack-call and HID PASS/FAIL/SD log, live ARM-read
-  buttons/Circle Pad/touch/snapshot/clean exit, HID/GSP rotated color/corner/touch
-  display/stability and exit,
-  external-AOT guest frame/touch/restart/stability results and SD logs per
-  `docs/console-testing.md`. Record firmware and homebrew/launcher environment.
-  No commercial dump or encryption key is needed for these diagnostic builds.
+- **Wii U:** follow the v0.14.6 Save-then-RomFS check in
+  `docs/console-retest.md`; upload new independent result TXT, any full traces,
+  and the snapshot/siblings. Native/Guarded/Compiled v0.14.5 completion is
+  user-reported; their uploaded old logs cannot verify those runs. New SD
+  result persistence/save updates/assets and full lifecycle/WUP acceptance
+  remain open. No ROM or key is needed for these original diagnostics.
 - **Windows execution:** a manual workflow is prepared locally at
   `.github/workflows/windows-validation.yml`, including actual external AOT and
   Unicode execution. Publication/one run remain subject to the earlier requested
@@ -584,7 +662,7 @@ P2/P3: inspect the supplied Mario revision, then expand the kernel/IPC and
 CPU semantics beyond the tested shared startup subset. Implement memory
 control beyond the checked owned-heap/shared-object subsets, cross-process maps,
 broader thread/affinity/priority-inheritance behavior, PICA/GX2 state/shaders/textures/coherency,
-DSP/audio, RomFS/saves and module behavior. CFG user/Mii/console-unique identity
+DSP/audio, NCCH/IVFC/commercial RomFS assets, retail saves and module behavior. CFG user/Mii/console-unique identity
 and broader configuration blocks remain pending. Complete CPU/FP correctness and
 measure real console costs. The original framebuffer harness uses custom I/O; the separate standard-HID
 consumer and direct/queued HID/GSP graphics guests supply standard-interface evidence.

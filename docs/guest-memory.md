@@ -7,6 +7,15 @@ toward backing limits. Thread stacks pin owned allocations until their guest
 context exits, and eight 512-byte TLS slots share the original TLS page. See
 `guest-threads.md`; no retail firmware image or cross-process mapping is supplied.
 
+
+v0.14.6 adds a separate read-only shared time page at 1ff81000. Its double-bank
+milliseconds/tick-frequency/tick-offset reference advances with the guest clock
+from an explicitly synthetic Unix-zero epoch. Ordinary unmodified libctru time
+queries can run; actual RTC/timezone/full firmware config is not supplied. This
+page adds 4 KiB to loader backing/quota accounting; the minimal thread fixture
+now owns 36 KiB rather than 32 KiB. Both host and portable loaders reject segment
+collisions and include the allocation in their bounds.
+
 Version 0.7.0 advances M3/P3 with ControlMemory (SVC 1) and QueryMemory (SVC 2).
 It does not enable a commercial profile. This is original C11 code with checked
 little-endian accesses and no guest-to-host pointer casts. Public interface

@@ -116,3 +116,13 @@ through normal compiled original applications. Snapshot bytes are little-endian,
 bounded and CRC checked; the persistence adapter uses standard C I/O and rename.
 Native Windows rename/exclusive-file and application/toolchain behavior still
 need execution evidence. These Linux/emulated-PPC checks do not validate Windows.
+
+
+v0.14.6 adds independent fixed-size result TXT read-back and save publication
+without rename replacement, plus the original Level-3 RomFS application.
+`make -C tests/report check` and `make -C tests/filesystem check` cover their
+portable boundaries. `tools/validate-libctru.py --application romfs` uses the
+same checked generated-C interface and normal libctru parser; no game assets are
+bundled. Read/write/exclusive/rename behavior and actual compiled execution still
+need native Windows validation. The final injector GUI remains deferred until
+the commercial conversion and installable-WUP pipeline is proven.

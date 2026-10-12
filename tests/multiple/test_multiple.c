@@ -43,6 +43,42 @@ static void faults(void) {
     setup(0xb401,true);cpu.r[13]=0x08000007;
     CHECK(ctr_cpu_step(&cpu)==CTR_CPU_MEMORY_FAULT && cpu.memory_fault==CTR_MEM_ALIGNMENT && cpu.r[13]==0x08000007 && cpu.r[15]==0x100000);
 }
+static void base_in_list_store(void) {
+    setup(0xe92d6000,false);cpu.r[13]=0x08000020;cpu.r[14]=0x12345678;
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[13]==0x08000018);
+    CHECK(word(24)==0x08000020 && word(28)==0x12345678);
+    setup(0xe8ac5000,false);cpu.r[12]=0x08000020;cpu.r[14]=0x12345678;
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[12]==0x08000028);
+    CHECK(word(32)==0x08000020 && word(36)==0x12345678);
+    setup(0xe92d6000,false);cpu.r[13]=0x08000044;cpu.r[14]=0x12345678;
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_MEMORY_FAULT && cpu.r[13]==0x08000044);
+    CHECK(word(60)==0x08000044); /* First store survives; no writeback on fault. */
+}
+static void unaligned_data(void) {
+    setup(0xe18230b7,false);cpu.r[2]=0x08000000;cpu.r[7]=1;cpu.r[3]=0x3a;
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && data[1]==0x3a && data[2]==0 && cpu.r[15]==0x100004);
+    setup(0xe1dc40b1,false);data[1]=0x34;data[2]=0x12;cpu.r[12]=0x08000000;
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[4]==0x1234);
+    setup(0xe58c4001,false);cpu.r[12]=0x08000000;cpu.r[4]=0x12345678;
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && data[1]==0x78 && data[2]==0x56 && data[3]==0x34 && data[4]==0x12);
+    uint32_t value;CHECK(ctr_memory_read(&memory,0x08000001,4,CTR_MEM_READ,&value)==CTR_MEM_ALIGNMENT);
+    /* A regular transfer may span mappings; a later permission/gap fault
+       cannot publish its earlier bytes. Strict multi/exclusive APIs remain. */
+    uint8_t a[3]={0xa5,0xa5,0xa5},b[3]={0xa5,0xa5,0xa5};ctr_memory split;
+    ctr_memory_init(&split);CHECK(ctr_memory_map(&split,0x08000000,3,3,a,3)==CTR_MEM_OK);
+    CHECK(ctr_memory_map(&split,0x08000003,3,1,b,3)==CTR_MEM_OK);
+    uint64_t before=split.generation;
+    CHECK(ctr_memory_write_data(&split,0x08000001,4,0x12345678)==CTR_MEM_PERMISSION);
+    CHECK(split.generation==before && a[1]==0xa5 && b[0]==0xa5);
+    CHECK(ctr_memory_change_range(&split,0x08000003,3,3,false)==CTR_MEM_OK);
+    CHECK(ctr_memory_write_data(&split,0x08000001,4,0x12345678)==CTR_MEM_OK);
+    CHECK(a[1]==0x78 && a[2]==0x56 && b[0]==0x34 && b[1]==0x12);
+    CHECK(ctr_memory_read_data(&split,0x08000001,4,&value)==CTR_MEM_OK && value==0x12345678);
+    CHECK(ctr_memory_write_data(&split,UINT32_MAX,2,0)==CTR_MEM_OVERFLOW);
+    CHECK(ctr_memory_read_data(&split,0x08000005,2,&value)==CTR_MEM_UNMAPPED);
+    setup(0xe92d6000,false);cpu.r[13]=0x08000007;
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_MEMORY_FAULT && cpu.memory_fault==CTR_MEM_ALIGNMENT);
+}
 static void unsupported(void) {
     const uint32_t arm[]={0xe8cc0001,0xe8ac1001,0xe8bc1001,0xe89f0001,0xe88f8000,0xe8ac0000,0xe12fff3f};
     const uint32_t thumb[]={0xb400,0xbc00,0xc000,0xc800,0xc103,0x47f8};
@@ -69,7 +105,7 @@ static void interworking_and_wrap(void) {
     CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[12]==0xfffffff4u && wrapped[0]==1 && wrapped[4]==2 && wrapped[8]==3);
 }
 int main(void) {
-    modes();faults();unsupported();interworking_and_wrap();int result=ctr_stack_selftest();
+    modes();faults();base_in_list_store();unaligned_data();unsupported();interworking_and_wrap();int result=ctr_stack_selftest();
     if(result)fprintf(stderr,"stack selftest=%d\n",result);
     CHECK(!result);
     printf("{\"ok\":true,\"assertions\":%u,\"original_arm_thumb_stack_calls\":true,\"console_verified\":false}\n",assertions);return 0;

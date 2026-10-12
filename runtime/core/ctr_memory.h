@@ -34,6 +34,12 @@ ctr_mem_result ctr_memory_map(ctr_memory *memory, uint32_t base, uint32_t size,
                              size_t storage_size);
 ctr_mem_result ctr_memory_read(const ctr_memory *memory, uint32_t address,
                               unsigned width, unsigned permission, uint32_t *value);
+/* ARMv6 U=1/A=0 single-data transfers. Instruction, multiple, exclusive and
+ * FP accesses retain the strict APIs. Validate the full range before mutation. */
+ctr_mem_result ctr_memory_read_data(const ctr_memory *memory,uint32_t address,
+                                   unsigned width,uint32_t *value);
+ctr_mem_result ctr_memory_write_data(ctr_memory *memory,uint32_t address,
+                                    unsigned width,uint32_t value);
 ctr_mem_result ctr_memory_write(ctr_memory *memory, uint32_t address,
                                unsigned width, uint32_t value);
 /* Validate an entire byte range before a service publishes any output. Adjacent

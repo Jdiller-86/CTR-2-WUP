@@ -42,10 +42,19 @@ The applications test:
 - `filesystem`: normal savedata mount and newlib file I/O, Japanese UTF-16
   path, delete, explicit commit, fresh-process reload and independently checked
   snapshot bytes. Corrupt snapshots are rejected and preserved. Its optional
-  fifth RPX/WUHB writes only an original private diagnostic save.
+  RPX/WUHB writes only an original private diagnostic save.
 - `interactive`: standard input drives three exact top-screen colors, bottom
   touch pixels at (17,23)/(319,239), release and the guest's own B-button exit.
   Its optional RPX/WUHB uses live VPAD input and the same checked AOT/GSP runtime.
+
+- `romfs`: ordinary root/nested/Unicode file reads, seek/EOF, directory listing,
+  write denial and unmount through unmodified libctru's Level-3 parser. Its
+  current-process view contains only original assets; see `romfs-assets.md`.
+
+The default validator now runs all **seven** applications. The current console
+kit includes Native, interactive, guarded interactive, Save and RomFS variants.
+The RomFS guest also passes under ASan/UBSan and emulated big-endian PPC Linux;
+this does not establish physical Wii U execution.
 
 All require a real guest PASS, ExitProcess and zero interpreter fallback. Pixel
 checks inspect every pixel, not only a debug message. Input tests use the public
@@ -60,10 +69,10 @@ run successfully. The boot checks its active state and `aptMainLoop`. Use
 `--application boot --trace-startup` to capture every request. The remaining
 startup lookup failures are APT:S, APT:A and optional ptm:sysm. Privileged/system
 services and general applets are not supplied. See `filesystem.md` for exact
-state, ownership, persistence and limits. No ROMFS/retail saves, DSP/audio, CRO,
+state, ownership, persistence and limits. No NCCH/IVFC authentication or retail save integration, DSP/audio, CRO,
 PICA commands, GPU physical addresses or commercial compatibility is claimed.
-Native diagnostic tone remains platform audio; console and Windows results are
-pending. Do not enable a commercial profile from these homebrew passes.
+Native diagnostic tone remains platform audio; v0.14.5 interactive/guarded completion is user-reported. New independent result
+files, save updates, RomFS and native Windows acceptance remain pending. Do not enable a commercial profile from these homebrew passes.
 
 The original source is under `tests/homebrew`. Optional locally generated guest
 images link external libctru/newlib/compiler support. The library's full license

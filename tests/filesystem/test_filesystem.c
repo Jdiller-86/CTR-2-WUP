@@ -1,9 +1,15 @@
 /* Wire/ownership, hostile guest ranges and persistent snapshot corruption. */
+#define _POSIX_C_SOURCE 200809L
 #include "ctr_fs.h"
+#include "ctr_fs_snapshot.h"
 #include "ctr_service_fixture.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
 #define DATA UINT32_C(0x08000000)
 static unsigned assertions;
 #define CHECK(x) do { ++assertions;if(!(x)) { fprintf(stderr,"line %d: %s\n",__LINE__,#x);exit(1); } } while(0)
@@ -101,7 +107,124 @@ static void snapshots(void) {
     CHECK(ctr_fs_volume_init(&next,9,true));CHECK(!ctr_fs_import(&next,p,n));CHECK(ctr_fs_volume_close(&next));
     free(p);CHECK(ctr_fs_volume_close(&v));
 }
+typedef struct { unsigned calls,fail_at;bool rollback_fails,interrupt; } rename_probe;
+static int no_replace(void *context,const char *from,const char *to) {
+    rename_probe *probe=context;++probe->calls;
+    if(probe->calls==probe->fail_at || (probe->rollback_fails && probe->calls>probe->fail_at)) {
+        errno=EACCES;return -1;
+    }
+    struct stat st;
+    if(stat(to,&st)==0) { errno=EEXIST;return -1; }
+    if(errno!=ENOENT)return -1;
+    int result=rename(from,to);
+    if(!result && probe->interrupt && probe->calls==1)_exit(66);
+    return result;
+}
+static void disk_record(const char *path,unsigned expected,bool recovered) {
+    ctr_fs_volume loaded;CHECK(ctr_fs_volume_init(&loaded,4,true));
+    CHECK(ctr_fs_snapshot_load(&loaded,path)==(recovered?CTR_FS_SNAPSHOT_RECOVERED:CTR_FS_SNAPSHOT_OK));
+    CHECK(loaded.files[0].active && loaded.files[0].size==1 && loaded.files[0].bytes[0]==expected);
+    CHECK(ctr_fs_volume_close(&loaded));
+}
+static void publication(void) {
+    char dir[]="/tmp/ctr2wup-snapshot-XXXXXX",path[512],pending[524],previous[524];
+    CHECK(mkdtemp(dir)!=NULL);
+    CHECK(snprintf(path,sizeof(path),"%s/save.snapshot",dir)>0);
+    CHECK(snprintf(pending,sizeof(pending),"%s.pending",path)>0);
+    CHECK(snprintf(previous,sizeof(previous),"%s.previous",path)>0);
+    ctr_fs_volume v;CHECK(ctr_fs_volume_init(&v,4,true));
+    const unsigned char first=1;CHECK(ctr_fs_seed(&v,"/counter",&first,1)==0);
+    rename_probe probe={0};
+    CHECK(ctr_fs_snapshot_save_with_rename(path,&v,no_replace,&probe));disk_record(path,1,false);
+    v.files[0].bytes[0]=2;probe=(rename_probe){0};
+    CHECK(ctr_fs_snapshot_save_with_rename(path,&v,no_replace,&probe));
+    CHECK(probe.calls==2 && access(pending,F_OK)!=0 && access(previous,F_OK)!=0);disk_record(path,2,false);
+    v.files[0].bytes[0]=3;probe=(rename_probe){.fail_at=2};
+    CHECK(!ctr_fs_snapshot_save_with_rename(path,&v,no_replace,&probe) && errno==EACCES);
+    CHECK(probe.calls==3 && access(pending,F_OK)!=0 && access(previous,F_OK)!=0);disk_record(path,2,false);
+    probe=(rename_probe){.fail_at=2,.rollback_fails=true};
+    CHECK(!ctr_fs_snapshot_save_with_rename(path,&v,no_replace,&probe) && errno==EACCES);
+    CHECK(access(path,F_OK)!=0 && access(previous,F_OK)==0 && access(pending,F_OK)==0);disk_record(path,2,true);
+    /* Recovery never promotes an uncommitted staging file. It stays blocked. */
+    probe=(rename_probe){0};CHECK(!ctr_fs_snapshot_save_with_rename(path,&v,no_replace,&probe) && errno==EEXIST);
+    disk_record(path,2,false);CHECK(unlink(pending)==0);
+    CHECK(ctr_fs_snapshot_save_with_rename(path,&v,no_replace,&probe));disk_record(path,3,false);
+    v.files[0].bytes[0]=4;
+    pid_t child=fork();CHECK(child>=0);
+    if(child==0) { rename_probe interrupted={.interrupt=true};ctr_fs_snapshot_save_with_rename(path,&v,no_replace,&interrupted);_exit(1); }
+    int status;CHECK(waitpid(child,&status,0)==child && WIFEXITED(status) && WEXITSTATUS(status)==66);
+    disk_record(path,3,true);CHECK(access(pending,F_OK)==0);CHECK(unlink(pending)==0);
+    probe=(rename_probe){0};CHECK(ctr_fs_snapshot_save_with_rename(path,&v,no_replace,&probe));disk_record(path,4,false);
+    /* An unrelated/stale backup or corrupt primary is never deleted/reset. */
+    FILE *file=fopen(previous,"wb");CHECK(file && fwrite("preserve",1,8,file)==8 && fclose(file)==0);
+    CHECK(!ctr_fs_snapshot_save_with_rename(path,&v,no_replace,&probe) && errno==EEXIST);
+    CHECK(unlink(previous)==0);
+    file=fopen(path,"r+b");CHECK(file && fputc('X',file)!=EOF && fclose(file)==0);
+    CHECK(!ctr_fs_snapshot_save_with_rename(path,&v,no_replace,&probe) && errno==EINVAL);
+    CHECK(access(pending,F_OK)!=0);CHECK(unlink(path)==0);CHECK(rmdir(dir)==0);CHECK(ctr_fs_volume_close(&v));
+}
+typedef struct { uint64_t last_offset;uint32_t last_size;unsigned calls;bool fail; } asset_reader;
+static bool read_asset(void *context,uint64_t offset,void *output,uint32_t size) {
+    asset_reader *r=context;r->last_offset=offset;r->last_size=size;++r->calls;
+    for(uint32_t i=0;i<size;++i)((uint8_t *)output)[i]=(uint8_t)(offset+i);
+    return !r->fail;
+}
+static void romfs_transport(void) {
+    ctr_guest g;ctr_fs_romfs view={0};asset_reader reader={0};
+    CHECK(ctr_service_fixture_open(&g));
+    CHECK(ctr_fs_romfs_init(&view,UINT64_C(0x100000010),read_asset,&reader));
+    CHECK(!ctr_fs_romfs_init(&view,10,read_asset,&reader));
+    CHECK(ctr_fs_mount_romfs(&g,&view) && view.mounts==1);
+    CHECK(!ctr_fs_mount_romfs(&g,&view) && !ctr_fs_romfs_close(&view));
+    uint32_t service=fs(&g);
+    for(unsigned i=0;i<13;++i)CHECK(ctr_memory_write(&g.memory,DATA+100+i,1,0)==CTR_MEM_OK);
+    uint32_t opening[]={0x08030204,0,3,1,1,2,12,1,0,0x4802,DATA+100,0x30002,DATA+101};
+    send(&g,service,opening,13);CHECK(word(&g,0)==0x08030042 && word(&g,1)==0 && word(&g,2)==0x10);
+    uint32_t file=word(&g,3);CHECK(view.references==1);
+    const uint32_t getsize[]={0x08040000};send(&g,file,getsize,1);
+    CHECK(word(&g,2)==16 && word(&g,3)==1);
+    uint32_t reading[]={0x080200c2,5,1,16,0x10c,DATA+256};send(&g,file,reading,6);
+    CHECK(word(&g,1)==0 && word(&g,2)==11 && reader.calls==1 && reader.last_offset==UINT64_C(0x100000005) && reader.last_size==11);
+    for(unsigned i=0;i<11;++i) { uint32_t n;CHECK(ctr_memory_read(&g.memory,DATA+256+i,1,CTR_MEM_READ,&n)==CTR_MEM_OK && n==i+5); }
+    reading[1]=reading[2]=UINT32_MAX;send(&g,file,reading,6);CHECK(word(&g,1)==0 && word(&g,2)==0 && reader.calls==1);
+    reading[1]=0;reading[2]=0;reader.fail=true;
+    CHECK(ctr_memory_write(&g.memory,DATA+256,4,0xa5a5a5a5)==CTR_MEM_OK);
+    send(&g,file,reading,6);CHECK(word(&g,1)==CTR_FS_DENIED && word(&g,2)==0);
+    uint32_t preserved;CHECK(ctr_memory_read(&g.memory,DATA+256,4,CTR_MEM_READ,&preserved)==CTR_MEM_OK && preserved==0xa5a5a5a5);
+    uint32_t writing[]={0x08030102,0,0,4,0,0x4a,DATA+256};send(&g,file,writing,7);CHECK(word(&g,1)==CTR_FS_DENIED);
+    const uint32_t resizing[]={0x08050080,0,0};send(&g,file,resizing,3);CHECK(word(&g,1)==CTR_FS_DENIED);
+    const uint32_t flushing[]={0x08090000};send(&g,file,flushing,1);CHECK(word(&g,1)==0);
+    CHECK(ctr_guest_handle_close(&g,service)); /* A direct file survives FS session closure. */
+    send(&g,file,getsize,1);CHECK(word(&g,1)==0 && word(&g,3)==1);
+    g.cpu.r[1]=file;ctr_guest_svc(&g,0x27);uint32_t duplicate=g.cpu.r[1];CHECK(duplicate && duplicate!=file && view.references==1);
+    const uint32_t closing[]={0x08080000};send(&g,file,closing,1);CHECK(word(&g,1)==0 && !view.references);
+    send(&g,duplicate,getsize,1);CHECK(word(&g,1)==CTR_FS_INVALID);
+    CHECK(ctr_guest_handle_close(&g,file) && ctr_guest_handle_close(&g,duplicate));
+    ctr_guest_close(&g);CHECK(!view.mounts && ctr_fs_romfs_close(&view));
+    for(unsigned kind=0;kind<8;++kind) {
+        view=(ctr_fs_romfs){0};reader=(asset_reader){0};CHECK(ctr_service_fixture_open(&g));
+        CHECK(ctr_fs_romfs_init(&view,16,read_asset,&reader) && ctr_fs_mount_romfs(&g,&view));service=fs(&g);
+        for(unsigned i=0;i<13;++i)CHECK(ctr_memory_write(&g.memory,DATA+100+i,1,0)==CTR_MEM_OK);
+        opening[7]=1;opening[9]=0x4802;opening[10]=DATA+100;opening[12]=DATA+101;
+        if(kind==0)opening[9]=0x4002;
+        if(kind==1)opening[12]=0xfffffffdu;
+        if(kind==2)opening[12]=g.cpu.tls_address+0x80;
+        if(kind==3)CHECK(ctr_memory_write(&g.memory,DATA+105,1,1)==CTR_MEM_OK);
+        if(kind<4) {
+            send(&g,service,opening,13);CHECK(g.state==CTR_GUEST_FAULTED && !view.references && !reader.calls);
+        } else {
+            send(&g,service,opening,13);file=word(&g,3);CHECK(file && word(&g,1)==0);
+            reading[1]=reading[2]=0;reading[3]=16;reading[4]=0x10c;reading[5]=DATA+256;
+            if(kind==4)reading[5]=g.cpu.tls_address+0x80;
+            if(kind==5)reading[5]=DATA+4094;
+            if(kind==6)reading[4]=0x10a;
+            if(kind==7) { reading[3]=CTR_FS_MAX_FILE_BYTES+1;reading[4]=(reading[3]<<4)|0xc; }
+            send(&g,file,reading,6);CHECK(g.state==CTR_GUEST_FAULTED && !reader.calls);
+        }
+        ctr_guest_close(&g);CHECK(!view.references && !view.mounts && ctr_fs_romfs_close(&view));
+    }
+}
 int main(void) {
-    lifecycle();rejection();snapshots();
+    lifecycle();rejection();snapshots();publication();romfs_transport();
     printf("{\"ok\":true,\"assertions\":%u,\"bounded_private_filesystem\":true,\"console_verified\":false}\n",assertions);return 0;
 }

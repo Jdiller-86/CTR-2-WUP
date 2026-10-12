@@ -30,7 +30,7 @@ games will grow as the shared runtime gains the features they require. See the
 
 ![Estimated implementation progress: approximately 20%; zero of seven full milestones accepted.](docs/images/progress.svg)
 
-**Assessment: October 11, 2026 · runtime version 0.14.5.** About **20%** is a rough
+**Assessment: October 11, 2026 · runtime version 0.14.6.** About **20%** is a rough
 engineering estimate toward the finished GUI-to-playable-WUP product, not a
 measured task percentage or a compatibility rating. **0 of 7 full milestones
 have met their acceptance criteria.** Most renderer, commercial-game, GUI, and
@@ -38,9 +38,9 @@ hardware validation work remains.
 
 | Milestone | Current status | Main remaining work |
 |---|---|---|
-| M1 · Wii U platform | Native guide and Minus exit have console evidence | Compiled stability and WUP installation |
+| M1 · Wii U platform | Native guide/exit have evidence; three v0.14.5 apps reported passing | Verified new result files, save behavior and WUP installation |
 | M2 · CPU translation | Tested subset and AOT integration | Broader instruction support and Wii U performance |
-| M3 · Homebrew runtime | Six original applications verified on desktop | Broader services and console execution/stability |
+| M3 · Homebrew runtime | Seven original applications; saves and read-only RomFS assets | Broader services, retail integration and console acceptance |
 | M4 · PICA → GX2 graphics | Renderer not implemented | 3DS draws, shaders, textures, and reference scenes |
 | M5 · First commercial game | Mario selected; dump analysis pending | Boot, gameplay, guest audio, and retail saves |
 | M6 · Automated WUP conversion | Build and packaging foundations tested | Commercial end-to-end conversion, Windows, and installer acceptance |
@@ -57,11 +57,12 @@ or the [milestone checklist](docs/milestones.md) for detailed acceptance gates.
   integration, checked memory, guest threads, and scoped 3DS services.
 - **Original homebrew execution:** normal compiler-built programs exercise boot,
   threads, input, CPU-written two-screen images, private save/reload, and
-  standalone application startup and exit.
-- **Wii U diagnostic builds:** five RPX/WUHB variants are compiled, including
-  interactive input/display and persistent-save tests. Native guided checks have
-  console evidence, and Minus exit now works. Compiled A input is delayed and
-  intermittently freezes; save testing remains deferred.
+  standalone application startup and exit, and read-only RomFS asset access.
+- **Wii U diagnostic builds:** the current five-app kit includes Native,
+  Compiled AOT, Guarded AOT, Save and RomFS. The user reports the first three
+  passed on v0.14.5, but found no new reports and a save failure. v0.14.6 adds
+  independent read-back-verified TXT results and safer save publication;
+  their console checks are pending.
 - **Packaging foundations:** original metadata/artwork staging and encrypted
   packing with independent decryption and file checks using synthetic test inputs.
   Actual WUP installation remains unverified.
@@ -91,7 +92,7 @@ python3 -m host run-fixture "artifacts/my fixture/ctr2wup-guest.cxi" --output "a
 The outputs are **RPX/WUHB diagnostics and reference images**, not installable
 commercial-game WUPs. Generated builds and reports are kept in ignored
 `artifacts/` directories. See [fixture builds](docs/guest-fixture.md),
-[compiled homebrew](docs/compiled-homebrew.md), and
+[compiled homebrew](docs/compiled-homebrew.md), [RomFS assets](docs/romfs-assets.md), and
 [external translation setup](docs/upstream-integration.md) for further workflows.
 
 To inspect a decrypted dump locally, run `python3 -m host inspect PATH`.
@@ -100,8 +101,8 @@ See [CIA intake](docs/cia-intake.md) for the small private executable export hel
 
 ## Development and testing
 
-- [Guided console tests and TXT uploads](docs/guided-testing.md) — v0.14.5 hardens SD checkpoints; the next step is one short guarded retest.
-- [Console evidence review](docs/console-evidence.md) — the first guarded report reaches shutdown; the frozen launch saved nothing.
+- [Guided console tests and TXT uploads](docs/guided-testing.md) — v0.14.6 adds verified result files; test Save, then RomFS.
+- [Console evidence review](docs/console-evidence.md) — separates older uploaded logs, reported v0.14.5 successes and the valid snapshot.
 - [Current status and reports](STATUS.md) — implementation history and verification evidence.
 - [Next testing and input gates](docs/current-roadblock.md) — what awaits a dump, Wii U, or Windows test.
 - [Console testing](docs/console-testing.md) — launch and record the diagnostic results.

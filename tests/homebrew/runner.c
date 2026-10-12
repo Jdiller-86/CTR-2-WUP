@@ -4,6 +4,15 @@
 #include "ctr_gsp.h"
 #include "ctr_hid.h"
 #include "ctr_fs_snapshot.h"
+#include <string.h>
+#ifdef CTR_ROMFS_HOMEBREW
+#include "romfs-image.h"
+static bool romfs_read(void *context,uint64_t offset,void *output,uint32_t size) {
+    (void)context;
+    if(offset>sizeof(romfs_bytes) || size>sizeof(romfs_bytes)-offset)return false;
+    memcpy(output,romfs_bytes+(size_t)offset,size);return true;
+}
+#endif
 #include "ctr_apt.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -64,6 +73,10 @@ int main(int argc,char **argv) {
     ctr_fs_volume sd;
     if(!ctr_fs_volume_init(&sd,9,false) || !ctr_fs_mount(&g,&sd)) { ctr_guest_close(&g);return 8; }
     ctr_fs_volume save;
+#ifdef CTR_ROMFS_HOMEBREW
+    ctr_fs_romfs assets={0};
+    if(!ctr_fs_romfs_init(&assets,sizeof(romfs_bytes),romfs_read,NULL) || !ctr_fs_mount_romfs(&g,&assets))return 9;
+#endif
     if(filesystem) {
         ctr_fs_volume_init(&save,4,true);
         if(ctr_fs_snapshot_load(&save,argv[2])==CTR_FS_SNAPSHOT_ERROR || !ctr_fs_mount(&g,&save)) { ctr_guest_close(&g);ctr_fs_volume_close(&save);return 5; }
@@ -91,5 +104,9 @@ int main(int argc,char **argv) {
     for(unsigned i=0;i<captures;++i)printf("%s%u",i?",":"",colors[i]);
     unsigned depth=0;uint64_t unwinds=0;ctr_recomp_depth_stats(&g,&depth,&unwinds);
     printf("],\"input_samples\":%u,\"save_commits\":%llu,\"aot_max_depth\":%u,\"aot_unwinds\":%llu}\n",input_samples,(unsigned long long)(filesystem?save.commits:0),depth,(unsigned long long)unwinds);
-    ctr_guest_close(&g);if(!ctr_fs_volume_close(&sd) || (filesystem && !ctr_fs_volume_close(&save)))return 6;return 0;
+    ctr_guest_close(&g);if(!ctr_fs_volume_close(&sd) || (filesystem && !ctr_fs_volume_close(&save)))return 6;
+#ifdef CTR_ROMFS_HOMEBREW
+    if(!ctr_fs_romfs_close(&assets))return 10;
+#endif
+    return 0;
 }

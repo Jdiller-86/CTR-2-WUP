@@ -1,101 +1,80 @@
-# Guided Wii U testing and TXT reports (0.14.5)
+# Guided Wii U tests and TXT results (0.14.6)
 
-Use the **0.14.5 console testing kit** for the current test round. It supplies
-four original homebrew diagnostic variants with prompts and automatic plain-text
-recording. No ROM is required and these builds are RPX/WUHB, not WUP packages.
+The kit contains five original homebrew diagnostics, supplied as WUHB and RPX.
+No ROM is required. The current round is the short
+[save and result-file check](console-retest.md), followed by Compiled RomFS.
+The user reports that Native, Guarded AOT and Compiled AOT completed on 0.14.5;
+their ten-minute guides need not be repeated for this round.
 
-**Current round: [one short guarded report-recovery retest](console-retest.md).**
-The first old report is reviewed; the frozen launch saved no file. Native Minus
-exit is user-confirmed. Guarded stability and crash recovery remain unverified.
-The same `console-retest.md` is in the kit.
+## Launch
 
-## Start
+For Aroma, copy the kit's `sd-card/` contents to the SD root. Apps belong in
+`sd:/wiiu/apps/`. An RPX-capable launcher can use the matching `rpx/` files.
+Keep the existing `sd:/ctr2wup/` folder and saves. Use your current launcher.
 
-1. Extract the kit on your PC. For Aroma, copy the contents of `sd-card/` to
-   your SD card root. The four WUHB files belong in `sd:/wiiu/apps/`.
-2. For this round use **Guarded AOT 0.14.5** once per the short retest. Leave
-   **Native**, **Compiled AOT** and **Compiled Save** for later.
-   For complete acceptance rounds, follow each app's on-screen guide.
-3. For an RPX-capable launcher, use the matching files under `rpx/` through
-   that launcher's normal workflow. Use your existing homebrew environment.
+Each app displays **BUILD 0.14.6**, **RESULT VERIFIED** and its new filename.
+VERIFIED means the current 4 KiB TXT was closed and compared byte for byte after
+reopening. It does not prove survival of sudden power loss. The separate
+**TRACE SAVING / FAILED** status describes the longer trace, not the result file.
+A trace failure is captured in the result. **RESULT STORAGE FAILED / SD ERROR**
+pauses the guest; exit with Minus and report the operation/number and any files.
 
-The apps reserve a new report at launch and show **TXT SYNC**, its filename,
-and the upload folder. **TXT REPORT FAILED / SD ERROR** means
-the file could not be created or written; report that error and upload any
-available partial file. Logging cannot work without accessible writable SD storage.
+## Prompts
 
-v0.14.5 displays **TXT SYNC** after startup commits succeed. Critical checkpoints
-sync and close the file, flush the mounted SD volume and reopen the existing file;
-startup, guest start and periodic summaries commit too. A storage failure pauses
-guest execution and reports the failing operation, errno and FSA status. Syncing
-adds diagnostic overhead and cannot guarantee SD-controller power-loss recovery.
+- Button/stick/touch inputs, guest PASS/exit and save reload are checked automatically.
+- **R** confirms the displayed picture, alignment, sound or stability observation;
+  **L** marks a problem. These are labeled user evidence.
+- **ZL** skips a step as NOT TESTED; **ZR** marks a problem and advances.
+- **Minus** ends the test and writes the available summary. Unfinished steps stay
+  NOT TESTED. Results are also written at startup and throughout execution.
+- Use **Plus** when prompted for guest restart/save reload. Y/unscheduled Plus
+  remain reserved while a guide is active.
 
-## Prompts and controls
+Only Native plays the platform tone on A. Compiled apps use A as guest input and
+implement no guest audio. The interactive A prompt waits for a fresh decoded
+green frame before allowing R and records latency separately from confirmation.
+Native and interactive full guides include a ten-minute observation interval;
+its completion is separate from the user's final stability confirmation.
 
-- Requested button presses, four directions on each stick, five touch regions,
-  border rejection, guest PASS/exit, and snapshot reload are recorded automatically.
-- **R** confirms a picture, touch-alignment, sound, or stability observation;
-  **L** records a problem. These confirmations apply to the displayed prompt.
-- **ZL** skips the current step and records **NOT TESTED**.
-- **ZR** records a problem for the current step and advances.
-- **Minus** finishes early or closes a completed test. Unfinished steps stay
-  **NOT TESTED**; the app writes its available session summary before closing.
-  Reports are written throughout the run, rather than waiting for Minus.
+Compiled Save preserves the existing diagnostic snapshot, checks its own guest
+save/reload and asks for Plus. It may request one exit/relaunch for a fresh-process
+check. Compiled RomFS automatically checks original asset reads and exits after
+one step. No photo is needed to report these software checks.
 
-Only the native app plays the diagnostic tone on A. The compiled apps reserve A
-for guest input and show progress counters. They do not implement guest audio.
-The A-button prompt waits for a new green guest frame and records its latency;
-R remains a confirmation of what you saw, distinct from decoded-pixel evidence.
+## Files to return
 
-The native and interactive tests include a ten-minute countdown. Their final
-stability prompt asks whether you observed problems. The interval and your
-confirmation are separate evidence, not a claim of representative game speed.
-Y mode changes and unscheduled Plus restarts are reserved until the guide finishes;
-they will not disrupt a button test. Follow the prompted Plus action when testing
-guest restart or save reload.
-
-The save test checks the initial guest save/reload, prompts for Plus to reload,
-then requests **one exit and fresh launch** if needed. The next launch detects
-the guest's successful initial reload and reports **Fresh-launch reload confirmed**.
-Existing snapshots are preserved; no reset/deletion is required. A failure to
-read or commit a snapshot is logged rather than replaced with an empty save.
-
-## Results and delivery
-
-Reports are in **`sd:/ctr2wup/`**:
+All reports are under **`sd:/ctr2wup/`**:
 
 ```text
-native-<session>-<suffix>.txt
-compiled-interactive-<session>-<suffix>.txt
-compiled-guarded-<session>-<suffix>.txt
-compiled-save-<session>-<suffix>.txt
+result-native-0.14.6-<ticks>-<suffix>.txt
+result-compiled-interactive-0.14.6-<ticks>-<suffix>.txt
+result-compiled-guarded-0.14.6-<ticks>-<suffix>.txt
+result-compiled-save-0.14.6-<ticks>-<suffix>.txt
+result-compiled-romfs-0.14.6-<ticks>-<suffix>.txt
 ```
 
-Each report contains the application/build identity, raw diagnostic messages,
-named guided steps and their **PASS / FAIL / NOT TESTED** results, your controller
-confirmations, runtime faults, input events, save messages, duration/counters,
-and a final session summary. Session IDs use console ticks rather than wall-clock
-dates; collisions try another suffix instead of replacing a report.
-Records are flushed as they are written. An interrupted run can leave useful
-partial evidence: absence of the final `===== END OF REPORT:` marker means
-resource cleanup was not recorded. Exit checkpoints follow that marker; neither
-the marker nor `main_return` proves successful launcher return. Include your
-brief return/stall/freeze observation. Flush and close do not establish power-loss durability.
+These fixed-size plain-text results contain named PASS / FAIL / NOT TESTED guide
+outcomes and their evidence, build/session identity, embedded-check status,
+guest instructions/PC/fault/fallback, input counters, green-response latency,
+diagnostic frame timing, save load/commit status and full-trace errors. Trailing
+space padding is intentional. Later updates verify the reserved file identity;
+missing or replaced reports are not silently recreated. Per-launch exclusive
+names preserve older results.
 
-After the tests, exit with Minus and copy the **new `.txt` files** from that
-folder to your PC. **Upload them in this chat**, individually or in one ZIP
-below 32 MiB. Include both save-test launch reports when available. On save
-failure, also return `filesystem-test.snapshot` and its `.pending` sibling if
-present; keep the originals. Exclude unrelated personal files and credentials.
+The separate longer traces use `native-*.txt`, `compiled-interactive-*.txt`,
+`compiled-guarded-*.txt`, `compiled-save-*.txt` and `compiled-romfs-*.txt`.
+Their successful commits sync/close/flush the SD volume. Neither a cleanup marker
+nor a saved result proves that the launcher finished returning; add that observation.
 
-With the first upload, include Windows version, Wii U model/region/firmware,
-homebrew environment and launcher versions, SD format/capacity, and TV resolution.
-Pictures are optional for illustrating a visual failure; normal results are
-recorded in the TXT files. Add a brief note if the generic controller confirmation
-does not describe a problem precisely enough.
+Upload the new result TXT and any matching full trace **in this chat**, directly
+or in a ZIP below 32 MiB. For save testing, include the snapshot and any `.pending`
+/ `.previous` siblings, preserving the originals. If nothing exists, say so and
+include the short on-screen storage error. See `console-retest.md` for this round.
+The console environment, launcher version, SD format/capacity and TV resolution
+help when diagnosing failures; do not resend already supplied details.
 
-These tests establish scoped platform/runtime behavior. They do not validate
-PICA game rendering, guest DSP/audio, commercial saves, Mario gameplay, or WUP
-installation. Display/audio observations are user confirmations, distinct from
-software assertions. The new guide/report code passes desktop and sanitizer
-checks and is cross-compiled; actual console evidence is still pending.
+Local tests verify report write/read-back, failed/missing/replaced-file handling,
+interrupted process evidence, guide outcomes and lifecycle ordering. Builds use
+the actual Wii U SDK. v0.14.6 result persistence and save updates are awaiting
+physical evidence. These diagnostics do not verify PICA, guest audio, retail
+saves, Mario gameplay or WUP installation.

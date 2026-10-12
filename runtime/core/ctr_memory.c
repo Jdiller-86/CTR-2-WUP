@@ -54,6 +54,32 @@ ctr_mem_result ctr_memory_read(const ctr_memory *memory, uint32_t address,
     *value = out;
     return CTR_MEM_OK;
 }
+ctr_mem_result ctr_memory_read_data(const ctr_memory *memory,uint32_t address,
+                                   unsigned width,uint32_t *value) {
+    if(width!=1 && width!=2 && width!=4)return CTR_MEM_ALIGNMENT;
+    if(!(address&(width-1)))return ctr_memory_read(memory,address,width,CTR_MEM_READ,value);
+    ctr_mem_result result=ctr_memory_check_range(memory,address,width,CTR_MEM_READ);
+    if(result!=CTR_MEM_OK)return result;
+    uint32_t out=0;
+    for(unsigned i=0;i<width;++i) {
+        uint32_t byte;result=ctr_memory_read(memory,address+i,1,CTR_MEM_READ,&byte);
+        if(result!=CTR_MEM_OK)return result;
+        out|=byte<<(8*i);
+    }
+    *value=out;return CTR_MEM_OK;
+}
+ctr_mem_result ctr_memory_write_data(ctr_memory *memory,uint32_t address,
+                                    unsigned width,uint32_t value) {
+    if(width!=1 && width!=2 && width!=4)return CTR_MEM_ALIGNMENT;
+    if(!(address&(width-1)))return ctr_memory_write(memory,address,width,value);
+    ctr_mem_result result=ctr_memory_check_range(memory,address,width,CTR_MEM_WRITE);
+    if(result!=CTR_MEM_OK)return result;
+    for(unsigned i=0;i<width;++i) {
+        result=ctr_memory_write(memory,address+i,1,(value>>(8*i))&255u);
+        if(result!=CTR_MEM_OK)return result;
+    }
+    return CTR_MEM_OK;
+}
 
 ctr_mem_result ctr_memory_write(ctr_memory *memory, uint32_t address,
                                unsigned width, uint32_t value) {

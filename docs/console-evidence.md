@@ -1,7 +1,40 @@
-# Guarded console evidence review
+# Console evidence review
 
 Received October 12, 2026 UTC (October 11 in America/New_York).
 The raw TXT and SHA-256 receipt are retained privately, outside source bundles.
+
+## Latest folder upload and v0.14.5 feedback
+
+The user reports Native, Guarded and Compiled completed with no errors on
+0.14.5, including the latest input/exit round. No new reports were found; Save
+failed and left a snapshot. This is useful **user-reported evidence**, separate
+from the uploaded file identities:
+
+| Uploaded file | Identified evidence |
+|---|---|
+| `native-00ba9c0725b6c820-00.txt` | Native 0.14.3; cancelled first guide step, nine self-tests PASS, complete exit checkpoints |
+| `native-00ba9bdc28fd74db-00.txt` | Native 0.14.2; cancelled first guide step, nine self-tests PASS, stops at graphics cleanup begin |
+| `native-00ba9b456393b96e-00.txt` | Native 0.14.1; previously received ten guide/nine self-test passes |
+| `native-ba9b26dfd4988b.log` | Compiled 0.14.0 despite its filename; previously received guest PASS |
+| `compiled-guarded-00ba9c07ed661313-00.txt` | Guarded 0.14.3; same first delayed-green run reviewed below |
+| `filesystem-test.snapshot` | 88-byte valid CTRFS001, archive 4, correct CRC, two exact 12-byte visit-1 records |
+
+None of the text headers says 0.14.5. The snapshot has no build identity or failure
+stage. It proves an initial write; it does not establish later save/reload or
+report generation. All six originals and SHA-256 receipts are preserved under
+ignored `private/console-followup-20261011/`, excluded from source/diagnostic kits.
+A private desktop replay advances its copy to visits 2 and 3 with zero fallback;
+the original remains unchanged. No private bytes are published.
+
+v0.14.6 adds independent named TXT results with exact closed-file read-back and
+save publication that does not require rename replacement. Unit/sanitizer tests
+cover failures and rollback, but these are **not confirmed causes/fixes for the
+console behavior**. The exact missing-report and save failure stages remain
+unknown. The next requested evidence is [Save then RomFS](console-retest.md).
+The v0.14.5 successes supersede the old request to repeat the long input guides;
+no new claim of commercial or full milestone acceptance follows.
+
+## Historical guarded 0.14.3 report
 
 The uploaded report identifies **compiled-guarded 0.14.3**. Its complete shutdown
 and guide results match the user's first, delayed-green run. It does not capture
@@ -35,4 +68,5 @@ v0.14.5 adds checked file sync/close and mounted-volume sync before continuing
 past critical checkpoints. Desktop process-termination tests verify scoped
 recovery, and SDK builds verify the actual imports. SD controller durability,
 FSA behavior during a console freeze, and the original freeze remain unverified.
-The next requested evidence is [one short guarded retest](console-retest.md).
+That earlier retest request is superseded by the latest feedback and v0.14.6
+save/result-file round above.

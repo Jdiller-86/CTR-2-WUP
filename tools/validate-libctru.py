@@ -45,7 +45,7 @@ def main():
     p.add_argument('--libctru-source',type=Path,default=ROOT.parent/'ctr2wup-deps/libctru')
     p.add_argument('--devkitarm',type=Path,default=Path(os.environ.get('DEVKITARM',str(Path(os.environ.get('DEVKITPRO','/workspace/ctr2wup-sdk'))/'devkitARM'))))
     p.add_argument('--cc',default='gcc');p.add_argument('--cc-prefix',default='');p.add_argument('--run-prefix',default='');p.add_argument('--static',action='store_true');p.add_argument('--sanitize',action='store_true')
-    p.add_argument('--application',choices=('boot','threaded','graphics','input','interactive','filesystem'),help='Run only the selected original application')
+    p.add_argument('--application',choices=('boot','threaded','graphics','input','interactive','filesystem','romfs'),help='Run only the selected original application')
     p.add_argument('--wiiu',action='store_true',help='Also build original interactive/filesystem applications as RPX/WUHB')
     p.add_argument('--wiiu-guarded',action='store_true',help='Also verify/build an interactive AOT comparison with call depth limited to 2')
     p.add_argument('--live-input',action='store_true',help='Replay held/released A with varied host clocks and console-sized budgets')
@@ -71,20 +71,22 @@ def main():
         run('libctru-build',['make','-C',str(library),'lib/libctru.a','-j','4'],env=env)
         library_hash=hashlib.sha256((library/'lib/libctru.a').read_bytes()).hexdigest()
         reports=[]
-        for name in (a.application,) if a.application else ('boot','threaded','graphics','input','interactive','filesystem'):
+        for name in (a.application,) if a.application else ('boot','threaded','graphics','input','interactive','filesystem','romfs'):
             folder=out/name;folder.mkdir();elf=folder/'application.elf'
             run(name+'-arm-compile',[str(arm),'-march=armv6k','-mtune=mpcore','-mfloat-abi=hard','-mfpu=vfp','-mtp=soft','-O2','-g','-ffunction-sections','-fdata-sections','-D__3DS__','-I'+str(library/'include'),'-L'+str(library/'lib'),'-specs=3dsx.specs',str(ROOT/'tests/homebrew'/(name+'.c')),'-lctru','-lm','-o',str(elf)])
             rom=folder/'original.cxi';rom.write_bytes(container(elf));image=load_image(rom);generation=generate_into(rom,folder/'aot')
             blob=','.join(str(b) for b in image['code']);segments=','.join('{'+','.join(str(s[k]) for k in ('address','pages','size'))+'}' for s in image['segments'].values())
             (folder/'boot-image.h').write_text('#include "ctr_guest.h"\nstatic const uint8_t boot_bytes[]={'+blob+'};\nstatic const ctr_guest_image boot_image={boot_bytes,sizeof(boot_bytes),'+segments+','+str(image['bss_size'])+',16384,"'+hashlib.sha256(image['code']).hexdigest()+'"};\n')
+            if name=='romfs':run('romfs-fixture',[sys.executable,str(ROOT/'tools/generate-romfs-fixture.py'),'--output',str(folder)])
             core=ROOT/'runtime/core';binary=folder/'runner';flags=['-std=c11','-O2','-g','-Wall','-Wextra','-Werror','-ffp-contract=off','-fno-fast-math','-I'+str(core),'-I'+str(ROOT/'runtime/recomp'),'-I'+str(folder),'-I'+str(folder/'aot')]
             if a.static:flags+=['-static','-mcpu=750']
             if a.sanitize:flags+=['-O1','-fno-omit-frame-pointer','-fsanitize=address,undefined']
+            if name=='romfs':flags+=['-DCTR_ROMFS_HOMEBREW']
             sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c','ctr_fs.c','ctr_apt.c','ctr_fs_snapshot.c')]+[ROOT/'runtime/recomp/ctr_recomp.c',ROOT/'tests/homebrew/runner.c']+[folder/'aot'/n for n in generation['sources']]
             run(name+'-host-compile',shlex.split(a.cc_prefix)+[a.cc,*flags,*map(str,sources),'-lm','-o',str(binary)])
             extra=['--trace-ipc'] if a.trace_startup else [str(folder)] if name in ('graphics','interactive') else ['--filesystem',str(folder/'save.snapshot')] if name=='filesystem' else []
             output=run(name+'-execute',shlex.split(a.run_prefix)+[str(binary)]+extra)
-            result=json.loads(output.splitlines()[-1]);expected='CTR2WUP compiled libctru boot PASS' if name=='boot' else 'CTR2WUP compiled thread/TLS/LightLock PASS' if name=='threaded' else 'CTR2WUP compiled graphics PASS' if name=='graphics' else 'CTR2WUP compiled input PASS' if name=='input' else 'CTR2WUP compiled filesystem SAVE 1 PASS' if name=='filesystem' else 'CTR2WUP compiled interactive PASS'
+            result=json.loads(output.splitlines()[-1]);expected='CTR2WUP compiled libctru boot PASS' if name=='boot' else 'CTR2WUP compiled thread/TLS/LightLock PASS' if name=='threaded' else 'CTR2WUP compiled graphics PASS' if name=='graphics' else 'CTR2WUP compiled input PASS' if name=='input' else 'CTR2WUP compiled filesystem SAVE 1 PASS' if name=='filesystem' else 'CTR2WUP compiled RomFS PASS' if name=='romfs' else 'CTR2WUP compiled interactive PASS'
             if result['state']!='exited' or result['fallback'] or expected not in result['messages']:raise RuntimeError(name+' did not complete its real guest assertions')
             if name in ('graphics','interactive') and result['frames']!=[0x00ff00ff,0xff0000ff,0x00ff00ff]:raise RuntimeError('Require all three exact two-screen RGB565 frames')
             if name=='input' and result['input_samples']!=3:raise RuntimeError('Require all three standard HID publications')
@@ -135,7 +137,7 @@ def main():
                 checks.append({'name':'filesystem-corrupt-reject','exit_code':rejected.returncode,'expected':5})
                 if rejected.returncode!=5 or corrupt.read_bytes()!=bad:raise RuntimeError('Corrupt save was not preserved/rejected')
                 reports[-1]['snapshot_sha256']=hashlib.sha256(snapshot).hexdigest()
-            if a.wiiu and name in ('interactive','filesystem'):
+            if a.wiiu and name in ('interactive','filesystem','romfs'):
                 wiiu=folder/'wiiu';wiiu.mkdir();recipe=ROOT/'runtime/wiiu'
                 # GNU Make tokenizes source/prerequisite lists. Keep its relative
                 # names free of user-path whitespace, as the main build engine
@@ -143,8 +145,9 @@ def main():
                 (ROOT/'artifacts').mkdir(exist_ok=True)
                 with tempfile.TemporaryDirectory(prefix='compiled-console-',dir=ROOT/'artifacts') as temporary:
                     work=Path(temporary);shutil.copytree(folder/'aot',work/'aot');shutil.copy2(folder/'boot-image.h',work/'boot-image.h')
+                    if name=='romfs':shutil.copy2(folder/'romfs-image.h',work/'romfs-image.h')
                     prefix=os.path.relpath(work,recipe)
-                    run(name+'-wiiu-build',['make','-C',str(recipe),'OUTPUT='+prefix+'/wiiu','TARGET=ctr2wup-libctru-'+name,'FILESYSTEM_HOMEBREW='+('1' if name=='filesystem' else '0'),'GUEST_DEFAULT=2','EXTERNAL_AOT=1','COMPILED_HOMEBREW=1','COMPILED_IMAGE_DIR='+prefix,'UPSTREAM_DIR='+prefix+'/aot'],env=env)
+                    run(name+'-wiiu-build',['make','-C',str(recipe),'OUTPUT='+prefix+'/wiiu','TARGET=ctr2wup-libctru-'+name,'FILESYSTEM_HOMEBREW='+('1' if name=='filesystem' else '0'),'ROMFS_HOMEBREW='+('1' if name=='romfs' else '0'),'GUEST_DEFAULT=2','EXTERNAL_AOT=1','COMPILED_HOMEBREW=1','COMPILED_IMAGE_DIR='+prefix,'UPSTREAM_DIR='+prefix+'/aot'],env=env)
                     built=work/'wiiu';rpx=built/('ctr2wup-libctru-'+name+'.rpx');shortcut=rpx.with_suffix('.wuhb')
                     _validate_rpx(rpx)
                     if shortcut.read_bytes()[:4]!=b'WUHB':raise RuntimeError('Invalid compiled WUHB')
@@ -161,7 +164,7 @@ def main():
                         if shortcut.read_bytes()[:4]!=b'WUHB':raise RuntimeError('Invalid guarded WUHB')
                         shutil.copy2(rpx,guarded_folder/rpx.name);shutil.copy2(shortcut,guarded_folder/shortcut.name)
                     reports[-1]['guarded_wiiu_artifacts']=[{'name':f.name,'size':f.stat().st_size,'sha256':hashlib.sha256(f.read_bytes()).hexdigest()} for f in sorted(guarded_folder.iterdir())]
-        if a.wiiu and not any('wiiu_artifacts' in r for r in reports):raise ValueError('--wiiu requires the interactive or filesystem application')
+        if a.wiiu and not any('wiiu_artifacts' in r for r in reports):raise ValueError('--wiiu requires interactive, filesystem or romfs')
     report={'ok':True,'version':__version__,'libctru_pin':pin,'library_sha256':library_hash,'arm_compiler':arm_version.splitlines()[0],'applications':reports,'checks':checks,'console_verified':False,'native_windows_verified':False,'complete_service_startup':False,'standalone_apt_and_fs_startup':True,'unavailable_startup_services':['APT:S','APT:A','ptm:sysm'],'powerpc_execution':'emulated Linux' if a.static else None}
     (out/'report.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps({'ok':True,'applications':[{'name':r['application'],'instructions':r['guest']['instructions'],'ipc_failures':r['guest']['ipc_failures']} for r in reports],'report':str(out/'report.json')}));return 0
 if __name__=='__main__':raise SystemExit(main())

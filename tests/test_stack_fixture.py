@@ -17,7 +17,7 @@ class StackFixtureTests(unittest.TestCase):
         self.assertEqual(result['inspection']['identity']['program_id'],f'{PROGRAM_ID:016x}')
         self.assertEqual(result['inspection']['partitions'][0]['service_access'],[])
     def test_generated_transfers_are_decoded_and_invalid_forms_fail_closed(self):
-        for opcode,thumb in ((0xe92d40f0,False),(0xe8bd80f0,False),(0xb530,True),(0xbd30,True),(0xc630,True),(0xce0c,True)):
+        for opcode,thumb in ((0xe92d40f0,False),(0xe92d6000,False),(0xe8ac5000,False),(0xe8bd80f0,False),(0xb530,True),(0xbd30,True),(0xc630,True),(0xce0c,True)):
             source=translate(struct.pack('<H' if thumb else '<I',opcode),0x100000,'transfer',thumb)
             self.assertIn('ctr_cpu_multiple(cpu,',source);self.assertNotIn('ctr_cpu_step(',source)
         for opcode,thumb in ((0xe8cc0001,False),(0xe8ac1001,False),(0xe8bc1001,False),(0xe89f0001,False),(0xe88f8000,False),

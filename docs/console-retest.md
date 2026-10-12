@@ -1,60 +1,63 @@
-# Guarded report-recovery retest (0.14.5)
+# Save and result-file check (0.14.6)
 
-Native Minus exit works, according to the user. The received v0.14.3 guarded
-report captures the first run, which displayed green late and exited. It records
-continued execution/rendering, a failed button-response observation and complete
-shutdown; it does not explain the next launch's freeze. The user confirms that
-frozen launch saved nothing. **There is no old partial report to recover.**
-See [the scoped evidence review](console-evidence.md).
+The user reports that Native, Guarded AOT and Compiled AOT completed without
+errors on **0.14.5**. Repeating their long guides is unnecessary for this round.
+No new TXT reports were found. The uploaded text logs identify 0.14.0–0.14.3;
+the snapshot is valid and contains both expected records at visit 1. It proves
+an initial write, but cannot establish the failed save update/reload stage.
+See [the evidence review](console-evidence.md).
 
-## One short test
+## First: Compiled Save
 
-1. Extract the **0.14.5 console testing kit** and copy its `sd-card/` contents to
-   the SD root, replacing the previous diagnostic builds. An RPX launcher may
-   instead use the matching `rpx/ctr2wup-libctru-guarded.rpx`.
-2. Launch **CTR2WUP Guarded AOT 0.14.5** once. Leave Native, Compiled AOT and
-   Compiled Save for later. No ROM is needed.
-3. If **REPORT STORAGE FAILED** appears, press **Minus** to exit. Report the
-   displayed `SD ERROR`, operation and `FSA` number; send any TXT that exists.
-   Guest execution pauses on a reported storage failure.
-4. Confirm the red top / blue bottom picture with **R**. At the A prompt, hold
-   **A** until **NEW GREEN FRAME DETECTED** appears and the picture looks green,
-   then confirm with **R**. If it still says **WAITING FOR GREEN** after about
-   30 seconds, mark the problem with **L**.
-5. Press **Minus** to exit after that observation. The remaining guide steps will
-   be marked unfinished; this short diagnostic is not a full acceptance run.
-   Stop after this launch, including if it freezes, and return the result before
-   trying another launch.
+1. Extract the **0.14.6 console testing kit** and copy `sd-card/` to the SD root,
+   replacing the previous apps. Keep `sd:/ctr2wup/` and all its existing files.
+   Preserve `filesystem-test.snapshot`, `.pending` and `.previous` if present.
+2. Launch **CTR2WUP Compiled Save 0.14.6**. Check that the in-app footer says
+   **BUILD 0.14.6** and **RESULT VERIFIED**, followed by its result filename.
+   An RPX launcher can use `rpx/ctr2wup-libctru-filesystem.rpx` instead.
+3. Wait for the first save/reload check to complete, then press **Plus** when
+   prompted. The app checks the new guest's PASS and exit automatically.
+4. Press **Minus** after the guide completes. If it requests a fresh launch,
+   launch this app once more and follow its two prompts. An existing visit-1
+   snapshot should already permit fresh-launch reload confirmation.
+5. If **RESULT STORAGE FAILED** or a guest/save failure appears, stop that test
+   and exit with Minus. Return the available files and short error text.
+   Do not delete a snapshot or its siblings to make a failure disappear.
 
-## Return the result here
+## Then: Compiled RomFS
 
-Upload the newly created **`compiled-guarded-*.txt`** from:
+If the save app exits normally, launch **CTR2WUP Compiled RomFS 0.14.6**.
+This one-step automatic test reads original root, nested and Unicode-named assets,
+checks seeking and directory listing, and rejects writes. Wait for its PASS/exit
+and **GUIDED TEST COMPLETE**, then press Minus. No game file is needed.
 
-```text
-sd:/ctr2wup/
-```
+## Upload here
 
-Send it **in this chat**, directly or in a ZIP below 32 MiB. If several guarded
-reports exist and the new one is unclear, send them together; each header records
-its application/build. Include any incomplete file after a reboot.
-Add a short note: whether green appeared, whether Minus returned to Menu, or
-whether the console froze. If no file exists again, say so—do not repeat the test
-to create one. A visible storage error only needs its short text/numbers.
+Copy the new files from **`sd:/ctr2wup/`** and upload them in this chat,
+individually or in a ZIP below 32 MiB:
 
-## What changed
+- `result-compiled-save-0.14.6-*.txt` from each save launch;
+- `result-compiled-romfs-0.14.6-*.txt` from the asset test;
+- any matching `compiled-save-*.txt` / `compiled-romfs-*.txt` full traces;
+- the updated `filesystem-test.snapshot` and any `.pending` / `.previous` siblings.
 
-Each critical checkpoint now **syncs the file, closes it, flushes the mounted SD
-volume, then reopens the existing file** before proceeding. Startup and periodic
-summaries also commit; missing files are never silently recreated. The report
-names the checkpoint, commit sequence and sync policy. Failure preserves the
-first error and pauses guest execution. WUT continues to own the SD mount.
+Add a brief note about launcher return or any freeze. If no new result exists,
+report that and any displayed `SD ERROR` operation/number; do not repeat a failed
+run just to generate a file. Screenshots are optional.
 
-This is stronger than flushing a C buffer, but physical crash recovery still
-needs this console test. Syncing adds diagnostic overhead. If the filesystem or
-SD controller itself hangs, a checkpoint can remain missing despite these steps.
-There is no verified freeze fix yet.
+## Why these changes
 
-The kit also retains v0.14.4's cached image scaling, fresh-green confirmation,
-latency logging and tested idle-AOT-dispatch guard. Those checks pass locally;
-they have not established console speed or intermittent stability. The supplied
-RPX/WUHB diagnostics are not commercial-game WUPs.
+Each launch now creates a **separate 4 KiB plain-text result file** independently
+of the full trace handler. Every update closes the file and reads back all bytes
+before displaying **RESULT VERIFIED**. Named guide results, self-tests, guest
+state/fault, save errors and full-trace status are retained there. A full-trace
+error can be reported through this independent result; result-storage failure
+pauses guest execution. VERIFIED means byte read-back, not power-loss durability.
+
+Save updates no longer require rename to overwrite an existing file. The old
+committed snapshot moves to `.previous`, the staged file moves into the vacant
+primary name, and failures attempt rollback. Recovery can use a validated backup
+when the primary is absent; corrupt or ambiguous data remains a visible failure.
+This fixes a tested platform assumption, but the exact console failure and new
+result-file behavior still need the tests above. These RPX/WUHB diagnostics do
+not establish commercial-game or WUP installation support.

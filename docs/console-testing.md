@@ -1,26 +1,26 @@
 # Physical Wii U test checklist
 
-**Current workflow: use the v0.14.5 kit and first follow
-[guided-testing.md](guided-testing.md).** The diagnostic variants now prompt for inputs
-and observations and write per-launch `.txt` reports under `sd:/ctr2wup/`.
-Upload those reports in this chat. Photos are optional when illustrating a visual
-problem; the manual checklist below remains a reference for deeper investigation
-and older artifacts. Native guided checks have now passed on the user's console,
-and native Minus exit now works. Guarded A was delayed once and froze on a second
-launch. The first report is reviewed; the second saved no file. The next action
-is one short guarded test of the stronger SD checkpoint commits.
-Follow `console-retest.md` before repeating long guides or running the save app.
+**Current workflow: use the v0.14.6 kit and follow
+[console-retest.md](console-retest.md): Compiled Save, then the automatic Compiled
+RomFS test if exit works.** The user reports Native/Guarded/Compiled completion
+without errors on 0.14.5, but no new TXT reports. Supplied text logs are older;
+the valid snapshot proves initial writing and the later save step failed.
+Independent `result-*-0.14.6-*.txt` files now retain named outcomes and are closed/
+read-back verified. Upload them and the snapshot/siblings in this chat. No long
+native/input repetition is needed. The manual checklist below is historical
+reference for deeper acceptance rounds; [guided-testing.md](guided-testing.md)
+describes current controls and reporting.
 
 No console is attached to this environment. Full physical acceptance remains
 open despite the scoped native results. Cross-compilation, host tests and RPX headers do not
 establish console behavior.
 
 v0.14 adds `CTR2WUP-libctru-filesystem-0.14.0.zip`. Launch its WUHB/RPX with
-an accessible mounted SD card; the existing diagnostic creates its `ctr2wup` directory under the WHB SD mount. A fresh diagnostic
+an accessible mounted SD card; the existing diagnostic creates its `ctr2wup` directory on the WUT-owned SD mount. A fresh diagnostic
 save must show/log `CTR2WUP compiled filesystem SAVE 1 PASS` and `state=exited`.
 Press Plus: it must reload, update and show `RELOAD PASS`. Exit with Minus and
 relaunch to test another fresh process. Preserve the private diagnostic snapshot
-and logs on failures; do not discard a corrupt snapshot or stale `.pending` file.
+and logs on failures; do not discard a corrupt snapshot or stale `.pending` / `.previous` files.
 Its path, atomic-publication limits and detailed procedure are in `filesystem.md`.
 The fifth build executes standard libctru/newlib savedata code, not a Mario save.
 Native SD exclusive-write/rename behavior and stability are unverified.
@@ -220,8 +220,8 @@ No console installation, replacement or removal is automated by these tools.
 
 ## Not yet available for console validation
 
-Proven installable WUP, conventional 3DS homebrew/service boot, PICA renderer scenes, commercial
-gameplay, DSP, saves, CRO modules, and representative CPU/VFP/fallback performance
+Proven installable WUP, broader commercial service boot, PICA renderer scenes, commercial
+gameplay, DSP, retail saves, CRO modules, and representative CPU/VFP/fallback performance
 benchmarks. No commercial ROM is needed for the native test above. One user-owned
 fully decrypted Old 3DS revision will be requested for the commercial milestone
 for the selected Super Mario 3D Land candidate's private revision analysis.
