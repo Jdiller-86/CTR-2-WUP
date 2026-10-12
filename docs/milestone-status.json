@@ -1,0 +1,128 @@
+{
+  "schema_version": 1,
+  "version": "0.17.0",
+  "updated": "2026-10-12",
+  "approximate_implementation_percent": 20,
+  "full_milestones_accepted": 0,
+  "milestones": [
+    {
+      "id": "m1",
+      "title": "M1: Native Wii U platform",
+      "area": "area:runtime",
+      "waiting_labels": [
+        "needs-console"
+      ],
+      "summary": "Native RPX/WUHB builds and older native/exit evidence; v0.14.5 Native/Guarded/Compiled success is user-reported.",
+      "verified_foundations": [
+        "Versioned builds and checked test-report lifecycle",
+        "User-reported native/control/exit checks retained"
+      ],
+      "acceptance_remaining": [
+        "Verify current result-file and save behavior on the Wii U",
+        "Complete native stability/lifecycle and actual WUP install/Menu evidence"
+      ]
+    },
+    {
+      "id": "m2",
+      "title": "M2: CPU translation and performance",
+      "area": "area:cpu",
+      "waiting_labels": [
+        "needs-console"
+      ],
+      "summary": "Checked ARM/Thumb/VFP/AOT subsets and emulated big-endian PowerPC comparisons exist.",
+      "verified_foundations": [
+        "Original CPU/AOT/reference suites and checked memory",
+        "Eight single-core contexts and scoped threading semantics"
+      ],
+      "acceptance_remaining": [
+        "Complete exercised ARM/VFP correctness beyond supported subset",
+        "Measure actual Espresso costs and useful gameplay performance"
+      ]
+    },
+    {
+      "id": "m3",
+      "title": "M3: Homebrew execution runtime",
+      "area": "area:runtime",
+      "waiting_labels": [
+        "needs-console"
+      ],
+      "summary": "Eight original normal-CRT/libctru applications cover boot, threading, graphics, input, files, RomFS and GX transfers.",
+      "verified_foundations": [
+        "Owned memory, scoped kernel/services and lifecycle",
+        "Private save/reload, verified RomFS and GX command operations"
+      ],
+      "acceptance_remaining": [
+        "Verify save/results/assets and GX program on console",
+        "Implement broader game services, modules, guest audio and retail saves"
+      ]
+    },
+    {
+      "id": "m4",
+      "title": "M4: PICA to GX2 rendering",
+      "area": "area:graphics",
+      "waiting_labels": [
+        "needs-console"
+      ],
+      "summary": "Base textures, CPU-backed GX transfers and framebuffer presentation are implemented; PICA draws are not.",
+      "verified_foundations": [
+        "All 14 base textures with original and reference checks",
+        "GSP DMA/fill/transfer/texture copy/cache queue and completion interrupts"
+      ],
+      "acceptance_remaining": [
+        "Implement required vertex/shader/TEV/draw and GPU resource/coherency behavior",
+        "Compare actual reference scenes and Wii U timings"
+      ]
+    },
+    {
+      "id": "m5",
+      "title": "M5: Super Mario 3D Land revision",
+      "area": "area:runtime",
+      "waiting_labels": [
+        "needs-input",
+        "needs-console"
+      ],
+      "summary": "Mario is selected; the received small intake contains no executable. No commercial profile is enabled.",
+      "verified_foundations": [
+        "Candidate chosen and local preparation/intake path available"
+      ],
+      "acceptance_remaining": [
+        "Privately analyze a decrypted executable and assets without uploading keys",
+        "Prove boot/menu/gameplay/audio/save/reload/stability on Wii U"
+      ]
+    },
+    {
+      "id": "m6",
+      "title": "M6: Automated ROM to WUP conversion",
+      "area": "area:host",
+      "waiting_labels": [
+        "needs-windows",
+        "needs-console"
+      ],
+      "summary": "Local decryption/assets, AOT builds and synthetic packing/verification exist; commercial conversion and installation remain unverified.",
+      "verified_foundations": [
+        "Original encrypted CIA to AOT/Wii U artifact proof",
+        "Checked private asset preparation and bounded synthetic packing"
+      ],
+      "acceptance_remaining": [
+        "Complete selected-game conversion/rebuild/caching/cancellation",
+        "Verify native Windows tooling and actual WUP installation/Menu launch"
+      ]
+    },
+    {
+      "id": "m7",
+      "title": "M7: Windows GUI injector",
+      "area": "area:host",
+      "waiting_labels": [
+        "needs-input"
+      ],
+      "summary": "UWUVCI-style workflow is specified; GUI implementation is deferred until the execution pipeline works.",
+      "verified_foundations": [
+        "User-facing workflow and first-profile scope documented"
+      ],
+      "acceptance_remaining": [
+        "Implement a responsive Inject workflow around the proven engine",
+        "Validate packaged clean-Windows conversion and installed gameplay"
+      ]
+    }
+  ]
+}

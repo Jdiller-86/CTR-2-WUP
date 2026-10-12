@@ -8,8 +8,11 @@ use, build/runtime pins and the unverified native-Windows acceptance check.
 The source CLI targets Python 3.12+ and uses the standard library, argument-list
 subprocesses, Windows process-group cancellation and Unicode paths. It has been
 executed on Linux, including a checkout/output path with spaces and Japanese
-characters. A clean Windows machine has not been tested; this is a pending
-acceptance check, not a completed Windows product.
+characters. The clean hosted Windows Server 2022 baseline now passes the Python host and all
+17 normal C suites, including Unicode guest compilation/execution. Three existing
+filesystem/privilege-specific Python cases are reported as skipped. See the
+[passing run](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38287776847).
+A complete Windows desktop conversion/install/GUI product remains unverified.
 
 ## Prerequisites
 
@@ -59,7 +62,7 @@ audited source with Rust 1.95.0 and writes the provenance receipt. Use
 The script/workflow are prepared; they have not yet executed on Windows.
 The manual workflow at `.github/workflows/windows-validation.yml` also tests
 actual external ARM/Thumb/VFP execution and Unicode output, then builds a WPF
-tooling probe. Publishing/one run await the earlier requested approval.
+tooling probe. Publication is now authorized by the user; consult actual hosted run evidence.
 
 Version 0.4.0 adds optional encrypted packaging. From source, run
 `python -m pip install '.[packaging]'` and follow `packaging.md` for local file-based inputs.
@@ -94,8 +97,10 @@ packing gates are demonstrated, as required by the brief.
 
 Version 0.11 source/builds include the shared GSP relay probe and API suite.
 `make check` runs its sanitizer checks; `tools/validate-upstream.py --relay-api`
-runs nine probes and shared queue API checks. Native Windows execution remains
-pending; no local unapproved workflow is published or included in source bundles.
+runs nine probes and shared queue API checks. Native Windows host/portable-C execution is verified by the hosted baseline;
+full native conversion and the separate external-AOT/WPF checks remain pending. The reviewed Windows workflows
+are now included in the repository and source bundles; see
+[GitHub development](github-development.md).
 
 Version 0.12 adds `make -C tests/multiple check` and
 `python tools/validate-upstream.py --multiple-api --output artifacts/windows-stack`.
@@ -145,3 +150,11 @@ GCC/Make. `tools/validate-textures.py` optionally uses a clean audited Zakuro
 checkout and Rust for test-only comparisons; neither is a runtime dependency.
 Windows filesystem behavior and these native executable/reference checks still
 need Windows execution; Linux/PPC evidence is not Windows acceptance.
+
+
+v0.17.0 adds an automatic Windows host/normal portable-C baseline and reviewed
+manual deep Windows AOT/WPF workflow. Use `make check-c-portable` in UCRT64 for
+all 17 normal C suites; Linux sanitizer behavior is not assumed on Windows.
+Workflow/agent/documentation publication is now explicitly authorized; no old
+permission question blocks it. See [GitHub development](github-development.md)
+for hosted artifacts, current results and the remaining native SDK/GUI gates.

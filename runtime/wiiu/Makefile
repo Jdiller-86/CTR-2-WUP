@@ -11,9 +11,10 @@ COMPILED_HOMEBREW ?= 0
 FILESYSTEM_HOMEBREW ?= 0
 ROMFS_HOMEBREW ?= 0
 ROMFS_FILE ?= 0
+GX_HOMEBREW ?= 0
 UDP_LOG ?= 0
 CALL_LIMIT ?= 64
-APP_VERSION := 0.16.0
+APP_VERSION := 0.17.0
 UPSTREAM_DIR ?= ../../artifacts/generated-upstream-guest
 ifeq ($(GUEST_DEFAULT),1)
 APP_NAME := CTR2WUP ARM Guest $(APP_VERSION)
@@ -46,12 +47,16 @@ CFLAGS += -DCTR_ROMFS_FILE
 APP_NAME := CTR2WUP Asset Files $(APP_VERSION)
 endif
 endif
+ifeq ($(GX_HOMEBREW),1)
+CFLAGS += -DCTR_GX_HOMEBREW
+APP_NAME := CTR2WUP GX Transfers $(APP_VERSION)
+endif
 LDFLAGS := -mcpu=750 -meabi -mhard-float -specs="$(WUT)/share/wut.specs" \
            -Wl,-Map,$(OUTPUT)/$(TARGET).map
 SOURCES := main.c viewport.c diagnostic_font.c test_report.c test_guide.c test_lifecycle.c image_scale.c report_storage.c test_result.c
 OBJECTS := $(addprefix $(BUILD)/,$(SOURCES:.c=.o))
 CORE_SOURCES := ../core/ctr_memory.c ../core/ctr_cpu.c ../core/ctr_cpu_selftest.c \
-                ../core/ctr_guest.c ../core/ctr_ipc.c ../core/ctr_heap.c ../core/ctr_kernel.c ../core/ctr_hid.c ../core/ctr_gsp.c ../core/ctr_fs.c ../core/ctr_apt.c ../core/ctr_fs_snapshot.c ../core/ctr_guest_fixture.c \
+                ../core/ctr_guest.c ../core/ctr_ipc.c ../core/ctr_heap.c ../core/ctr_kernel.c ../core/ctr_hid.c ../core/ctr_gsp.c ../core/ctr_gx.c ../core/ctr_transfer.c ../core/ctr_fs.c ../core/ctr_apt.c ../core/ctr_fs_snapshot.c ../core/ctr_guest_fixture.c \
                 ../core/ctr_service_fixture.c \
                 ../core/ctr_heap_fixture.c \
                 ../core/ctr_kernel_fixture.c \

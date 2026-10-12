@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "repository": "Jdiller-86/CTR-2-WUP",
+  "application_status": "experimental; no commercial game support",
+  "description": "Experimental 3DS-to-Wii U static translation and Windows WUP injector project. Original homebrew diagnostics; commercial gameplay is not supported yet.",
+  "topics": ["wiiu", "homebrew", "3ds", "static-recompilation", "powerpc", "devkitpro", "aroma", "windows"],
+  "delete_branch_on_merge": true,
+  "discussions_requested": true,
+  "dependency_alerts_requested": true,
+  "main_protection_requested": {
+    "required_check": "Required CI",
+    "require_up_to_date": true,
+    "require_pull_request": true,
+    "required_human_approvals": 0,
+    "allow_force_pushes": false,
+    "allow_deletions": false,
+    "apply_only_after_successful_hosted_checks": true
+  },
+  "project_requested": {
+    "title": "CTR2WUP Development",
+    "public": false,
+    "items": "seven milestone tracker issues",
+    "status_columns": ["Planned", "In progress", "Awaiting evidence", "Accepted"],
+    "extra_fields": ["Milestone", "Waiting resource"]
+  },
+  "paid_features_enabled": false,
+  "visibility_change_requested": false,
+  "live_settings_verified": false,
+  "blocked_reason": "Current GitHub integration denied Projects creation and repository Administration/security-setting writes."
+}

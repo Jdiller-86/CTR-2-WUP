@@ -1,10 +1,12 @@
 /* Original single-process GSP direct/shared framebuffer bridge from wire facts. */
 #include "ctr_gsp.h"
 #include "ctr_kernel.h"
+#include "ctr_gx.h"
 #include <string.h>
 #define BAD_HANDLE UINT32_C(0xd8e007f7)
 #define BAD_STATE UINT32_C(0xe0a01bf5)
 #define NO_MEMORY UINT32_C(0xd86007f3)
+static bool execute_queue(ctr_guest *g);
 static void unregister(ctr_guest *g) {
     ctr_guest_gsp *s=&g->gsp;
     if(!s->registered)return;
@@ -69,6 +71,9 @@ bool ctr_gsp_request(ctr_guest *g,unsigned session,const uint32_t *words,uint32_
         case 0x00140000:
             if(!g->gsp.registered || g->gsp.relay_owner!=session) { out[1]=BAD_STATE;return true; }
             unregister(g);return true;
+        case 0x000c0000:
+            if(!g->gsp.right || !g->gsp.registered || g->gsp.relay_owner!=session) { out[1]=BAD_STATE;return true; }
+            return execute_queue(g);
         case 0x00050200: {
             if(!g->gsp.right || !supported(words[1],words+2))return false;
             ctr_mem_result result=source_ok(g,words[1],words+2);
@@ -90,14 +95,47 @@ static bool device_fault(ctr_guest *g,ctr_mem_result result,uint32_t detail) {
     g->cpu.memory_fault=result;g->fault_detail=detail;g->state=CTR_GUEST_FAULTED;
     ctr_cpu_stop(&g->cpu,g->fault,detail);return false;
 }
+static bool ring_valid(const uint8_t *page) { return page[0]<52 && page[1]<=52 && page[2]<=1 && !page[3]; }
+static bool queue_valid(const uint8_t *page) {
+    const uint8_t *h=page+0x800;
+    if(h[0]>=15 || h[1]>15 || h[2]>1 || h[3]>1)return false;
+    for(unsigned i=4;i<32;++i)if(h[i])return false;
+    return true;
+}
+static bool interrupt(ctr_guest *g,uint8_t *page,unsigned irq) {
+    if(page[1]==52) { page[2]=1;++g->gsp.dropped_interrupts;return false; }
+    page[0xc+(page[0]+page[1])%52]=(uint8_t)irq;++page[1];return true;
+}
+static bool execute_queue(ctr_guest *g) {
+    ctr_guest_gsp *s=&g->gsp;uint8_t page[4096];memcpy(page,g->shared[s->relay_shared].storage,sizeof(page));
+    if(!ring_valid(page) || !queue_valid(page))return device_fault(g,CTR_MEM_OK,0x800);
+    while(page[0x801]) {
+        if(page[0x802])break;
+        if(page[0x803]) { page[0x802]=1;ctr_shared_publish(g,s->relay_shared,page);break; }
+        uint32_t command[8];unsigned at=0x820+page[0x800]*32;
+        for(unsigned i=0;i<8;++i)command[i]=word_at(page+at+i*4);
+        ctr_gx_completion completion;s->last_gx_header=command[0];
+        ctr_gx_result r=ctr_gx_execute(g,command,&completion);s->last_gx_detail=completion.detail;
+        if(r!=CTR_GX_OK)return device_fault(g,r==CTR_GX_MEMORY?completion.memory:r==CTR_GX_NO_MEMORY?CTR_MEM_CAPACITY:CTR_MEM_OK,completion.detail);
+        ++s->gx_commands;unsigned id=command[0]&255;
+        if(id==0)++s->gx_dma;else if(id==2)++s->gx_fills;else if(id==3)++s->gx_transfers;
+        else if(id==4)++s->gx_copies;else if(id==5)++s->gx_cache;
+        page[0x800]=(uint8_t)((page[0x800]+1)%15);--page[0x801];
+        if(command[0]&0x10000)page[0x802]=1;
+        bool enqueued=completion.signal && interrupt(g,page,completion.irq);
+        ctr_shared_publish(g,s->relay_shared,page);
+        if(enqueued) { g->events[s->relay_event].signaled=true;ctr_threads_poll(g); }
+    }
+    return true;
+}
 bool ctr_gsp_poll(ctr_guest *g,uint64_t now) {
     ctr_guest_gsp *s=&g->gsp;
     if(!s->registered || !s->right || now<s->next_vblank_ns)return true;
     uint64_t frames=1+(now-s->next_vblank_ns)/CTR_GSP_FRAME_NS;
     if(frames>(UINT64_MAX-s->next_vblank_ns)/CTR_GSP_FRAME_NS)return device_fault(g,CTR_MEM_OK,0x130042);
     uint8_t next[4096];memcpy(next,g->shared[s->relay_shared].storage,sizeof(next));
-    if(next[0]>=52 || next[1]>52 || next[2]>1 || next[3])return device_fault(g,CTR_MEM_OK,0);
-    if(word_at(next+0x800))return device_fault(g,CTR_MEM_OK,0x800); /* No erased GX work. */
+    if(!ring_valid(next))return device_fault(g,CTR_MEM_OK,0);
+    if(!queue_valid(next))return device_fault(g,CTR_MEM_OK,0x800);
     uint32_t info[2][7];bool dirty[2];
     for(unsigned screen=0;screen<2;++screen) {
         unsigned offset=0x200+screen*0x40;uint32_t header=word_at(next+offset);
@@ -110,18 +148,18 @@ bool ctr_gsp_poll(ctr_guest *g,uint64_t now) {
         ctr_mem_result result=source_ok(g,screen,info[screen]);
         if(result!=CTR_MEM_OK)return device_fault(g,result,info[screen][1]);
     }
-    /* Both screen descriptors and the ring are checked before any publication. */
+    /* Frame descriptors are checked before queue or display publication. Queue
+       commands commit in order; a failing command preserves its pending entry. */
+    if(!execute_queue(g))return false;
+    memcpy(next,g->shared[s->relay_shared].storage,sizeof(next));
     for(unsigned screen=0;screen<2;++screen)if(dirty[screen]) {
         memcpy(s->info[screen],info[screen],sizeof(s->info[screen]));s->active[screen]=true;++s->swaps[screen];
         next[0x201+screen*0x40]=0;
     }
-    for(unsigned irq=2;irq<=3;++irq) {
-        if(next[1]==52) { next[2]=1;++s->dropped_interrupts; }
-        else { next[0xc+(next[0]+next[1])%52]=(uint8_t)irq;++next[1]; }
-    }
+    bool enqueued=false;for(unsigned irq=2;irq<=3;++irq)if(interrupt(g,next,irq))enqueued=true;
     ctr_shared_publish(g,s->relay_shared,next);
     ++s->vblanks;s->coalesced_vblanks+=frames-1;s->next_vblank_ns+=frames*CTR_GSP_FRAME_NS;
-    g->events[s->relay_event].signaled=true;ctr_threads_poll(g);return true;
+    if(enqueued) { g->events[s->relay_event].signaled=true;ctr_threads_poll(g); }return true;
 }
 static unsigned expand(unsigned value,unsigned bits) {
     return bits==6?(value<<2)|(value>>4):bits==5?(value<<3)|(value>>2):(value<<4)|value;

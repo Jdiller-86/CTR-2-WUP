@@ -1,0 +1,256 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Fork contributions receive no repository write access or project credentials.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  workflows:
+    name: Workflow lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate workflows with checksum-pinned actionlint
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/ci/workflows "$RUNNER_TEMP/actionlint"
+          curl --fail --show-error --location --proto '=https' --tlsv1.2 \
+            'https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz' \
+            --output "$RUNNER_TEMP/actionlint/actionlint.tar.gz"
+          printf '%s  %s\n' '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8' \
+            "$RUNNER_TEMP/actionlint/actionlint.tar.gz" | sha256sum --check
+          tar --extract --gzip --file "$RUNNER_TEMP/actionlint/actionlint.tar.gz" \
+            --directory "$RUNNER_TEMP/actionlint" actionlint
+          "$RUNNER_TEMP/actionlint/actionlint" -color 2>&1 | tee artifacts/ci/workflows/actionlint.log
+      - name: Upload lint log
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: workflow-lint-${{ github.sha }}
+          path: artifacts/ci/workflows/*.log
+          retention-days: 14
+          if-no-files-found: warn
+
+  python:
+    name: Python ${{ matrix.python }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.12', '3.14']
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install declared crypto and wheel build dependencies
+        run: python -m pip install '.[packaging,decryption]' build
+      - name: Run original offline host fixtures
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/ci/python
+          make check-python PYTHON=python 2>&1 | tee artifacts/ci/python/tests.log
+      - name: Build wheel and test its installed entry point outside the checkout
+        run: |
+          set -euo pipefail
+          python -m build --wheel --outdir artifacts/ci/python/dist 2>&1 | tee artifacts/ci/python/wheel-build.log
+          python -m venv "$RUNNER_TEMP/ctr2wup-wheel"
+          "$RUNNER_TEMP/ctr2wup-wheel/bin/python" -m pip install --no-deps artifacts/ci/python/dist/*.whl
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/ctr2wup-wheel/bin/ctr2wup" --help
+      - name: Upload wheel and host test logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: host-python-${{ matrix.python }}-${{ github.sha }}
+          path: |
+            artifacts/ci/python/*.log
+            artifacts/ci/python/dist/*.whl
+            artifacts/logs/*.log
+          retention-days: 14
+          if-no-files-found: warn
+
+  native:
+    name: C ${{ matrix.cc }} and sanitizers
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run all portable C fixtures with ASan and UBSan
+        env:
+          CC: ${{ matrix.cc }}
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/ci/native
+          "$CC" --version > artifacts/ci/native/compiler.log
+          make check-c 2>&1 | tee artifacts/ci/native/tests.log
+      - name: Upload portable C logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-${{ matrix.cc }}-${{ github.sha }}
+          path: artifacts/ci/native/*.log
+          retention-days: 14
+          if-no-files-found: warn
+
+  windows:
+    name: Windows host and portable C
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Set up native GCC, Make and independent OpenSSL
+        id: msys
+        uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
+        with:
+          msystem: UCRT64
+          path-type: inherit
+          update: false
+          install: >-
+            make
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-openssl
+      - name: Run Windows host fixtures
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/ci/windows
+          python -m pip install '.[packaging,decryption]'
+          python --version > artifacts/ci/windows/python-version.log
+          make check-python PYTHON=python 2>&1 | tee artifacts/ci/windows/python-tests.log
+      - name: Run all normal portable C suites on Windows
+        if: ${{ !cancelled() && steps.msys.outcome == 'success' }}
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/ci/windows
+          gcc --version > artifacts/ci/windows/compiler.log
+          make check-c-portable 2>&1 | tee artifacts/ci/windows/portable-c-tests.log
+      - name: Upload Windows baseline logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-baseline-${{ github.sha }}
+          include-hidden-files: true
+          path: |
+            artifacts/ci/windows/*.log
+            artifacts/logs/*.log
+          retention-days: 14
+          if-no-files-found: warn
+
+  wiiu:
+    name: Wii U prototype build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Extract official immutable devkitPro SDK and build the native prototype
+        env:
+          CTR2WUP_SDK_ROOT: ${{ runner.temp }}/ctr2wup-sdk
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/ci/sdk
+          bash tools/install-wiiu-sdk.sh 2>&1 | tee artifacts/ci/sdk/install-build.log
+          printf 'DEVKITPRO=%s\nDEVKITPPC=%s\n' "$CTR2WUP_SDK_ROOT" \
+            "$CTR2WUP_SDK_ROOT/devkitPPC" >> "$GITHUB_ENV"
+      - name: Publish structurally validated RPX and WUHB with provenance and notices
+        run: |
+          set -euo pipefail
+          python -m host build --target prototype --output artifacts/ci/wiiu
+          cp LICENSE THIRD_PARTY_NOTICES artifacts/ci/wiiu/
+          cp "$DEVKITPRO/ctr2wup-image-digest.txt" artifacts/ci/wiiu/sdk-image-digest.txt
+          cp -R "$DEVKITPRO/licenses" artifacts/ci/wiiu/sdk-licenses
+          git rev-parse HEAD > artifacts/ci/wiiu/source-commit.txt
+          (cd artifacts/ci/wiiu && sha256sum -- *.rpx *.wuhb > SHA256SUMS)
+      - name: Explain the scope of the diagnostic build
+        if: always()
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ### Wii U diagnostic build
+
+          RPX/WUHB compilation and format validation do not establish console execution,
+          WUP installer acceptance or commercial game compatibility. This is the original
+          native diagnostic application. No ROM, user key, save or commercial asset is used.
+          Download the `wiiu-prototype` artifact from this run for the build, checksums,
+          source/SDK provenance and third-party notices.
+          EOF
+      - name: Upload diagnostic application and build logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wiiu-prototype-${{ github.sha }}
+          path: |
+            artifacts/ci/sdk/*.log
+            artifacts/ci/wiiu/
+          retention-days: 30
+          if-no-files-found: warn
+
+  required:
+    name: Required CI
+    if: always()
+    needs: [workflows, python, native, windows, wiiu]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every automatic check to succeed
+        env:
+          CHECK_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          checks = json.loads(os.environ['CHECK_RESULTS'])
+          failed = {name: check['result'] for name, check in checks.items() if check['result'] != 'success'}
+          for name, check in checks.items():
+              print(f"{name}: {check['result']}")
+          if failed:
+              raise SystemExit(f'CI checks did not all pass: {failed}')
+          PY

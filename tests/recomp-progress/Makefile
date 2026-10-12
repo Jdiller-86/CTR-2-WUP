@@ -1,7 +1,7 @@
 CC ?= cc
 OUT := ../../artifacts/recomp-progress-tests
 FLAGS := -std=c11 -O2 -g -Wall -Wextra -Werror -I../../runtime/core -I../../runtime/recomp
-CORE := $(addprefix ../../runtime/core/,ctr_cpu.c ctr_memory.c ctr_guest.c ctr_ipc.c ctr_heap.c ctr_kernel.c ctr_hid.c ctr_gsp.c ctr_fs.c ctr_apt.c)
+CORE := $(addprefix ../../runtime/core/,ctr_cpu.c ctr_memory.c ctr_guest.c ctr_ipc.c ctr_heap.c ctr_kernel.c ctr_hid.c ctr_gsp.c ctr_gx.c ctr_transfer.c ctr_fs.c ctr_apt.c)
 SOURCES := test_progress.c $(CORE) ../../runtime/recomp/ctr_recomp.c
 HEADERS := $(wildcard ../../runtime/core/*.h ../../runtime/recomp/*.h)
 .PHONY: check sanitize

@@ -73,7 +73,7 @@ def run_fixture(path, output, *, frames=2, buttons=0, touch=False, x=0, y=0, tra
         build_log=logs/(stage.name+"-compile.log")
         execution_log=logs/(stage.name+"-execute.log")
         core = repo / "runtime/core"
-        sources = [repo / "runtime/desktop/guest_runner.c"] + [core / name for name in ("ctr_memory.c", "ctr_cpu.c", "ctr_guest.c", "ctr_ipc.c", "ctr_heap.c", "ctr_kernel.c", "ctr_hid.c","ctr_gsp.c", "ctr_fs.c", "ctr_apt.c", "ctr_guest_fixture.c")]
+        sources = [repo / "runtime/desktop/guest_runner.c"] + [core / name for name in ("ctr_memory.c", "ctr_cpu.c", "ctr_guest.c", "ctr_ipc.c", "ctr_heap.c", "ctr_kernel.c", "ctr_hid.c","ctr_gsp.c", "ctr_gx.c", "ctr_transfer.c", "ctr_fs.c", "ctr_apt.c", "ctr_guest_fixture.c")]
         flags=[];generation=None
         if backend=="upstream":
             from translator.upstream import generate_into
@@ -84,8 +84,11 @@ def run_fixture(path, output, *, frames=2, buttons=0, touch=False, x=0, y=0, tra
             (stage/"framebuffer.generated.c").unlink()
         else:
             sources += [stage / name for name in generated_sources(image)]
-        command = [compiler, "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-I", str(core), *flags,*map(str, sources), "-lm", "-o", str(binary)]
-        _run_build(command, env, build_log, repo)
+        # MinGW's linker cannot reliably open an absolute Unicode output path.
+        # Python sets the native working directory; the fixed relative filename
+        # keeps linker output paths ASCII without changing the user's destination.
+        command = [compiler, "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-I", str(core), *flags,*map(str, sources), "-lm", "-o", binary.name]
+        _run_build(command, env, build_log, stage)
         _run_build([str(binary), str(frames), str(buttons), str(int(touch)), str(x), str(y), str(int(translated))],
                    env,execution_log,stage,stage="execute",timeout=60)
         shutil.copy2(build_log,stage/"build.log"); shutil.copy2(execution_log,stage/"execution.log")

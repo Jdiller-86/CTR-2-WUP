@@ -76,7 +76,7 @@ static void rings(void) {
         if(!count)CHECK(page[0xc+51]==2 && page[0xc]==3 && !page[2] && !g.gsp.dropped_interrupts);
         else if(count==51)CHECK(page[0xc+50]==2 && page[0xc+51]==0xaa && page[2]==1 && g.gsp.dropped_interrupts==1);
         else CHECK(page[0xc+50]==0xaa && page[2]==1 && g.gsp.dropped_interrupts==2);
-        CHECK(g.events[g.gsp.relay_event].signaled);ctr_guest_close(&g);
+        CHECK(g.events[g.gsp.relay_event].signaled==(count<52));ctr_guest_close(&g);
     }
 }
 static void rejection(void) {
@@ -87,7 +87,7 @@ static void rejection(void) {
         if(kind==1)write_word(&g,0x10002000,53<<8);
         if(kind==2)write_word(&g,0x10002000,2<<16);
         if(kind==3)write_word(&g,0x10002000,1<<24);
-        if(kind==4)write_word(&g,0x10002800,1); /* Explicit unsupported GX command. */
+        if(kind==4)write_word(&g,0x10002800,0x100); /* Pending malformed GX command. */
         if(kind==5)write_word(&g,0x10002240,0x102);
         if(kind==6)write_word(&g,0x10002240,0x10101);
         if(kind==7)write_word(&g,0x10002240+32+16,0x105);

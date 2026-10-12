@@ -2,7 +2,8 @@
 #define CTR_GSP_H
 #include "ctr_guest.h"
 #define CTR_GSP_FRAME_NS UINT64_C(16666667)
-/* Direct/shared framebuffer service; GX command execution and PICA remain absent. */
+/* Direct/shared framebuffer service and scoped CPU-backed GX queue operations.
+ * PICA command lists/draws and native GX2 render translation remain absent. */
 bool ctr_gsp_request(ctr_guest *guest,unsigned session,const uint32_t *words,uint32_t *reply,unsigned *count);
 void ctr_gsp_session_closed(ctr_guest *guest,unsigned session);
 /* Host-time poll at a guest execution boundary; late display ticks are coalesced. */

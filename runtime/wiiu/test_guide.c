@@ -37,8 +37,13 @@ static const step save_steps[]={
 static const step asset_steps[]={
     {GUEST_EXIT,"RomFS asset reads","Wait for root/nested/Unicode/read-only checks.","The original guest's own PASS and exit are checked."}
 };
+static const step gx_steps[]={
+    {VIEW_GUEST,"GX transfer picture","TV: GREEN / RED / GREEN. GamePad: BLUE.","R: observed correctly   L: wrong/missing picture"},
+    {GUEST_EXIT,"GX operations and exit","Wait for fill/copy/conversion checks and exit.","The original guest's own PASS and exit are checked."}
+};
 
 static const step *steps(const ctr_test_guide *g, unsigned *count) {
+    if(g->kind==CTR_GUIDE_GX) { *count=sizeof(gx_steps)/sizeof(*gx_steps);return gx_steps; }
     if(g->kind==CTR_GUIDE_ASSETS) { *count=sizeof(asset_steps)/sizeof(*asset_steps);return asset_steps; }
     if(g->kind==CTR_GUIDE_SAVE) { *count=sizeof(save_steps)/sizeof(*save_steps);return save_steps; }
     if(g->kind==CTR_GUIDE_INTERACTIVE) { *count=sizeof(interactive_steps)/sizeof(*interactive_steps);return interactive_steps; }

@@ -6,9 +6,9 @@ HEADERS := $(wildcard ../../runtime/wiiu/*.h) stubs/coreinit/filesystem_fsa.h
 .PHONY: check sanitize clean
 $(OUT):
 	mkdir -p "$@"
-$(OUT)/report-test: $(SOURCES) $(HEADERS) | $(OUT)
+$(OUT)/report-test: $(SOURCES) $(HEADERS) ../test_platform.h | $(OUT)
 	$(CC) $(CFLAGS) $(SOURCES) -o "$@"
-$(OUT)/report-test-san: $(SOURCES) $(HEADERS) | $(OUT)
+$(OUT)/report-test-san: $(SOURCES) $(HEADERS) ../test_platform.h | $(OUT)
 	$(CC) $(CFLAGS) -O1 -fno-omit-frame-pointer -fsanitize=address,undefined $(SOURCES) -o "$@"
 check: $(OUT)/report-test
 	"$(OUT)/report-test"

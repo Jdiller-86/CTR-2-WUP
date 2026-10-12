@@ -1,6 +1,6 @@
 # Project completion assessment
 
-Updated **October 12, 2026**, against version **0.16.0** and the
+Updated **October 12, 2026**, against version **0.17.0** and the
 [product plan](development-plan.md).
 
 ## Estimated implementation: approximately 20%
@@ -109,3 +109,11 @@ establish game rendering, Mario gameplay, Wii U file I/O acceptance or installed
 WUP behavior. The approximately-20% estimate and 0/7 full gates remain unchanged.
 Current validation/delivery: `artifacts/reports/assets-textures-v016/` and
 `artifacts/delivery/assets-textures-0.16.0/`.
+
+
+v0.17.0 adds standard CPU-backed GX queue operations and a stock-libctru transfer
+application with exact frame checks. GitHub now exposes seven tracked milestone
+issues, CI/artifacts, review templates and agent guidance. These improve shared
+runtime foundations and development visibility. They do not supply the missing
+PICA draws, actual Mario/console/Windows/installed-WUP/GUI acceptance, so the
+approximately-20% estimate and 0/7 full gates remain unchanged.

@@ -96,7 +96,8 @@ rotated RGBA8/BGR8/RGB565/RGB5A1/RGBA4 conversion. A separate original ARM guest
 reads HID, writes RGB565 and displays through this interface in all Wii U builds;
 see `gsp-display.md`. Version 0.11.0 adds one local GSP relay/shared framebuffer
 page, diagnostic VBlank and atomic queued presentation; see `gsp-queues.md`.
-The standard display guest now uses this queue. GX commands and PICA remain absent.
+The standard display guest uses this queue. Version 0.17 adds scoped synchronous
+GX commands; see [gx-transfers.md](gx-transfers.md). PICA rendering remains absent.
 Its guest mode presents completed ARM-written raw framebuffers through the same
 GX2 copying path. It is separate from PICA/GSP emulation; see `guest-fixture.md`.
 Version 0.12 adds checked user-mode ARM/Thumb multiple-register/stack transfers
@@ -211,3 +212,19 @@ RGBA bytes without native guest-word loads. It preflights compressed blocks,
 lengths and aliases before publication. The Python/reference tools and emulated
 PPC checks establish decoder behavior, not GX2 upload/sampling or draw execution.
 See `romfs-assets.md` and `renderer-status.md` for the supported contracts.
+
+
+v0.17.0 adds a standard client-0 GSP GX ring dispatcher and synchronous CPU-backed
+operations. DMA/fill/display conversion/raw copy stage source/outputs and validate
+all spans before command mutation; output cannot touch retained relay backing
+through any guest alias. Complete-range bulk memory APIs copy adjacent mappings,
+reject host/guest backing alias and update exclusive/code generations correctly.
+Successful commands advance and signal only enqueued completions; errors preserve
+the failing entry and later work while retaining an already committed prefix.
+PICA command lists, physical/VRAM translation and asynchronous GPU coherency are
+outside that contract. `gx-transfers.md` records accepted wire flags/dimensions.
+
+GitHub now separates source-reviewed runtime evidence from hosted CI and physical
+testing. Managed milestone issue sections derive from checked-in status data;
+PR/check/artifact/release records never automatically close hardware acceptance.
+Repository instructions and agent profiles preserve the same boundaries.

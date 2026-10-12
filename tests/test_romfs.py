@@ -18,9 +18,8 @@ from tests.romfs_fixtures import ivfc_image, level3_image, ncch_romfs
 class RomfsTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(); self.root = Path(self.tmp.name)
+        self.addCleanup(self.tmp.cleanup)
         self.source = self.root/'original.cxi'; self.output = self.root/'private assets 日本語'
-
-    def tearDown(self): self.tmp.cleanup()
 
     def region(self, data):
         path = self.root/'fixture.bin'; path.write_bytes(data)

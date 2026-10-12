@@ -17,8 +17,13 @@ class GuestCliTests(unittest.TestCase):
     def test_aot_and_interpreter_real_pipeline(self):
         with tempfile.TemporaryDirectory(prefix="guest Unicode 日本語 ") as temporary:
             root=Path(temporary); source=root/"original fixture.cxi"; source.write_bytes(fixture_bytes())
-            aot=run_fixture(source,root/"AOT output",frames=2,buttons=1,touch=True,x=100,y=80)
-            interpreted=run_fixture(source,root/"interpreter output",frames=2,buttons=1,touch=True,x=100,y=80,translated=False)
+            try:
+                aot=run_fixture(source,root/"AOT output",frames=2,buttons=1,touch=True,x=100,y=80)
+                interpreted=run_fixture(source,root/"interpreter output",frames=2,buttons=1,touch=True,x=100,y=80,translated=False)
+            except HostError as error:
+                log = error.details.get("log")
+                evidence = Path(log).read_text(encoding="utf-8", errors="replace") if log else ""
+                self.fail(f"Original fixture pipeline failed: {error}\n{evidence}")
             self.assertTrue(aot["ok"] and interpreted["ok"])
             self.assertEqual(aot["guest"]["instructions"],interpreted["guest"]["instructions"])
             self.assertEqual(aot["guest"]["fallback_instructions"],0)

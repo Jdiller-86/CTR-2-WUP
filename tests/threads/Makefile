@@ -2,7 +2,7 @@ CC ?= gcc
 ROOT := ../..
 OUT := $(ROOT)/artifacts/thread-tests
 FLAGS := -std=c11 -O2 -g -Wall -Wextra -Wpedantic -Werror -I$(ROOT)/runtime/core
-SOURCES := test_threads.c $(addprefix $(ROOT)/runtime/core/,ctr_cpu.c ctr_memory.c ctr_guest.c ctr_ipc.c ctr_heap.c ctr_kernel.c ctr_hid.c ctr_gsp.c ctr_fs.c ctr_apt.c ctr_thread_fixture.c) $(ROOT)/tests/fixtures/threads/thread.generated.c $(ROOT)/tests/fixtures/threads/thread-image.generated.c
+SOURCES := test_threads.c $(addprefix $(ROOT)/runtime/core/,ctr_cpu.c ctr_memory.c ctr_guest.c ctr_ipc.c ctr_heap.c ctr_kernel.c ctr_hid.c ctr_gsp.c ctr_gx.c ctr_transfer.c ctr_fs.c ctr_apt.c ctr_thread_fixture.c) $(ROOT)/tests/fixtures/threads/thread.generated.c $(ROOT)/tests/fixtures/threads/thread-image.generated.c
 .PHONY: check sanitize
 $(OUT):
 	mkdir -p "$@"

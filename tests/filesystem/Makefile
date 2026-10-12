@@ -2,7 +2,7 @@ CC ?= gcc
 ROOT := ../..
 OUT := $(ROOT)/artifacts/filesystem-tests
 FLAGS := -std=c11 -O2 -g -Wall -Wextra -Wpedantic -Werror -I$(ROOT)/runtime/core
-SOURCES := test_filesystem.c $(addprefix $(ROOT)/runtime/core/,ctr_cpu.c ctr_memory.c ctr_guest.c ctr_ipc.c ctr_heap.c ctr_kernel.c ctr_hid.c ctr_gsp.c ctr_fs.c ctr_apt.c ctr_fs_snapshot.c ctr_service_fixture.c) $(ROOT)/tests/fixtures/services/boot.generated.c $(ROOT)/tests/fixtures/services/boot-image.generated.c
+SOURCES := test_filesystem.c $(addprefix $(ROOT)/runtime/core/,ctr_cpu.c ctr_memory.c ctr_guest.c ctr_ipc.c ctr_heap.c ctr_kernel.c ctr_hid.c ctr_gsp.c ctr_gx.c ctr_transfer.c ctr_fs.c ctr_apt.c ctr_fs_snapshot.c ctr_service_fixture.c) $(ROOT)/tests/fixtures/services/boot.generated.c $(ROOT)/tests/fixtures/services/boot-image.generated.c
 .PHONY: check sanitize
 $(OUT):
 	mkdir -p "$@"
