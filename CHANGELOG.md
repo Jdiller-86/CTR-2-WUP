@@ -20,7 +20,9 @@ do not establish commercial-game compatibility or installable WUP acceptance.
 - Verify real external AOT/Unicode execution and WPF tooling on hosted Windows.
 - Expand the seven milestone overviews into 35 linked work issues with dependency,
   acceptance and evidence criteria; add exclusive status labels and branch reports.
-- PICA draws, commercial profiles, GUI, console/install and protected GitHub settings
+- Keep planned board statuses aligned with explicit milestone states when resources
+  are also pending; preserve populated board fields.
+- PICA draws, commercial profiles, GUI, console/install and repository management
   acceptance remain pending; consult current status and actual workflow results.
 
 ## 0.16.0 — 2026-10-12

@@ -203,6 +203,8 @@ def configuration(settings, state):
             raise SetupError('Unknown waiting resource label: ' + milestone['id'])
         if milestone.get('project_status') not in (*STATUSES, None):
             raise SetupError('Unknown project status: ' + milestone['id'])
+        if milestone.get('state') not in (*WORK_ITEM_STATUSES, None):
+            raise SetupError('Unknown milestone state: ' + milestone['id'])
         if milestone.get('project_status') == 'Accepted' and milestone.get('accepted') is not True:
             raise SetupError('Accepted status requires explicit accepted evidence: ' + milestone['id'])
         tasks = milestone.get('work_items', [])
@@ -256,6 +258,8 @@ def initial_status(milestone):
     explicit = milestone.get('project_status')
     if explicit:
         return explicit
+    if milestone.get('state') is not None:
+        return WORK_ITEM_STATUSES[milestone['state']]
     if milestone['id'] == 'm7':
         return 'Planned'  # The current source requirements defer the GUI.
     if milestone.get('waiting_labels'):
