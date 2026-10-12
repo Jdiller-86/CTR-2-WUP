@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="720" height="112" viewBox="0 0 720 112" role="img" aria-labelledby="title description">
   <title id="title">CTR2WUP estimated implementation progress: approximately 20 percent</title>
-  <desc id="description">Rough engineering estimate as of October 11, 2026, runtime version 0.14.4. Native guided checks have partial console evidence; native Minus exit now works; delayed/intermittent compiled input remains unresolved. Zero of seven full milestone acceptance checks are complete. No commercial game is playable yet.</desc>
+  <desc id="description">Rough engineering estimate as of October 11, 2026, runtime version 0.14.5. Native guided checks have partial console evidence; native Minus exit now works; delayed/intermittent compiled input remains unresolved. SD checkpoint recovery needs console evidence. Zero of seven full milestone acceptance checks are complete. No commercial game is playable yet.</desc>
   <rect width="720" height="112" rx="12" fill="#f1f5f9"/>
   <text x="24" y="32" fill="#0f172a" font-family="Arial, sans-serif" font-size="18" font-weight="700">Approximately 20% implemented</text>
   <text x="696" y="32" text-anchor="end" fill="#334155" font-family="Arial, sans-serif" font-size="13">October 9, 2026</text>

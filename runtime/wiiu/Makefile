@@ -11,7 +11,7 @@ COMPILED_HOMEBREW ?= 0
 FILESYSTEM_HOMEBREW ?= 0
 UDP_LOG ?= 0
 CALL_LIMIT ?= 64
-APP_VERSION := 0.14.4
+APP_VERSION := 0.14.5
 UPSTREAM_DIR ?= ../../artifacts/generated-upstream-guest
 ifeq ($(GUEST_DEFAULT),1)
 APP_NAME := CTR2WUP ARM Guest $(APP_VERSION)
@@ -22,6 +22,7 @@ BUILD := $(OUTPUT)/objects
 CC := $(DEVKITPPC)/bin/powerpc-eabi-gcc
 WUT := $(DEVKITPRO)/wut
 CFLAGS := -std=c11 -O2 -g -Wall -Wextra -Werror -ffunction-sections -fdata-sections \
+          -DCTR_APP_VERSION=\"$(APP_VERSION)\" \
           -DESPRESSO -D__WIIU__ -D__WUT__ -DCTR_GUEST_DEFAULT=$(GUEST_DEFAULT) -DCTR_DIAGNOSTIC_UDP=$(UDP_LOG) -mcpu=750 -meabi -mhard-float -I"$(WUT)/include" -I../core
 ifeq ($(COMPILED_HOMEBREW),1)
 CFLAGS += -DCTR_COMPILED_HOMEBREW -I"$(COMPILED_IMAGE_DIR)"
@@ -37,7 +38,7 @@ APP_NAME := CTR2WUP Compiled Save $(APP_VERSION)
 endif
 LDFLAGS := -mcpu=750 -meabi -mhard-float -specs="$(WUT)/share/wut.specs" \
            -Wl,-Map,$(OUTPUT)/$(TARGET).map
-SOURCES := main.c viewport.c diagnostic_font.c test_report.c test_guide.c test_lifecycle.c image_scale.c
+SOURCES := main.c viewport.c diagnostic_font.c test_report.c test_guide.c test_lifecycle.c image_scale.c report_storage.c
 OBJECTS := $(addprefix $(BUILD)/,$(SOURCES:.c=.o))
 CORE_SOURCES := ../core/ctr_memory.c ../core/ctr_cpu.c ../core/ctr_cpu_selftest.c \
                 ../core/ctr_guest.c ../core/ctr_ipc.c ../core/ctr_heap.c ../core/ctr_kernel.c ../core/ctr_hid.c ../core/ctr_gsp.c ../core/ctr_fs.c ../core/ctr_apt.c ../core/ctr_fs_snapshot.c ../core/ctr_guest_fixture.c \

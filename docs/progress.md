@@ -1,6 +1,6 @@
 # Project completion assessment
 
-Updated **October 11, 2026**, against runtime version **0.14.4** and the
+Updated **October 11, 2026**, against runtime version **0.14.5** and the
 [product plan](development-plan.md).
 
 ## Estimated implementation: approximately 20%
@@ -73,7 +73,10 @@ game assets; commercial asset integration will require access to those separatel
 
 The native guide and later Minus exit now have user-provided console evidence.
 The guarded app displayed green late once, then froze on a second launch. Its
-stability remains unaccepted. Return the two guarded TXT files before more runs.
+stability remains unaccepted. The first report is reviewed and reaches shutdown;
+the user confirms that the frozen second launch left no file. v0.14.5 adds file
+sync/close and mounted-volume sync with visible failure/guest pause. One short
+guarded retest is requested; physical recovery and freeze resolution are open.
 v0.14.4 improves scaling and waiting/latency reporting, and rejects an AOT
 no-progress loop in local tests; the hard freeze's cause is still unknown.
 The [follow-up instructions](console-retest.md) separate delay from stability.

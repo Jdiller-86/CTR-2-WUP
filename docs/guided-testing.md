@@ -1,28 +1,34 @@
-# Guided Wii U testing and TXT reports (0.14.4)
+# Guided Wii U testing and TXT reports (0.14.5)
 
-Use the **0.14.4 console testing kit** for the current test round. It supplies
+Use the **0.14.5 console testing kit** for the current test round. It supplies
 four original homebrew diagnostic variants with prompts and automatic plain-text
 recording. No ROM is required and these builds are RPX/WUHB, not WUP packages.
 
-**Current round: [return the two existing guarded TXT reports](console-retest.md)
-before further console tests.** Native Minus exit is user-confirmed; guarded A
-was delayed on one run and froze on another. No full stability acceptance follows.
+**Current round: [one short guarded report-recovery retest](console-retest.md).**
+The first old report is reviewed; the frozen launch saved no file. Native Minus
+exit is user-confirmed. Guarded stability and crash recovery remain unverified.
 The same `console-retest.md` is in the kit.
 
 ## Start
 
 1. Extract the kit on your PC. For Aroma, copy the contents of `sd-card/` to
    your SD card root. The four WUHB files belong in `sd:/wiiu/apps/`.
-2. For this round use **Native 0.14.4**, then **Guarded AOT 0.14.4**, then
-   **Compiled AOT 0.14.4** per the short retest. Leave **Compiled Save** for later.
+2. For this round use **Guarded AOT 0.14.5** once per the short retest. Leave
+   **Native**, **Compiled AOT** and **Compiled Save** for later.
    For complete acceptance rounds, follow each app's on-screen guide.
 3. For an RPX-capable launcher, use the matching files under `rpx/` through
    that launcher's normal workflow. Use your existing homebrew environment.
 
-The apps reserve a new report at launch and show **TXT REPORT SAVING**, its
-filename, and the upload folder. **TXT REPORT FAILED / SD REPORT ERROR** means
+The apps reserve a new report at launch and show **TXT SYNC**, its filename,
+and the upload folder. **TXT REPORT FAILED / SD ERROR** means
 the file could not be created or written; report that error and upload any
 available partial file. Logging cannot work without accessible writable SD storage.
+
+v0.14.5 displays **TXT SYNC** after startup commits succeed. Critical checkpoints
+sync and close the file, flush the mounted SD volume and reopen the existing file;
+startup, guest start and periodic summaries commit too. A storage failure pauses
+guest execution and reports the failing operation, errno and FSA status. Syncing
+adds diagnostic overhead and cannot guarantee SD-controller power-loss recovery.
 
 ## Prompts and controls
 

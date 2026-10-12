@@ -1,13 +1,14 @@
 # Physical Wii U test checklist
 
-**Current workflow: use the v0.14.4 kit and first follow
+**Current workflow: use the v0.14.5 kit and first follow
 [guided-testing.md](guided-testing.md).** The diagnostic variants now prompt for inputs
 and observations and write per-launch `.txt` reports under `sd:/ctr2wup/`.
 Upload those reports in this chat. Photos are optional when illustrating a visual
 problem; the manual checklist below remains a reference for deeper investigation
 and older artifacts. Native guided checks have now passed on the user's console,
 and native Minus exit now works. Guarded A was delayed once and froze on a second
-launch. Return both existing guarded TXT reports before further console runs.
+launch. The first report is reviewed; the second saved no file. The next action
+is one short guarded test of the stronger SD checkpoint commits.
 Follow `console-retest.md` before repeating long guides or running the save app.
 
 No console is attached to this environment. Full physical acceptance remains

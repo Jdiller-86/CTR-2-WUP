@@ -51,7 +51,11 @@ green once, then froze on relaunch; its stability is unaccepted. Cached scaling,
 fresh-green confirmation/latency logs and a tested idle-dispatch fault guard are
 implemented. Eight varied-clock live-input replays pass on desktop, including
 7.1 s delay under old 285 ms host pacing; no physical speed/freeze improvement is
-claimed. Return the two guarded TXT files before more console tests. No full
+claimed. The first guarded TXT now records continued execution/rendering and
+complete shutdown, with A response marked failed. The user confirms the second
+run saved nothing. v0.14.5 syncs/closes checkpoints and flushes the mounted SD
+volume, with sticky errors and guest pause. One short guarded retest is requested;
+physical crash recovery and intermittent stability remain open. No full
 milestone is closed. See [the follow-up](console-retest.md).
 
 v0.14.1 added controller-driven guided native/compiled/save tests and checked

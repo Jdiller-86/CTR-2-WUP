@@ -1,9 +1,13 @@
-# Next acceptance gate and resume steps (0.14.4)
+# Next acceptance gate and resume steps (0.14.5)
 
 **October 11 latest feedback:** native Minus exit now works. The first guarded
 run produced green late after L/advancement and exited; the next froze on A.
-Compiled stability is unaccepted. The two latest guarded TXT files are the next
-needed input (`console-retest.md`); do not repeat native exit or save tests yet.
+Compiled stability is unaccepted. The first guarded report is now reviewed:
+execution/rendering continued and shutdown reached `main_return`; A response was
+marked failed. The frozen second launch saved nothing, so no old partial report
+is requested. v0.14.5 adds file sync/close and mounted-volume sync, preserves
+storage failures and pauses guest execution on them. Follow `console-retest.md`
+for one short guarded retest; do not repeat native exit or save tests yet.
 v0.14.4 adds cached scaling, fresh-green confirmation/latency logs and a tested
 no-progress dispatch fault. Desktop timing replay reproduces delay and exits;
 its guard is not proven to explain the physical freeze.
@@ -57,11 +61,12 @@ No commercial profile or playable Mario build is enabled.
 
 Resume in this order when the evidence is available:
 
-1. Return both v0.14.3 `compiled-guarded-*.txt` reports per `console-retest.md`,
-   including the frozen run's partial report. Native Minus exit is now passing;
-   the final guest/render checkpoint is needed to diagnose the repeated freeze.
-   v0.14.4 software checks/builds are ready, but another console run is deferred
-   until these logs are reviewed. Full compiled/save/WUP acceptance remains open.
+1. Run the one short v0.14.5 guarded test per `console-retest.md` and upload its
+   TXT. The first old report is reviewed and the second saved nothing. Native
+   Minus exit is passing. New storage commits need physical recovery evidence;
+   the final guest/render checkpoint may narrow the intermittent freeze. If no
+   file exists again, report that without repeating the run. Full compiled/save/
+   WUP acceptance remains open.
 2. Use `CTR2WUP-CIA-Intake` with a decrypted local CIA and privately return its
    small `CTR2WUP-intake.zip` per `cia-intake.md`. Analyze actual hashes/segments/
    allowlists and pinned-lifter coverage; establish the exact Mario revision.

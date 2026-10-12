@@ -14,13 +14,37 @@ judgment, not measured task completion. **0/7 full milestones are accepted.**
 See [the completion assessment](docs/progress.md) for its basis, remaining work,
 and external testing gates; the README provides a concise progress overview.
 
+**Version 0.14.5 hardens reports after a freeze left no file.** The uploaded
+v0.14.3 guarded TXT matches the first run: picture confirmed, A response marked
+failed, guide cancelled with six steps unfinished, 64 complete input/guest/render
+checkpoint frames, nine embedded checks passed, zero guest faults/fallback and
+completed shutdown through `main_return`. Host frames averaged 285,194 us
+(about 3.5/s); the old report does not record pixel colors or exact A-to-green
+latency. It cannot locate the second run's freeze. The user confirms that run
+saved nothing, so no further old report is requested. Raw evidence and its hashed
+review remain under ignored `private/console-20261011/`.
+
+Report checkpoints now request `fsync`, close the file, flush the mounted SD
+volume, and reopen the existing report without recreating a missing file. Startup,
+guest start, the bounded input/guest/render trace and periodic summaries commit
+this way. Storage failures pause guest execution and show the failing operation,
+errno and FSA status. The helper owns only its extra FSA client, releases it before
+system transitions and never remounts/unmounts WUT's SD volume. Late exit
+checkpoints sync/close the file without opening extra FSA clients. Desktop tests cover
+abrupt process exit, ordering, failure retention and missing-file preservation;
+cross-builds use the actual SDK's `fsync`/FSA imports. Physical power-loss recovery
+and intermittent-freeze resolution remain **unverified**. Sync I/O adds diagnostic
+overhead and does not measure game performance. Follow `docs/console-retest.md`
+for one short guarded retest; native/save/standard-AOT tests remain deferred.
+Implementation remains approximately 20%; no full milestone is closed.
+
 **Version 0.14.4 follows confirmed native exit and inconsistent guarded A input.**
 The user confirms Minus now returns normally. The first v0.14.3 guarded run
 produced green late, after L/advancement, and exited; a second launch froze the
 whole console while holding A. This is a delayed response plus an intermittent
-stability failure, not a successful guarded acceptance test. The two latest
-TXT reports have not been supplied. Return both `compiled-guarded-*.txt` files
-before another console run (`docs/console-retest.md`). Save testing remains deferred.
+stability failure, not a successful guarded acceptance test. At that point both
+TXT files were requested; the first is now reviewed above and the frozen run
+saved nothing. Save testing remains deferred.
 Feedback is saved privately; no new ROM/intake or installation evidence exists.
 
 Cached nearest-neighbor coordinate maps/repeated rows remove per-pixel 64-bit
@@ -353,6 +377,23 @@ is unverified; no milestone requiring physical-console evidence is complete.
 
 ## Reports and deliverables
 
+v0.14.5 verification is under `artifacts/reports/report-recovery-v0145/`.
+The required `make check` and `make prototype` have separately recorded exit 0.
+There are 155 Python tests and all normal/ASan/UBSan C suites; report/guide/
+lifecycle/scale/storage tests have 506 assertions per run. These include abrupt
+desktop `_exit` with a reopened stream, checked-close-before-volume-sync order,
+file/volume errors, sticky first failure, no recreation after deletion, and FSA
+client ownership/failure handling. Actual Wii U storage behavior is untested.
+Original interactive/guarded execution still matches every expected frame and
+exits with zero fallback; eight live-input timing cases pass. The interactive
+validator plus final-source cross-builds records 23 successful checks; savedata
+records 10 zero-exit checks and one expected corruption rejection (exit 5).
+Final native/interactive/guarded/save RPX/WUHB builds and hashes are
+verified. The source and four-app SD kit are under
+`artifacts/delivery/report-recovery-0.14.5/`. Uploaded raw console data is excluded.
+The next evidence is the short guarded run in `docs/console-retest.md`; physical
+crash recovery, intermittent stability, save/WUP acceptance and Mario remain open.
+
 v0.14.4 verification is under `artifacts/reports/input-delay-v0144/`: required
 `make check` covers 155 Python tests and all normal/ASan/UBSan C suites. The
 lifecycle/guide/scale/report suite has 425 assertions, including a delayed fresh
@@ -363,8 +404,8 @@ observed deadline failure is recorded independently. Original interactive and
 save validators/cross-builds pass; eight live-input replays run standard and
 2-deep guarded AOT through held/released A, repeated red/green and guest exit.
 Source and the SD kit are under `artifacts/delivery/input-delay-0.14.4/`.
-The actual intermittent console freeze requires the user's two guarded TXT
-reports; the diagnostic update is not a verified hardware fix.
+The first guarded TXT is now reviewed above; the frozen run left no file.
+The diagnostic update is not a verified hardware fix.
 
 
 v0.14.3 evidence is under `artifacts/reports/menu-exit-v0143/`: required `make check`

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ctr2wup"
-version = "0.14.4"
+version = "0.14.5"
 description = "Strict container inspection and real Wii U prototype build tools"
 requires-python = ">=3.12"
 dependencies = []

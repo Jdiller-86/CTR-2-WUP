@@ -30,7 +30,7 @@ games will grow as the shared runtime gains the features they require. See the
 
 ![Estimated implementation progress: approximately 20%; zero of seven full milestones accepted.](docs/images/progress.svg)
 
-**Assessment: October 11, 2026 · runtime version 0.14.4.** About **20%** is a rough
+**Assessment: October 11, 2026 · runtime version 0.14.5.** About **20%** is a rough
 engineering estimate toward the finished GUI-to-playable-WUP product, not a
 measured task percentage or a compatibility rating. **0 of 7 full milestones
 have met their acceptance criteria.** Most renderer, commercial-game, GUI, and
@@ -100,7 +100,8 @@ See [CIA intake](docs/cia-intake.md) for the small private executable export hel
 
 ## Development and testing
 
-- [Guided console tests and TXT uploads](docs/guided-testing.md) — v0.14.4 waits for fresh green frames; return the two guarded run reports before further testing.
+- [Guided console tests and TXT uploads](docs/guided-testing.md) — v0.14.5 hardens SD checkpoints; the next step is one short guarded retest.
+- [Console evidence review](docs/console-evidence.md) — the first guarded report reaches shutdown; the frozen launch saved nothing.
 - [Current status and reports](STATUS.md) — implementation history and verification evidence.
 - [Next testing and input gates](docs/current-roadblock.md) — what awaits a dump, Wii U, or Windows test.
 - [Console testing](docs/console-testing.md) — launch and record the diagnostic results.

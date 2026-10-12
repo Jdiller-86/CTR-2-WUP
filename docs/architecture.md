@@ -43,6 +43,17 @@ see `upstream-integration.md`. Its desktop runtime is not a Wii U dependency.
 
 The native WUT backend provides independent TV and GamePad diagnostic output,
 input, sound, process lifecycle, timing, and CPU self-test instrumentation.
+v0.14.5 commits critical TXT checkpoints with `fflush`/`fsync`, checked close,
+`FSAFlushVolume` on the existing SD mount, then `r+` reopen/seek without creation.
+Startup, guest start and periodic summaries also commit. Only acknowledged file/
+volume commits are counted; first failures remain sticky and pause guest input/
+execution, with operation/errno/FSA status on screen. A diagnostic-owned FSA
+client is released before system transitions; subsequent exit checkpoints only
+sync/close their file. WUT retains mount ownership.
+Desktop abrupt-process-exit tests do not establish SD power-loss durability or
+recover a GPU/OS/storage hang. Sync cost is diagnostic overhead. The received
+v0.14.3 report records the completed first run; the next frozen launch saved
+nothing. See [console-evidence.md](console-evidence.md).
 v0.14.4 caches bounded nearest-neighbor coordinate maps and reuses scaled rows,
 with byte-order-independent RGBA output, checked source/output capacity and black
 borders/padding. The native backend flushes/invalidates the produced GX2 surfaces.

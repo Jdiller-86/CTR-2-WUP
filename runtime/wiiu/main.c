@@ -29,6 +29,7 @@
 #include "diagnostic_font.h"
 #include "viewport.h"
 #include "test_report.h"
+#include "report_storage.h"
 #include "test_guide.h"
 #include "test_lifecycle.h"
 #include "image_scale.h"
@@ -64,6 +65,8 @@ static uint32_t top_image[TOP_W*GUEST_H], bottom_image[BOTTOM_W*GUEST_H];
 static int16_t audio_samples[AUDIO_SAMPLES] __attribute__((aligned(64)));
 #endif
 static ctr_test_report test_report;
+static ctr_report_storage report_storage={.client=-1};
+static uint64_t report_sync_max_us;
 static ctr_test_guide test_guide;
 static ctr_test_lifecycle lifecycle;
 static atomic_uint home_exit_requested;
@@ -131,6 +134,19 @@ static uint32_t home_button_exit(void *context) {
     (void)context;atomic_store(&home_exit_requested,1);return 0;
 }
 
+static bool report_commit(const char *stage) {
+    if (test_report.failed) return false;
+    WHBLogPrintf("REPORT COMMIT stage=%s sequence=%llu policy=file_sync_close_volume_sync",
+        stage,(unsigned long long)(test_report.commits+1));
+    OSTime start=OSGetTime();
+    bool ok=ctr_test_report_commit(&test_report);
+    uint64_t elapsed=OSTicksToMicroseconds(OSGetTime()-start);
+    if(elapsed>report_sync_max_us)report_sync_max_us=elapsed;
+    if(!ok)OSReport("CTR2WUP REPORT COMMIT FAILED stage=%s errno=%d operation=%s FSA=%d\n",
+        stage,test_report.error_code,test_report.error_stage?test_report.error_stage:"unknown",report_storage.last_status);
+    return ok;
+}
+
 static void freeze_checkpoint(const char *stage) {
     if(!freeze_trace_frames)return;
     WHBLogPrintf("INPUT CHECKPOINT stage=%s remaining=%u state=%s pc=%08x instructions=%llu swaps=%llu",
@@ -144,6 +160,9 @@ static void freeze_checkpoint(const char *stage) {
     WHBLogPrintf("AOT checkpoint max_depth=%u unwinds=%llu call_limit=%u host_stack_headroom=%lu",
         depth,(unsigned long long)unwinds,CTR_RECOMP_CALL_LIMIT,(unsigned long)(end && sp>=end?sp-end:0));
 #endif
+    /* Preserve the last completed stage before entering the next risky call.
+       This is intentionally expensive diagnostic I/O, not a game timing metric. */
+    if(!report_commit(stage))freeze_trace_frames=0;
 }
 
 static void guest_debug(void *context,const char *message) {
@@ -161,6 +180,7 @@ static void guest_trace(void *context,const char *event,const char *hash,uint32_
     WHBLogPrintf("guest_event=%s module=%s pc=%08x thumb=%u detail=%08x",event,hash,pc,thumb,detail);
 }
 static void restart_guest(void) {
+    if(test_report.failed) return;
     if(guest_sessions) {
         WHBLogPrintf("Restart requested: prior framebuffer=%s prior GSP=%s prior GSP fallback=%llu fault=%s detail=%08x",
             ctr_guest_state_name(frame_guest.state),ctr_guest_state_name(gsp_guest.state),
@@ -170,6 +190,7 @@ static void restart_guest(void) {
     ++guest_sessions;
     gsp_pass_seen=false;
     WHBLogPrintf("Guest session %u starting",guest_sessions);
+    if(!report_commit("guest_start")) return;
     ctr_guest_close(&frame_guest);
 #ifdef CTR_COMPILED_HOMEBREW
     guest_ready=0;
@@ -224,7 +245,7 @@ static void update_input_guest(ctr_guest *guest,int ready,OSTime origin,const VP
     static const uint32_t masks[]={VPAD_BUTTON_A,VPAD_BUTTON_B,VPAD_BUTTON_MINUS,VPAD_BUTTON_PLUS,
         VPAD_BUTTON_RIGHT,VPAD_BUTTON_LEFT,VPAD_BUTTON_UP,VPAD_BUTTON_DOWN,VPAD_BUTTON_R,VPAD_BUTTON_L,
         VPAD_BUTTON_X,VPAD_BUTTON_Y};
-    if (!ready || guest->state==CTR_GUEST_FAULTED || guest->state==CTR_GUEST_EXITED) return;
+    if (test_report.failed || !ready || guest->state==CTR_GUEST_FAULTED || guest->state==CTR_GUEST_EXITED) return;
     uint32_t buttons=0;for(unsigned i=0;i<12;++i)if(pad->hold&masks[i])buttons|=1u<<i;
     uint64_t now=1+(uint64_t)OSTicksToMicroseconds(OSGetTime()-origin)*1000u;
     if (!ctr_hid_update(guest,buttons,circle_axis(pad->leftStick.x),circle_axis(pad->leftStick.y),inside,x,y,now)) {
@@ -238,7 +259,8 @@ static void file_log(const char *message) {
     if(!ctr_test_report_line(&test_report,message) && !report_error_announced) {
         report_error_announced=true;
         /* Calling WHBLogPrintf here would recurse through this handler. */
-        OSReport("CTR2WUP TXT report write FAILED errno=%d path=%s\n",test_report.error_code,test_report.path);
+        OSReport("CTR2WUP TXT report write FAILED errno=%d operation=%s path=%s\n",test_report.error_code,
+            test_report.error_stage?test_report.error_stage:"unknown",test_report.path);
     }
 }
 static void system_log(const char *message) { OSReport("%s\n", message); }
@@ -248,8 +270,10 @@ static void guide_log(void *context,const char *message) {
 
 static void session_summary(int result) {
     WHBLogPrintf("===== SESSION SUMMARY =====");
+    WHBLogPrintf("SD commits=%llu maximum_sync_us=%llu policy=file_sync_close_volume_sync; crash_recovery_requires_console_evidence",
+        (unsigned long long)test_report.commits,(unsigned long long)report_sync_max_us);
     ctr_test_guide_summary(&test_guide);
-    WHBLogPrintf("Application: %s | Build: 0.14.4 | Entering cleanup: result=%d",REPORT_APPLICATION,result);
+    WHBLogPrintf("Application: %s | Build: %s | Entering cleanup: result=%d",REPORT_APPLICATION,CTR_APP_VERSION,result);
     WHBLogPrintf("Elapsed milliseconds: %llu | Completed display frames: %u | Guest sessions: %u",
         (unsigned long long)(OSTicksToMicroseconds(OSGetTime()-session_started)/1000),completed_frames,guest_sessions);
     WHBLogPrintf("Display frame microseconds: minimum=%u average=%llu maximum=%u (diagnostic workload, not game FPS)",
@@ -460,6 +484,8 @@ static void exit_checkpoint(void *context,const char *message) {
     OSReport("%s\n",message);
     if(!ctr_test_report_checkpoint(&test_report,message))
         OSReport("CTR2WUP exit checkpoint FAILED errno=%d\n",test_report.error_code);
+    /* No diagnostic-owned FSA client crosses a ProcUI/system transition. */
+    ctr_report_storage_close(&report_storage);
 }
 static void cleanup_resources(void *context) {
     native_exit_context *exit=context;
@@ -512,12 +538,17 @@ static void cleanup_resources(void *context) {
     if(report_handler_added)WHBRemoveLogHandler(file_log);
     if(!ctr_test_report_close(&test_report))OSReport("CTR2WUP TXT report close FAILED errno=%d\n",test_report.error_code);
     ctr_test_report_checkpoint(&test_report,"EXIT stage=report_close_done; SD mount cleanup belongs to WUT");
+    ctr_report_storage_close(&report_storage);
 }
 static uint32_t exit_save_ready(void *context) {
     (void)context;OSSavesDone_ReadyToRelease();return 0;
 }
 static void clear_proc_callbacks(void *context) {
     (void)context;ProcUIClearCallbacks();
+    /* Mounted-volume commits belong to active foreground diagnostics. Avoid
+       opening new FSA clients after requesting a system transition. */
+    ctr_test_report_set_volume_sync(&test_report,NULL,NULL);
+    ctr_report_storage_close(&report_storage);
     /* Keep the save acknowledgement even after removing the GFX callbacks. */
     ProcUISetSaveCallback(exit_save_ready,NULL);
 }
@@ -564,18 +595,20 @@ int main(int argc, char **argv) {
 #ifdef CTR_FILESYSTEM_HOMEBREW
         if(directory_ok)snprintf(diagnostic_save_path,sizeof(diagnostic_save_path),"%s/filesystem-test.snapshot",directory);
 #endif
-        if(directory_ok && ctr_test_report_open(&test_report,directory,REPORT_APPLICATION,"0.14.4",(uint64_t)session_started)) {
+        if(directory_ok && ctr_test_report_open(&test_report,directory,REPORT_APPLICATION,CTR_APP_VERSION,(uint64_t)session_started)) {
+            ctr_test_report_set_volume_sync(&test_report,ctr_report_storage_sync,&report_storage);
             WHBAddLogHandler(file_log);report_handler_added=true;
         } else if(!directory_ok) {
-            test_report.failed=true;test_report.error_code=errno;
+            test_report.failed=true;test_report.error_code=errno;test_report.error_stage="directory";
         }
     }
-    WHBLogPrintf("CTR2WUP native diagnostic version=0.14.4 application=%s pointer_bits=%u endian=big UDP=%u TXT_report=%u",
-                  REPORT_APPLICATION,(unsigned)(8*sizeof(void *)),udp_ready,report_handler_added);
+    WHBLogPrintf("CTR2WUP native diagnostic version=%s application=%s pointer_bits=%u endian=big UDP=%u TXT_report=%u",
+                  CTR_APP_VERSION,REPORT_APPLICATION,(unsigned)(8*sizeof(void *)),udp_ready,report_handler_added);
     WHBLogPrintf("Platform title_id=%016llx exit_route=%s SD_owner=WUT_devoptab",
         (unsigned long long)lifecycle.title_id,ctr_test_from_hbl(lifecycle.title_id)?"HBL_relaunch":"system_menu");
     WHBLogPrintf("TXT report path=%s status=%s errno=%d",test_report.path[0]?test_report.path:"unavailable",
         report_handler_added?"SAVING":"FAILED",test_report.error_code);
+    if(report_handler_added)report_commit("startup");
 #ifdef CTR_FILESYSTEM_HOMEBREW
     ctr_test_guide_init(&test_guide,CTR_GUIDE_SAVE,guide_log,NULL);
 #elif defined(CTR_COMPILED_HOMEBREW)
@@ -653,11 +686,16 @@ int main(int argc, char **argv) {
         if(status!=prior_status) {
             WHBLogPrintf("APP ProcUI status=%d",(int)status);prior_status=status;
         }
-        if(status==CTR_PROC_EXITING) { exit_observed=true;break; }
+        if(status==CTR_PROC_EXITING) {
+            ctr_test_report_set_volume_sync(&test_report,NULL,NULL);
+            ctr_report_storage_close(&report_storage);
+            exit_observed=true;break;
+        }
         if(atomic_load(&home_exit_requested)) {
             WHBLogPrintf("EXIT trigger=HBL_home_button");break;
         }
         if(status==CTR_PROC_RELEASE) {
+            ctr_report_storage_close(&report_storage);
 #ifndef CTR_COMPILED_HOMEBREW
             audio_shutdown();
 #endif
@@ -826,20 +864,25 @@ int main(int argc, char **argv) {
         guide_input.guest_green_frame=guest_green_frame;
         guide_input.guest_frame_serial=gsp_presented;guide_input.input_frame_serial=input_frame_serial;
         guide_input.fresh_save_reload=fresh_save_reload_seen;
-        ctr_test_guide_update(&test_guide,&guide_input);
-        if(ctr_test_guide_take_restart(&test_guide))restart_guest();
+        if(!test_report.failed) {
+            ctr_test_guide_update(&test_guide,&guide_input);
+            if(ctr_test_guide_take_restart(&test_guide))restart_guest();
+        }
         char guide_rows[7][72];ctr_test_guide_view(&test_guide,guide_input.milliseconds,guide_rows);
         for(unsigned i=0;i<TOP_W*83;++i)top_image[i]=0x162d4fff;
-        if(test_report.failed && test_guide.done) {
-            snprintf(guide_rows[3],72,"SD WRITE FAILED; report may be missing/partial.");
+        if(test_report.failed) {
+            snprintf(guide_rows[0],72,"REPORT STORAGE FAILED / GUEST INPUT PAUSED");
+            snprintf(guide_rows[1],72,"MINUS: EXIT. Do not continue this test.");
+            snprintf(guide_rows[3],72,"SD file may be missing/partial after reboot.");
             snprintf(guide_rows[4],72,"Send the error below and any available TXT.");
         }
         for(unsigned i=0;i<7;++i)image_text(top_image,TOP_W,i,guide_rows[i]);
         for(unsigned i=TOP_W*154;i<TOP_W*178;++i)top_image[i]=0x162d4fff;
-        image_text(top_image,TOP_W,15,test_report.file && !test_report.failed?"TXT REPORT SAVING / UPLOAD SD:/CTR2WUP":"TXT REPORT FAILED / CHECK SD CARD");
+        image_text(top_image,TOP_W,15,test_report.file && !test_report.failed?"TXT SYNC / UPLOAD SD:/CTR2WUP":"TXT REPORT FAILED / CHECK SD CARD");
         char report_line[100];
         if(!test_report.failed)snprintf(report_line,sizeof(report_line),"%s",test_report.filename);
-        else snprintf(report_line,sizeof(report_line),"SD REPORT ERROR %d",test_report.error_code);
+        else snprintf(report_line,sizeof(report_line),"SD ERROR %d %s FSA %d",test_report.error_code,
+            test_report.error_stage?test_report.error_stage:"unknown",report_storage.last_status);
         image_text(top_image,TOP_W,16,report_line);
 #ifdef CTR_COMPILED_HOMEBREW
         for(unsigned i=TOP_W*184;i<TOP_W*206;++i)top_image[i]=0x162d4fff;
@@ -901,6 +944,7 @@ int main(int argc, char **argv) {
                 (unsigned long long)gsp_guest.ipc_requests,(unsigned long long)gsp_guest.ipc_failures,
                 gsp_guest.ipc_service[0]?gsp_guest.ipc_service:"none",gsp_guest.ipc_target[0]?gsp_guest.ipc_target:"none",
                 gsp_guest.ipc_header,gsp_guest.ipc_result);
+            if(!test_report.failed)report_commit("periodic");
             log_time=OSGetTime();
         }
         ++frame;
@@ -911,6 +955,7 @@ cleanup:
         native_exit_context exit={result,gfx_ready,udp_ready,foreground,&tv_source,&drc_source};
         if(!ctr_test_complete_exit(&lifecycle,exit_observed,&exit_ops,&exit))result=1;
     }
+    ctr_report_storage_close(&report_storage);
     WHBRemoveLogHandler(system_log);
     return result;
 }

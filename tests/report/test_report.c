@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 #include "test_report.h"
+#include "report_storage.h"
 #include "test_guide.h"
 #include "test_lifecycle.h"
 #include "image_scale.h"
@@ -7,9 +8,49 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/wait.h>
+#include <coreinit/filesystem_fsa.h>
 
 static unsigned checks;
 #define CHECK(x) do { ++checks; if (!(x)) { fprintf(stderr, "FAIL %u line %d: %s\n", checks, __LINE__, #x); exit(1); } } while (0)
+
+static int32_t storage_add_result=123,storage_flush_result,storage_delete_result;
+static unsigned storage_add_calls,storage_flush_calls,storage_delete_calls;
+FSAClientHandle FSAAddClient(FSAClientAttachAsyncData *data) {
+    CHECK(data==NULL);++storage_add_calls;return storage_add_result;
+}
+FSError FSAFlushVolume(FSAClientHandle client,const char *path) {
+    CHECK(client==123 && strcmp(path,"/vol/external01")==0);
+    ++storage_flush_calls;return storage_flush_result;
+}
+FSError FSADelClient(FSAClientHandle client) {
+    CHECK(client==123);++storage_delete_calls;return storage_delete_result;
+}
+static void storage_tests(void) {
+    ctr_report_storage storage={.client=-1};
+    CHECK(ctr_report_storage_sync(&storage));
+    CHECK(storage.client==123 && storage.last_status==0 && storage_add_calls==1 && storage_flush_calls==1);
+    CHECK(ctr_report_storage_sync(&storage));
+    CHECK(storage_add_calls==1 && storage_flush_calls==2); /* Reuse only this helper's client. */
+    storage_flush_result=-196665;
+    CHECK(!ctr_report_storage_sync(&storage));
+    CHECK(errno==EIO && storage.last_status==-196665 && storage.client==123);
+    ctr_report_storage_close(&storage);
+    CHECK(storage.client==-1 && storage_delete_calls==1 && storage.last_status==0);
+    ctr_report_storage_close(&storage);CHECK(storage_delete_calls==1);
+    storage_add_result=-7;
+    CHECK(!ctr_report_storage_sync(&storage));
+    CHECK(errno==EIO && storage.last_status==-7 && storage_flush_calls==3);
+    storage_add_result=0;
+    CHECK(!ctr_report_storage_sync(&storage));
+    CHECK(errno==EIO && storage.last_status==0 && storage_flush_calls==3);
+    CHECK(!ctr_report_storage_sync(NULL) && errno==EINVAL);
+    ctr_report_storage_close(NULL);
+    storage_add_result=123;storage_flush_result=0;
+    CHECK(ctr_report_storage_sync(&storage));
+    storage_delete_result=-17;ctr_report_storage_close(&storage);
+    CHECK(storage.client==-1 && storage.last_status==-17 && storage_delete_calls==2);
+}
 
 static char guide_log_text[32768];
 static void capture(void *context,const char *message) {
@@ -145,6 +186,89 @@ static void read_file(const char *path, char *buffer, size_t size) {
     CHECK(fclose(f) == 0);
 }
 
+typedef struct {
+    ctr_test_report *report;
+    unsigned calls;
+    int failure;
+    bool remove_file;
+} sync_probe;
+
+static bool fake_volume_sync(void *context) {
+    sync_probe *probe=context;
+    CHECK(probe->report->file==NULL); /* Metadata sync must follow a checked close. */
+    ++probe->calls;
+    if(probe->remove_file)CHECK(unlink(probe->report->path)==0);
+    if(probe->failure) { errno=probe->failure;return false; }
+    return true;
+}
+
+static void commit_tests(const char *directory) {
+    char text[4096];ctr_test_report r={0};sync_probe probe={.report=&r};
+    CHECK(ctr_test_report_open(&r,directory,"compiled-guarded","0.14.5",10));
+    ctr_test_report_set_volume_sync(&r,fake_volume_sync,&probe);
+    CHECK(ctr_test_report_line(&r,"INPUT CHECKPOINT stage=compiled_guest_begin"));
+    CHECK(ctr_test_report_commit(&r));
+    CHECK(probe.calls==1 && r.commits==1 && r.file!=NULL);
+    read_file(r.path,text,sizeof(text));
+    CHECK(strstr(text,"stage=compiled_guest_begin")!=NULL);
+    CHECK(ctr_test_report_line(&r,"INPUT CHECKPOINT stage=compiled_guest_done"));
+    CHECK(ctr_test_report_commit(&r));
+    read_file(r.path,text,sizeof(text));
+    CHECK(strstr(text,"stage=compiled_guest_begin")!=NULL && strstr(text,"stage=compiled_guest_done")!=NULL);
+    CHECK(probe.calls==2 && r.commits==2);
+    CHECK(ctr_test_report_close(&r));
+    CHECK(probe.calls==3 && r.commits==3 && r.file==NULL);
+    CHECK(ctr_test_report_checkpoint(&r,"EXIT stage=main_return"));
+    CHECK(probe.calls==4 && r.commits==4 && r.file==NULL);
+    CHECK(unlink(r.path)==0);
+
+    r=(ctr_test_report){0};probe=(sync_probe){.report=&r,.failure=ENOSPC};
+    CHECK(ctr_test_report_open(&r,directory,"compiled-guarded","0.14.5",11));
+    ctr_test_report_set_volume_sync(&r,fake_volume_sync,&probe);
+    CHECK(!ctr_test_report_commit(&r));
+    CHECK(r.failed && r.error_code==ENOSPC && strcmp(r.error_stage,"volume_sync")==0);
+    CHECK(!r.file && !r.commits && probe.calls==1);
+    CHECK(!ctr_test_report_line(&r,"Never erase the first failure"));
+    CHECK(!ctr_test_report_close(&r) && !ctr_test_report_commit(&r));
+    CHECK(r.error_code==ENOSPC && strcmp(r.error_stage,"volume_sync")==0 && probe.calls==1);
+    CHECK(unlink(r.path)==0);
+
+    r=(ctr_test_report){0};probe=(sync_probe){.report=&r,.remove_file=true};
+    CHECK(ctr_test_report_open(&r,directory,"compiled-guarded","0.14.5",12));
+    ctr_test_report_set_volume_sync(&r,fake_volume_sync,&probe);
+    CHECK(!ctr_test_report_commit(&r));
+    CHECK(r.failed && !r.file && r.error_code==ENOENT && strcmp(r.error_stage,"reopen")==0);
+    CHECK(access(r.path,F_OK)!=0); /* Missing committed reports cannot be recreated. */
+
+    int pipe_fd[2];CHECK(pipe(pipe_fd)==0);
+    r=(ctr_test_report){0};r.file=fdopen(pipe_fd[1],"w");CHECK(r.file!=NULL);
+    probe=(sync_probe){.report=&r};ctr_test_report_set_volume_sync(&r,fake_volume_sync,&probe);
+    CHECK(!ctr_test_report_commit(&r)); /* A pipe cannot acknowledge file sync. */
+    CHECK(!r.file && r.failed && r.error_code==EINVAL && strcmp(r.error_stage,"file_sync")==0);
+    CHECK(!probe.calls && !r.commits);
+    CHECK(close(pipe_fd[0])==0);
+    CHECK(!ctr_test_report_commit(NULL));
+
+    char path[512];CHECK(snprintf(path,sizeof(path),"%s/compiled-guarded-%016llx-00.txt",directory,13ULL)>0);
+    pid_t child=fork();CHECK(child>=0);
+    if(child==0) {
+        ctr_test_report interrupted={0};
+        if(!ctr_test_report_open(&interrupted,directory,"compiled-guarded","0.14.5",13) ||
+           !ctr_test_report_line(&interrupted,"INPUT CHECKPOINT stage=compiled_guest_begin") ||
+           !ctr_test_report_commit(&interrupted))_exit(1);
+        /* Simulate abrupt process termination with a reopened, unclosed stream.
+           This validates desktop recovery, not SD hardware power-loss behavior. */
+        if(fputs("UNCOMMITTED BUFFER",interrupted.file)<0)_exit(2);
+        _exit(77);
+    }
+    int status;CHECK(waitpid(child,&status,0)==child);
+    CHECK(WIFEXITED(status) && WEXITSTATUS(status)==77);
+    read_file(path,text,sizeof(text));
+    CHECK(strstr(text,"stage=compiled_guest_begin")!=NULL);
+    CHECK(strstr(text,"UNCOMMITTED BUFFER")==NULL && strstr(text,"===== END OF REPORT:")==NULL);
+    CHECK(unlink(path)==0);
+}
+
 static void lifecycle_tests(void) {
     const uint64_t hbl[]={UINT64_C(0x0005000013374842),UINT64_C(0x000500101004a000),
         UINT64_C(0x000500101004a100),UINT64_C(0x000500101004a200)};
@@ -253,12 +377,14 @@ static void exit_order_tests(void) {
 }
 
 int main(void) {
+    storage_tests();
     guide_tests();
     lifecycle_tests();
     exit_order_tests();
     scale_tests();
     char directory[] = "/tmp/ctr2wup-report-XXXXXX", text[4096];
     CHECK(mkdtemp(directory) != NULL);
+    commit_tests(directory);
     ctr_test_report first = {0}, second = {0}, bad = {0};
     CHECK(ctr_test_report_open(&first, directory, "native", "0.14.1", 1));
     CHECK(strstr(first.filename, "native-0000000000000001-00.txt") != NULL);
