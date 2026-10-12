@@ -139,6 +139,22 @@ class GithubProjectTests(unittest.TestCase):
         self.settings, self.state = source()
         self.api = FakeGitHub(self.state)
 
+    def test_milestone_state_takes_precedence_over_waiting_resources(self):
+        for state, expected in setup.WORK_ITEM_STATUSES.items():
+            with self.subTest(state=state):
+                milestone = dict(self.state['milestones'][0], state=state,
+                                 waiting_labels=['needs-console'])
+                self.assertEqual(setup.initial_status(milestone), expected)
+        report = setup.base_report(self.settings, self.state)
+        for source_milestone, planned in zip(self.state['milestones'], report['trackers']):
+            self.assertEqual(planned['initial_status'],
+                             setup.WORK_ITEM_STATUSES[source_milestone['state']])
+        milestone['project_status'] = 'Ready for review'
+        self.assertEqual(setup.initial_status(milestone), 'Ready for review')
+        self.state['milestones'][0]['state'] = 'accepted'
+        with self.assertRaisesRegex(setup.SetupError, 'Unknown milestone state'):
+            setup.base_report(self.settings, self.state)
+
     def preflight(self):
         report = setup.base_report(self.settings, self.state)
         context = setup.preflight(self.api, self.settings, self.state, report)
