@@ -1,160 +1,84 @@
 # Build on Windows
 
-The v0.5.0 `CTR2WUP-CIA-Intake` console utility has a separate self-contained
-Windows x64 bundle requiring no Python/SDK/runtime installation. It exports
-private analysis data and is not the final GUI/injector. See `cia-intake.md` for
-use, build/runtime pins and the unverified native-Windows acceptance check.
+Windows development tooling is verified. The finished injector GUI, native Wii U
+conversion and playable WUP output remain under development.
 
-The source CLI targets Python 3.12+ and uses the standard library, argument-list
-subprocesses, Windows process-group cancellation and Unicode paths. It has been
-executed on Linux, including a checkout/output path with spaces and Japanese
-characters. The clean hosted Windows Server 2022 baseline now passes the Python host and all
-17 normal C suites, including Unicode guest compilation/execution. Three existing
-filesystem/privilege-specific Python cases are reported as skipped. See the
-[passing run](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38287776847).
-A complete Windows desktop conversion/install/GUI product remains unverified.
+The [hosted baseline](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38289820946)
+passes Python fixtures and all 17 normal C suites on Windows Server 2022,
+including Unicode guest compilation/execution. Three filesystem/privilege-specific
+Python tests are explicitly skipped; their platform behavior remains unverified.
+The [deep Windows run](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38289835013)
+also passes real pinned external ARM/Thumb/VFP generation, 14 execution probes,
+runtime API checks, Unicode output and a .NET 10.0.401 WPF tooling build.
+The WPF probe verifies the SDK; it is not CTR2WUP's final application.
 
 ## Prerequisites
 
-Install Python 3.12 or newer and the official devkitPro Windows installer. Use
-devkitPro's supplied MSYS2 environment to install the signed `wiiu-dev` packages
-(devkitPPC, WUT, Wii U tools) and GNU Make. Preserve normal Pacman signature and
-TLS verification. Set `DEVKITPRO` and `DEVKITPPC` to that installation, and put
-the compiler, tools and Make in PATH. The Linux Docker SDK is an ELF toolchain;
-it cannot be used as native Windows executable dependencies.
+- Python 3.12 or newer and Git.
+- MSYS2 UCRT64 with native GCC and Make for host-generated C and portable tests.
+- Official devkitPro Windows tooling with devkitPPC/WUT for Wii U RPX/WUHB builds.
+- Rust 1.95.0 for the optional audited external lifter.
+- .NET SDK 10.0.401 for the separate CIA intake helper and WPF tooling probe.
 
-From the extracted source root, in that environment:
+The Linux Docker SDK installer does not produce native Windows dependencies.
+Use the official Windows SDK route and preserve download/signature verification.
+Native `gcc` executes host fixtures; the PowerPC cross-compiler cannot run them.
+Keep the two compilers distinct in PATH.
+
+## Source CLI and original fixtures
+
+Run these commands from the repository root, using `python` or your local Python
+launcher. Install the declared crypto extras before exercising encrypted inputs:
 
 ```sh
-python -m host doctor
-python -m unittest discover -s tests -v
-python -m host inspect "C:/My Games/my decrypted dump.cxi"
-python -m host build --target prototype --output "C:/My Builds/CTR2WUP diagnostic"
-python -m host make-fixture --output "C:/My Builds/original guest"
-python -m host run-fixture "C:/My Builds/original guest/ctr2wup-guest.cxi" --output "C:/My Builds/guest frames"
-python -m host build "C:/My Builds/original guest/ctr2wup-guest.cxi" --target guest-fixture --output "C:/My Builds/guest console"
+python -m pip install '.[packaging,decryption]'
+python -m host --help
+make check-python PYTHON=python
+make check-c-portable
+python -m host make-fixture --output "artifacts/Windows fixture 日本語"
+python -m host run-fixture "artifacts/Windows fixture 日本語/ctr2wup-guest.cxi" --output "artifacts/Windows frames 日本語"
 ```
 
-The output directory must not exist. It receives the real RPX, WUHB if available,
-build log and versioned build report after successful artifact validation. Builds
-never install titles on a console. Commercial `build` reports an unsupported
-profile with a nonzero exit and produces no placeholder package.
+Run Make commands in UCRT64 with native GCC available. `make check-c-portable`
+runs normal C suites; Linux ASan/UBSan results are separate evidence.
+Generated fixtures are original and require no ROM, console key or commercial
+asset. See [encrypted inputs](encrypted-input.md) for private local key handling.
 
-`run-fixture` requires a native Windows GCC available as `gcc`; the devkitPPC
-cross-compiler cannot execute desktop tests. Its native runner uses relative
-ASCII output filenames inside the Unicode working directory.
+The Python wheel contains the CLI, translator and preparation modules. It does
+not bundle the SDK, GUI or native runtime/build recipes. Extract the matching
+source distribution for Wii U builds; `CTR2WUP_PROJECT_ROOT` can point an installed
+CLI to that distribution.
 
-The Python wheel includes the host CLI and bounded Python translator. It
-does not bundle the SDK, a Windows GUI, or the native C source/build recipes. For
-prototype/guest building use the full source distribution, or set
-`CTR2WUP_PROJECT_ROOT` to it when calling an installed `ctr2wup` entry point.
+## Optional external generation
 
-The optional external lifter requires a Windows Rust 1.95.0 toolchain and a C
-compiler. See the audited source pin and unresolved notice/ABI requirements in
-`foundation-audit.md`. `tools/install-translator.sh` provisions Linux only; it is
-not advertised as a Windows installer. The bounded Python translator itself
-requires only Python and emits portable C for the supplied synthetic fixtures.
+In PowerShell, use `tools/install-translator-windows.ps1`. It builds the audited
+source pin with Rust 1.95.0 and writes a provenance receipt. Then use the native
+GCC/Make environment:
 
-Version 0.3.0 adds `tools/install-translator-windows.ps1` for the external
-generation driver. It requires official Rust/rustup and Git, builds the clean
-audited source with Rust 1.95.0 and writes the provenance receipt. Use
-`run-fixture --backend upstream` and `tools/validate-upstream.py` with native GCC.
-The script/workflow are prepared; they have not yet executed on Windows.
-The manual workflow at `.github/workflows/windows-validation.yml` also tests
-actual external ARM/Thumb/VFP execution and Unicode output, then builds a WPF
-tooling probe. Publication is now authorized by the user; consult actual hosted run evidence.
+```sh
+python tools/validate-upstream.py --service-api --heap-api --kernel-api --hid-api --gsp-api --relay-api --fs-api --apt-api --thread-api --multiple-api --output artifacts/windows-upstream
+python -m host run-fixture "artifacts/Windows fixture 日本語/ctr2wup-guest.cxi" --backend upstream --output "artifacts/Windows AOT frames 日本語"
+```
 
-Version 0.4.0 adds optional encrypted packaging. From source, run
-`python -m pip install '.[packaging]'` and follow `packaging.md` for local file-based inputs.
-`pack-title` and `verify-package` pass Linux Unicode/space-path and installed-wheel
-checks; native Windows packaging remains unverified. The prepared workflow now
-installs the crypto dependency and runs its original offline unit tests too.
+The manual **Windows development validation** workflow reproduces these checks
+and the WPF SDK probe, preserving logs as Actions artifacts.
+[Upstream integration](upstream-integration.md) records ABI, pin and notice limits.
+Optional Unicorn/Zakuro/reference comparisons require their own pinned tools;
+the Windows baseline is not evidence that those optional comparisons ran there.
 
-## Windows checks still required
+## CIA intake helper
 
-v0.6.0 adds the portable TLS/SRV/CFG startup suite. With native GCC/Make, run
-`make -C tests/services check` and `python tools/validate-upstream.py --service-api
---output artifacts/windows-startup-check`. These source checks have Linux and
-emulated PowerPC evidence; no native Windows result is claimed. The separate
-v0.5.0 CIA intake helper remains the unchanged ROM-export utility.
+The v0.5.0 `CTR2WUP-CIA-Intake` console utility has a separate self-contained
+Windows x64 bundle. It needs no Python/SDK/runtime installation and exports
+private analysis data. See [CIA intake](cia-intake.md) for controls, build pins and
+its user-machine acceptance check. It is separate from the planned injector GUI.
 
-v0.7.0 adds `make -C tests/heap check` and
-`python tools/validate-upstream.py --heap-api --service-api --output
-artifacts/windows-memory-check`. These exercise allocation/free/protection/query
-and actual external AOT. Native Windows acceptance remains pending.
+## Remaining Windows acceptance
 
-v0.8/v0.9/v0.10 add `make -C tests/kernel check`, `make -C tests/hid check`,
-`make -C tests/gsp check`, and `python tools/validate-upstream.py --kernel-api
---hid-api --gsp-api --output artifacts/windows-device-check`. The latter checks
-actual external execution and emits original HID/GSP display reference images.
-Native Windows and physical Wii U results remain pending.
-
-Doctor and clean prototype compile; inspection of NCSD/NCCH and malformed inputs;
-spaces/Unicode on both source and output paths; cancellation terminating compiler
-children; atomic publication and refusal to overwrite outputs; installable-wheel
-commands; interpreter/AOT guest-frame matches; and console RPX launch. The WPF GUI is deferred until execution and
-packing gates are demonstrated, as required by the brief.
-
-Version 0.11 source/builds include the shared GSP relay probe and API suite.
-`make check` runs its sanitizer checks; `tools/validate-upstream.py --relay-api`
-runs nine probes and shared queue API checks. Native Windows host/portable-C execution is verified by the hosted baseline;
-full native conversion and the separate external-AOT/WPF checks remain pending. The reviewed Windows workflows
-are now included in the repository and source bundles; see
-[GitHub development](github-development.md).
-
-Version 0.12 adds `make -C tests/multiple check` and
-`python tools/validate-upstream.py --multiple-api --output artifacts/windows-stack`.
-All eleven external probes and the API execute on the selected compiler/target.
-The optional `tools/reference-multiple.py` requires pinned Unicorn 2.1.4 and a
-native GCC/shared-library toolchain; no native Windows reference result is claimed.
-
-v0.13 adds `make -C tests/threads check` and `tools/validate-upstream.py
---thread-api` (14 external probes). Optional normal devkitARM/libctru application
-checks use `tools/validate-libctru.py`; see `compiled-homebrew.md`. The generated
-C adapter removes redundant equality parentheses so real compiled libctru code
-also builds under Clang with warnings treated as errors. This is Linux compiler
-evidence; native Windows/toolchain/WPF acceptance remains pending.
-
-v0.14 adds portable `tests/filesystem` and `tests/apt` suites, and
-`tools/validate-upstream.py --fs-api --apt-api`. Savedata and standalone APT run
-through normal compiled original applications. Snapshot bytes are little-endian,
-bounded and CRC checked; the persistence adapter uses standard C I/O and rename.
-Native Windows rename/exclusive-file and application/toolchain behavior still
-need execution evidence. These Linux/emulated-PPC checks do not validate Windows.
-
-
-v0.14.6 adds independent fixed-size result TXT read-back and save publication
-without rename replacement, plus the original Level-3 RomFS application.
-`make -C tests/report check` and `make -C tests/filesystem check` cover their
-portable boundaries. `tools/validate-libctru.py --application romfs` uses the
-same checked generated-C interface and normal libctru parser; no game assets are
-bundled. Read/write/exclusive/rename behavior and actual compiled execution still
-need native Windows validation. The final injector GUI remains deferred until
-the commercial conversion and installable-WUP pipeline is proven.
-
-
-v0.15.0 supplies pure-Python import-rom-keys and prepare-rom commands in the
-wheel/full source. Install `.[decryption]` for the bounded local AES preparation
-path; it uses the same audited cryptography major as packaging. The original
-execution fixture proves encrypted input to actual AOT and cross-build on Linux.
-The Windows .NET CIA helper is unchanged and does not decrypt; there is no GUI
-key wizard/device helper yet. Native Windows private-file behavior, credential
-storage and real-console key exports remain acceptance work. Never upload or
-bundle a real local key store. See `encrypted-input.md` for commands and limits.
-
-
-v0.16.0 includes pure-Python `prepare-assets`/full RomFS verification in the wheel
-and portable C SHA-256, file-provider and texture suites in the source bundle.
-Use `make -C tests/assets check` and `make -C tests/textures check` with native
-GCC/Make. `tools/validate-textures.py` optionally uses a clean audited Zakuro
-checkout and Rust for test-only comparisons; neither is a runtime dependency.
-Windows filesystem behavior and these native executable/reference checks still
-need Windows execution; Linux/PPC evidence is not Windows acceptance.
-
-
-v0.17.0 adds an automatic Windows host/normal portable-C baseline and reviewed
-manual deep Windows AOT/WPF workflow. Use `make check-c-portable` in UCRT64 for
-all 17 normal C suites; Linux sanitizer behavior is not assumed on Windows.
-Workflow/agent/documentation publication is now explicitly authorized; no old
-permission question blocks it. See [GitHub development](github-development.md)
-for hosted artifacts, current results and the remaining native SDK/GUI gates.
+Full native devkitPPC conversion, personal decrypted/keyed inputs, untested
+filesystem/privilege behavior, installer acceptance and the complete GUI need
+their own evidence. The end-to-end product must convert the selected title,
+install its WUP, launch from Wii U Menu and support gameplay/audio/save/reload.
+Original synthetic packing checks and development SDK probes do not close these
+gates. Follow [milestones](milestones.md) and [GitHub development](github-development.md)
+for the current record.

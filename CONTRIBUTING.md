@@ -105,6 +105,8 @@ The wrapper records **Codex** as author using the verified OpenAI-owned
 [ChatGPT Codex Connector bot](https://github.com/apps/chatgpt-codex-connector)
 identity. The hook adds OpenAI's published trailer exactly once:
 `Co-authored-by: Codex <noreply@openai.com>`.
+The [published Codex attribution source](https://github.com/openai/codex/blob/c308e127e0e8cd040f670ca0e0496ae1c7519d3f/codex-rs/ext/git-attribution/src/world_state.rs)
+records the commit and PR formats used here.
 Add `Generated with [Codex](https://openai.com/codex/).` to the associated PR body.
 
 Ordinary `git commit` retains your identity and message. Installation is local

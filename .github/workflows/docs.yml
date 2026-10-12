@@ -1,0 +1,74 @@
+name: Documentation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: documentation-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Documentation build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Check out maintained source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: docs-requirements.txt
+      - name: Install the pinned public documentation dependency tree
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/docs-logs
+          python -m pip install --requirement docs-requirements.txt \
+            2>&1 | tee artifacts/docs-logs/dependency-install.log
+          python -m pip check 2>&1 | tee artifacts/docs-logs/dependency-check.log
+          python -m pip freeze > artifacts/docs-logs/dependencies.txt
+      - name: Build strict documentation and verify every rendered local link
+        run: |
+          set -euo pipefail
+          python tools/build-docs-site.py 2>&1 | tee artifacts/docs-logs/site-build.log
+          python tools/package-docs-site.py 2>&1 | tee artifacts/docs-logs/site-package.log
+      - name: Upload the rendered site for review
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: documentation-preview-${{ github.sha }}
+          path: |
+            artifacts/docs-site/site/
+            artifacts/docs-publication/
+          retention-days: 14
+          if-no-files-found: error
+      - name: Preserve documentation evidence and failure logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: documentation-checks-${{ github.sha }}
+          path: |
+            artifacts/docs-site/build.log
+            artifacts/docs-site/build-report.json
+            artifacts/docs-logs/
+          retention-days: 14
+          if-no-files-found: warn
+
+# The source repository is private on GitHub Free. Publish the generated docs-only
+# bundle in a separate public repository; its native Pages workflow needs no paid
+# plan and cannot expose the application source or private development files.

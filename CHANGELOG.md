@@ -14,6 +14,10 @@ do not establish commercial-game compatibility or installable WUP acceptance.
 - Add GitHub CI/build artifacts, live milestone trackers and synchronization,
   contribution/security/report templates, ownership and specialist agent guidance.
 - Add a documentation landing page and clear download/build/testing instructions.
+- Build searchable documentation, an offline HTML guide and a free public
+  docs-only Pages bundle; preserve private application source.
+- Add an opt-in verified Codex commit hook and documented PR/CI maintenance practices.
+- Verify real external AOT/Unicode execution and WPF tooling on hosted Windows.
 - PICA draws, commercial profiles, GUI, console/install and protected GitHub settings
   acceptance remain pending; consult current status and actual workflow results.
 

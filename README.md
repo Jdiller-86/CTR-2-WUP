@@ -101,6 +101,11 @@ and the exact files to return. No ROM or key is needed for original diagnostics.
 GitHub now tracks each milestone with an issue and acceptance checklist. CI
 provides versioned build/test artifacts; [the GitHub guide](docs/github-development.md)
 explains automatic checks, manual Windows validation and agent profiles.
+Searchable [documentation builds](https://github.com/Jdiller-86/CTR-2-WUP/actions/workflows/docs.yml)
+include an offline HTML guide and a free public docs-only Pages export. The
+application source stays private. Topic branches, pull requests and passing CI
+support maintenance on GitHub Free. Codex-generated commits carry explicit attribution through
+an opt-in [repository hook](CONTRIBUTING.md#codex-commit-attribution).
 
 ## Try the developer tools
 

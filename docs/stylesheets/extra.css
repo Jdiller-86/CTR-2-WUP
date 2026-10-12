@@ -1,0 +1,20 @@
+:root {
+  --md-text-font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --md-code-font: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+}
+
+.md-grid { max-width: 82rem; }
+.md-content__inner > h1 { font-weight: 750; letter-spacing: -.025em; }
+.md-typeset h2 { font-weight: 650; }
+.md-typeset img[src$="progress.svg"] {
+  display: block;
+  width: min(100%, 49rem);
+  margin: 1.2rem 0;
+}
+.md-typeset table:not([class]) th { white-space: nowrap; }
+.md-typeset a { text-underline-offset: .16em; }
+.md-typeset :target { scroll-margin-top: 5rem; }
+@media (max-width: 60em) {
+  .md-typeset { overflow-wrap: anywhere; }
+  .md-typeset pre { overflow-wrap: normal; }
+}

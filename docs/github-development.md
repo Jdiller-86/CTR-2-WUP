@@ -54,7 +54,8 @@ WUHB a WUP or label a diagnostic release playable. No real game, key, seed DB,
 save, private trace or extracted commercial asset belongs in an Actions artifact
 or release. Preserve older requested test kits and their versioned instructions.
 
-The 0.17.0 kit contains Native and GX Transfers. The 0.14.6 kit remains the
+The 0.17.0 kit contains Native and GX Transfers. Its release also includes a
+single offline HTML guide and generated public docs-only site bundle. The 0.14.6 kit remains the
 Save/RomFS follow-up. [Getting started](getting-started.md) explains SD layout,
 Aroma/RPX launch and report delivery.
 
@@ -77,6 +78,57 @@ has access. Profile files do not activate a subscription or automatically assign
 work to an external service. Current development also used independent parallel
 runtime and workflow/documentation reviews; actual findings were corrected and
 checks rerun.
+
+Codex work uses the repository's opt-in [commit attribution hook](../CONTRIBUTING.md#codex-commit-attribution).
+Its verified public bot author and standard Codex co-author trailer provide
+visible credit while normal Git/PR authentication continues through the connected
+account. It does not impersonate a bot login or rewrite earlier history.
+
+## Documentation and free hosting
+
+The Markdown guides are readable directly in GitHub. Each Documentation workflow
+build also provides a searchable Material site and **a single HTML guide that
+opens directly in a browser**, with navigation, search and a print layout. The
+HTML guide requires no account, server or internet connection to read its content.
+Download it from a matching development release or Documentation run artifact.
+
+A separate public **CTR-2-WUP-docs** repository can host the generated site with
+GitHub Pages on the free plan while the application repository remains private.
+The export bundle includes the rendered site, notices, README and a pinned Pages
+workflow; it excludes application code, ROMs, keys and private test data. Initial
+creation/publication still requires repository access. A generated bundle is not
+proof of a published site; only link a live URL after verifying deployment.
+The connected integration rejected creation of `CTR-2-WUP-docs` with HTTP 403
+**Resource not accessible by integration**. The ready export can be uploaded to
+a public repository created by the owner, or published after granting the
+required repository creation/Pages access. The HTML guide is usable immediately.
+Private-source Pages is unavailable on the user's current plan and is not enabled.
+
+```sh
+python3 -m venv artifacts/docs-build-venv
+artifacts/docs-build-venv/bin/python -m pip install -r docs-requirements.txt
+artifacts/docs-build-venv/bin/python tools/build-docs-site.py
+artifacts/docs-build-venv/bin/python tools/package-docs-site.py
+```
+
+The strict build validates rendered links, anchors, search and assets. The site is
+in `artifacts/docs-site/site/`; the HTML guide and public-repository bundle are
+in `artifacts/docs-publication/`. Their JSON receipts and checksums identify the
+source commit. Source links stay commit-specific and require repository access.
+The site and HTML guide preserve the product goal, progress and acceptance limits.
+
+## Maintenance on GitHub Free
+
+The private source repository uses topic branches and reviewable pull requests.
+Check the latest **Required CI** and **Documentation build** on the PR before
+merging; keep source and evidence together. Preserve history and use a new
+version for changed published artifacts. Dependencies/actions are pinned,
+CODEOWNERS identifies the maintainer, and contributor/security/result guides
+provide the review context.
+
+The user explicitly declined branch protection because the repository is private
+on GitHub Free. No protection rule or administration setup tool is incorporated.
+These maintenance practices are team conventions; GitHub does not enforce them.
 
 ## Board setup
 
@@ -109,14 +161,11 @@ The prepared desired setup is:
 - Private project **CTR2WUP Development**, linked to this repository, containing
   the seven milestone issues, with Status columns Planned / In progress /
   Awaiting evidence / Accepted and fields for milestone and waiting resource.
-- Protect main against force pushes/deletion, require up-to-date **Required CI**
-  and PR review flow. Avoid requiring a second human approver for a solo maintainer
-  unless one is available. Do not enable protection before its checks actually run.
 - About description/topics reflecting early development; optional Discussions,
   delete merged topic branches and free dependency-alert settings.
 
 Grant the GitHub connection the relevant **Projects write** and **repository
-Administration/security-setting** access to finish those protected operations,
+Administration/security-setting and public docs-repository/Pages write** access to finish those protected operations,
 or apply them in repository/account settings.
 
 For this cloud environment, an optional secure personal secret requirement named

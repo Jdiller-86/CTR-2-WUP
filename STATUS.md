@@ -39,7 +39,7 @@ services or Wii U rendering are implemented. [The GX contract](docs/gx-transfers
 records alignment/size/format/layout limits and the optional two-step console guide.
 
 Independent review found and corrected missing fill-trigger validation and
-signaling for dropped interrupts. Required `make check` passes **222 Python tests
+signaling for dropped interrupts. Required `make check` passes **237 Python tests
 and 17 C suites**, normal and ASan/UBSan. GX has **1,102 assertions**; report/guide
 has **587**. The transfer matrix has **400 original C/Python/reference color/layout
 comparisons** and matching emulated big-endian PowerPC hashes. Reference color/
@@ -65,19 +65,33 @@ Automatic CI covers Python 3.12/3.14, GCC/Clang sanitizers, Windows host/portabl
 workflow lint and immutable-SDK native Wii U artifacts. **Required CI** aggregates
 those checks. Deep Windows AOT/WPF and eligibility-gated CodeQL are manual;
 agent profiles do not enable a paid subscription or run unattended.
-[Hosted CI passed](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38287776847)
-on source `c0083d4`: all eight checks, including Python 3.12/3.14, GCC/Clang
-sanitizers, the Windows baseline and Wii U build. Windows runs 222 Python cases
+[Hosted main CI passed](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38295253188)
+on source `9feab1b`: all eight checks, including Python 3.12/3.14, GCC/Clang
+sanitizers, the Windows baseline and Wii U build. Windows runs 230 Python cases
 with three documented filesystem/privilege skips plus all 17 normal C suites.
-Deep Windows external-AOT/WPF validation remains a separate check. [GitHub development](docs/github-development.md) explains
-artifacts, release policy and protected setup still awaiting access.
+[Deep Windows validation passed](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38289835013),
+including real pinned external AOT, Unicode execution and .NET 10 WPF tooling.
+This verifies development tools; full Windows conversion and GUI remain unfinished.
+[GitHub development](docs/github-development.md) explains
+artifacts, release policy and management operations still awaiting access.
 
 The existing GitHub integration rejected Projects creation and repository
 administration/security-setting writes with **Resource not accessible by
-integration**. Issue/milestone writes work. Project board, branch protection,
+integration**. Issue/milestone writes work. Project board,
 About/topics/Discussions and security-setting changes need the relevant GitHub
 connection permissions; those features are not falsely marked enabled.
-No repository visibility or paid entitlement was changed.
+Searchable documentation has a strict build, rendered-link checks, an offline
+HTML guide and a free public docs-only Pages export. The user confirms private
+Pages is unavailable on their free plan; application source remains private.
+The user explicitly declines branch protection for the private free-plan repository.
+Topic branches, reviewable PRs and passing CI are the maintenance policy.
+Local documentation builds do not establish live hosting.
+The connection rejected public docs-repository creation with HTTP 403, so its
+free hosted publication needs owner access. The standalone HTML reader and
+complete public export remain available for download.
+Future Codex commits use an opt-in attribution hook and verified public bot identity;
+normal commits and existing history retain their authors. No repository visibility
+or paid entitlement was changed.
 
 ## Console evidence and inputs still needed
 
