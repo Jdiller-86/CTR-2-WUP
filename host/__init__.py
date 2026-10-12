@@ -1,3 +1,3 @@
-"""CTR2WUP host tools; encrypted packaging has an optional crypto dependency."""
+"""CTR2WUP host tools; local ROM preparation and packaging use optional crypto."""
 
-__version__ = "0.14.6"
+__version__ = "0.15.0"

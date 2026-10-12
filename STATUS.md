@@ -1,18 +1,81 @@
 # CTR2WUP status
 
-Updated October 11, 2026 (America/New_York); report filenames use UTC.
+Updated October 12, 2026 (America/New_York); report filenames use UTC.
 Requirements: `docs/project-brief.md`; product plan:
 `docs/development-plan.md`; GUI workflow: `docs/gui-workflow.md`.
 The user resumed implementation and selected **Super Mario 3D Land** as the first
 title candidate. The target remains an UWUVCI-style Windows GUI: select a
-decrypted game, configure title/artwork, click Inject, install its per-game WUP
+game (decrypted or locally prepared with imported 3DS material), configure title/artwork, click Inject, install its per-game WUP
 and launch from Wii U Menu. The CLI is the shared engine, not the final product.
 
 **Overall implementation estimate: approximately 20%**, reassessed against the
-v0.14.6 GUI-to-playable-WUP target on October 11, 2026. This is a rough engineering
+v0.15.0 GUI-to-playable-WUP target on October 12, 2026. This is a rough engineering
 judgment, not measured task completion. **0/7 full milestones are accepted.**
 See [the completion assessment](docs/progress.md) for its basis, remaining work,
 and external testing gates; the README provides a concise progress overview.
+
+**Version 0.15.0 adds local encrypted-input preparation and key/seed import.**
+The user expands the final GUI's scope to accept decrypted dumps or encrypted
+dumps using material obtained from their own 3DS. This amends the original
+brief's decrypted-only input scope without altering that historical document.
+The PC side now supplies `prepare-rom` and `import-rom-keys`; the GUI import
+wizard, protected Windows storage and device extraction/helper remain planned.
+No console key, bootrom or Nintendo key database is bundled or used.
+
+The host decrypts supported CIA outer main content with a local title key or
+common key/ticket, verifies its full TMD plaintext hash, then prepares supported
+NCCH v2 exheader/ExeFS/RomFS bytes. Standard/1/0a/0b crypto methods, unseeded
+primary versus secondary keys, seed verification/derivation, mixed ExeFS keys and
+unaligned bounded CTR chunks are supported. Existing checked hashes/code
+inspection precede non-overwriting atomic publication. `game.cxi` preserves main
+RomFS bytes; auxiliary contents, tickets and key files are not exported with it.
+No authentic-signature, full IVFC or commercial compatibility claim follows.
+
+Plaintext AES-key database NCCH retail KeyX records, seeddb and explicitly declared
+decrypted title-key DB records can be imported into an explicitly private local
+store. Field/range/count/duplicate checks and redacted errors/repr are tested.
+Wrong/missing keys or seeds and unsupported forms fail; input and existing output
+remain unchanged. Fixed-key/v1 NCCH, encrypted key databases, boot9/aes_keys.txt
+import, raw SD/NAND, updates/DLC and ticket depersonalization remain unsupported.
+A personalized ticket needs a previously recovered local title key.
+Actual user-console exports and native Windows behavior are pending.
+See [encrypted-input.md](docs/encrypted-input.md).
+
+The user is again away from desktop/Wii U and authorizes continuing independent
+milestones with earlier verbal confirmations. Their **U.S. console, latest
+firmware, latest Aroma and latest WUP Installer GX2** are recorded as reported;
+exact build numbers are unknown. Earlier v0.14.5 Native/Guarded/Compiled successes
+remain positive user evidence. No new physical execution or installation is
+claimed. The private receipt is `private/console-environment-20261012.json`.
+The existing v0.14.6 five-app kit remains the pending Save/RomFS result round;
+this release does not require repeating the completed long input guides.
+
+Verification is under `artifacts/reports/rom-preparation-v015/` and
+`artifacts/reports/rom-preparation-workflow-v015/`:
+
+- **184 Python tests** (29 new key/preparation cases) and all fourteen existing C
+  suites pass normally and with ASan/UBSan. No test is skipped in this environment.
+  Known NIST CBC/CTR vectors, a separate bit/carry scrambler implementation, all
+  four NCCH methods/seed routes, both CIA layers, mixed ExeFS/padding, compressed
+  code, >1 MiB streaming, import formats, malformed/wrong data and publication
+  races are exercised. No real key or commercial byte is used.
+- The original doubly encrypted execution fixture completes **prepare → validate/
+  small intake → actual external AOT → desktop guest execution → Wii U RPX/WUHB**.
+  Its prepared bytes match the original fixture, executable revision survives
+  intake, two frames complete, guest exits after **1,382,494 instructions** with
+  **zero fallback**, and source remains unchanged. Synthetic key files are
+  transient/private and removed.
+- Required `make check` and `make prototype` complete. Make object dependencies
+  now include the recipe so version/build-recipe changes cannot silently retain
+  old compiled app identities. Fresh native/external-fixture builds carry 0.15.0.
+- The pure-Python wheel and matching source/development artifacts are under
+  `artifacts/delivery/rom-preparation-0.15.0/`; no real private receipt/key is
+  included. Installed-wheel local preparation is checked outside the checkout.
+
+This advances P2 input preparation and P4/M6 engine foundations. Mario's actual
+executable/assets, commercial HLE/PICA/audio/retail-save work, verified WUP
+installation and native Windows/GUI acceptance still need implementation/evidence.
+**Approximately 20% overall implementation; 0/7 full milestone gates accepted.**
 
 **Version 0.14.6 reviews the latest evidence and advances shared RomFS support.**
 The user reports **Native, Guarded and Compiled completed without errors on

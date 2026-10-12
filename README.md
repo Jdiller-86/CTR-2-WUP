@@ -3,7 +3,8 @@
 **A project to turn 3DS games into individual Wii U titles through a Windows GUI.**
 
 The intended experience follows [UWUVCI AIO](https://github.com/stuff-by-3-random-dudes/UWUVCI-AIO-WPF):
-choose a decrypted game, customize its name and artwork, click **Inject**, and
+choose a game, use a decrypted dump or import locally obtained 3DS key material,
+customize its name and artwork, click **Inject**, and
 receive a WUP package to install and launch from the Wii U Menu.
 The TV displays the top screen; the GamePad supplies the bottom screen, touch,
 and controls.
@@ -30,7 +31,7 @@ games will grow as the shared runtime gains the features they require. See the
 
 ![Estimated implementation progress: approximately 20%; zero of seven full milestones accepted.](docs/images/progress.svg)
 
-**Assessment: October 11, 2026 · runtime version 0.14.6.** About **20%** is a rough
+**Assessment: October 12, 2026 · version 0.15.0.** About **20%** is a rough
 engineering estimate toward the finished GUI-to-playable-WUP product, not a
 measured task percentage or a compatibility rating. **0 of 7 full milestones
 have met their acceptance criteria.** Most renderer, commercial-game, GUI, and
@@ -43,7 +44,7 @@ hardware validation work remains.
 | M3 · Homebrew runtime | Seven original applications; saves and read-only RomFS assets | Broader services, retail integration and console acceptance |
 | M4 · PICA → GX2 graphics | Renderer not implemented | 3DS draws, shaders, textures, and reference scenes |
 | M5 · First commercial game | Mario selected; dump analysis pending | Boot, gameplay, guest audio, and retail saves |
-| M6 · Automated WUP conversion | Build and packaging foundations tested | Commercial end-to-end conversion, Windows, and installer acceptance |
+| M6 · Automated WUP conversion | Local decryption, build and packaging foundations tested | Commercial end-to-end conversion, Windows, and installer acceptance |
 | M7 · Windows GUI | Workflow specified | Implement and verify the complete Inject experience |
 
 Read the [completion assessment](docs/progress.md) for the reasoning and evidence,
@@ -51,8 +52,10 @@ or the [milestone checklist](docs/milestones.md) for detailed acceptance gates.
 
 ## What works today
 
-- **Game inspection:** bounded parsing of decrypted 3DS/CXI/CIA inputs and
-  executable metadata, with explicit rejection of unsupported or encrypted data.
+- **Game preparation:** bounded 3DS/CXI/CIA inspection plus optional local
+  decryption using user-supplied keys/seeds. Supported key database imports,
+  recovered-code hashes and original encrypted pipeline tests are implemented.
+  Console extraction and native Windows key handling still need validation.
 - **Translation and runtime foundations:** ARM/Thumb/VFP subsets, external AOT
   integration, checked memory, guest threads, and scoped 3DS services.
 - **Original homebrew execution:** normal compiler-built programs exercise boot,
@@ -97,7 +100,9 @@ commercial-game WUPs. Generated builds and reports are kept in ignored
 
 To inspect a decrypted dump locally, run `python3 -m host inspect PATH`.
 Keep ROMs and derived game data under ignored `private/` directories.
-See [CIA intake](docs/cia-intake.md) for the small private executable export helper.
+See [CIA intake](docs/cia-intake.md) for the small private executable export helper,
+and [local encrypted-input preparation](docs/encrypted-input.md) for the new engine
+commands. Keys stay on your PC; the app does not obtain them from a 3DS yet.
 
 ## Development and testing
 

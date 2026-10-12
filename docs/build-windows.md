@@ -126,3 +126,13 @@ same checked generated-C interface and normal libctru parser; no game assets are
 bundled. Read/write/exclusive/rename behavior and actual compiled execution still
 need native Windows validation. The final injector GUI remains deferred until
 the commercial conversion and installable-WUP pipeline is proven.
+
+
+v0.15.0 supplies pure-Python import-rom-keys and prepare-rom commands in the
+wheel/full source. Install `.[decryption]` for the bounded local AES preparation
+path; it uses the same audited cryptography major as packaging. The original
+execution fixture proves encrypted input to actual AOT and cross-build on Linux.
+The Windows .NET CIA helper is unchanged and does not decrypt; there is no GUI
+key wizard/device helper yet. Native Windows private-file behavior, credential
+storage and real-console key exports remain acceptance work. Never upload or
+bundle a real local key store. See `encrypted-input.md` for commands and limits.

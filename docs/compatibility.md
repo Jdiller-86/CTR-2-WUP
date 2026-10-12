@@ -19,7 +19,8 @@
 | Decrypted base-application CIA | Intake supported | Checked index-0 NCCH, metadata/bitmap/content hashes and loader offsets; small executable export supported |
 | Decrypted NCCH v2 `.cxi` | Inspection supported | Bounds, sections/ExeFS hashes, code decompression and metadata tested with original fixtures |
 | Decrypted NCSD `.3ds` | Inspection supported | Cartridge partition bounds and all present NCCH partitions checked; no NAND loader |
-| Encrypted dump | Unsupported | Clear rejection; no decryption/key acquisition implemented |
+| Supported encrypted CIA/NCSD/NCCH | Local preparation implemented; original fixtures verified | prepare-rom validates recovered main CXI using local key/seed files; standard/1/0a/0b NCCH, scoped CIA wrapping; no actual user-key/Windows acceptance or commercial conversion |
+| 3DS key/seed exports | Scoped local import implemented | Plaintext AES key DB retail NCCH KeyX, seeddb and declared decrypted title-key DB; no console extraction, boot9 import or encrypted key DB support |
 | `.3dsx`, update/DLC merges | Unsupported | No corresponding loader/pipeline; renamed input is not accepted as NCCH |
 | Any commercial revision | Unsupported/unverified | Mario CIA exceeds transfer limit; small intake reports encrypted executable and contains no code; required HLE/GPU/audio/save implementation and Wii U gameplay evidence remain absent |
 | WUP installation | Unverified/unavailable | Original encrypted writer and independent verification pass synthetic-input checks; installer acceptance and actual installable output remain pending |
@@ -47,3 +48,10 @@ GUI. Native output copying is not a working PICA renderer.
 ARMv6 interpreter SXTB/SXTH/UXTB/UXTH rotations/conditions/aliases pass 2,048
 independent reference cases. This is a bounded CPU extension; full compiled
 interpreter startup still rejects STRD. The delivered guarded app uses AOT.
+
+
+October 12 reported console environment is U.S. firmware/Aroma/WUP Installer GX2,
+each described by the user as latest. Exact versions are not yet captured. Earlier
+v0.14.5 Native/Guarded/Compiled successes are retained as reported evidence while
+the user is away. They do not establish v0.15 decryption, v0.14.6 SD/RomFS, retail
+compatibility or actual WUP installation. No completed milestone is added.

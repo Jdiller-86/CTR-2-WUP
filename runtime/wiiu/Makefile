@@ -12,7 +12,7 @@ FILESYSTEM_HOMEBREW ?= 0
 ROMFS_HOMEBREW ?= 0
 UDP_LOG ?= 0
 CALL_LIMIT ?= 64
-APP_VERSION := 0.14.6
+APP_VERSION := 0.15.0
 UPSTREAM_DIR ?= ../../artifacts/generated-upstream-guest
 ifeq ($(GUEST_DEFAULT),1)
 APP_NAME := CTR2WUP ARM Guest $(APP_VERSION)
@@ -77,7 +77,7 @@ vpath %.c ../core ../recomp ../../tests/fixtures/cpu ../../tests/fixtures/guest 
 all: $(OUTPUT)/$(TARGET).rpx $(OUTPUT)/$(TARGET).wuhb
 $(BUILD):
 	mkdir -p "$@"
-$(BUILD)/%.o: %.c | $(BUILD)
+$(BUILD)/%.o: %.c Makefile | $(BUILD)
 	"$(CC)" $(CFLAGS) -MMD -MP -c "$<" -o "$@"
 $(OUTPUT)/$(TARGET).elf: $(OBJECTS)
 	"$(CC)" $(LDFLAGS) $(OBJECTS) -L"$(WUT)/lib" -lwut -lm -o "$@"

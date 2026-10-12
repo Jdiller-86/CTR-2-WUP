@@ -27,7 +27,7 @@ All acceptance checkboxes below remain open until their evidence is recorded.
 - [ ] M7 Windows GUI: proven same execution pipeline, usable responsive front
   end and documented packaged prerequisites.
 
-## Current evidence (October 11, 2026, America/New_York)
+## Current evidence (October 12, 2026, America/New_York)
 
 The current rough implementation estimate is **approximately 20% of the finished
 GUI-to-playable-WUP product**; full milestone acceptance is **0/7**. These measure
@@ -40,7 +40,7 @@ different things. See [progress.md](progress.md) for the assessment and evidence
 | M3 | Checked NCCH loading and eight single-core contexts; CPU/TLS/VFP/FPSCR ownership, priorities/quanta, joins/locks/arbiters/quotas; SRV/CFG/heap/shared/HID/GSP/VBlank; seven normal-CRT/libctru applications including exact CPU framebuffer pixels, private FS save/reload, APT lifecycle and read-only Level-3 RomFS assets; five current diagnostic variants built | Verified new result-file/save/RomFS console evidence; broader services, applets, NCCH/IVFC and commercial assets/retail saves, cross-process semantics, motion, GX commands/PICA and guest audio |
 | M4 | Bounded command references, standard direct/shared GSP display and five tested rotated CPU display formats | Actual PICA-to-GX2 features, scene comparisons and console timings |
 | M5 | Mario selected; original attachment exceeds 32 MiB; October 11 small intake receipt reports outer-encrypted executable content and contains no executable; intake/export helper tested; shared runtime foundations | Decrypted private executable export/revision, title-specific runtime/renderer/services/save/audio implementation and console gameplay |
-| M6 | External C generation/static compilation, staging/artwork/intake, original encrypted writer and independent decrypt/FST/file checks with synthetic inputs, atomic output/wheel; Windows workflow prepared | Actual local certificate/key provenance and installer acceptance, full commercial conversion, caches/traces/rebuild, Windows execution and console install checks |
+| M6 | Local key/seed import and CIA/NCCH preparation, original encrypted-input→intake→AOT→RPX/WUHB proof; external C generation/static compilation, staging/artwork/intake, original encrypted writer and independent decrypt/FST/file checks with synthetic inputs, atomic output/wheel; Windows workflow prepared | Actual local certificate/key provenance and installer acceptance, full commercial conversion, caches/traces/rebuild, Windows execution and console install checks |
 | M7 | Deliberately deferred | Proven pipeline before responsive Windows GUI implementation |
 
 These are partial implementation outcomes. None of the full milestone checkboxes
@@ -172,3 +172,13 @@ Clang/emulated PPC pass both APIs and actual save/reload with byte-identical
 snapshots. Spaced Japanese console-output paths pass after controlled build
 staging. The fifth save RPX also passes offline encrypted packing with temporary
 synthetic inputs; no installable WUP or physical acceptance is claimed.
+
+
+v0.15.0 adds the user's optional encrypted-input route, scoped local support-file
+import, known-vector/original encrypted fixture checks and a real original-guest
+pipeline through decryption/intake/external AOT/Wii U cross-build. This advances
+P2/P4/M6 preparation, not commercial compatibility. Actual local 3DS exports and
+Windows protected-key import/device-helper/GUI behavior are pending. Earlier
+console successes and the latest U.S. firmware/Aroma/WUP Installer GX2 environment
+are retained as user evidence; exact versions/new logs remain open. No full gate
+is closed; original requirements and amendments are in `encrypted-input.md`.

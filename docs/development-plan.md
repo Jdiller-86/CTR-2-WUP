@@ -6,7 +6,9 @@ UWUVCI AIO GUI workflow clarification. `gui-workflow.md` specifies the reviewed
 reference, screens, Inject action, output and acceptance criteria.
 The referenced conversation supplies product context; its feasibility scores,
 upstream coverage percentages and compatibility claims are not verified results.
-The original brief remains the requirements document. This plan corrects the
+The original brief remains the requirements document, with the October 12
+user amendment accepting optional local encrypted-input preparation described
+in [encrypted-input.md](encrypted-input.md). This plan corrects the
 execution priorities and preserves its hardware, correctness and licensing gates.
 
 ## Product and completion target
@@ -18,7 +20,10 @@ install the resulting WUP on Wii U → launch from the Wii U Menu.**
 
 The GUI runs this conversion sequence behind its Inject action:
 
-1. Select a user-owned decrypted Old 3DS `.3ds` or `.cxi` dump.
+1. Select a user-owned Old 3DS `.3ds`, `.cxi` or supported base-application `.cia`.
+   Use decrypted input directly, or prepare encrypted input locally using
+   material imported from the user's 3DS; validate the recovered executable/assets.
+   No key is bundled or uploaded. Device extraction and GUI import help remain planned.
 2. Detect the title/revision and report its actual support status.
 3. Analyze and translate its ARM/Thumb/VFP code on the Windows PC.
 4. Compile translated code and the reusable Wii U HLE runtime with devkitPPC;
@@ -73,7 +78,7 @@ licenses and target suitability pass the existing audit gates.
 | P1: Resolve conversion foundations | Extend the pinned lifter adapter from analysis to C generation and static linking; normalize its 32-bit ABI, little-endian fast memory paths, SVC/resume state and fallback boundary. Resolve lifter redistribution notices. In parallel, choose a license-cleared WUP packaging route and stage original `code/content/meta` for the existing native app. | Original ARM/Thumb/VFP tests execute through the adapted lifter on desktop and PowerPC; report code size, build/memory costs and fallback timing. Original homebrew WUP is generated and physically installed/launched/exited. Advances M1/M2 and establishes M6 packaging prerequisites. |
 | P2: Select and analyze the first title | Compare a small candidate set using reproduced upstream evidence and service/GPU/module demands. Obtain one user-owned decrypted revision when its private inspection is needed. Extract code, RomFS and required module metadata; create an exact-hash profile and feature/test-route matrix. | A selected revision, traceable requirements, repeatable gameplay/save route and explicit unsupported features. Sets the scope for M3–M5. Title analysis can proceed while P1 console tests are pending. |
 | P3: Run that title through the Wii U runtime | Implement or adapt only the required kernel/SVC/IPC/APT/FS/HID/CFG/GSP behavior, guest scheduling and memory layouts. Implement the required PICA-to-GX2 draws, shaders, textures/TEV/transfers/coherency with reference tests. Add exercised CRO relocation/dispatch, DSP/audio and save/extdata behavior. Use targeted redistributable fixtures for each interface. | Adapted guest fixture works on console; selected game progresses through boot → menu → gameplay → save/reload. Produce a manually staged per-game WUP through P1 packaging and verify Menu launch. Record physical CPU/GPU/fallback timings, memory, accuracy and stability. M3/M4/M5 acceptance remains evidence-based. |
-| P4: Automate the Windows injection engine | Connect all proven stages to the existing host pipeline: validate → profile → extract → translate → compile → shader/cache preparation → link/stage → metadata/title ID → pack → validate → publish. Provide real internal `build/rebuild/import-trace/validate-package`, versioned GUI requests/progress events, cancellation, revision-aware caches, stable saves/IDs and actionable diagnostics. | A clean Windows machine converts the selected ROM into the functioning per-game WUP through the engine without hand edits. Verify install/Menu launch, rebuild/save continuity and uninstall behavior. Completes M6 after its console checks; the CLI alone does not complete the product. |
+| P4: Automate the Windows injection engine | Connect all proven stages to the existing host pipeline: detect encryption → optional local decrypt/validate → profile → extract → translate → compile → shader/cache preparation → link/stage → metadata/title ID → pack → validate → publish. Provide real internal `build/rebuild/import-trace/validate-package`, versioned GUI requests/progress events, cancellation, revision-aware caches, stable saves/IDs and actionable diagnostics. | A clean Windows machine converts the selected ROM into the functioning per-game WUP through the engine without hand edits. Verify install/Menu launch, rebuild/save continuity and uninstall behavior. Completes M6 after its console checks; the CLI alone does not complete the product. |
 | P5: Deliver the Windows GUI injector | Build the C# WPF front end on a supported .NET LTS release over the verified engine, following `gui-workflow.md`. Provide the UWUVCI-style 3DS Inject page, ROM/compatibility detection, game name and artwork previews, settings/WUP destination, one Inject action, responsive progress/cancellation, completion/SD-install guidance and saved-project rebuild. Package or provision actual prerequisites through documented setup. | `CTR2WUP.exe` performs the supported injection on clean Windows without manual shell commands. Its WUP installs, launches from the Menu and passes the agreed physical-console gameplay/save test. Completes M7 and the first MVP. |
 
 P1 has two independent work streams: translator/runtime portability and packaging.
@@ -226,3 +231,20 @@ new trace absence and later save failure remain unconfirmed causes. Next physica
 checks are Save and RomFS, followed by actual decrypted Mario revision/asset
 analysis and required PICA/audio/services integration. No GUI, commercial profile
 or full acceptance milestone is enabled by these diagnostics.
+
+
+October 12 user update: optional 3DS key import/local decryption is part of the
+final product. v0.15.0 implements bounded local CIA/NCCH/NCSD main-content
+preparation and plaintext support-file import, verified with original encrypted
+fixtures through small intake, actual external AOT execution and Wii U cross-build.
+It does not acquire keys from a console, ship key material or enable retail
+compatibility. Already-decrypted input remains available. The on-console helper,
+protected Windows key storage and GUI import wizard remain planned; see
+`encrypted-input.md`. This advances P2 preparation and P4/M6 foundations without
+moving GUI work ahead of commercial runtime/renderer/installation proof.
+
+The user is again away and explicitly authorizes continued independent milestones
+using earlier verbal confirmations. Reported environment: U.S. console, latest
+available firmware, latest Aroma and latest WUP Installer GX2. Exact build numbers
+and v0.14.6 result files remain pending. Positive v0.14.5 reports remain usable
+scoped user evidence; no unrelated long retest is requested.

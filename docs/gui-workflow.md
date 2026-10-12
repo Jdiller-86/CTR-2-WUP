@@ -28,7 +28,11 @@ its own original Wii U title template instead of a commercial VC donor base.
 
 1. **Open CTR2WUP → 3DS Inject.** The injector page is the default destination;
    navigation also provides saved projects, settings and help.
-2. **Choose the game.** Browse for a decrypted `.3ds`/`.cxi`. Display detected
+2. **Choose the game.** Browse for a `.3ds`/`.cxi` or supported base-application
+   `.cia`. Accept already-decrypted input, or offer **Import keys from your 3DS**
+   when the detected encryption needs local material. The setup wizard explains
+   supported console-export steps, imports selected files and shows missing
+   requirements. Decrypt locally and validate before continuing. Display detected
    title, icon, region/revision and supported/experimental/unsupported status.
    Provide an actionable reason when the input cannot be injected. Automatically
    select the supported compatibility preset for the exact revision.
@@ -43,6 +47,8 @@ its own original Wii U title template instead of a commercial VC donor base.
    compilation, runtime/assets staging, metadata creation, WUP packing and
    validation. Display the actual stage, elapsed time, progress and Cancel.
    Detailed logs and technical settings live in expandable diagnostics/settings.
+   Decryption runs as a preparation stage; it does not require a separate game
+   conversion action. Console key values never enter reports or WUP output.
 6. **Receive the finished WUP.** Show the completed package directory, title
    information, build report and installation guide. Offer Open output folder
    and an explicit Copy to SD action if implemented. Publish success only after
@@ -84,3 +90,21 @@ That WUP installs and launches from the Wii U Menu and passes the agreed gamepla
 input/touch/audio/save/reload/rebuild test. The app stays responsive during the
 entire conversion. Its completion message distinguishes validated package output
 from previously recorded physical-console compatibility evidence.
+
+
+## October 12 encrypted-input amendment
+
+The user asks for both decrypted input and local decryption using their own 3DS
+material. The shared engine now implements the scoped preparation/import path
+in `encrypted-input.md`. The eventual GUI includes import/remove/reselect key
+storage and guided export help, with optional on-console companion integration
+only after hardware/tool validation. The Windows app cannot read keys directly
+from a stock console over USB. An imported key set may need title keys/seeds;
+one console-specific SD key is not a universal standalone-ROM key.
+
+Acceptance adds real locally exported keys plus an owned encrypted fixture,
+recovered-code/asset integrity, missing/wrong-key messages, cancellation/cleanup,
+protected Windows storage and redacted diagnostics. No key is bundled, fetched,
+uploaded, included in exported projects or shipped in WUPs. Preparation success
+does not override a game's unsupported profile or physical compatibility gate.
+The GUI remains unimplemented until the underlying commercial pipeline works.

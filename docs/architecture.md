@@ -180,3 +180,17 @@ checks and 2,048 Unicorn ARM1176 cases validate this scope. Full compiled libctr
 interpreter startup still stops on STRD, so no interpreter comparison is shipped.
 For the optional reference, install `unicorn==2.1.4` in a developer Python
 environment, then run `python3 tools/reference-extend.py --output NEW_DIRECTORY`.
+
+
+v0.15.0 adds input preparation ahead of container inspection. A bounded local
+key provider loads selected 16-byte file references in-process, with redacted
+failures/repr. Plaintext support-file imports create a separate explicitly private
+store. CIA AES-CBC main-content hashes are checked before inner NCCH decryption;
+NCCH v2 primary/secondary CTR, seed/key derivation and extents are checked before
+publishing a derived CXI. Output includes the main RomFS, but not other contents,
+tickets or key files. Input/output identities and lack of signature/full-IVFC
+verification are explicit. Read-only sources, bounded chunks, input-change checks
+and atomic non-overwriting publication reuse the existing host boundaries.
+The validated decrypted CXI enters the unchanged loader/lifter pipeline; key
+values never reach generated C, runtime binaries or WUP staging. See
+`encrypted-input.md` for profiles and pending hardware/Windows checks.

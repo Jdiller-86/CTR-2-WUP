@@ -44,6 +44,13 @@ def parser():
     intake.add_argument("path");intake.add_argument("--output",required=True);intake.add_argument("--lifter",action="store_true")
     small=commands.add_parser("prepare-intake",help="Create a private small executable view or encryption report; not a full ROM or supported conversion")
     small.add_argument("path");small.add_argument("--output",required=True)
+    preparation=commands.add_parser("prepare-rom",help="Create a private checked decrypted main CXI using optional local 3DS keys; no commercial conversion")
+    preparation.add_argument("path");preparation.add_argument("--output",required=True)
+    preparation.add_argument("--keys-config",help="Local schema-1 key file references; never pass key values")
+    key_import=commands.add_parser("import-rom-keys",help="Import existing plaintext 3DS key/seed exports to a private local store; no device extraction")
+    key_import.add_argument("--output",required=True)
+    key_import.add_argument("--aeskeydb");key_import.add_argument("--seeddb")
+    key_import.add_argument("--decrypted-titlekeys",help="Locally obtained decTitleKeys-format database declared to contain plaintext title keys")
     compile_command = commands.add_parser("build", help="Compile the native diagnostic RPX or check a ROM support gate")
     compile_command.add_argument("path", nargs="?")
     compile_command.add_argument("--target", choices=("prototype", "guest-fixture", "commercial"), default="commercial")
@@ -92,6 +99,12 @@ def execute(args):
     if args.command == "prepare-intake":
         from .intake_export import export_intake
         return export_intake(args.path,args.output)
+    if args.command == "prepare-rom":
+        from .rom_prepare import prepare_rom
+        return prepare_rom(args.path,args.output,keys_config=args.keys_config)
+    if args.command == "import-rom-keys":
+        from .rom_key_import import import_keys
+        return import_keys(args.output,aeskeydb=args.aeskeydb,seeddb=args.seeddb,decrypted_titlekeys=args.decrypted_titlekeys)
     if args.command == "build":
         if args.target == "prototype":
             if args.path:

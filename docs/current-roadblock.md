@@ -1,4 +1,4 @@
-# Remaining acceptance gates (0.14.6)
+# Remaining acceptance gates (0.15.0)
 
 The final product remains an UWUVCI-style **Windows GUI → Inject → per-game WUP →
 Wii U Menu gameplay**. The CLI and original diagnostics are its shared foundations.
@@ -30,8 +30,8 @@ See [romfs-assets.md](romfs-assets.md) and [filesystem.md](filesystem.md).
    Read-back and emulated PPC checks cannot establish real SD behavior or Wii U stability.
 2. **Mario executable intake:** the supplied CIA exceeds the transfer tool's
    32 MiB limit. The received small intake ZIP reports an outer-encrypted
-   executable and contains no code. Run the existing helper on a decrypted
-   user-owned copy and privately provide the small executable export per
+   executable and contains no code. Use the new local key/seed preparation route in `encrypted-input.md`, or
+   run the existing helper on an already-decrypted user-owned copy and privately provide the small executable export per
    [cia-intake.md](cia-intake.md). Its exact revision/service/module requirements
    remain unknown; the helper excludes assets, which will also need private access.
 3. **Commercial renderer/runtime:** use that revision and private reference
@@ -51,3 +51,14 @@ it cannot replace these physical gates or reveal the selected game's actual
 requirements. Current delivery is a five-app diagnostic RPX/WUHB kit and source,
 not an installable commercial WUP. Approximately 20% implementation and 0/7 full
 acceptance gates remain the current assessment.
+
+
+October 12: the user is again away and authorizes continuing with earlier verbal
+confirmations. Their U.S. Wii U is reported to use latest firmware, Aroma and WUP
+Installer GX2; exact versions remain unknown. v0.15.0 completes further independent
+local ROM preparation/key-import work and an original encrypted execution pipeline.
+No personal key is requested here. When available, local preparation can generate
+the small executable intake without uploading keys. The existing v0.14.6 console
+kit still supplies the Save/RomFS report round; this host release does not require
+repeating completed long guides. Actual game bytes/requirements, renderer scenes,
+local key-export/Windows proof and console/install acceptance remain external gates.

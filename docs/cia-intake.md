@@ -5,6 +5,13 @@ reports `encrypted_cia_content`; no executable view was exported. This identifie
 the next input as a decrypted executable/CIA copy. The receipt is retained
 privately, and the original CIA bytes have not been independently inspected.
 
+October 12: v0.15.0 now has a **local Python engine** prepare-rom stage and
+supported key/seed database importer. With locally obtained material it can
+prepare a checked main CXI, then feed that into the existing small export.
+See [encrypted-input.md](encrypted-input.md). No real console export has been
+tested, and the standalone .NET helper remains unchanged/decrypted-only.
+Do not upload key files or a key store; preparation runs on the user's PC.
+
 Updated October 7, 2026 (America/New_York). The user supplied
 `0004000000054000 Super Mario 3D Land (CTR-P-AREE) (v0.3.0) (U).legit.cia`.
 Its transfer into this execution workspace failed because the attachment exceeds

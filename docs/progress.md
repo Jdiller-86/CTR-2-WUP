@@ -1,6 +1,6 @@
 # Project completion assessment
 
-Updated **October 11, 2026**, against runtime version **0.14.6** and the
+Updated **October 12, 2026**, against version **0.15.0** and the
 [product plan](development-plan.md).
 
 ## Estimated implementation: approximately 20%
@@ -31,13 +31,13 @@ while every full acceptance checkbox remains open. See the
 
 | Area | Verified implementation | Limits for the finished product |
 |---|---|---|
-| Host preparation | Decrypted container inspection, executable loading, private intake, external code generation, static builds, original metadata/artwork staging | No complete commercial conversion or clean Windows execution |
+| Host preparation | Container inspection, optional local key/seed import and decryption, executable loading, private intake, external code generation, static builds, original metadata/artwork staging | Original encrypted execution fixture passes; no complete commercial conversion, actual user-key import or clean Windows execution |
 | CPU and shared runtime | Bounded ARM/Thumb/VFP support, checked AOT boundary, memory, eight single-core guest thread contexts, scoped services | Incomplete CPU/HLE coverage; actual game and Wii U timing requirements unknown |
 | Homebrew execution | Seven original normal-CRT/libctru applications, input/exact CPU-written frames, save/reload, standalone lifecycle and read-only RomFS assets | Desktop/sanitizer/emulated PPC evidence; v0.14.5 interactive/guarded completion user-reported, new file/save/asset acceptance pending |
 | Packaging | Original encrypted writer and independent decrypt/hash/FST/file verification, including real diagnostic RPX payloads | Synthetic credentials; no installer acceptance or retained installable package |
 | Wii U platform | Current five-app kit; older native guide/exit evidence and user-reported v0.14.5 Native/Guarded/Compiled success | Missing new traces; visit-1 snapshot received, later save step failed; v0.14.6 reports/saves/assets and installation pending |
 
-v0.14.6 passes **155 Python tests** and fourteen C suites normally and with
+v0.14.6 passes **184 Python tests** and fourteen C suites normally and with
 ASan/UBSan, including 1,892 FS and 574 report/guide assertions in each mode.
 Fourteen external AOT probes pass 28 compile/execute checks; 944 independent
 ARM1176 cases verify the scoped CPU additions. The new RomFS program passes
@@ -69,7 +69,9 @@ These local artifacts are not a published playable-game release.
 The supplied Mario CIA has not been inspected: it exceeds the attachment tool's
 32 MiB transfer limit. The [CIA intake helper](cia-intake.md) can export a small
 private executable view for revision and code analysis when the user's computer
-is available. An encrypted executable needs decrypted data. That export excludes
+is available. An encrypted executable can now be prepared locally with the new
+[optional decryption stage](encrypted-input.md), using locally obtained material.
+Real console export and native Windows acceptance remain pending. That export excludes
 game assets; commercial asset integration will require access to those separately.
 
 The native guide and later Minus exit have user-provided console evidence.
@@ -89,3 +91,12 @@ Further reusable runtime work remains possible; it does not substitute for the
 missing evidence. Reassess progress after title boot/rendering, physical diagnostic
 tests, successful installation, and GUI-driven conversion provide new evidence.
 The next steps are maintained in [current-roadblock.md](current-roadblock.md).
+
+
+v0.15.0 advances the same approximately-20% foundation: local encrypted main-content
+preparation and support-file import have original fixture/known-vector checks and
+an actual AOT/RPX/WUHB pipeline proof. The reported U.S. latest-firmware/Aroma/
+WUP Installer GX2 setup and earlier successes allow continued independent work;
+exact versions/hard logs remain pending. Commercial rendering/runtime, installed
+WUP gameplay and GUI proof still dominate remaining work, so no full acceptance
+gate or percentage increase follows from the decryption increment.
