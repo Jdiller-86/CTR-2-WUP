@@ -91,6 +91,7 @@ jobs:
           path: |
             artifacts/ci/python/*.log
             artifacts/ci/python/dist/*.whl
+            artifacts/logs/*.log
           retention-days: 14
           if-no-files-found: warn
 
@@ -141,6 +142,7 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
       - name: Set up native GCC, Make and independent OpenSSL
+        id: msys
         uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
         with:
           msystem: UCRT64
@@ -150,22 +152,30 @@ jobs:
             make
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-openssl
-      - name: Run Windows host fixtures and all normal portable C suites
+      - name: Run Windows host fixtures
         shell: msys2 {0}
         run: |
           set -euo pipefail
           mkdir -p artifacts/ci/windows
           python -m pip install '.[packaging,decryption]'
           python --version > artifacts/ci/windows/python-version.log
-          gcc --version > artifacts/ci/windows/compiler.log
           make check-python PYTHON=python 2>&1 | tee artifacts/ci/windows/python-tests.log
+      - name: Run all normal portable C suites on Windows
+        if: ${{ !cancelled() && steps.msys.outcome == 'success' }}
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/ci/windows
+          gcc --version > artifacts/ci/windows/compiler.log
           make check-c-portable 2>&1 | tee artifacts/ci/windows/portable-c-tests.log
       - name: Upload Windows baseline logs
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows-baseline-${{ github.sha }}
-          path: artifacts/ci/windows/*.log
+          path: |
+            artifacts/ci/windows/*.log
+            artifacts/logs/*.log
           retention-days: 14
           if-no-files-found: warn
 

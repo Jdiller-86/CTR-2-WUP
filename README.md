@@ -147,3 +147,13 @@ translated commercial code, packages, traces, and credentials private as well.
 Original fixtures and linked support carry the notices recorded in
 [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES). Dependency and redistribution limits
 are documented in the [foundation audit](docs/foundation-audit.md).
+
+## License and acknowledgments
+
+CTR2WUP source is [MIT licensed](LICENSE). Linked runtime support and external
+tools retain their own licenses; see [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES).
+Development builds use [devkitPro](https://devkitpro.org),
+[WUT](https://github.com/devkitPro/wut), and
+[libctru](https://github.com/devkitPro/libctru). The
+[foundation audit](docs/foundation-audit.md) records translator/runtime references
+and redistribution boundaries. UWUVCI AIO informs the planned user workflow.

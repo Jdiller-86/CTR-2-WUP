@@ -31,6 +31,7 @@ jobs:
         with:
           dotnet-version: '10.0.401'
       - name: Set up native GCC and Make
+        id: msys
         uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
         with:
           msystem: UCRT64
@@ -40,13 +41,19 @@ jobs:
             make
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-openssl
-      - name: Run host and native C tests
+      - name: Run Windows host fixtures
         shell: msys2 {0}
         run: |
           set -euo pipefail
           mkdir -p artifacts/windows-validation
           python -m pip install '.[packaging,decryption]'
           make check-python PYTHON=python 2>&1 | tee artifacts/windows-validation/python-tests.log
+      - name: Run all normal portable C suites on Windows
+        if: ${{ !cancelled() && steps.msys.outcome == 'success' }}
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/windows-validation
           make check-c-portable 2>&1 | tee artifacts/windows-validation/portable-c-tests.log
       - name: Build pinned external generation tools
         shell: pwsh
@@ -92,6 +99,7 @@ jobs:
             artifacts/windows-validation/*.log
             artifacts/windows-validation/upstream/*.log
             artifacts/windows-validation/upstream/report.json
+            artifacts/logs/*.log
           if-no-files-found: warn
           retention-days: 14
 

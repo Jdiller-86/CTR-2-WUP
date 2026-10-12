@@ -8,6 +8,7 @@ GUI are not supported yet.**
 ## Start here
 
 - [Getting started](getting-started.md): downloads, Aroma launch, SD layout and reports.
+- [Troubleshooting](troubleshooting.md): missing reports, storage failures and hangs.
 - [Testing](testing.md): which checks establish desktop, Windows and console evidence.
 - [Current status](../STATUS.md) and [progress assessment](progress.md).
 - [GitHub development](github-development.md): CI, releases, issues, agents and permissions.

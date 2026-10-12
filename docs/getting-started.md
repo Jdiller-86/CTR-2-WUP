@@ -44,6 +44,8 @@ present at `sd:/ctr2wup/romfs-test.bin`. Save/result testing follows
 [console-retest.md](console-retest.md). Completed long input guides need not be
 repeated merely because a newer source version exists.
 
+If a result is missing or the app hangs, use [troubleshooting](troubleshooting.md).
+
 ## Build from source
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for Python, host compiler and verified
