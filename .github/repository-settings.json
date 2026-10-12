@@ -16,6 +16,7 @@
   },
   "project_requested": {
     "title": "CTR2WUP Development",
+    "existing_url": "https://github.com/users/Jdiller-86/projects/2",
     "public": false,
     "items": "milestone overviews and their actionable work issues",
     "status_columns": ["Planned", "In progress", "Awaiting evidence", "Blocked", "Ready for review", "Done", "Closed", "Accepted"],
@@ -34,5 +35,5 @@
   "paid_features_enabled": false,
   "visibility_change_requested": false,
   "live_settings_verified": false,
-  "blocked_reason": "Current GitHub integration denied Projects creation, public docs-repository creation and repository Administration/Pages access. Branch protection is explicitly declined."
+  "blocked_reason": "Owner supplied existing Project #2; current GitHub integration denied its read access and other Projects operations, public docs-repository creation and repository Administration/Pages access. Branch protection is explicitly declined."
 }

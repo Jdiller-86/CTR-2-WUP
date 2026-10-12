@@ -1,4 +1,4 @@
-# GSP command queue and CPU-backed GX transfers (0.17.0)
+# GSP command queue and CPU-backed GX transfers (0.18.0)
 
 This M3/M4 foundation lets ordinary libctru GX calls clear/copy/convert buffers
 through the standard shared command ring. It supplies no PICA draw renderer or
@@ -20,7 +20,7 @@ Documented stop/should-stop states are retained, not silently erased.
 | Display transfer (3) | All five display formats, linear/tiled/same layout, vertical flip | Equal dimensions in 1..1024; tiled multiples of 8; no scaling/crop/raw-display copy |
 | Texture copy (4) | Raw copy with independent 16-byte-unit line widths/gaps | Flags8, lengths in whole 16-byte units; bounded spans; gaps preserved |
 | Cache regions (5) | Checked coherent CPU-backed ranges and barrier | No asynchronous GPU/DSP cache model |
-| PICA command list (1) | Visible unsupported fault | Shaders/TEV/draw execution remains unfinished |
+| PICA command list (1) | Finalized raw viewport/scissor configuration and P3D completion | All draws, shaders/uploads and other register state remain unsupported; see [the contract](pica-commands.md) |
 
 DMA accepts the virtual addresses defined by the GSP command wire. This is not
 a general physical/VRAM translator. All source/destination spans, permissions,
@@ -44,8 +44,8 @@ DMA bytes, tiled RGBA8 -> linear RGB565 conversion, and green/red/green top with
 blue bottom images. It waits through standard PSC/PPF/DMA/VBlank events, then
 unmounts/exits through ordinary library code.
 
-Its checked AOT run exits after **1,487,784 instructions**, **zero fallback**,
-**16 GX operations** (3 DMA, 8 fill, 3 display, 1 texture copy, 1 cache), and exact
+Its checked AOT run exits after **1,489,172 instructions**, **zero fallback**,
+**17 GX operations** (3 DMA, 8 fill, 3 display, 1 texture copy, 1 cache, 1 PICA setup), and exact
 three-frame pixel checks. Three deliberately unavailable startup services remain
 recorded. C normal/sanitizer checks cover failure atomicity, permissions, aliases,
 generations, queue wrap/stop/prefix behavior, malformed headers and full interrupts.
@@ -56,8 +56,8 @@ reference comparisons. Required checks and WUT builds are recorded separately.
 
 ## Optional console round
 
-The 0.17.0 kit places `ctr2wup-libctru-transfer.wuhb` in `sd-card/wiiu/apps/`.
-Copy the contents of `sd-card` to SD root and launch **CTR2WUP GX Transfers 0.17.0**
+The 0.18.0 kit places `ctr2wup-libctru-transfer.wuhb` in `sd-card/wiiu/apps/`.
+Copy the contents of `sd-card` to SD root and launch **CTR2WUP GX Transfers 0.18.0**
 in Aroma. This test needs **no ROM, key or extra blob**.
 
 1. Watch the TV change green/red/green with a blue GamePad image. The guide asks
@@ -67,8 +67,13 @@ in Aroma. This test needs **no ROM, key or extra blob**.
    when complete and separately report whether it returned to Menu/launcher.
 
 Results are under **`sd:/ctr2wup/`**, named
-**`result-compiled-gx-transfer-0.17.0-*.txt`**, plus any full trace. They include
+**`result-compiled-gx-transfer-0.18.0-*.txt`**, plus any full trace. They include
 operation counts and the last GX command/fault. ZIP those TXT files together and
 attach the ZIP to a console-result issue or the development conversation. Preserve
 existing saves/reports. Completed long native/input guides need not be repeated.
 Actual SD/lifecycle/pictures and console timings remain pending until that round.
+
+The v0.18 fixture also submits an original libctru-built no-draw PICA configuration
+list and waits for P3D. Its TXT report includes PICA list/write/finalizer counts
+and parser diagnostics. Picture and launcher confirmations remain separate;
+these pictures still come from fills/transfers, not a PICA draw renderer.

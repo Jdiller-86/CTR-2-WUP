@@ -12,8 +12,11 @@ spec.loader.exec_module(setup)
 
 
 def source():
-    return (json.loads((ROOT / '.github/repository-settings.json').read_text()),
-            json.loads((ROOT / 'docs/milestone-status.json').read_text()))
+    settings = json.loads((ROOT / '.github/repository-settings.json').read_text())
+    # Legacy title discovery/creation still has coverage. Explicit user-selected
+    # boards are tested separately and must never fall back to creation.
+    settings['project_requested'].pop('existing_url', None)
+    return settings, json.loads((ROOT / 'docs/milestone-status.json').read_text())
 
 
 def managed(state):
@@ -87,6 +90,13 @@ class FakeGitHub:
             return copy.deepcopy(self.project_list_override)
         return [copy.deepcopy(self.remote_project)] if self.remote_project else []
 
+    def project(self, owner, number):
+        if self.denied:
+            raise setup.SetupError('GitHub Projects access/request failed: Resource not accessible by integration')
+        if not self.remote_project or self.remote_project['number'] != number:
+            return None
+        return {'id': self.remote_project['id']}
+
     def snapshot(self, identifier):
         self.snapshot_count += 1
         if self.before_snapshot:
@@ -138,6 +148,64 @@ class GithubProjectTests(unittest.TestCase):
     def setUp(self):
         self.settings, self.state = source()
         self.api = FakeGitHub(self.state)
+
+    def select_owner_project(self):
+        self.settings['project_requested']['existing_url'] = 'https://github.com/users/Jdiller-86/projects/2'
+        self.api.remote_project.update(number=2, url=self.settings['project_requested']['existing_url'],
+                                       title='Owner’s existing board name')
+        def unrelated_projects(_owner):
+            raise AssertionError('Explicit selection must not list unrelated Projects')
+        self.api.projects = unrelated_projects
+
+    def test_explicit_existing_project_preserves_identity_and_content(self):
+        self.select_owner_project()
+        original = copy.deepcopy(self.api.remote_project)
+        report = setup.base_report(self.settings, self.state)
+        context = setup.preflight(self.api, self.settings, self.state, report)
+        setup.plan(context, report)
+        self.assertEqual(report['operations'], [])
+        self.assertTrue(report['live_project_verified'])
+        self.assertEqual(report['project_url'], self.settings['project_requested']['existing_url'])
+        self.assertEqual(self.api.remote_project, original)
+        self.assertEqual(self.api.writes, [])
+
+    def test_denied_explicit_project_never_falls_back_to_creation(self):
+        self.select_owner_project()
+        self.api.denied = True
+        report = setup.base_report(self.settings, self.state)
+        with self.assertRaisesRegex(setup.SetupError, 'Resource not accessible'):
+            setup.preflight(self.api, self.settings, self.state, report)
+        self.assertEqual(self.api.writes, [])
+        self.assertEqual(report['operations'], [])
+        self.assertFalse(report['live_project_verified'])
+
+    def test_missing_explicit_project_never_falls_back_to_creation(self):
+        self.select_owner_project()
+        self.api.remote_project = None
+        report = setup.base_report(self.settings, self.state)
+        with self.assertRaisesRegex(setup.SetupError, 'no new Project will be created'):
+            setup.preflight(self.api, self.settings, self.state, report)
+        self.assertEqual(self.api.writes, [])
+
+    def test_explicit_project_identity_mismatch_blocks_writes(self):
+        self.select_owner_project()
+        self.api.remote_project['url'] = 'https://github.com/users/Jdiller-86/projects/3'
+        report = setup.base_report(self.settings, self.state)
+        with self.assertRaisesRegex(setup.SetupError, 'identity changed'):
+            setup.preflight(self.api, self.settings, self.state, report)
+        self.assertEqual(self.api.writes, [])
+
+    def test_explicit_project_url_rejects_wrong_owner_and_untrusted_addresses(self):
+        for url in ('https://github.com/users/another-owner/projects/2',
+                    'https://example.com/users/Jdiller-86/projects/2',
+                    'https://github.com/users/Jdiller-86/projects/0',
+                    'https://github.com/users/Jdiller-86/projects/2?extra=1',
+                    'https://github.com/users/Jdiller-86/projects/../../2'):
+            with self.subTest(url=url):
+                self.settings['project_requested']['existing_url'] = url
+                with self.assertRaisesRegex(setup.SetupError, 'Existing Project URL'):
+                    setup.base_report(self.settings, self.state)
+        self.assertEqual(self.api.writes, [])
 
     def test_milestone_state_takes_precedence_over_waiting_resources(self):
         for state, expected in setup.WORK_ITEM_STATUSES.items():

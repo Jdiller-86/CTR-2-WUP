@@ -126,7 +126,65 @@ static void queue(void) {
     open(&g);owner=register_queue(&g);enqueue(&g,0,1,w);put(&g,0x10002000,51|(52<<8));CHECK(trigger(&g,owner));
     CHECK(g.shared[g.gsp.relay_shared].storage[2]==1 && g.gsp.dropped_interrupts==1 && g.gsp.gx_commands==1 && !g.events[g.gsp.relay_event].signaled);ctr_guest_close(&g);
 }
+static void pica_commands(void) {
+    for(unsigned flush=0;flush<2;++flush) {
+        ctr_guest g;open(&g);unsigned owner=register_queue(&g);
+        const uint32_t stream[]={0x11223344,0x000f0041,0xaabbccdd,0x00050041,
+            0x12345678,0x000f0010,0x12345678,0x000f0010};
+        for(unsigned i=0;i<8;++i)put(&g,0x30000000+i*4,stream[i]);
+        uint32_t w[]={0x01000101,0x30000000,32,0,0,0,0,flush};
+        uint8_t before[8192];memcpy(before,buffers,sizeof(before));
+        uint64_t generation=g.memory.generation;
+        enqueue(&g,14,1,w);CHECK(trigger(&g,owner));
+        CHECK(!get(&g,0x10002800) && g.gsp.gx_commands==1 && g.gsp.gx_pica==1);
+        CHECK(g.gsp.pica.committed_lists==1 && g.gsp.pica.register_writes==4 && g.gsp.pica.finalizations==2);
+        CHECK(g.gsp.pica.registers[0x41]==0x11bb33dd && !g.gsp.pica.registers[0x10]);
+        CHECK(g.shared[g.gsp.relay_shared].storage[12]==5 && g.shared[g.gsp.relay_shared].storage[1]==1);
+        CHECK(g.events[g.gsp.relay_event].signaled && !memcmp(buffers,before,sizeof(before)));
+        /* Queue/interrupt publications change shared guest memory; PICA itself
+           has no render target or guest-memory output. */
+        CHECK(g.memory.generation>generation);
+        ctr_guest_close(&g);
+    }
+    for(unsigned kind=0;kind<17;++kind) {
+        ctr_guest g;open(&g);unsigned owner=register_queue(&g);
+        const uint32_t stream[]={0x11223344,0x000f0041,0xaabbccdd,0x00050041,
+            0x12345678,0x000f0010,0x12345678,0x000f0010};
+        for(unsigned i=0;i<8;++i)put(&g,0x30000000+i*4,stream[i]);
+        uint32_t w[]={0x01000101,0x30000000,32,0,0,0,0,0};
+        ctr_cpu_result fault=CTR_CPU_UNSUPPORTED;
+        if(kind==0)w[1]+=4;
+        if(kind==1)w[2]=0;
+        if(kind==2)w[2]=24;
+        if(kind==3)w[2]=CTR_PICA_MAX_BYTES+16;
+        if(kind==4)w[3]=1;
+        if(kind>=5 && kind<=7)w[kind-1]=1;
+        if(kind==8)w[7]=2;
+        if(kind==9) { w[1]=0xfffffff8;fault=CTR_CPU_MEMORY_FAULT; }
+        if(kind==10) { w[1]=0xdead0000;fault=CTR_CPU_MEMORY_FAULT; }
+        if(kind==11) { CHECK(ctr_memory_change_range(&g.memory,0x30000010,16,2,false)==CTR_MEM_OK);fault=CTR_CPU_MEMORY_FAULT; }
+        if(kind==12)put(&g,0x3000000c,0x000f022e); /* Draw arrays. */
+        if(kind==13)put(&g,0x3000000c,0x000f02c1); /* Uniform stream. */
+        if(kind==14)put(&g,0x3000000c,0x100f0041); /* Unused header bits. */
+        if(kind==15)put(&g,0x30000010,0); /* Invalid finalization marker. */
+        if(kind==16)put(&g,0x3000000c,0x000003ff); /* Unknown, even mask zero. */
+        enqueue(&g,0,1,w);
+        uint8_t before[8192],relay[4096];memcpy(before,buffers,sizeof(before));
+        memcpy(relay,g.shared[g.gsp.relay_shared].storage,sizeof(relay));
+        ctr_pica_state state=g.gsp.pica;
+        CHECK(!trigger(&g,owner) && g.state==CTR_GUEST_FAULTED && g.fault==fault);
+        CHECK(!memcmp(before,buffers,sizeof(before)) && !memcmp(relay,g.shared[g.gsp.relay_shared].storage,sizeof(relay)));
+        CHECK(!memcmp(&state,&g.gsp.pica,sizeof(state)) && !g.gsp.gx_commands && !g.gsp.gx_pica);
+        CHECK(!g.events[g.gsp.relay_event].signaled);
+        if(kind==12 || kind==13 || kind==16) {
+            CHECK(g.gsp.last_pica_result==CTR_PICA_UNSUPPORTED && g.gsp.last_pica_offset==8);
+            CHECK(g.gsp.last_pica_register==(kind==12?0x22e:kind==13?0x2c1:0x3ff));
+            CHECK(g.fault_detail==0x30000008);
+        }
+        ctr_guest_close(&g);
+    }
+}
 int main(void) {
-    bulk();transfers();operations();rejection();queue();
+    bulk();transfers();operations();rejection();queue();pica_commands();
     printf("{\"ok\":true,\"assertions\":%u,\"gx_queue\":true,\"cpu_transfers\":true,\"console_verified\":false}\n",assertions);return 0;
 }

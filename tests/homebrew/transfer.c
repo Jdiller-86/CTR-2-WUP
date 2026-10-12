@@ -1,4 +1,5 @@
-/* Original stock-libctru GX queue program. No PICA draw commands or game data. */
+/* Original stock-libctru GX queue program with no-draw PICA configuration.
+ * All displayed colors still come from CPU-backed GX operations, not draws. */
 #include <3ds.h>
 #include <stdlib.h>
 u32 __ctru_heap_size=2*1024*1024;
@@ -10,6 +11,21 @@ static void fail(void) {
 static void request(Result result) { if(R_FAILED(result))fail(); }
 int main(void) {
     gfxInit(GSP_RGB565_OES,GSP_RGB565_OES,false);
+    u32 *commands=linearAlloc(1024),*submitted=NULL,words=0;
+    if(!commands)fail();
+    GPUCMD_SetBuffer(commands,256,0);
+    const u32 viewport[]={0x12345678,0x10203040,0x55667788,0x90abcdef};
+    GPUCMD_AddIncrementalWrites(GPUREG_VIEWPORT_WIDTH,viewport,4);
+    const u32 repeated[]={0x11223344,0xaabbccdd};
+    GPUCMD_AddMaskedWrites(GPUREG_VIEWPORT_WIDTH,5,repeated,2);
+    GPUCMD_AddWrite(GPUREG_SCISSORTEST_MODE,1);
+    GPUCMD_AddWrite(GPUREG_SCISSORTEST_POS,0);
+    GPUCMD_AddWrite(GPUREG_SCISSORTEST_DIM,399|(239<<16));
+    GPUCMD_AddWrite(GPUREG_VIEWPORT_XY,0);
+    GPUCMD_Split(&submitted,&words);
+    if(submitted!=commands || words!=20)fail();
+    request(GX_ProcessCommandList(submitted,words*4,2));gspWaitForP3D();
+    linearFree(commands);
     const unsigned pixels=400*240,bytes=pixels*4;
     u32 *source=linearAlloc(bytes),*copy=linearAlloc(bytes);
     u8 *stripes=linearAlloc(256),*output=linearAlloc(512);

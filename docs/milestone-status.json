@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "0.17.0",
+  "version": "0.18.0",
   "updated": "2026-10-12",
   "approximate_implementation_percent": 20,
   "full_milestones_accepted": 0,
@@ -306,10 +306,11 @@
       "waiting_labels": [
         "needs-console"
       ],
-      "summary": "Five framebuffer formats, all 14 base textures and scoped CPU-backed GSP/GX transfers are implemented; real PICA draw/shader/TEV execution and GX2 scene acceptance remain open.",
+      "summary": "Framebuffer/textures and scoped GX transfers are joined by a bounded native PICA command front end and finalized viewport/scissor raw configuration. Actual PICA draws, shader/TEV execution and GX2 scene acceptance remain open.",
       "verified_foundations": [
         "Direct/shared framebuffer presentation and all 14 base texture formats with original/reference checks",
-        "Bounded GSP DMA/fill/display-transfer/raw-texture-copy/cache queue operations and completion interrupts"
+        "Bounded GSP DMA/fill/display-transfer/raw-texture-copy/cache queue operations and completion interrupts",
+        "v0.18 finalized no-draw viewport/scissor PICA command lists, checked wire inspection and transactional guest-queue integration"
       ],
       "acceptance_remaining": [
         "Implement real PICA command/state, vertex/shader, texture/sampler/TEV and raster behavior",
@@ -321,14 +322,14 @@
         {
           "id": "m4-pica-commands",
           "title": "Decode PICA state and submit bounded draw commands",
-          "summary": "Implement the first real PICA command/state path beyond the existing CPU-backed GSP transfers and framebuffer display.",
+          "summary": "The bounded command front end, raw viewport/scissor state, canonical finalization and standard GSP queue path work on original fixtures. Draw inputs/resources and actual renderer submission remain open.",
           "acceptance_criteria": [
             "Original command streams establish register/state changes, draw inputs and validated resource ranges; malformed or unsupported state fails visibly before modifying output.",
             "The decoder feeds a documented renderer boundary, with reference traces that distinguish CPU-written framebuffer presentation from actual PICA draws."
           ],
           "depends_on": [],
           "waiting_labels": [],
-          "state": "planned"
+          "state": "in_progress"
         },
         {
           "id": "m4-vertex-shaders",

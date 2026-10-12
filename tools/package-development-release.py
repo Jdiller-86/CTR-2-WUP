@@ -29,7 +29,7 @@ LIBCTRU = "9b55eda44cf80b971503991e0c78f9bc8fe50425"
 SOURCE_DIRS = {".github", ".githooks", "docs", "host", "translator", "runtime", "renderer", "packaging", "profiles", "tests", "tools"}
 SOURCE_FILES = {".gitignore", "AGENTS.md", "CHANGELOG.md", "CONTRIBUTING.md", "LICENSE", "Makefile", "README.md", "SECURITY.md", "STATUS.md", "THIRD_PARTY_NOTICES", "pyproject.toml", "mkdocs.yml", "docs-requirements.txt"}
 FORBIDDEN = {".3ds", ".cxi", ".cci", ".cia", ".3dsx", ".rom", ".sav", ".key", ".keys", ".cert", ".app", ".h3", ".tik", ".tmd", ".pyc", ".log", ".elf", ".o", ".rpx", ".wuhb", ".zip", ".exe", ".dll", ".so", ".pyd", ".whl", ".tar", ".gz", ".7z", ".wup", ".snapshot", ".trace"}
-REQUIRED_CHECKS = {"make-check", "make-prototype", "native-build", "transfer-validation", "wheel-build", "wheel-smoke"}
+REQUIRED_CHECKS = {"make-check", "make-prototype", "native-build", "transfer-validation", "wheel-build", "wheel-smoke", "pica-validation"}
 CHECK_NAMES = REQUIRED_CHECKS | {"sdk-install", "arm-fixtures-install", "translator-install", "docs-build", "docs-package"}
 NATIVE_NAMES = ("ctr2wup-prototype.rpx", "ctr2wup-prototype.wuhb")
 TRANSFER_NAMES = ("ctr2wup-libctru-transfer.rpx", "ctr2wup-libctru-transfer.wuhb")
@@ -195,7 +195,7 @@ def package(options: argparse.Namespace) -> dict:
     app = apps[0]
     identity = app.get("generation", {}).get("input_identity", {})
     guest = app.get("guest", {})
-    if identity.get("program_id") != "000400000ff00f0c" or identity.get("product_code") != "CTR-P-TEST" or guest.get("state") != "exited" or guest.get("fallback") != 0 or "CTR2WUP compiled GX transfers PASS" not in guest.get("messages", "") or guest.get("frames") != [0x00FF00FF, 0xFF0000FF, 0x00FF00FF] or guest.get("gx") != {"commands": 16, "dma": 3, "fills": 8, "transfers": 3, "copies": 1, "cache": 1}:
+    if identity.get("program_id") != "000400000ff00f0c" or identity.get("product_code") != "CTR-P-TEST" or guest.get("state") != "exited" or guest.get("fallback") != 0 or "CTR2WUP compiled GX transfers PASS" not in guest.get("messages", "") or guest.get("frames") != [0x00FF00FF, 0xFF0000FF, 0x00FF00FF] or guest.get("gx") != {"commands": 17, "dma": 3, "fills": 8, "transfers": 3, "copies": 1, "cache": 1, "pica": 1} or guest.get("pica_state") != {"lists": 1, "writes": 11, "finalizers": 1, "viewport_width": 0x12bb56dd}:
         raise ValueError("Original transfer execution identity or behavior is unverified")
     transfer_records = check_records(app["wiiu_artifacts"], TRANSFER_NAMES, options.transfer_dir)
     frames = app.get("frames", [])
@@ -265,7 +265,7 @@ def package(options: argparse.Namespace) -> dict:
             for record in documentation_records:
                 shutil.copyfile(options.documentation_dir / record["name"], stage / record["name"])
             (stage / "documentation-report.json").write_text(json.dumps(documentation, indent=2) + "\n", encoding="utf-8")
-        public_evidence = {"ok": True, "version": version, "source_commit": commit, "original_fixtures_only": True, "checks": checks, "sdk_image": SDK_IMAGE, "libctru_pin": LIBCTRU, "native_artifacts": native_records, "transfer_artifacts": transfer_records, "transfer_guest": {key: guest[key] for key in ("state", "fault", "instructions", "fallback", "frames", "gx")}, "reference_frames": frames, "zip_crc_verified": True, "wheel_source_modules_verified": True, "source_archive_entries": source_entries, "diagnostic_archive_entries": diagnostic_entries, "wheel_entries": wheel_entries, "console_verified": False, "wup_installation_verified": False, "commercial_gameplay_verified": False}
+        public_evidence = {"ok": True, "version": version, "source_commit": commit, "original_fixtures_only": True, "checks": checks, "sdk_image": SDK_IMAGE, "libctru_pin": LIBCTRU, "native_artifacts": native_records, "transfer_artifacts": transfer_records, "transfer_guest": {key: guest[key] for key in ("state", "fault", "instructions", "fallback", "frames", "gx", "pica_state")}, "reference_frames": frames, "zip_crc_verified": True, "wheel_source_modules_verified": True, "source_archive_entries": source_entries, "diagnostic_archive_entries": diagnostic_entries, "wheel_entries": wheel_entries, "console_verified": False, "wup_installation_verified": False, "commercial_gameplay_verified": False}
         public_evidence["documentation_artifacts"] = documentation_records
         (stage / "validation-report.json").write_text(json.dumps(public_evidence, indent=2) + "\n", encoding="utf-8")
         published = [{"name": path.name, "size": path.stat().st_size, "sha256": sha256(path)} for path in sorted(stage.iterdir())]

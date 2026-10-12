@@ -368,11 +368,13 @@ References: [Renderer status](renderer-status.md) · [GX transfer contract](gx-t
 
 #### m4-pica-commands: Decode PICA state and submit bounded draw commands
 
-Implement the first real PICA command/state path beyond the existing CPU-backed GSP transfers and framebuffer display.
+The first bounded PICA command/state path now handles finalized viewport/scissor configuration through the standard guest queue. Draw inputs/resources and actual renderer submission remain open.
 
-State: **Planned** · Needs: none for original-fixture development.
+State: **In progress** · Needs: none for original-fixture development.
 
 Depends on: none.
+
+Verified foundation: [PICA command contract](pica-commands.md), 353 original builder/reference cases, transactional native state and the compiled standard command-queue fixture. No draws or full task acceptance are claimed.
 
 Acceptance:
 

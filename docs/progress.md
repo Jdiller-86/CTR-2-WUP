@@ -1,6 +1,6 @@
 # Project completion assessment
 
-Updated **October 12, 2026**, against version **0.17.0** and the
+Updated **October 12, 2026**, against version **0.18.0** and the
 [product plan](development-plan.md).
 
 ## Estimated implementation: approximately 20%
@@ -117,3 +117,11 @@ issues, CI/artifacts, review templates and agent guidance. These improve shared
 runtime foundations and development visibility. They do not supply the missing
 PICA draws, actual Mario/console/Windows/installed-WUP/GUI acceptance, so the
 approximately-20% estimate and 0/7 full gates remain unchanged.
+
+
+v0.18.0 adds a bounded PICA command front end, transactional raw viewport/scissor
+configuration and standard queue/P3D completion, verified by original pinned
+libctru command construction and a compiled guest. Draw/shader/GX2 scene work
+and console acceptance remain open, so the rough estimate remains 20% and 0/7
+full gates. The owner supplied Project #2; automated population still requires
+Projects access, and the tool cannot create a duplicate after an access failure.

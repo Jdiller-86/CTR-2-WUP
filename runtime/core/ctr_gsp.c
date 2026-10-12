@@ -120,6 +120,7 @@ static bool execute_queue(ctr_guest *g) {
         ++s->gx_commands;unsigned id=command[0]&255;
         if(id==0)++s->gx_dma;else if(id==2)++s->gx_fills;else if(id==3)++s->gx_transfers;
         else if(id==4)++s->gx_copies;else if(id==5)++s->gx_cache;
+        else if(id==1)++s->gx_pica;
         page[0x800]=(uint8_t)((page[0x800]+1)%15);--page[0x801];
         if(command[0]&0x10000)page[0x802]=1;
         bool enqueued=completion.signal && interrupt(g,page,completion.irq);
