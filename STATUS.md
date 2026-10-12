@@ -41,7 +41,7 @@ records alignment/size/format/layout limits and the optional two-step console gu
 Independent review found and corrected missing fill-trigger validation and
 signaling for dropped interrupts. Required `make check` passes **210 Python tests
 and 17 C suites**, normal and ASan/UBSan. GX has **1,102 assertions**; report/guide
-has **583**. The transfer matrix has **400 original C/Python/reference color/layout
+has **587**. The transfer matrix has **400 original C/Python/reference color/layout
 comparisons** and matching emulated big-endian PowerPC hashes. Reference color/
 Morton primitives were tested; the external full transfer engine was not.
 Fresh Native and GX Transfers RPX/WUHB cross-builds carry v0.17.0.

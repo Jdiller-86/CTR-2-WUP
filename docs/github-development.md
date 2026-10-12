@@ -88,7 +88,16 @@ The prepared desired setup is:
 
 Grant the GitHub connection the relevant **Projects write** and **repository
 Administration/security-setting** access to finish those protected operations,
-or apply them in repository/account settings. No token value should be pasted
-into chat. The [desired configuration](../.github/repository-settings.json) is
+or apply them in repository/account settings.
+
+For this cloud environment, an optional secure personal secret requirement named
+`CTR2WUP_GITHUB_MANAGEMENT_TOKEN` has been saved for `api.github.com` only. The
+[Projects API documentation](https://docs.github.com/en/issues/planning-and-tracking-with-projects/automating-your-project/using-the-api-to-manage-projects)
+specifies a classic personal access token with `project` scope; private repository
+issues/settings additionally need `repo` access. Enter the credential in environment
+settings, review/save the draft and publish the environment changes. Saving the
+requirement alone does not grant access or create a board. Keep the existing
+connection for normal Git/issue/Actions work; use the optional credential only
+for the management operations. No token value should be pasted into chat. The [desired configuration](../.github/repository-settings.json) is
 concrete and reviewable; the live milestone/issues view works while board access
 is pending. Repository visibility and paid entitlements have not been changed.

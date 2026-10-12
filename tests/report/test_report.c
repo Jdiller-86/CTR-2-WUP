@@ -8,8 +8,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <sys/wait.h>
+#include "../test_platform.h"
 #include <coreinit/filesystem_fsa.h>
 
 static unsigned checks;
@@ -218,9 +217,29 @@ static bool fake_volume_sync(void *context) {
     sync_probe *probe=context;
     CHECK(probe->report->file==NULL); /* Metadata sync must follow a checked close. */
     ++probe->calls;
-    if(probe->remove_file)CHECK(unlink(probe->report->path)==0);
+    if(probe->remove_file)CHECK(ctr_test_unlink(probe->report->path)==0);
     if(probe->failure) { errno=probe->failure;return false; }
     return true;
+}
+
+static int interrupted_report(const char *mode,const char *directory) {
+    if(!strcmp(mode,"report-interrupt")) {
+        ctr_test_report interrupted={0};
+        if(!ctr_test_report_open(&interrupted,directory,"compiled-guarded","0.14.5",13) ||
+           !ctr_test_report_line(&interrupted,"INPUT CHECKPOINT stage=compiled_guest_begin") ||
+           !ctr_test_report_commit(&interrupted))_Exit(1);
+        /* Abrupt termination must preserve the committed checkpoint and discard
+           this reopened stream's uncommitted buffer on both native platforms. */
+        if(fputs("UNCOMMITTED BUFFER",interrupted.file)<0)_Exit(2);
+        _Exit(77);
+    }
+    if(!strcmp(mode,"result-interrupt")) {
+        ctr_test_result interrupted={0};
+        if(!ctr_test_result_open(&interrupted,directory,"native","0.14.6",101) ||
+           !ctr_test_result_update(&interrupted,"Stage: compiled_guest_begin\nGuide: RUNNING\n"))_Exit(1);
+        _Exit(77);
+    }
+    return 90;
 }
 
 static void commit_tests(const char *directory) {
@@ -241,7 +260,7 @@ static void commit_tests(const char *directory) {
     CHECK(probe.calls==3 && r.commits==3 && r.file==NULL);
     CHECK(ctr_test_report_checkpoint(&r,"EXIT stage=main_return"));
     CHECK(probe.calls==4 && r.commits==4 && r.file==NULL);
-    CHECK(unlink(r.path)==0);
+    CHECK(ctr_test_unlink(r.path)==0);
 
     r=(ctr_test_report){0};probe=(sync_probe){.report=&r,.failure=ENOSPC};
     CHECK(ctr_test_report_open(&r,directory,"compiled-guarded","0.14.5",11));
@@ -252,42 +271,31 @@ static void commit_tests(const char *directory) {
     CHECK(!ctr_test_report_line(&r,"Never erase the first failure"));
     CHECK(!ctr_test_report_close(&r) && !ctr_test_report_commit(&r));
     CHECK(r.error_code==ENOSPC && strcmp(r.error_stage,"volume_sync")==0 && probe.calls==1);
-    CHECK(unlink(r.path)==0);
+    CHECK(ctr_test_unlink(r.path)==0);
 
     r=(ctr_test_report){0};probe=(sync_probe){.report=&r,.remove_file=true};
     CHECK(ctr_test_report_open(&r,directory,"compiled-guarded","0.14.5",12));
     ctr_test_report_set_volume_sync(&r,fake_volume_sync,&probe);
     CHECK(!ctr_test_report_commit(&r));
     CHECK(r.failed && !r.file && r.error_code==ENOENT && strcmp(r.error_stage,"reopen")==0);
-    CHECK(access(r.path,F_OK)!=0); /* Missing committed reports cannot be recreated. */
+    CHECK(ctr_test_access(r.path,F_OK)!=0); /* Missing committed reports cannot be recreated. */
 
-    int pipe_fd[2];CHECK(pipe(pipe_fd)==0);
-    r=(ctr_test_report){0};r.file=fdopen(pipe_fd[1],"w");CHECK(r.file!=NULL);
+    int pipe_fd[2];CHECK(ctr_test_pipe(pipe_fd)==0);
+    r=(ctr_test_report){0};r.file=ctr_test_fdopen(pipe_fd[1],"w");CHECK(r.file!=NULL);
     probe=(sync_probe){.report=&r};ctr_test_report_set_volume_sync(&r,fake_volume_sync,&probe);
     CHECK(!ctr_test_report_commit(&r)); /* A pipe cannot acknowledge file sync. */
     CHECK(!r.file && r.failed && r.error_code==EINVAL && strcmp(r.error_stage,"file_sync")==0);
     CHECK(!probe.calls && !r.commits);
-    CHECK(close(pipe_fd[0])==0);
+    CHECK(ctr_test_close(pipe_fd[0])==0);
     CHECK(!ctr_test_report_commit(NULL));
 
     char path[512];CHECK(snprintf(path,sizeof(path),"%s/compiled-guarded-%016llx-00.txt",directory,13ULL)>0);
-    pid_t child=fork();CHECK(child>=0);
-    if(child==0) {
-        ctr_test_report interrupted={0};
-        if(!ctr_test_report_open(&interrupted,directory,"compiled-guarded","0.14.5",13) ||
-           !ctr_test_report_line(&interrupted,"INPUT CHECKPOINT stage=compiled_guest_begin") ||
-           !ctr_test_report_commit(&interrupted))_exit(1);
-        /* Simulate abrupt process termination with a reopened, unclosed stream.
-           This validates desktop recovery, not SD hardware power-loss behavior. */
-        if(fputs("UNCOMMITTED BUFFER",interrupted.file)<0)_exit(2);
-        _exit(77);
-    }
-    int status;CHECK(waitpid(child,&status,0)==child);
-    CHECK(WIFEXITED(status) && WEXITSTATUS(status)==77);
+    ctr_test_child child;CHECK(ctr_test_child_start(&child,"report-interrupt",directory,interrupted_report));
+    unsigned status;CHECK(ctr_test_child_wait(&child,&status));CHECK(status==77);
     read_file(path,text,sizeof(text));
     CHECK(strstr(text,"stage=compiled_guest_begin")!=NULL);
     CHECK(strstr(text,"UNCOMMITTED BUFFER")==NULL && strstr(text,"===== END OF REPORT:")==NULL);
-    CHECK(unlink(path)==0);
+    CHECK(ctr_test_unlink(path)==0);
 }
 static void result_tests(const char *directory) {
     ctr_test_result first={0},second={0};char text[CTR_TEST_RESULT_BYTES+2];
@@ -308,25 +316,19 @@ static void result_tests(const char *directory) {
     CHECK(!ctr_test_result_update(&first,"Never overwrite another reserved result"));
     CHECK(first.failed && first.error_code==EIO && strcmp(first.error_stage,"read_verify")==0);
     read_file(first.path,text,sizeof(text));CHECK(memcmp(text,other,CTR_TEST_RESULT_BYTES)==0);
-    CHECK(!ctr_test_result_update(&first,"Sticky failure"));CHECK(unlink(first.path)==0);
-    CHECK(unlink(second.path)==0);
+    CHECK(!ctr_test_result_update(&first,"Sticky failure"));CHECK(ctr_test_unlink(first.path)==0);
+    CHECK(ctr_test_unlink(second.path)==0);
     CHECK(!ctr_test_result_update(&second,"Do not recreate a missing receipt"));
-    CHECK(second.failed && second.error_code==ENOENT && access(second.path,F_OK)!=0);
+    CHECK(second.failed && second.error_code==ENOENT && ctr_test_access(second.path,F_OK)!=0);
     ctr_test_result bad={0};CHECK(!ctr_test_result_open(&bad,directory,"../escape","0.14.6",1) && bad.error_code==EINVAL);
     CHECK(!ctr_test_result_open(&bad,"/missing/ctr2wup-results","native","0.14.6",1));
     CHECK(!ctr_test_result_open(NULL,directory,"native","0.14.6",1));
     CHECK(!ctr_test_result_update(NULL,"body"));
     char path[512];CHECK(snprintf(path,sizeof(path),"%s/result-native-0.14.6-%016llx-00.txt",directory,101ULL)>0);
-    pid_t child=fork();CHECK(child>=0);
-    if(!child) {
-        ctr_test_result interrupted={0};
-        if(!ctr_test_result_open(&interrupted,directory,"native","0.14.6",101) ||
-           !ctr_test_result_update(&interrupted,"Stage: compiled_guest_begin\nGuide: RUNNING\n"))_exit(1);
-        _exit(77);
-    }
-    int status;CHECK(waitpid(child,&status,0)==child && WIFEXITED(status) && WEXITSTATUS(status)==77);
+    ctr_test_child child;CHECK(ctr_test_child_start(&child,"result-interrupt",directory,interrupted_report));
+    unsigned status;CHECK(ctr_test_child_wait(&child,&status) && status==77);
     read_file(path,text,sizeof(text));CHECK(strstr(text,"compiled_guest_begin") && strstr(text,"Guide: RUNNING"));
-    CHECK(unlink(path)==0);
+    CHECK(ctr_test_unlink(path)==0);
 }
 
 static void lifecycle_tests(void) {
@@ -436,14 +438,15 @@ static void exit_order_tests(void) {
     CHECK(!state.requested && !state.finished);
 }
 
-int main(void) {
+int main(int argc,char **argv) {
+    if(argc==4 && !strcmp(argv[1],"--ctr-test-child"))return interrupted_report(argv[2],argv[3]);
     storage_tests();
     guide_tests();
     lifecycle_tests();
     exit_order_tests();
     scale_tests();
-    char directory[] = "/tmp/ctr2wup-report-XXXXXX", text[4096];
-    CHECK(mkdtemp(directory) != NULL);
+    char directory[384],text[4096];
+    CHECK(ctr_test_temp_directory(directory,sizeof(directory),"ctr2wup-report"));
     result_tests(directory);
     commit_tests(directory);
     ctr_test_report first = {0}, second = {0}, bad = {0};
@@ -483,7 +486,14 @@ int main(void) {
     CHECK(!ctr_test_report_open(&bad, long_directory, "native", "0.14.1", 1));
     CHECK(bad.error_code == ENAMETOOLONG);
     ctr_test_report full = {0};
-    full.file = fopen("/dev/full", "w"); CHECK(full.file != NULL);
+#ifdef _WIN32
+    /* A valid read-only stream provides a native deterministic write error;
+       Windows has no /dev/full. The same sticky-write/close checks still run. */
+    full.file = fopen(first.path,"rb");
+#else
+    full.file = fopen("/dev/full", "w");
+#endif
+    CHECK(full.file != NULL);
     CHECK(!ctr_test_report_line(&full, "A write failure must stay visible"));
     CHECK(full.failed && full.error_code != 0);
     CHECK(!ctr_test_report_line(&full, "Never clear the failed status"));
@@ -491,18 +501,21 @@ int main(void) {
     CHECK(full.file == NULL);
     CHECK(!ctr_test_report_checkpoint(&full,"Must not hide the prior SD error"));
     CHECK(full.file == NULL);
-    CHECK(unlink(second.path)==0);
+    read_file(first.path,text,sizeof(text));
+    CHECK(strstr(text,"CPU_selftest PASS result=0")!=NULL &&
+          strstr(text,"A write failure must stay visible")==NULL);
+    CHECK(ctr_test_unlink(second.path)==0);
     CHECK(!ctr_test_report_checkpoint(&second,"Never recreate a missing result"));
     CHECK(second.failed && second.error_code==ENOENT);
-    CHECK(access(second.path,F_OK)!=0);
+    CHECK(ctr_test_access(second.path,F_OK)!=0);
     ctr_test_report busy={0};
     CHECK(ctr_test_report_open(&busy,directory,"native","0.14.2",2));
     CHECK(!ctr_test_report_checkpoint(&busy,"Reject an active stream"));
     CHECK(busy.failed && busy.error_code==EBUSY);
     CHECK(!ctr_test_report_close(&busy));
     CHECK(busy.file==NULL);
-    CHECK(unlink(busy.path)==0);
-    CHECK(unlink(first.path) == 0); CHECK(rmdir(directory) == 0);
+    CHECK(ctr_test_unlink(busy.path)==0);
+    CHECK(ctr_test_unlink(first.path) == 0); CHECK(ctr_test_remove_directory(directory) == 0);
     printf("{\"ok\":true,\"assertions\":%u,\"text_reports\":true,\"console_verified\":false}\n", checks);
     return 0;
 }

@@ -7,9 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-#include <unistd.h>
 #include <sys/stat.h>
-#include <sys/wait.h>
+#include "../test_platform.h"
 #define DATA UINT32_C(0x08000000)
 static unsigned assertions;
 #define CHECK(x) do { ++assertions;if(!(x)) { fprintf(stderr,"line %d: %s\n",__LINE__,#x);exit(1); } } while(0)
@@ -117,7 +116,7 @@ static int no_replace(void *context,const char *from,const char *to) {
     if(stat(to,&st)==0) { errno=EEXIST;return -1; }
     if(errno!=ENOENT)return -1;
     int result=rename(from,to);
-    if(!result && probe->interrupt && probe->calls==1)_exit(66);
+    if(!result && probe->interrupt && probe->calls==1)_Exit(66);
     return result;
 }
 static void disk_record(const char *path,unsigned expected,bool recovered) {
@@ -126,9 +125,18 @@ static void disk_record(const char *path,unsigned expected,bool recovered) {
     CHECK(loaded.files[0].active && loaded.files[0].size==1 && loaded.files[0].bytes[0]==expected);
     CHECK(ctr_fs_volume_close(&loaded));
 }
+static int interrupted_publication(const char *mode,const char *path) {
+    if(strcmp(mode,"snapshot-interrupt"))return 90;
+    ctr_fs_volume v;
+    if(!ctr_fs_volume_init(&v,4,true) || ctr_fs_snapshot_load(&v,path)!=CTR_FS_SNAPSHOT_OK ||
+       !v.files[0].active || v.files[0].size!=1 || v.files[0].bytes[0]!=3)return 91;
+    v.files[0].bytes[0]=4;rename_probe interrupted={.interrupt=true};
+    ctr_fs_snapshot_save_with_rename(path,&v,no_replace,&interrupted);
+    return 1;
+}
 static void publication(void) {
-    char dir[]="/tmp/ctr2wup-snapshot-XXXXXX",path[512],pending[524],previous[524];
-    CHECK(mkdtemp(dir)!=NULL);
+    char dir[384],path[512],pending[524],previous[524];
+    CHECK(ctr_test_temp_directory(dir,sizeof(dir),"ctr2wup-snapshot"));
     CHECK(snprintf(path,sizeof(path),"%s/save.snapshot",dir)>0);
     CHECK(snprintf(pending,sizeof(pending),"%s.pending",path)>0);
     CHECK(snprintf(previous,sizeof(previous),"%s.previous",path)>0);
@@ -138,30 +146,29 @@ static void publication(void) {
     CHECK(ctr_fs_snapshot_save_with_rename(path,&v,no_replace,&probe));disk_record(path,1,false);
     v.files[0].bytes[0]=2;probe=(rename_probe){0};
     CHECK(ctr_fs_snapshot_save_with_rename(path,&v,no_replace,&probe));
-    CHECK(probe.calls==2 && access(pending,F_OK)!=0 && access(previous,F_OK)!=0);disk_record(path,2,false);
+    CHECK(probe.calls==2 && ctr_test_access(pending,F_OK)!=0 && ctr_test_access(previous,F_OK)!=0);disk_record(path,2,false);
     v.files[0].bytes[0]=3;probe=(rename_probe){.fail_at=2};
     CHECK(!ctr_fs_snapshot_save_with_rename(path,&v,no_replace,&probe) && errno==EACCES);
-    CHECK(probe.calls==3 && access(pending,F_OK)!=0 && access(previous,F_OK)!=0);disk_record(path,2,false);
+    CHECK(probe.calls==3 && ctr_test_access(pending,F_OK)!=0 && ctr_test_access(previous,F_OK)!=0);disk_record(path,2,false);
     probe=(rename_probe){.fail_at=2,.rollback_fails=true};
     CHECK(!ctr_fs_snapshot_save_with_rename(path,&v,no_replace,&probe) && errno==EACCES);
-    CHECK(access(path,F_OK)!=0 && access(previous,F_OK)==0 && access(pending,F_OK)==0);disk_record(path,2,true);
+    CHECK(ctr_test_access(path,F_OK)!=0 && ctr_test_access(previous,F_OK)==0 && ctr_test_access(pending,F_OK)==0);disk_record(path,2,true);
     /* Recovery never promotes an uncommitted staging file. It stays blocked. */
     probe=(rename_probe){0};CHECK(!ctr_fs_snapshot_save_with_rename(path,&v,no_replace,&probe) && errno==EEXIST);
-    disk_record(path,2,false);CHECK(unlink(pending)==0);
+    disk_record(path,2,false);CHECK(ctr_test_unlink(pending)==0);
     CHECK(ctr_fs_snapshot_save_with_rename(path,&v,no_replace,&probe));disk_record(path,3,false);
     v.files[0].bytes[0]=4;
-    pid_t child=fork();CHECK(child>=0);
-    if(child==0) { rename_probe interrupted={.interrupt=true};ctr_fs_snapshot_save_with_rename(path,&v,no_replace,&interrupted);_exit(1); }
-    int status;CHECK(waitpid(child,&status,0)==child && WIFEXITED(status) && WEXITSTATUS(status)==66);
-    disk_record(path,3,true);CHECK(access(pending,F_OK)==0);CHECK(unlink(pending)==0);
+    ctr_test_child child;CHECK(ctr_test_child_start(&child,"snapshot-interrupt",path,interrupted_publication));
+    unsigned status;CHECK(ctr_test_child_wait(&child,&status) && status==66);
+    disk_record(path,3,true);CHECK(ctr_test_access(pending,F_OK)==0);CHECK(ctr_test_unlink(pending)==0);
     probe=(rename_probe){0};CHECK(ctr_fs_snapshot_save_with_rename(path,&v,no_replace,&probe));disk_record(path,4,false);
     /* An unrelated/stale backup or corrupt primary is never deleted/reset. */
     FILE *file=fopen(previous,"wb");CHECK(file && fwrite("preserve",1,8,file)==8 && fclose(file)==0);
     CHECK(!ctr_fs_snapshot_save_with_rename(path,&v,no_replace,&probe) && errno==EEXIST);
-    CHECK(unlink(previous)==0);
+    CHECK(ctr_test_unlink(previous)==0);
     file=fopen(path,"r+b");CHECK(file && fputc('X',file)!=EOF && fclose(file)==0);
     CHECK(!ctr_fs_snapshot_save_with_rename(path,&v,no_replace,&probe) && errno==EINVAL);
-    CHECK(access(pending,F_OK)!=0);CHECK(unlink(path)==0);CHECK(rmdir(dir)==0);CHECK(ctr_fs_volume_close(&v));
+    CHECK(ctr_test_access(pending,F_OK)!=0);CHECK(ctr_test_unlink(path)==0);CHECK(ctr_test_remove_directory(dir)==0);CHECK(ctr_fs_volume_close(&v));
 }
 typedef struct { uint64_t last_offset;uint32_t last_size;unsigned calls;bool fail; } asset_reader;
 static bool read_asset(void *context,uint64_t offset,void *output,uint32_t size) {
@@ -224,7 +231,8 @@ static void romfs_transport(void) {
         ctr_guest_close(&g);CHECK(!view.references && !view.mounts && ctr_fs_romfs_close(&view));
     }
 }
-int main(void) {
+int main(int argc,char **argv) {
+    if(argc==4 && !strcmp(argv[1],"--ctr-test-child"))return interrupted_publication(argv[2],argv[3]);
     lifecycle();rejection();snapshots();publication();romfs_transport();
     printf("{\"ok\":true,\"assertions\":%u,\"bounded_private_filesystem\":true,\"console_verified\":false}\n",assertions);return 0;
 }

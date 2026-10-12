@@ -5,7 +5,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
+#include "../test_platform.h"
 
 static unsigned checks;
 #define CHECK(x) do { ++checks;if(!(x)) { fprintf(stderr,"line %u: %s\n",__LINE__,#x);exit(1); } } while(0)
@@ -33,9 +33,10 @@ static void sha_tests(void) {
     CHECK(!ctr_sha256_update(NULL,bytes,1));CHECK(!ctr_sha256_update(&c,NULL,1));CHECK(!ctr_sha256_final(&c,NULL));
 }
 static void file_tests(void) {
-    char path[]="/tmp/ctr2wup-assets-XXXXXX";int fd=mkstemp(path);CHECK(fd>=0);
+    char directory[384],path[512];CHECK(ctr_test_temp_directory(directory,sizeof(directory),"ctr2wup-assets"));
+    CHECK(snprintf(path,sizeof(path),"%s/asset.bin",directory)>0);
     uint8_t bytes[8193],expected[32],got[64];for(unsigned i=0;i<sizeof(bytes);++i)bytes[i]=(uint8_t)(37*i+19);
-    CHECK(write(fd,bytes,sizeof(bytes))==(ssize_t)sizeof(bytes));CHECK(close(fd)==0);
+    FILE *output=fopen(path,"wbx");CHECK(output && fwrite(bytes,1,sizeof(bytes),output)==sizeof(bytes));CHECK(fclose(output)==0);
     ctr_sha256 c;ctr_sha256_init(&c);CHECK(ctr_sha256_update(&c,bytes,sizeof(bytes)));CHECK(ctr_sha256_final(&c,expected));
     ctr_romfs_file file={0};CHECK(ctr_romfs_file_open(&file,path,expected));CHECK(file.size==sizeof(bytes));
     CHECK(file.view.read(file.view.context,4093,got,sizeof(got)));CHECK(!memcmp(got,bytes+4093,sizeof(got)));
@@ -47,8 +48,9 @@ static void file_tests(void) {
     file.view.references=1;CHECK(!ctr_romfs_file_close(&file));file.view.references=0;
     CHECK(ctr_romfs_file_close(&file));CHECK(ctr_romfs_file_close(&file));
     expected[0]^=1;CHECK(!ctr_romfs_file_open(&file,path,expected));CHECK(!file.file && !file.view.read);
-    expected[0]^=1;CHECK(unlink(path)==0);CHECK(!ctr_romfs_file_open(&file,path,expected));
+    expected[0]^=1;CHECK(ctr_test_unlink(path)==0);CHECK(!ctr_romfs_file_open(&file,path,expected));
     CHECK(!ctr_romfs_file_open(NULL,path,expected));CHECK(!ctr_romfs_file_open(&file,path,NULL));
+    CHECK(ctr_test_remove_directory(directory)==0);
 }
 int main(void) {
     sha_tests();file_tests();

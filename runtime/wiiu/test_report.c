@@ -5,6 +5,7 @@
 #include <string.h>
 #ifdef _WIN32
 #include <io.h>
+#include <sys/stat.h>
 #else
 #include <unistd.h>
 #endif
@@ -78,7 +79,15 @@ bool ctr_test_report_close(ctr_test_report *r) {
         if (!r->failed) {
             int status;
 #ifdef _WIN32
-            do { status = _commit(_fileno(file)); } while (status != 0 && errno == EINTR);
+            struct _stat64 information;
+            int descriptor = _fileno(file);
+            status = _fstat64(descriptor, &information);
+            if (status == 0 && (information.st_mode & _S_IFMT) != _S_IFREG) {
+                errno = EINVAL;
+                status = -1;
+            } else if (status == 0) {
+                do { status = _commit(descriptor); } while (status != 0 && errno == EINTR);
+            }
 #else
             do { status = fsync(fileno(file)); } while (status != 0 && errno == EINTR);
 #endif

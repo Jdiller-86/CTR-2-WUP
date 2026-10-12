@@ -6,7 +6,7 @@ SOURCES := test_assets.c $(addprefix ../../runtime/core/,$(addsuffix .c,$(CORE))
 .PHONY: check sanitize
 $(OUT):
 	mkdir -p "$@"
-$(OUT)/assets: $(SOURCES) | $(OUT)
+$(OUT)/assets: $(SOURCES) ../test_platform.h | $(OUT)
 	$(CC) $(FLAGS) $(SOURCES) -o "$@"
 check: $(OUT)/assets
 	"$(OUT)/assets"
