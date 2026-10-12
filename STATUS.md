@@ -39,7 +39,7 @@ services or Wii U rendering are implemented. [The GX contract](docs/gx-transfers
 records alignment/size/format/layout limits and the optional two-step console guide.
 
 Independent review found and corrected missing fill-trigger validation and
-signaling for dropped interrupts. Required `make check` passes **210 Python tests
+signaling for dropped interrupts. Required `make check` passes **222 Python tests
 and 17 C suites**, normal and ASan/UBSan. GX has **1,102 assertions**; report/guide
 has **587**. The transfer matrix has **400 original C/Python/reference color/layout
 comparisons** and matching emulated big-endian PowerPC hashes. Reference color/
@@ -65,8 +65,11 @@ Automatic CI covers Python 3.12/3.14, GCC/Clang sanitizers, Windows host/portabl
 workflow lint and immutable-SDK native Wii U artifacts. **Required CI** aggregates
 those checks. Deep Windows AOT/WPF and eligibility-gated CodeQL are manual;
 agent profiles do not enable a paid subscription or run unattended.
-Workflow lint/schema checks pass locally; hosted execution must be read from
-its own run evidence. [GitHub development](docs/github-development.md) explains
+[Hosted CI passed](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38287776847)
+on source `c0083d4`: all eight checks, including Python 3.12/3.14, GCC/Clang
+sanitizers, the Windows baseline and Wii U build. Windows runs 222 Python cases
+with three documented filesystem/privilege skips plus all 17 normal C suites.
+Deep Windows external-AOT/WPF validation remains a separate check. [GitHub development](docs/github-development.md) explains
 artifacts, release policy and protected setup still awaiting access.
 
 The existing GitHub integration rejected Projects creation and repository
@@ -98,7 +101,7 @@ permits continued independent development using earlier verbal successes.
   encrypted content and no executable. Prepare locally or use an already decrypted
   owned dump, then privately export the small executable intake. Keys remain local.
   Actual revision/assets/required services and gameplay are unverified.
-- **Windows/install:** native host results, full devkitPPC conversion, actual WUP
+- **Windows/install:** full native devkitPPC conversion, actual WUP
   installation/Menu launch/audio/gameplay/save/reload and GUI acceptance remain
   separate gates. CI tooling success does not close them.
 

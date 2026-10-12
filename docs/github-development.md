@@ -58,6 +58,16 @@ The 0.17.0 kit contains Native and GX Transfers. The 0.14.6 kit remains the
 Save/RomFS follow-up. [Getting started](getting-started.md) explains SD layout,
 Aroma/RPX launch and report delivery.
 
+The **Publish development diagnostics** workflow is dispatched explicitly from
+main with the version in `pyproject.toml`. It runs required checks, verifies SDK/
+lifter/libctru pins, executes the original GX application with sanitizers, builds
+RPX/WUHB and smoke-tests the wheel. The packager checks reported binaries/frames,
+source and wheel module equality, ZIP CRCs and SHA-256 sums. A separate job with
+`contents: write` publishes the matching prerelease with GitHub's native token;
+a failed upload leaves a draft. Published versions cannot be replaced by different
+artifacts. This route also avoids the cloud connection's rejected upload-host
+authentication. It does not close console or commercial acceptance gates.
+
 ## Agent support
 
 [Shared instructions](../AGENTS.md), [Copilot guidance](../.github/copilot-instructions.md)

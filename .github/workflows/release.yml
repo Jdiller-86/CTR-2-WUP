@@ -1,0 +1,241 @@
+name: Publish development diagnostics
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version in pyproject.toml; publishes original diagnostics as a prerelease
+        required: true
+        type: string
+        default: '0.17.0'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: development-release-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Verify and package original diagnostics
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      REQUESTED_VERSION: ${{ inputs.version }}
+      UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+    outputs:
+      version: ${{ steps.identity.outputs.version }}
+    steps:
+      - name: Check out the dispatched source commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Require main, matching version and clean source
+        id: identity
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, re, subprocess, tomllib
+          assert os.environ['GITHUB_REF'] == 'refs/heads/main', 'Dispatch releases from main only'
+          version = os.environ['REQUESTED_VERSION']
+          assert re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version), 'Invalid version'
+          assert tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'] == version, 'Version mismatch'
+          assert subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip() == os.environ['GITHUB_SHA'], 'Source mismatch'
+          assert not subprocess.check_output(['git', 'status', '--porcelain'], text=True), 'Source is not clean'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'version={version}\n')
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write(f'RELEASE_VERSION={version}\nRELEASE_WORK=artifacts/development-release/{version}\n')
+              output.write(f"CTR2WUP_SDK_ROOT={os.environ['RUNNER_TEMP']}/ctr2wup-sdk\n")
+          PY
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Install pinned host and wheel dependencies
+        run: |
+          set -euo pipefail
+          mkdir -p "$RELEASE_WORK/logs"
+          python -m pip install build==1.6.1 packaging==26.3 pyproject-hooks==1.3.3 \
+            setuptools==84.0.0 wheel==0.48.0 cryptography==50.0.0 cffi==2.1.1 pycparser==3.0 \
+            2>&1 | tee "$RELEASE_WORK/logs/python-install.log"
+          python -m pip install --no-deps --no-build-isolation -e . \
+            2>&1 | tee "$RELEASE_WORK/logs/project-install.log"
+      - name: Run required host and portable C sanitizer checks
+        run: |
+          set -euo pipefail
+          make check PYTHON=python 2>&1 | tee "$RELEASE_WORK/logs/make-check.log"
+      - name: Install verified immutable Wii U SDK
+        run: |
+          set -euo pipefail
+          bash tools/install-wiiu-sdk.sh 2>&1 | tee "$RELEASE_WORK/logs/sdk-install.log"
+          printf 'DEVKITPRO=%s\nDEVKITPPC=%s\nDEVKITARM=%s\n' "$CTR2WUP_SDK_ROOT" \
+            "$CTR2WUP_SDK_ROOT/devkitPPC" "$CTR2WUP_SDK_ROOT/devkitARM" >> "$GITHUB_ENV"
+      - name: Verify native prototype and publish its build receipt
+        run: |
+          set -euo pipefail
+          make prototype 2>&1 | tee "$RELEASE_WORK/logs/make-prototype.log"
+          python -m host build --target prototype --output "$RELEASE_WORK/native" \
+            2>&1 | tee "$RELEASE_WORK/logs/native-build.log"
+      - name: Install audited original-homebrew and translator dependencies
+        run: |
+          set -euo pipefail
+          bash tools/install-arm-fixtures.sh 2>&1 | tee "$RELEASE_WORK/logs/arm-fixtures-install.log"
+          bash tools/install-translator.sh 2>&1 | tee "$RELEASE_WORK/logs/translator-install.log"
+      - name: Execute original GX transfers with sanitizers and cross-build WUT applications
+        run: |
+          set -euo pipefail
+          python tools/validate-libctru.py --application transfer --wiiu --sanitize \
+            --output "$RELEASE_WORK/transfer" 2>&1 | tee "$RELEASE_WORK/logs/transfer-validation.log"
+      - name: Build and smoke-test the pure-Python developer wheel
+        run: |
+          set -euo pipefail
+          python -m build --wheel --no-isolation --outdir "$RELEASE_WORK/wheel" \
+            2>&1 | tee "$RELEASE_WORK/logs/wheel-build.log"
+          python -m venv "$RUNNER_TEMP/ctr2wup-release-wheel"
+          "$RUNNER_TEMP/ctr2wup-release-wheel/bin/python" -m pip install --no-deps \
+            "$RELEASE_WORK/wheel/ctr2wup-$RELEASE_VERSION-py3-none-any.whl"
+          (
+            cd "$RUNNER_TEMP"
+            "$RUNNER_TEMP/ctr2wup-release-wheel/bin/ctr2wup" --help
+          ) 2>&1 | tee "$RELEASE_WORK/logs/wheel-smoke.log"
+      - name: Record passing evidence and verify publication contents
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, pathlib, subprocess
+          checks = ['make-check', 'make-prototype', 'native-build', 'transfer-validation',
+                    'wheel-build', 'wheel-smoke', 'sdk-install', 'arm-fixtures-install', 'translator-install']
+          work = pathlib.Path(os.environ['RELEASE_WORK'])
+          assert all((work / 'logs' / f'{name}.log').is_file() for name in checks)
+          evidence = {'ok': True, 'version': os.environ['RELEASE_VERSION'],
+                      'source_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
+                      'original_fixtures_only': True,
+                      'checks': [{'name': name, 'exit_code': 0} for name in checks]}
+          (work / 'evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
+          PY
+          python tools/package-development-release.py --version "$RELEASE_VERSION" \
+            --native-dir "$RELEASE_WORK/native" --transfer-dir "$RELEASE_WORK/transfer/transfer/wiiu" \
+            --transfer-report "$RELEASE_WORK/transfer/report.json" --reference-dir "$RELEASE_WORK/transfer/transfer" \
+            --wheel "$RELEASE_WORK/wheel/ctr2wup-$RELEASE_VERSION-py3-none-any.whl" \
+            --evidence "$RELEASE_WORK/evidence.json" --sdk-receipt "$DEVKITPRO/ctr2wup-image-digest.txt" \
+            --output "$RELEASE_WORK/publish" 2>&1 | tee "$RELEASE_WORK/logs/package.log"
+          (cd "$RELEASE_WORK/publish" && sha256sum --check SHA256SUMS.txt)
+      - name: Upload verified release assets
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: development-release-${{ github.sha }}
+          path: artifacts/development-release/${{ steps.identity.outputs.version }}/publish/
+          retention-days: 30
+          if-no-files-found: error
+      - name: Preserve versioned build and failure logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: development-release-logs-${{ github.sha }}
+          path: |
+            artifacts/development-release/*/logs/*.log
+            artifacts/development-release/*/transfer/*.log
+            artifacts/development-release/*/native/build.log
+          retention-days: 14
+          if-no-files-found: warn
+
+  release:
+    name: Publish matching development prerelease
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      RELEASE_VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - name: Download verified assets from this run
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: development-release-${{ github.sha }}
+          path: release-assets
+      - name: Verify checksums and complete a prerelease using native GitHub credentials
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, re, subprocess, tempfile, zipfile
+          root = pathlib.Path('release-assets')
+          version = os.environ['RELEASE_VERSION']
+          source = os.environ['GITHUB_SHA']
+          assert re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version)
+          tag = f'v{version}'
+          manifest = json.loads((root / 'manifest.json').read_text())
+          assert manifest['version'] == version and manifest['source_commit'] == source
+          assert manifest['prerelease'] is True and manifest['original_fixtures_only'] is True
+          sums = (root / 'SHA256SUMS.txt').read_text()
+          names = set()
+          for line in sums.splitlines():
+              digest, name = line.split('  ', 1)
+              assert re.fullmatch(r'[0-9a-f]{64}', digest) and pathlib.PurePath(name).name == name
+              assert name not in names
+              names.add(name)
+              assert hashlib.sha256((root / name).read_bytes()).hexdigest() == digest
+          assert names == {row['name'] for row in manifest['artifacts']} | {'manifest.json', 'release-notes.md'}
+          assert {path.name for path in root.iterdir()} == names | {'SHA256SUMS.txt'}
+          for path in root.glob('*.zip'):
+              with zipfile.ZipFile(path) as archive:
+                  assert archive.testzip() is None
+          def run(*args):
+              return subprocess.run(['gh', *args], capture_output=True, text=True)
+          def require(*args):
+              result = run(*args)
+              if result.returncode:
+                  raise SystemExit(result.stderr)
+              return result.stdout
+          repo = os.environ['GH_REPO']
+          existing = run('release', 'view', tag, '--json', 'isDraft,isPrerelease,targetCommitish')
+          if existing.returncode == 0:
+              release = json.loads(existing.stdout)
+              target = release['targetCommitish'] if release['isDraft'] else tag
+              resolved = json.loads(require('api', f'repos/{repo}/commits/{target}'))['sha']
+              assert resolved == source, 'Existing release targets a different source commit'
+              if not release['isDraft']:
+                  assert release['isPrerelease'], 'Refusing to replace a stable release'
+                  with tempfile.TemporaryDirectory() as temporary:
+                      require('release', 'download', tag, '--pattern', 'SHA256SUMS.txt', '--dir', temporary)
+                      assert (pathlib.Path(temporary) / 'SHA256SUMS.txt').read_text() == sums, 'Published assets differ; use a new version'
+                  print(f'{tag} already contains the identical verified assets')
+                  raise SystemExit(0)
+          else:
+              # A missing release may still have a tag; never retarget that tag.
+              target = run('api', f'repos/{repo}/commits/{tag}')
+              if target.returncode == 0:
+                  assert json.loads(target.stdout)['sha'] == source, 'Existing tag targets a different commit'
+              elif 'HTTP 404' not in target.stderr:
+                  raise SystemExit(target.stderr)
+              require('release', 'create', tag, '--target', source, '--draft', '--prerelease', '--latest=false',
+                      '--title', f'CTR2WUP {version} development diagnostics', '--notes-file', str(root / 'release-notes.md'))
+          require('release', 'upload', tag, *[str(path) for path in sorted(root.iterdir())], '--clobber')
+          require('release', 'edit', tag, '--draft=false', '--prerelease', '--latest=false',
+                  '--title', f'CTR2WUP {version} development diagnostics', '--notes-file', str(root / 'release-notes.md'))
+          print(f'Published {tag} as a development prerelease from {source}')
+          PY
+      - name: Record release scope
+        if: always()
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ### Development diagnostic prerelease
+
+          Only the original Native and GX Transfer applications, source, developer wheel,
+          exact reference frames, notices and verification receipts are eligible. The build
+          identifies its source commit and verifies checksums/ZIP CRCs before publication.
+          A draft stays unpublished if upload fails. Published versions are protected from
+          replacement with different assets. This workflow does not change repository
+          visibility, install a WUP, enable paid agents or claim commercial/console acceptance.
+          EOF
