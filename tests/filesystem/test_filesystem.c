@@ -116,7 +116,7 @@ static int no_replace(void *context,const char *from,const char *to) {
     if(stat(to,&st)==0) { errno=EEXIST;return -1; }
     if(errno!=ENOENT)return -1;
     int result=rename(from,to);
-    if(!result && probe->interrupt && probe->calls==1)_Exit(66);
+    if(!result && probe->interrupt && probe->calls==1)ctr_test_crash_exit(66);
     return result;
 }
 static void disk_record(const char *path,unsigned expected,bool recovered) {

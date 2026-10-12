@@ -23,6 +23,16 @@
 #include <sys/wait.h>
 #endif
 
+/* A crash must bypass CRT exit handlers and DLL detach callbacks on Windows. */
+static inline _Noreturn void ctr_test_crash_exit(unsigned status) {
+#ifdef _WIN32
+    TerminateProcess(GetCurrentProcess(),status);
+    _Exit(255); /* Unexpected termination failure must not masquerade as the requested crash. */
+#else
+    _Exit((int)status);
+#endif
+}
+
 typedef int (*ctr_test_child_body)(const char *mode,const char *directory);
 typedef struct {
 #ifdef _WIN32

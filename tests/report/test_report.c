@@ -227,17 +227,21 @@ static int interrupted_report(const char *mode,const char *directory) {
         ctr_test_report interrupted={0};
         if(!ctr_test_report_open(&interrupted,directory,"compiled-guarded","0.14.5",13) ||
            !ctr_test_report_line(&interrupted,"INPUT CHECKPOINT stage=compiled_guest_begin") ||
-           !ctr_test_report_commit(&interrupted))_Exit(1);
-        /* Abrupt termination must preserve the committed checkpoint and discard
-           this reopened stream's uncommitted buffer on both native platforms. */
-        if(fputs("UNCOMMITTED BUFFER",interrupted.file)<0)_Exit(2);
-        _Exit(77);
+           !ctr_test_report_commit(&interrupted))ctr_test_crash_exit(1);
+        /* Control buffering explicitly: CRT default buffering differs by platform.
+           Set the buffer before any operation on this new append stream. */
+        if(fclose(interrupted.file))ctr_test_crash_exit(1);
+        interrupted.file=fopen(interrupted.path,"ab");
+        static char buffer[4096];
+        if(!interrupted.file || setvbuf(interrupted.file,buffer,_IOFBF,sizeof(buffer)))ctr_test_crash_exit(1);
+        if(fputs("UNCOMMITTED BUFFER",interrupted.file)<0)ctr_test_crash_exit(2);
+        ctr_test_crash_exit(77);
     }
     if(!strcmp(mode,"result-interrupt")) {
         ctr_test_result interrupted={0};
         if(!ctr_test_result_open(&interrupted,directory,"native","0.14.6",101) ||
-           !ctr_test_result_update(&interrupted,"Stage: compiled_guest_begin\nGuide: RUNNING\n"))_Exit(1);
-        _Exit(77);
+           !ctr_test_result_update(&interrupted,"Stage: compiled_guest_begin\nGuide: RUNNING\n"))ctr_test_crash_exit(1);
+        ctr_test_crash_exit(77);
     }
     return 90;
 }
