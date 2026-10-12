@@ -106,6 +106,7 @@ nav:
       - GSP display: docs/gsp-display.md
       - GSP queues: docs/gsp-queues.md
       - Renderer status: docs/renderer-status.md
+      - PICA command front end: docs/pica-commands.md
       - Filesystem and saves: docs/filesystem.md
   - Project:
       - Current status: status.md

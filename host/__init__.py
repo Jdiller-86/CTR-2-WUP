@@ -1,3 +1,3 @@
 """CTR2WUP host tools; local ROM preparation and packaging use optional crypto."""
 
-__version__ = "0.17.0"
+__version__ = "0.18.0"

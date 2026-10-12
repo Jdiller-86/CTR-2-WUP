@@ -3,6 +3,17 @@
 All releases are development increments. RPX/WUHB diagnostics and desktop passes
 do not establish commercial-game compatibility or installable WUP acceptance.
 
+## 0.18.0 — 2026-10-12
+
+- Add original bounded native PICA inspection and transactional finalized raw
+  viewport/scissor state, with standard GX command-list/P3D queue integration.
+- Reject unsupported draws/uploads/flags before state changes; record parser
+  diagnostics in the existing guided TXT report.
+- Verify original command construction against pinned libctru and a compiled
+  guest; keep actual PICA rendering/GX2/console acceptance open.
+- Select the owner's existing GitHub Project #2 directly and prevent duplicate
+  creation when access is denied. Board population awaits Projects permission.
+
 ## 0.17.0 — 2026-10-12
 
 - Execute scoped standard GSP GX queues: DMA, triggered fills, unscaled display

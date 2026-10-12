@@ -1,6 +1,6 @@
 # CTR2WUP status
 
-Updated **October 12, 2026 (America/New_York)** · **v0.17.0**.
+Updated **October 12, 2026 (America/New_York)** · **v0.18.0**.
 The target remains an UWUVCI-style Windows GUI: select an owned 3DS game, configure
 title/artwork, click Inject, install its individual WUP and play from Wii U Menu.
 [Requirements](docs/project-brief.md), [product plan](docs/development-plan.md),
@@ -20,6 +20,31 @@ is enabled. Current binaries are original homebrew diagnostics.
 | Homebrew | Eight normal-CRT/libctru applications: boot, threads, graphics, input, interactive, filesystem, RomFS and GX transfer | New console/result/save/asset/GX evidence and broader game integration |
 | Graphics | Direct/shared framebuffer presentation, five display formats, 14 base textures, scoped CPU-backed GX queues/copies/fills/transfers | PICA vertex/shader/TEV/draw execution, GPU resources/coherency and measured console performance |
 | Packaging/GUI | Original synthetic packing/decryption verification and conversion foundations; GUI workflow specified | Commercial conversion, actual WUP install/Menu gameplay, clean Windows and final GUI |
+
+## v0.18.0 increment
+
+The bounded native PICA command front end now executes finalized raw viewport/
+scissor configuration through standard GX command 1. Masks, repeated/grouped
+writes, full-stream/counter validation, staged guest input and P3D completion
+are implemented. Unknown registers, draws, uploads and control flags fail before
+state/output changes, retaining pending queue work. See [the contract](docs/pica-commands.md).
+
+Validation passes **306 Python tests and 18 C suites**, normal and ASan/UBSan;
+the new PICA suite has 67,706 assertions and the integrated GX suite has 1,619.
+The independent pinned-libctru builder/C/Python matrix passes 353 original cases,
+with identical emulated big-endian PowerPC receipts.
+The compiled GX application executes 17 commands including one no-draw PICA list,
+exits after 1,489,172 instructions with zero fallback and retains exact prior
+transfer pictures. Native and compiled GX v0.18.0 RPX/WUHB cross-builds pass.
+Physical console behavior, actual draws/shaders and full M4 acceptance remain open.
+
+The owner supplied [Project #2](https://github.com/users/Jdiller-86/projects/2).
+The tracking tool now selects it directly and cannot create a duplicate on access
+failure. Direct Project reads still return Resource not accessible by integration;
+its fields/items and automated population remain unverified. Normal repository
+Git/issue/CI work continues.
+
+Reports: `artifacts/reports/pica-v018/`. Earlier diagnostic kits remain preserved.
 
 ## v0.17.0 increment
 

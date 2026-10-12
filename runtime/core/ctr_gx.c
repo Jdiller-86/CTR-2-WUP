@@ -82,6 +82,34 @@ static ctr_gx_result texture_copy(ctr_guest *g,const uint32_t *w,ctr_gx_completi
     }
     free(input);free(bytes);return CTR_GX_OK;
 }
+static ctr_gx_result pica_list(ctr_guest *g,const uint32_t *w,ctr_gx_completion *c) {
+    /* Standard virtual-address command list. The undocumented GSP state flag
+       remains unsupported. Requested cache flushing uses our coherent CPU
+       backing; this subset neither reads GPU resources nor produces pixels. */
+    c->signal=false;
+    uint32_t size=w[2];
+    if(!size || size>CTR_PICA_MAX_BYTES || (size&15u) || (w[1]&7u) ||
+       w[3] || w[4] || w[5] || w[6] || w[7]>1)return CTR_GX_UNSUPPORTED;
+    ctr_gx_result result=checked(g,w[1],size,CTR_MEM_READ,c);
+    if(result!=CTR_GX_OK)return result;
+    uint8_t *bytes=malloc(size);if(!bytes)return CTR_GX_NO_MEMORY;
+    c->memory=ctr_memory_read_bytes(&g->memory,w[1],bytes,size);
+    if(c->memory!=CTR_MEM_OK) { free(bytes);return CTR_GX_MEMORY; }
+    if(w[7])ctr_cpu_barrier();
+    ctr_pica_report report={0};
+    ctr_pica_result parsed=ctr_pica_execute(&g->gsp.pica,bytes,size,CTR_PICA_MAX_WRITES,&report);
+    free(bytes);
+    g->gsp.last_pica_result=(uint32_t)parsed;
+    g->gsp.last_pica_offset=(uint32_t)report.parameter_offset;
+    g->gsp.last_pica_register=report.reg;
+    if(parsed!=CTR_PICA_OK) {
+        c->detail=w[1]+(report.parameter_offset<size?(uint32_t)report.parameter_offset:0);
+        return CTR_GX_UNSUPPORTED;
+    }
+    /* One synchronous command-list completion, distinct from the one/two
+       canonical tail-marker writes. No asynchronous hardware timing claimed. */
+    c->irq=5;c->signal=true;return CTR_GX_OK;
+}
 ctr_gx_result ctr_gx_execute(ctr_guest *g,const uint32_t w[8],ctr_gx_completion *c) {
     if(!g || !w || !c)return CTR_GX_UNSUPPORTED;
     *c=(ctr_gx_completion){.detail=w[0],.signal=true};unsigned id=w[0]&255;
@@ -89,6 +117,7 @@ ctr_gx_result ctr_gx_execute(ctr_guest *g,const uint32_t w[8],ctr_gx_completion 
     if((id==5?header!=0x00000100:header!=0x01000100) || ((w[0]>>16)&255)>1)return CTR_GX_UNSUPPORTED;
     ctr_gx_result result=CTR_GX_UNSUPPORTED;
     if(id==0 && !w[4] && !w[5] && !w[6] && !w[7]) { c->irq=6;result=copied(g,w[1],w[2],w[3],c); }
+    else if(id==1)result=pica_list(g,w,c);
     else if(id==2)result=fill(g,w,c);
     else if(id==3) { c->irq=4;result=display(g,w,c); }
     else if(id==4) { c->irq=4;result=texture_copy(g,w,c); }

@@ -187,7 +187,9 @@ These maintenance practices are team conventions; GitHub does not enforce them.
 `tools/setup-github-project.py` produces a read-only plan by default. It resolves
 the seven overviews and their 35 work issues and checks project names, field types and
 access before applying changes. Once management access is available, `--apply`
-creates the private **CTR2WUP Development** board and links all 42 issues.
+populates the owner-created [CTR2WUP Development Project #2](https://github.com/users/Jdiller-86/projects/2) and links all 42 issues.
+The saved explicit URL selects that existing board; an inaccessible or missing
+board fails before writes and never falls back to creating a duplicate.
 Multiple tasks share their parent milestone; manual items and values stay intact. Existing
 notes, other items, option IDs and nonempty manual values are retained. The
 built-in Milestone field reflects each issue's milestone; Waiting resource
@@ -198,7 +200,9 @@ python3 tools/setup-github-project.py --output artifacts/github-project-plan.jso
 python3 tools/setup-github-project.py --apply --output artifacts/github-project-result.json
 ```
 
-A plan or mocked test does not prove a board exists. Read the actual result's
+The owner supplied Project #2, but the current integration rejects its direct
+read with **Resource not accessible by integration**. Its fields/items/population
+remain unverified. Read the actual result's
 `applied` / `live_project_verified` fields. Source synchronization currently updates
 issue descriptions; manually maintained board values are preserved.
 

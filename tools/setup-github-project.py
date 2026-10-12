@@ -141,6 +141,17 @@ class GitHub:
             after = connection['pageInfo']['endCursor']
         raise SetupError('Project list exceeds the 1,000-entry review budget')
 
+    def project(self, owner, number):
+        # Explicit user selection avoids touching unrelated inaccessible boards.
+        query = '''query($login:String!,$number:Int!) {
+          repositoryOwner(login:$login) {
+            ... on User { projectV2(number:$number) { id } }
+            ... on Organization { projectV2(number:$number) { id } }
+          }
+        }'''
+        node = self.graphql(query, {'login': owner, 'number': number}).get('repositoryOwner')
+        return node.get('projectV2') if node else None
+
     def _connection(self, project_id, name, selection):
         nodes, after = [], None
         query = ('query($id:ID!,$after:String) { node(id:$id) { ... on ProjectV2 { '
@@ -189,6 +200,11 @@ def configuration(settings, state):
             or requested.get('status_columns') != list(STATUSES)
             or requested.get('extra_fields') != ['Milestone', 'Waiting resource']):
         raise SetupError('Review the private board configuration before setup')
+    existing_url = requested.get('existing_url')
+    if existing_url is not None:
+        match = re.fullmatch(r'https://github\.com/users/([A-Za-z0-9-]+)/projects/([1-9][0-9]{0,8})/?', existing_url)
+        if not match or match[1].lower() != repo.split('/')[0].lower():
+            raise SetupError('Existing Project URL must identify this repository owner’s GitHub Project')
     milestones = state.get('milestones', [])
     if (state.get('schema_version') != 1
             or [m.get('id') for m in milestones] != [f'm{i}' for i in range(1, 8)]
@@ -272,6 +288,7 @@ def base_report(settings, state):
     return {'schema_version': 1, 'ok': False, 'applied': False,
             'repository': repo, 'version': state['version'],
             'requested_project': {'title': settings['project_requested']['title'], 'public': False,
+                                  'existing_url': settings['project_requested'].get('existing_url'),
                                   'view': VIEW_NAME, 'layout': 'BOARD_LAYOUT',
                                   'status_options': list(STATUSES),
                                   'fields': ['Milestone', 'Waiting resource']},
@@ -289,7 +306,8 @@ def base_report(settings, state):
                             'initial_status': WORK_ITEM_STATUSES[task['state']],
                             'waiting_resource': '; '.join(RESOURCE_NAMES[label] for label in task.get('waiting_labels', []))}
                            for m in state['milestones'] for task in m.get('work_items', [])],
-            'operations': [], 'completed_operations': [], 'project_url': None,
+            'operations': [], 'completed_operations': [],
+            'project_url': settings['project_requested'].get('existing_url'),
             'live_project_verified': False}
 
 
@@ -368,10 +386,20 @@ def preflight(client, settings, state, report):
         planned.update(number=issue['number'], url=issue['html_url'])
         (trackers if planned['kind'] == 'milestone' else work_items).append(
             {'issue': issue, 'milestone': milestone, 'planned': planned})
-    projects = [p for p in client.projects(owner['login']) if p['title'] == settings['project_requested']['title']]
-    if len(projects) > 1:
-        raise SetupError('Duplicate project titles; select/resolve them before writes')
-    project = client.snapshot(projects[0]['id']) if projects else None
+    existing_url = settings['project_requested'].get('existing_url')
+    if existing_url:
+        project_number = int(existing_url.rstrip('/').rsplit('/', 1)[1])
+        selected = client.project(owner['login'], project_number)
+        if not selected or not selected.get('id'):
+            raise SetupError('Requested existing Project is inaccessible; no new Project will be created')
+        project = client.snapshot(selected['id'])
+        if project.get('number') != project_number or project.get('url', '').rstrip('/').lower() != existing_url.rstrip('/').lower():
+            raise SetupError('Existing Project identity changed; no changes made')
+    else:
+        projects = [p for p in client.projects(owner['login']) if p['title'] == settings['project_requested']['title']]
+        if len(projects) > 1:
+            raise SetupError('Duplicate project titles; select/resolve them before writes')
+        project = client.snapshot(projects[0]['id']) if projects else None
     if project:
         _, items, _ = validate_project(project)
         for tracker in [*trackers, *work_items]:

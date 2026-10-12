@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Jdiller-86/CTR-2-WUP/actions/workflows/ci.yml/badge.svg)](https://github.com/Jdiller-86/CTR-2-WUP/actions/workflows/ci.yml)
 
-[Documentation](docs/README.md) · [Development releases](https://github.com/Jdiller-86/CTR-2-WUP/releases) · [Roadmap issues](https://github.com/Jdiller-86/CTR-2-WUP/issues?q=is%3Aissue+label%3Amilestone) · [Contributing](CONTRIBUTING.md)
+[Project tracking](https://github.com/users/Jdiller-86/projects/2) · [Documentation](docs/README.md) · [Development releases](https://github.com/Jdiller-86/CTR-2-WUP/releases) · [Roadmap issues](https://github.com/Jdiller-86/CTR-2-WUP/issues?q=is%3Aissue+label%3Amilestone) · [Contributing](CONTRIBUTING.md)
 
 **A project to turn 3DS games into individual Wii U titles through a Windows GUI.**
 
@@ -35,7 +35,7 @@ games will grow as the shared runtime gains the features they require. See the
 
 ![Estimated implementation progress: approximately 20%; zero of seven full milestones accepted.](docs/images/progress.svg)
 
-**Assessment: October 12, 2026 · version 0.17.0.** About **20%** is a rough
+**Assessment: October 12, 2026 · version 0.18.0.** About **20%** is a rough
 engineering estimate toward the finished GUI-to-playable-WUP product, not a
 measured task percentage or a compatibility rating. **0 of 7 full milestones
 have met their acceptance criteria.** Most renderer, commercial-game, GUI, and
@@ -46,7 +46,7 @@ hardware validation work remains.
 | M1 · Wii U platform | Native guide/exit have evidence; three v0.14.5 apps reported passing | Verified new result files, save behavior and WUP installation |
 | M2 · CPU translation | Tested subset and AOT integration | Broader instruction support and Wii U performance |
 | M3 · Homebrew runtime | Eight original applications; saves, RomFS assets and GX transfers | Broader services, retail integration and console acceptance |
-| M4 · PICA → GX2 graphics | Textures and GX transfers; draw renderer not implemented | 3DS draws, shaders, sampling, and reference scenes |
+| M4 · PICA → GX2 graphics | Textures, GX transfers and PICA setup; draw renderer not implemented | 3DS draws, shaders, sampling, and reference scenes |
 | M5 · First commercial game | Mario selected; dump analysis pending | Boot, gameplay, guest audio, and retail saves |
 | M6 · Automated WUP conversion | Local decryption, build and packaging foundations tested | Commercial end-to-end conversion, Windows, and installer acceptance |
 | M7 · Windows GUI | Workflow specified | Implement and verify the complete Inject experience |
@@ -66,7 +66,7 @@ or the [milestone checklist](docs/milestones.md) for detailed acceptance gates.
 - **Original homebrew execution:** normal compiler-built programs exercise boot,
   threads, input, CPU-written two-screen images, private save/reload, and
   standalone application startup and exit, and read-only RomFS asset access.
-- **Wii U diagnostic builds:** the current five-app kit includes Native,
+- **Wii U diagnostic builds:** the retained v0.14.6 follow-up kit includes Native,
   Compiled AOT, Guarded AOT, Save and RomFS. The user reports the first three
   passed on v0.14.5, but found no new reports and a save failure. v0.14.6 adds
   independent read-back-verified TXT results and safer save publication;
@@ -75,7 +75,9 @@ or the [milestone checklist](docs/milestones.md) for detailed acceptance gates.
   have original fixture/reference checks. This does not yet render 3DS game scenes.
 - **Standard GX operations:** original stock-libctru code exercises memory fills,
   DMA, tiled display conversion and raw copies through the graphics command queue.
-  The new GX Transfers diagnostic provides a short guided console test.
+  The GX Transfers diagnostic provides a short guided console test. v0.18 adds
+  finalized PICA viewport/scissor configuration; actual 3DS draws remain pending.
+  See the [command contract](docs/pica-commands.md).
 - **Packaging foundations:** original metadata/artwork staging and encrypted
   packing with independent decryption and file checks using synthetic test inputs.
   Actual WUP installation remains unverified.
@@ -89,6 +91,10 @@ audio are not**. Homebrew snapshot persistence does not establish commercial sav
 compatibility. Commercial conversion requests fail explicitly instead of producing
 a placeholder package. The separate Windows CIA intake helper is a console
 utility, not the planned injector GUI.
+
+The owner-created [development Project](https://github.com/users/Jdiller-86/projects/2)
+is the selected tracking board. Automatic population of the 42 roadmap issues
+awaits Projects access for the connected GitHub integration.
 
 ## Download and test
 

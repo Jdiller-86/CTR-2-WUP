@@ -85,14 +85,15 @@ def main():
             if a.static:flags+=['-static','-mcpu=750']
             if a.sanitize:flags+=['-O1','-fno-omit-frame-pointer','-fsanitize=address,undefined']
             if name=='romfs':flags+=['-DCTR_ROMFS_HOMEBREW']
-            sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c','ctr_gx.c','ctr_transfer.c','ctr_fs.c','ctr_apt.c','ctr_fs_snapshot.c','ctr_sha256.c','ctr_romfs_file.c')]+[ROOT/'runtime/recomp/ctr_recomp.c',ROOT/'tests/homebrew/runner.c']+[folder/'aot'/n for n in generation['sources']]
+            sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c','ctr_gx.c','ctr_pica.c','ctr_transfer.c','ctr_fs.c','ctr_apt.c','ctr_fs_snapshot.c','ctr_sha256.c','ctr_romfs_file.c')]+[ROOT/'runtime/recomp/ctr_recomp.c',ROOT/'tests/homebrew/runner.c']+[folder/'aot'/n for n in generation['sources']]
             run(name+'-host-compile',shlex.split(a.cc_prefix)+[a.cc,*flags,*map(str,sources),'-lm','-o',str(binary)])
             extra=['--trace-ipc'] if a.trace_startup else [str(folder)] if name in ('graphics','interactive','transfer') else ['--filesystem',str(folder/'save.snapshot')] if name=='filesystem' else []
             output=run(name+'-execute',shlex.split(a.run_prefix)+[str(binary)]+extra)
             result=json.loads(output.splitlines()[-1]);expected='CTR2WUP compiled libctru boot PASS' if name=='boot' else 'CTR2WUP compiled thread/TLS/LightLock PASS' if name=='threaded' else 'CTR2WUP compiled graphics PASS' if name=='graphics' else 'CTR2WUP compiled input PASS' if name=='input' else 'CTR2WUP compiled filesystem SAVE 1 PASS' if name=='filesystem' else 'CTR2WUP compiled RomFS PASS' if name=='romfs' else 'CTR2WUP compiled GX transfers PASS' if name=='transfer' else 'CTR2WUP compiled interactive PASS'
             if result['state']!='exited' or result['fallback'] or expected not in result['messages']:raise RuntimeError(name+' did not complete its real guest assertions')
             if name in ('graphics','interactive','transfer') and result['frames']!=[0x00ff00ff,0xff0000ff,0x00ff00ff]:raise RuntimeError('Require all three exact two-screen RGB565 frames')
-            if name=='transfer' and result['gx']!={'commands':16,'dma':3,'fills':8,'transfers':3,'copies':1,'cache':1}:raise RuntimeError('Original application did not execute all expected GX operations')
+            if name=='transfer' and result['gx']!={'commands':17,'dma':3,'fills':8,'transfers':3,'copies':1,'cache':1,'pica':1}:raise RuntimeError('Original application did not execute all expected GX operations')
+            if name=='transfer' and result['pica_state']!={'lists':1,'writes':11,'finalizers':1,'viewport_width':0x12bb56dd}:raise RuntimeError('Original GPUCMD configuration state did not match masked/grouped writes')
             if name=='input' and result['input_samples']!=3:raise RuntimeError('Require all three standard HID publications')
             if name=='interactive' and result['input_samples']!=4:raise RuntimeError('Require three input-driven frames and the guest B-button exit')
             if name=='filesystem':

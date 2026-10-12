@@ -187,6 +187,7 @@ static bool result_snapshot(const char *stage) {
         "Guest: state=%s pc=%08x instructions=%llu fallback=%llu fault=%s detail=%08x memory=%s\n"
         "Frames: host=%u guest=%llu | new_green_after_A=%u latency_ms=%llu\n"
         "GX: completed=%llu DMA=%llu fill=%llu display=%llu texture_copy=%llu cache=%llu last_header=%08x last_detail=%08x\n"
+        "PICA configuration only: completed=%llu lists=%llu writes=%llu finalizers=%llu last_result=%u last_offset=%u last_register=%03x; no draws/shaders\n"
         "Host frame us: min=%u mean=%llu max=%u (diagnostic overhead, not game performance)\n"
         "Latest guest message: %s\nSave: load_status=%d persist_errno=%d\n"
         "Full trace: %s | file=%s errno=%d operation=%s FSA=%d commits=%llu\n"
@@ -214,6 +215,13 @@ static bool result_snapshot(const char *stage) {
         (unsigned long long)(final_guest.captured?final_guest.gx.gx_cache:gsp_guest.gsp.gx_cache),
         final_guest.captured?final_guest.gx.last_gx_header:gsp_guest.gsp.last_gx_header,
         final_guest.captured?final_guest.gx.last_gx_detail:gsp_guest.gsp.last_gx_detail,
+        (unsigned long long)(final_guest.captured?final_guest.gx.gx_pica:gsp_guest.gsp.gx_pica),
+        (unsigned long long)(final_guest.captured?final_guest.gx.pica.committed_lists:gsp_guest.gsp.pica.committed_lists),
+        (unsigned long long)(final_guest.captured?final_guest.gx.pica.register_writes:gsp_guest.gsp.pica.register_writes),
+        (unsigned long long)(final_guest.captured?final_guest.gx.pica.finalizations:gsp_guest.gsp.pica.finalizations),
+        final_guest.captured?final_guest.gx.last_pica_result:gsp_guest.gsp.last_pica_result,
+        final_guest.captured?final_guest.gx.last_pica_offset:gsp_guest.gsp.last_pica_offset,
+        final_guest.captured?final_guest.gx.last_pica_register:gsp_guest.gsp.last_pica_register,
         completed_frames?frame_min_us:0,(unsigned long long)(completed_frames?frame_total_us/completed_frames:0),frame_max_us,
         latest_guest_message[0]?latest_guest_message:"none",snapshot_load_result,snapshot_errno,
         report_handler_added && !test_report.failed?"SAVING":"FAILED",test_report.filename,test_report.error_code,
@@ -981,7 +989,7 @@ int main(int argc, char **argv) {
             image_text(top_image,TOP_W,11,text);
 #ifdef CTR_GX_HOMEBREW
             image_text(top_image,TOP_W,12,"GX FILL / DMA / TILED TRANSFER / COPY");
-            snprintf(text,sizeof(text),"GX DONE %llu / PASS %u / PICA ABSENT",(unsigned long long)gsp_guest.gsp.gx_commands,gsp_pass_seen);
+            snprintf(text,sizeof(text),"GX %llu / PICA SETUP %llu / NO DRAWS",(unsigned long long)gsp_guest.gsp.gx_commands,(unsigned long long)gsp_guest.gsp.gx_pica);
             image_text(top_image,TOP_W,13,text);
 #else
             image_text(top_image,TOP_W,12,"A: GREEN / TOUCH: WHITE / B: EXIT");

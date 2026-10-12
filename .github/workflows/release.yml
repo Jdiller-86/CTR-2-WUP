@@ -7,7 +7,7 @@ on:
         description: Version in pyproject.toml; publishes original diagnostics as a prerelease
         required: true
         type: string
-        default: '0.17.0'
+        default: '0.18.0'
 
 permissions:
   contents: read
@@ -94,6 +94,11 @@ jobs:
           set -euo pipefail
           python tools/validate-libctru.py --application transfer --wiiu --sanitize \
             --output "$RELEASE_WORK/transfer" 2>&1 | tee "$RELEASE_WORK/logs/transfer-validation.log"
+      - name: Compare original PICA commands with pinned libctru construction
+        run: |
+          set -euo pipefail
+          python tools/validate-pica.py --sanitize --output "$RELEASE_WORK/pica-reference" \
+            2>&1 | tee "$RELEASE_WORK/logs/pica-validation.log"
       - name: Build and smoke-test the pure-Python developer wheel
         run: |
           set -euo pipefail
@@ -123,7 +128,7 @@ jobs:
           import json, os, pathlib, subprocess
           checks = ['make-check', 'make-prototype', 'native-build', 'transfer-validation',
                     'wheel-build', 'wheel-smoke', 'sdk-install', 'arm-fixtures-install', 'translator-install',
-                    'docs-build', 'docs-package']
+                    'docs-build', 'docs-package', 'pica-validation']
           work = pathlib.Path(os.environ['RELEASE_WORK'])
           assert all((work / 'logs' / f'{name}.log').is_file() for name in checks)
           evidence = {'ok': True, 'version': os.environ['RELEASE_VERSION'],
@@ -156,6 +161,7 @@ jobs:
             artifacts/development-release/*/logs/*.log
             artifacts/development-release/*/transfer/*.log
             artifacts/development-release/*/native/build.log
+            artifacts/development-release/*/pica-reference/report.json
           retention-days: 14
           if-no-files-found: warn
 

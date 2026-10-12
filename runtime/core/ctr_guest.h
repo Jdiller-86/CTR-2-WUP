@@ -43,6 +43,7 @@ typedef struct {
     unsigned index;
     uint64_t last_ns, samples;
 } ctr_guest_hid;
+#include "ctr_pica.h"
 typedef struct {
     bool right, black, active[2];
     uint32_t info[2][7];
@@ -50,8 +51,10 @@ typedef struct {
     bool registered;
     unsigned relay_owner, relay_shared, relay_event;
     uint64_t next_vblank_ns, vblanks, coalesced_vblanks, dropped_interrupts, failures;
-    uint64_t gx_commands,gx_dma,gx_fills,gx_transfers,gx_copies,gx_cache;
+    uint64_t gx_commands,gx_dma,gx_fills,gx_transfers,gx_copies,gx_cache,gx_pica;
     uint32_t last_gx_header,last_gx_detail;
+    ctr_pica_state pica;
+    uint32_t last_pica_result,last_pica_offset,last_pica_register;
 } ctr_guest_gsp;
 #define CTR_GUEST_MAX_THREADS 8u
 #define CTR_GUEST_THREAD_QUANTUM 32u
