@@ -337,7 +337,8 @@
         "Create native parents for the 35 gate tasks and their feature children.",
         "Add scoped next renderer features with explicit acceptance criteria.",
         "Reconcile reviewed Project statuses without accepting unfinished gates.",
-        "Make management repeatable through a dry-run-first trusted-main Actions workflow."
+        "Make management repeatable through a dry-run-first trusted-main Actions workflow.",
+        "Provide a repository tour, practical AGENTS.md, contributor policy and make help for incoming developers."
       ],
       "acceptance": [
         "All catalogued implementation PRs have a milestone, Project item and native linked scoped issue.",

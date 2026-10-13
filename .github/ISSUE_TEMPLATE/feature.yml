@@ -32,6 +32,13 @@ body:
     validations:
       required: true
   - type: textarea
+    id: parent
+    attributes:
+      label: Parent task and Project item
+      description: Link the existing work task. After creation, set its native sub-issue parent, repository milestone and Project membership; text links alone do not create those relationships.
+    validations:
+      required: true
+  - type: textarea
     id: acceptance
     attributes:
       label: Acceptance evidence

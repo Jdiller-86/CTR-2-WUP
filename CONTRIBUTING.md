@@ -13,6 +13,11 @@ reproduction with original data. For a feature, describe the resulting behavior,
 its milestone and acceptance evidence. The issue forms also accept Wii U test
 results, including missing reports, failed storage checks and hangs.
 
+Use [development tracking](docs/development-tracking.md) for native milestone →
+task → scoped feature → PR relationships. Assign the repository milestone and
+Project membership, give the feature a native parent, and record its PR in
+`docs/features.json`. Broad unfinished tasks remain open when a feature merges.
+
 Do not upload ROMs, key databases, personal keys, extracted game assets, saves,
 translated commercial code, game packages or credentials. Keep them under
 ignored `private/` directories locally. Original diagnostic TXT files are useful
@@ -21,7 +26,8 @@ for vulnerability reports instead of a normal issue.
 
 ## Build and check
 
-Use Python 3.12+, Make and a C compiler. Install the verified Wii U SDK with the
+Use Python 3.12+, Make and a C compiler. Host checks do not need the Wii U SDK;
+start with `make help` and `make check`. Install the verified Wii U SDK with the
 repository script; the first installation requires Docker. Optional encrypted
 input/packaging tests use the `cryptography` dependency. The target SDK uses
 devkitPro's devkitPPC, WUT and Wii U tools; the host compiler runs desktop tests.
@@ -76,6 +82,11 @@ Use the pull request template. Update affected status, architecture, compatibili
 and build documentation when behavior or evidence changes; do not claim console
 execution from compilation. Record evidence in versioned reports where the
 existing workflow calls for them.
+
+Develop on a separate topic branch and push a draft PR early. Link its scoped
+feature using `Closes #...`, then keep the PR and issue visible in the same
+milestone and Project. Merge only after required checks pass. Delete and verify
+the completed remote and local topic branches after every merge.
 
 New fixtures must be original and reproducible from source. Guest memory is
 little-endian even on big-endian PowerPC; avoid native guest-word loads and keep
