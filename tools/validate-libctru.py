@@ -18,6 +18,7 @@ import sys
 import tempfile
 import zlib
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from host.runtime_sources import runtime_sources
 from host.loader import load_image
 from host import __version__
 from host.build import _validate_rpx
@@ -25,6 +26,27 @@ from tests.host_fixtures import ncch
 from translator.upstream import generate_into
 ROOT=Path(__file__).resolve().parents[1]
 PIN='9b55eda44cf80b971503991e0c78f9bc8fe50425'
+
+def check_draw_frames(folder):
+    """Independent integer image oracle over the captured displayed surfaces."""
+    checks=[]
+    for screen,width in (('top',400),('bottom',320)):
+        data=(folder/('frame-0-'+screen+'.ppm')).read_bytes()
+        header=f'P6\n{width} 240\n255\n'.encode()
+        if not data.startswith(header) or len(data)!=len(header)+width*240*3:
+            raise RuntimeError('Draw capture has the wrong PPM format or dimensions')
+        expected=bytearray()
+        for y in range(240):
+            for x in range(width):
+                vx,vy=239-y,x
+                inside=30<=vx<210 and width//8<=vy<width*7//8
+                red=(2*vx+1)*width+(2*vy+1)*240<480*width
+                expected.extend((255,0,0) if inside and red else (0,255,0) if inside else (16,32,49))
+        if data[len(header):]!=expected:
+            raise RuntimeError('Captured draw pixels differ from the independent analytic image')
+        checks.append({'screen':screen,'width':width,'height':240,'pixels':width*240,
+                       'exact_match':True,'sha256':hashlib.sha256(data).hexdigest()})
+    return checks
 
 def container(elf):
     data=elf.read_bytes()
@@ -86,7 +108,7 @@ def main():
             if a.sanitize:flags+=['-O1','-fno-omit-frame-pointer','-fsanitize=address,undefined']
             if name=='romfs':flags+=['-DCTR_ROMFS_HOMEBREW']
             if name=='draw':flags+=['-DCTR_DRAW_HOMEBREW']
-            sources=[core/n for n in ('ctr_cpu.c','ctr_memory.c','ctr_guest.c','ctr_ipc.c','ctr_heap.c','ctr_kernel.c','ctr_hid.c','ctr_gsp.c','ctr_gx.c','ctr_guest_pica.c','ctr_scene.c','ctr_shader.c','ctr_vertex.c','ctr_pica.c','ctr_transfer.c','ctr_fs.c','ctr_apt.c','ctr_fs_snapshot.c','ctr_sha256.c','ctr_romfs_file.c')]+[ROOT/'runtime/recomp/ctr_recomp.c',ROOT/'tests/homebrew/runner.c']+[folder/'aot'/n for n in generation['sources']]
+            sources=runtime_sources(ROOT) + [core / n for n in ('ctr_fs_snapshot.c', 'ctr_sha256.c', 'ctr_romfs_file.c')]+[ROOT/'runtime/recomp/ctr_recomp.c',ROOT/'tests/homebrew/runner.c']+[folder/'aot'/n for n in generation['sources']]
             run(name+'-host-compile',shlex.split(a.cc_prefix)+[a.cc,*flags,*map(str,sources),'-lm','-o',str(binary)])
             extra=['--trace-ipc'] if a.trace_startup else [str(folder)] if name in ('graphics','interactive','transfer','draw') else ['--filesystem',str(folder/'save.snapshot')] if name=='filesystem' else []
             output=run(name+'-execute',shlex.split(a.run_prefix)+[str(binary)]+extra)
@@ -110,6 +132,7 @@ def main():
                     fields=dict(item.split('=',1) for item in line.split()[1:]);ipc.append({k:int(v,16) if k in ('header','result','pc') else int(v) if k=='request' else v for k,v in fields.items()})
             if a.trace_startup and sum(bool(event['result']) for event in ipc)!=result['ipc_failures']:raise RuntimeError('Incomplete startup failure trace')
             reports.append({'application':name,'guest':result,'frames':frames,'startup_ipc':ipc,'generation':generation,'allocated_bytes':image['allocated_bytes'],'executable_sha256':hashlib.sha256(image['code']).hexdigest()})
+            if name=='draw':reports[-1]['independent_frame_checks']=check_draw_frames(folder)
             if name=='romfs':
                 blob=folder/'romfs-level3.bin'
                 file_result=json.loads(run('romfs-file-execute',shlex.split(a.run_prefix)+[str(binary),'--romfs-file',str(blob)]).splitlines()[-1])
@@ -184,7 +207,9 @@ def main():
                         if shortcut.read_bytes()[:4]!=b'WUHB':raise RuntimeError('Invalid guarded WUHB')
                         shutil.copy2(rpx,guarded_folder/rpx.name);shutil.copy2(shortcut,guarded_folder/shortcut.name)
                     reports[-1]['guarded_wiiu_artifacts']=[{'name':f.name,'size':f.stat().st_size,'sha256':hashlib.sha256(f.read_bytes()).hexdigest()} for f in sorted(guarded_folder.iterdir())]
-        if a.wiiu and not any('wiiu_artifacts' in r for r in reports):raise ValueError('--wiiu requires interactive, filesystem or romfs')
-    report={'ok':True,'version':__version__,'libctru_pin':pin,'library_sha256':library_hash,'arm_compiler':arm_version.splitlines()[0],'applications':reports,'checks':checks,'console_verified':False,'native_windows_verified':False,'complete_service_startup':False,'standalone_apt_and_fs_startup':True,'unavailable_startup_services':['APT:S','APT:A','ptm:sysm'],'powerpc_execution':'emulated Linux' if a.static else None}
+        if a.wiiu and not any('wiiu_artifacts' in r for r in reports):raise ValueError('--wiiu requires interactive, filesystem, romfs, transfer or draw')
+    source_commit=run('source-commit',['git','-C',str(ROOT),'rev-parse','HEAD']).strip()
+    source_dirty=bool(run('source-state',['git','-C',str(ROOT),'status','--porcelain']))
+    report={'ok':True,'version':__version__,'source_commit':source_commit,'source_dirty':source_dirty,'libctru_pin':pin,'library_sha256':library_hash,'arm_compiler':arm_version.splitlines()[0],'applications':reports,'checks':checks,'console_verified':False,'native_windows_verified':False,'complete_service_startup':False,'standalone_apt_and_fs_startup':True,'unavailable_startup_services':['APT:S','APT:A','ptm:sysm'],'powerpc_execution':'emulated Linux' if a.static else None}
     (out/'report.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps({'ok':True,'applications':[{'name':r['application'],'instructions':r['guest']['instructions'],'ipc_failures':r['guest']['ipc_failures']} for r in reports],'report':str(out/'report.json')}));return 0
 if __name__=='__main__':raise SystemExit(main())

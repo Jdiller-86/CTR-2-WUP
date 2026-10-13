@@ -2,6 +2,7 @@
 import hashlib
 import json
 from pathlib import Path
+from .runtime_sources import runtime_sources
 import shutil
 import subprocess
 import tempfile
@@ -73,7 +74,7 @@ def run_fixture(path, output, *, frames=2, buttons=0, touch=False, x=0, y=0, tra
         build_log=logs/(stage.name+"-compile.log")
         execution_log=logs/(stage.name+"-execute.log")
         core = repo / "runtime/core"
-        sources = [repo / "runtime/desktop/guest_runner.c"] + [core / name for name in ("ctr_memory.c", "ctr_cpu.c", "ctr_guest.c", "ctr_ipc.c", "ctr_heap.c", "ctr_kernel.c", "ctr_hid.c","ctr_gsp.c", "ctr_gx.c","ctr_guest_pica.c","ctr_scene.c","ctr_shader.c","ctr_vertex.c", "ctr_pica.c", "ctr_transfer.c", "ctr_fs.c", "ctr_apt.c", "ctr_guest_fixture.c")]
+        sources = [repo / "runtime/desktop/guest_runner.c"] + runtime_sources(repo) + [core / n for n in ('ctr_guest_fixture.c',)]
         flags=[];generation=None
         if backend=="upstream":
             from translator.upstream import generate_into

@@ -1,0 +1,17 @@
+ctr_memory.c
+ctr_cpu.c
+ctr_guest.c
+ctr_ipc.c
+ctr_heap.c
+ctr_kernel.c
+ctr_hid.c
+ctr_gsp.c
+ctr_gx.c
+ctr_guest_pica.c
+ctr_pica.c
+ctr_scene.c
+ctr_shader.c
+ctr_vertex.c
+ctr_transfer.c
+ctr_fs.c
+ctr_apt.c

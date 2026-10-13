@@ -1,3 +1,5 @@
+ROOT := ../..
+include $(ROOT)/runtime/core/sources.mk
 DEVKITPRO ?= /workspace/ctr2wup-sdk
 DEVKITPPC ?= $(DEVKITPRO)/devkitPPC
 export DEVKITPRO DEVKITPPC
@@ -70,15 +72,15 @@ LDFLAGS := -mcpu=750 -meabi -mhard-float -specs="$(WUT)/share/wut.specs" \
            -Wl,-Map,$(OUTPUT)/$(TARGET).map
 SOURCES := main.c viewport.c diagnostic_font.c test_report.c test_guide.c test_lifecycle.c image_scale.c report_storage.c test_result.c diagnostic_audio.c
 OBJECTS := $(addprefix $(BUILD)/,$(SOURCES:.c=.o))
-CORE_SOURCES := ../core/ctr_memory.c ../core/ctr_cpu.c ../core/ctr_cpu_selftest.c \
-                ../core/ctr_guest.c ../core/ctr_ipc.c ../core/ctr_heap.c ../core/ctr_kernel.c ../core/ctr_hid.c ../core/ctr_gsp.c ../core/ctr_gx.c ../core/ctr_guest_pica.c ../core/ctr_pica.c ../core/ctr_transfer.c ../core/ctr_fs.c ../core/ctr_apt.c ../core/ctr_fs_snapshot.c ../core/ctr_guest_fixture.c \
+CORE_SOURCES := $(CTR_RUNTIME_SOURCES)   ../core/ctr_cpu_selftest.c \
+                            ../core/ctr_fs_snapshot.c ../core/ctr_guest_fixture.c \
                 ../core/ctr_service_fixture.c \
-                ../core/ctr_heap_fixture.c ../core/ctr_shader.c ../core/ctr_scene.c ../core/ctr_scene_fixture.c \
+                ../core/ctr_heap_fixture.c   ../core/ctr_scene_fixture.c \
                 ../core/ctr_kernel_fixture.c \
                 ../core/ctr_hid_fixture.c \
                 ../core/ctr_gsp_fixture.c \
                 ../core/ctr_relay_fixture.c \
-                ../core/ctr_stack_fixture.c ../core/ctr_thread_fixture.c ../core/ctr_sha256.c ../core/ctr_romfs_file.c ../core/ctr_texture.c ../core/ctr_vertex.c \
+                ../core/ctr_stack_fixture.c ../core/ctr_thread_fixture.c ../core/ctr_sha256.c ../core/ctr_romfs_file.c ../core/ctr_texture.c  \
                 ../../tests/fixtures/threads/thread.generated.c ../../tests/fixtures/threads/thread-image.generated.c \
                 ../../tests/fixtures/stack/stack.generated.c ../../tests/fixtures/stack/stack-image.generated.c \
                 ../../tests/fixtures/relay/relay.generated.c ../../tests/fixtures/relay/relay-image.generated.c \
@@ -102,7 +104,7 @@ vpath %.c ../core ../recomp ../../tests/fixtures/cpu ../../tests/fixtures/guest 
 all: $(OUTPUT)/$(TARGET).rpx $(OUTPUT)/$(TARGET).wuhb
 $(BUILD):
 	mkdir -p "$@"
-$(BUILD)/%.o: %.c Makefile | $(BUILD)
+$(BUILD)/%.o: %.c $(CTR_RUNTIME_MANIFEST) Makefile | $(BUILD)
 	"$(CC)" $(CFLAGS) -MMD -MP -c "$<" -o "$@"
 $(OUTPUT)/$(TARGET).elf: $(OBJECTS)
 	"$(CC)" $(LDFLAGS) $(OBJECTS) -L"$(WUT)/lib" -lwut -lm -o "$@"

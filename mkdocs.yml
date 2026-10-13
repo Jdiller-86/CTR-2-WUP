@@ -110,6 +110,7 @@ nav:
       - PICA command front end: docs/pica-commands.md
       - Vertex attributes: docs/vertex-attributes.md
       - First software scenes: docs/software-scenes.md
+      - Compiled guest PICA draws: docs/guest-pica-draws.md
       - Filesystem and saves: docs/filesystem.md
   - Project:
       - Development tracking: docs/development-tracking.md

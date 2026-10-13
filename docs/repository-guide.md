@@ -33,6 +33,11 @@ acceptance and the final GUI remain open.
 | `docs/` | Current contracts, plans, acceptance gates and recorded evidence |
 | `artifacts/`, `private/` | Ignored generated output and private inputs; never application source |
 
+`runtime/core/sources.list` is the canonical portable guest runtime manifest.
+The test Makefiles, native build and Python build/validation adapters consume it;
+add a shared runtime module there once. Consumer-specific fixtures and platform
+helpers remain in their own recipes. Standalone component suites keep narrow lists.
+
 ## First host check
 
 Use Python 3.12+, Make and a C compiler. The SDK and external lifter are optional
