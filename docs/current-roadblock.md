@@ -26,8 +26,8 @@ Current external requirements:
 
 Independent development can continue. It cannot replace title bytes, physical
 console observations or full Windows/install acceptance. Project #2 is populated
-through the repository Actions secret; public docs/dashboard deployment has its
-own operation receipts and must be verified before being called live.
+through the repository Actions secret; public docs and the Project dashboard are
+deployed and HTTP-verified. Direct cloud administration access remains limited.
 
 ## Historical handoffs
 

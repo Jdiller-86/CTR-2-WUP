@@ -39,13 +39,13 @@ an in-app Plus restart.
 
 Project #2 population/overview/fields/views are verified using the Actions secret.
 Source tracking still cannot overwrite existing board values. Docs-only Pages
-publication and the dynamic chart use a reviewed trusted-main workflow; hosting
-must be verified before being reported live. Application source remains private.
+publication and the dynamic chart are live through a reviewed trusted-main workflow.
+The site, dashboard, JSON and SVG return HTTP 200. Application source remains private.
 
-Validation: 349 Python tests and 20 C suites passed before the hosting additions;
+Validation: 363 Python tests and 20 normal/ASan/UBSan C suites pass;
 report/guide has 603 assertions and AX lifecycle has 149. Current Audio Check and
-compiled GX RPX/WUHB cross-builds passed. Final hosting/chart checks are recorded
-with this increment's delivery receipts. Full milestone acceptance remains 0/7.
+compiled GX RPX/WUHB cross-builds passed. The pinned PICA matrix passes 353 original cases. Strict docs/link and public
+export/privacy checks pass; hosting/chart receipts are retained with this increment. Full milestone acceptance remains 0/7.
 
 ## v0.19.0 increment (historical)
 
@@ -159,22 +159,24 @@ The separate [Documentation build passed](https://github.com/Jdiller-86/CTR-2-WU
 including real pinned external AOT, Unicode execution and .NET 10 WPF tooling.
 This verifies development tools; full Windows conversion and GUI remain unfinished.
 [GitHub development](docs/github-development.md) explains
-artifacts, release policy and management operations still awaiting access.
+artifacts, release policy and trusted-main management workflows.
 
 The existing GitHub integration rejected Projects creation and repository
 administration/security-setting writes with **Resource not accessible by
-integration**. Issue/milestone writes work. Project board,
-About/topics/Discussions and security-setting changes need the relevant GitHub
-connection permissions; those features are not falsely marked enabled.
+integration**. Issue/milestone writes work. Project #2 is now populated and linked through its Actions secret. Direct cloud
+administration access remains limited. The requested free About/topics,
+Discussions, branch cleanup and dependency-alert settings are applied and
+API-verified through the dedicated repository-features Actions workflow; its
+receipts establish live outcomes.
 Searchable documentation has a strict build, rendered-link checks, an offline
 HTML guide and a free public docs-only Pages export. The user confirms private
 Pages is unavailable on their free plan; application source remains private.
 The user explicitly declines branch protection for the private free-plan repository.
 Topic branches, reviewable PRs and passing CI are the maintenance policy.
-Local documentation builds do not establish live hosting.
-The connection rejected public docs-repository creation with HTTP 403, so its
-free hosted publication needs owner access. The standalone HTML reader and
-complete public export remain available for download.
+[Free public documentation](https://jdiller-86.github.io/CTR-2-WUP-docs/) and the
+[Project dashboard](https://jdiller-86.github.io/CTR-2-WUP-docs/progress/) are now
+deployed and HTTP-verified using repository Actions. Source remains private.
+The standalone HTML reader remains available for offline use.
 Future Codex commits use an opt-in attribution hook and verified public bot identity;
 normal commits and existing history retain their authors. No repository visibility
 or paid entitlement was changed.

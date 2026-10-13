@@ -297,22 +297,23 @@ def review_result_collection(client, source, apply=False):
     mutation = '''mutation($input:UpdateProjectV2ItemFieldValueInput!) {
       updateProjectV2ItemFieldValue(input:$input) { projectV2Item { id } }
     }'''
-    client.graphql(mutation, {'input': {'projectId': project['id'], 'itemId': row['item_id'],
-                    'fieldId': fields['Status']['id'], 'value': {'singleSelectOptionId': choices[0]}}})
+    if row['status'] != 'Done':
+        client.graphql(mutation, {'input': {'projectId': project['id'], 'itemId': row['item_id'],
+                        'fieldId': fields['Status']['id'], 'value': {'singleSelectOptionId': choices[0]}}})
     if row['resources']:
         current = client.graphql(query, {'id': row['item_id']}).get('node')
         if (not current or current.get('isArchived') is not False
                 or current.get('content', {}).get('id') != row['issue_id']
-                or current.get('status', {}).get('optionId') != choices[0]
+                or (current.get('status') or {}).get('optionId') != choices[0]
                 or resources(current) != row['resources']):
             raise TrackingError('Result status was updated, but its resource changed; preserve it for review.')
-        mutation = '''mutation($input:DeleteProjectV2ItemFieldValueInput!) {
-          deleteProjectV2ItemFieldValue(input:$input) { projectV2Item { id } }
+        mutation = '''mutation($input:ClearProjectV2ItemFieldValueInput!) {
+          clearProjectV2ItemFieldValue(input:$input) { projectV2Item { id } }
         }'''
         client.graphql(mutation, {'input': {'projectId': project['id'], 'itemId': row['item_id'],
                         'fieldId': fields['Waiting resource']['id']}})
     final = client.graphql(query, {'id': row['item_id']}).get('node')
-    if not final or final.get('status', {}).get('optionId') != choices[0] or resources(final):
+    if not final or (final.get('status') or {}).get('optionId') != choices[0] or resources(final):
         raise TrackingError('Result-collection review was not readable after the update; verify its current board values.')
     return {'ok': True, 'changed': True, 'task': 'm1-results', 'full_gate_accepted': False}
 

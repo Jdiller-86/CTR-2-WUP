@@ -129,8 +129,11 @@ class ProjectExportTests(unittest.TestCase):
                     api.writes.append(payload)
                     row = next(row for row in api.data['items'] if row['id'] == payload['itemId'])
                     if 'value' in payload:
+                        self.assertIn('UpdateProjectV2ItemFieldValueInput', query)
                         set_status(row, 'Done')
                     else:
+                        self.assertIn('ClearProjectV2ItemFieldValueInput', query)
+                        self.assertIn('clearProjectV2ItemFieldValue(input:', query)
                         row['waiting'] = None
                     return {'mutation': {'projectV2Item': {'id': row['id']}}}
                 answer = super().graphql(query, variables)
@@ -147,6 +150,12 @@ class ProjectExportTests(unittest.TestCase):
         self.assertEqual(managed[('work-item', 'm1-results')]['resources'], [])
         self.assertEqual(managed[('milestone', 'm1')]['status'], 'Planned')
         self.assertFalse(export.review_result_collection(api, self.source, apply=True)['changed'])
+        # Resume the actual partial-success case: Done was stored, but resource
+        # clearing failed. Retry only the supported clear operation.
+        api.data['items'][1]['waiting'] = {'__typename': 'ProjectV2ItemFieldTextValue', 'text': 'Wii U console results'}
+        self.assertTrue(export.review_result_collection(api, self.source, apply=True)['changed'])
+        self.assertEqual(len(api.writes), 3)
+        self.assertNotIn('value', api.writes[-1])
 
     def test_result_review_preserves_manual_block_and_requires_reviewed_evidence(self):
         api = FakeGitHub(self.project)
