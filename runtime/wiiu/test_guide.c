@@ -35,7 +35,11 @@ static const step save_steps[]={
     {SAVE_RELOAD,"Snapshot reload","Press PLUS to restart from the saved snapshot.","The new guest PASS and exit are checked."}
 };
 static const step asset_steps[]={
-    {GUEST_EXIT,"RomFS asset reads","Wait for root/nested/Unicode/read-only checks.","The original guest's own PASS and exit are checked."}
+    {GUEST_EXIT,"RomFS asset reads","Checking the bundled sample files automatically.","Checks folders, Japanese names and write rejection."}
+};
+static const step audio_steps[]={
+    {VIEW_NATIVE,"Launch music stopped","Has the Wii U launch music stopped?","R: quiet now   L: launch music still playing"},
+    {AUDIO,"Native test tone","Press A: a short tone should play on both screens.","R: heard on BOTH   L: missing or wrong sound"}
 };
 static const step gx_steps[]={
     {VIEW_GUEST,"GX transfer picture","TV: GREEN / RED / GREEN. GamePad: BLUE.","R: observed correctly   L: wrong/missing picture"},
@@ -43,6 +47,7 @@ static const step gx_steps[]={
 };
 
 static const step *steps(const ctr_test_guide *g, unsigned *count) {
+    if(g->kind==CTR_GUIDE_AUDIO) { *count=sizeof(audio_steps)/sizeof(audio_steps[0]);return audio_steps; }
     if(g->kind==CTR_GUIDE_GX) { *count=sizeof(gx_steps)/sizeof(*gx_steps);return gx_steps; }
     if(g->kind==CTR_GUIDE_ASSETS) { *count=sizeof(asset_steps)/sizeof(*asset_steps);return asset_steps; }
     if(g->kind==CTR_GUIDE_SAVE) { *count=sizeof(save_steps)/sizeof(*save_steps);return save_steps; }
@@ -171,8 +176,13 @@ void ctr_test_guide_view(const ctr_test_guide *g,uint64_t milliseconds,char rows
         snprintf(rows[3],72,"Results: SD:/CTR2WUP/*.TXT");
         snprintf(rows[4],72,"Upload the TXT files in this chat.");
         snprintf(rows[5],72,"Filename and SD status are shown below.");
-        if(g->kind==CTR_GUIDE_SAVE)snprintf(rows[6],72,g->fresh_reload_confirmed?
-            "Fresh-launch reload confirmed; testing complete.":"Relaunch ONCE, repeat; upload BOTH reports.");
+        if(g->kind==CTR_GUIDE_SAVE && !g->fresh_reload_confirmed && !g->failed && !g->skipped) {
+            snprintf(rows[0],72,"SAVE CHECK: ONE FRESH LAUNCH STILL NEEDED");
+            snprintf(rows[2],72,"MINUS: exit. Then open this SAME app again.");
+            snprintf(rows[4],72,"Keep the SD snapshot; PLUS is only an in-app restart.");
+            snprintf(rows[6],72,"Relaunch ONCE, repeat; upload BOTH reports.");
+        } else if(g->kind==CTR_GUIDE_SAVE)snprintf(rows[6],72,g->fresh_reload_confirmed?
+            "Fresh-launch reload confirmed; testing complete.":"Save checks failed or skipped; send the saved report.");
         return;
     }
     snprintf(rows[0],72,"GUIDED TEST %u/%u",g->step+1,count);

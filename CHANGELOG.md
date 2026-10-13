@@ -3,6 +3,21 @@
 All releases are development increments. RPX/WUHB diagnostics and desktop passes
 do not establish commercial-game compatibility or installable WUP acceptance.
 
+## 0.20.0 — 2026-10-13
+
+- Initialize and release a neutral native AX context in every diagnostic;
+  compiled guests acquire no tone voice. Record lifecycle/failure counters and
+  add a two-step Audio Check for launch silence and the native tone.
+- Record reviewed physical TXT collection, original fresh-launch save reload,
+  embedded/SD assets and GX transfer/configuration. Preserve older failures;
+  launch-music regression and full platform acceptance remain open.
+- Clarify the separate fresh-launch save step and simplify the next test handoff.
+- Populate Project #2 using its Actions secret, preserve owner values and add
+  a live stacked task chart with visible timestamps and interactive dashboard.
+- Prepare verified public docs-only Pages publication through trusted main,
+  while application source stays private. Rewrite the README around purpose,
+  capabilities, getting started, progress and contributions.
+
 ## 0.19.0 — 2026-10-12
 
 - Add an original bounded vertex-stream decoder for the four published PICA

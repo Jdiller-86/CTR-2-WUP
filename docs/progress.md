@@ -1,6 +1,6 @@
 # Project completion assessment
 
-Updated **October 12, 2026**, against version **0.19.0** and the
+Updated **October 13, 2026**, against version **0.20.0** and the
 [product plan](development-plan.md).
 
 The [live Project](https://github.com/users/Jdiller-86/projects/2) owns current
@@ -38,9 +38,9 @@ while every full acceptance checkbox remains open. See the
 |---|---|---|
 | Host preparation | Container inspection, optional local key/seed import and decryption, executable loading, private intake, external code generation, static builds, original metadata/artwork staging | Original encrypted execution fixture passes; no complete commercial conversion, actual user-key import or clean Windows execution |
 | CPU and shared runtime | Bounded ARM/Thumb/VFP support, checked AOT boundary, memory, eight single-core guest thread contexts, scoped services | Incomplete CPU/HLE coverage; actual game and Wii U timing requirements unknown |
-| Homebrew execution | Seven original normal-CRT/libctru applications, input/exact CPU-written frames, save/reload, standalone lifecycle and read-only RomFS assets | Desktop/sanitizer/emulated PPC evidence; v0.14.5 interactive/guarded completion user-reported, new file/save/asset acceptance pending |
+| Homebrew execution | Eight original normal-CRT/libctru applications, input/exact CPU-written frames, save/reload, standalone lifecycle and read-only RomFS assets | Desktop/sanitizer/emulated PPC checks plus physical original fresh-launch save, embedded/SD assets and GX results; broader runtime acceptance remains open |
 | Packaging | Original encrypted writer and independent decrypt/hash/FST/file verification, including real diagnostic RPX payloads | Synthetic credentials; no installer acceptance or retained installable package |
-| Wii U platform | Current five-app kit; older native guide/exit evidence and user-reported v0.14.5 Native/Guarded/Compiled success | Missing new traces; visit-1 snapshot received, later save step failed; v0.14.6 reports/saves/assets and installation pending |
+| Wii U platform | Named TXT read-back, fresh-launch save reload, current pictures/Minus return and earlier controls evidence | Launch-music regression, exact platform versions, recovery and installed-WUP acceptance remain open |
 
 v0.14.6 passes **184 Python tests** and fourteen C suites normally and with
 ASan/UBSan, including 1,892 FS and 574 report/guide assertions in each mode.
@@ -130,3 +130,11 @@ libctru command construction and a compiled guest. Draw/shader/GX2 scene work
 and console acceptance remain open, so the rough estimate remains 20% and 0/7
 full gates. The owner supplied Project #2; automated population still requires
 Projects access, and the tool cannot create a duplicate after an access failure.
+
+
+v0.20.0 records reviewed physical TXT collection, original save fresh-launch
+reload, embedded/SD assets and GX transfer/configuration evidence. The looping
+launch music remains an open regression with a short Audio Check/GX handoff.
+Project #2 is populated through Actions; its task fields remain authoritative.
+These scoped successes do not accept a full gate or materially change the
+approximately-20% implementation estimate.

@@ -18,6 +18,10 @@ on:
         description: Populate the selected existing Project before its first export; preserve manual values
         type: boolean
         default: false
+      review_console_results:
+        description: Record the reviewed named-TXT collection task as Done; never accept a full milestone
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -62,6 +66,21 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.CTR2WUP_GITHUB_MANAGEMENT_TOKEN }}
         run: python tools/flesh-github-project.py --apply --output "$RUNNER_TEMP/project-setup.json"
+      - name: Review only the completed physical result-collection task
+        if: github.event_name == 'workflow_dispatch' && inputs.review_console_results
+        env:
+          GH_TOKEN: ${{ secrets.CTR2WUP_GITHUB_MANAGEMENT_TOKEN }}
+        run: |
+          python - <<'PY'
+          import importlib.util, json
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location('tracking', 'tools/export-github-project.py')
+          tracking = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(tracking)
+          source = json.loads(Path('docs/milestone-status.json').read_text())
+          receipt = tracking.review_result_collection(tracking.GitHub(), source, apply=True)
+          print(json.dumps(receipt))
+          PY
       - name: Read live Project and mirror its status labels
         id: project
         env:

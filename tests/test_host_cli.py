@@ -15,6 +15,17 @@ from tests.host_fixtures import ncch
 
 
 class CliTests(unittest.TestCase):
+    def test_audio_check_rejects_guest_or_external_backend_before_build(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / 'audio-output'
+            for options in ({'guest_path': 'owned-game.cxi'}, {'backend': 'upstream'}):
+                with self.subTest(options=options), patch.object(build, 'doctor') as probe:
+                    with self.assertRaises(HostError) as caught:
+                        build.prototype(output, audio_only=True, **options)
+                    self.assertEqual(caught.exception.code, 'invalid_profile')
+                    probe.assert_not_called()
+                    self.assertFalse(output.exists())
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)

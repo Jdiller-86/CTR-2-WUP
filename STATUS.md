@@ -1,6 +1,6 @@
 # CTR2WUP status
 
-Updated **October 12, 2026 (America/New_York)** · **v0.19.0**.
+Updated **October 13, 2026 (America/New_York)** · **v0.20.0**.
 The target remains an UWUVCI-style Windows GUI: select an owned 3DS game, configure
 title/artwork, click Inject, install its individual WUP and play from Wii U Menu.
 [Requirements](docs/project-brief.md), [product plan](docs/development-plan.md),
@@ -17,11 +17,37 @@ is enabled. Current binaries are original homebrew diagnostics.
 |---|---|---|
 | Input/preparation | Bounded CIA/NCSD/NCCH inspection, optional local key/seed imports/decryption, canonical full RomFS IVFC/metadata verification and private asset blobs | Actual user exports/Mario assets, broader forms and Windows acceptance |
 | CPU/runtime | Checked ARM/Thumb/VFP/AOT subsets, owned memory, eight single-core contexts and scoped services | Complete exercised CPU/HLE coverage, modules, guest audio and retail saves |
-| Homebrew | Eight normal-CRT/libctru applications: boot, threads, graphics, input, interactive, filesystem, RomFS and GX transfer | New console/result/save/asset/GX evidence and broader game integration |
+| Homebrew | Eight normal-CRT/libctru applications: boot, threads, graphics, input, interactive, filesystem, RomFS and GX transfer | Launch-audio regression, broader services and game integration |
 | Graphics | Direct/shared framebuffer presentation, five display formats, 14 base textures, scoped CPU-backed GX queues/copies/fills/transfers | PICA vertex/shader/TEV/draw execution, GPU resources/coherency and measured console performance |
 | Packaging/GUI | Original synthetic packing/decryption verification and conversion foundations; GUI workflow specified | Commercial conversion, actual WUP install/Menu gameplay, clean Windows and final GUI |
 
-## v0.19.0 increment
+## v0.20.0 increment
+
+All diagnostic variants initialize a fresh native AX context before running
+self-tests or waiting for input. An inherited same-process context is reset;
+owned voices are released before AX shutdown and foreground changes. Compiled
+apps acquire no tone voice. Failure states and lifecycle counters enter the
+small result and full trace. A two-step Audio Check asks whether launch music
+stopped and whether the original native tone played on both outputs. This is
+not 3DS guest audio, and physical silence remains pending.
+
+The private physical round now verifies named TXT read-back, original fresh-launch
+save reload, embedded/SD RomFS and GX transfer/configuration. Correct pictures and
+Minus return have user confirmation; the launch-music defect remains separate.
+The save completion prompt now explicitly distinguishes a fresh app launch from
+an in-app Plus restart.
+
+Project #2 population/overview/fields/views are verified using the Actions secret.
+Source tracking still cannot overwrite existing board values. Docs-only Pages
+publication and the dynamic chart use a reviewed trusted-main workflow; hosting
+must be verified before being reported live. Application source remains private.
+
+Validation: 349 Python tests and 20 C suites passed before the hosting additions;
+report/guide has 603 assertions and AX lifecycle has 149. Current Audio Check and
+compiled GX RPX/WUHB cross-builds passed. Final hosting/chart checks are recorded
+with this increment's delivery receipts. Full milestone acceptance remains 0/7.
+
+## v0.19.0 increment (historical)
 
 An original bounded vertex-attribute decoder handles signed8, unsigned8, signed16
 and finite little-endian float32 from explicit streams/input permutations. It
@@ -155,22 +181,22 @@ or paid entitlement was changed.
 
 ## Console evidence and inputs still needed
 
-The user reports Native, Guarded AOT and Compiled AOT completed without errors on
-**0.14.5**. Supplied logs have older 0.14.0–0.14.3 headers. The valid visit-1 snapshot
-proves an initial save, while the later Save test failed and no new logs appeared.
-Exact causes remain unconfirmed. The earlier native guide and Minus-exit reports
-are retained as scoped evidence; [console-evidence.md](docs/console-evidence.md)
-distinguishes logs and verbal confirmation.
+Five new result files establish original Save, embedded RomFS, SD-file assets
+and GX transfer/configuration checks. The additional Save 0.14.6 full trace
+confirms reload in its first guest session after closing and reopening the app.
+All new guides complete without failures/skips; guest fallback/fault are zero.
+The user confirms correct screens and normal Minus return, but reports Wii U
+launch music continuing throughout. Raw uploads remain private and older failures
+are retained separately in [the evidence review](docs/console-evidence.md).
 
-The tester reports a U.S. Wii U with latest firmware, Aroma and WUP Installer GX2;
-exact versions remain unknown. No console is attached. The user is now available for a focused new test round. Earlier verbal successes
-remain scoped evidence while current logs are pending.
+The tester reports latest U.S. firmware, Aroma and WUP Installer GX2; exact
+versions remain unknown. No console is attached.
 
-- **Save/results/RomFS:** the existing v0.14.6 follow-up remains pending.
-  Preserve snapshot/siblings/reports; see [console-retest.md](docs/console-retest.md).
-- **Assets/GX:** optional v0.16 Asset Files and v0.18 GX/PICA setup await physical
-  SD/read/picture/lifecycle evidence. Neither requires a ROM/key. Do not repeat
-  completed long guides merely for a source version bump.
+- **Audio:** run only [Audio Check and GX Transfers 0.20.0](docs/launch-audio.md)
+  for launch silence, native tone and compiled stability/exit. No Save/RomFS or
+  long controls-guide repeat is required solely for this version.
+- **Platform:** exact versions, Home/APT routes, recovery and installed original
+  WUP evidence remain separate acceptance work.
 - **Mario:** supplied CIA exceeds the 32 MiB attachment limit; small intake has
   encrypted content and no executable. Prepare locally or use an already decrypted
   owned dump, then privately export the small executable intake. Keys remain local.

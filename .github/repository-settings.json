@@ -68,5 +68,7 @@
   "paid_features_enabled": false,
   "visibility_change_requested": false,
   "live_settings_verified": false,
-  "blocked_reason": "Personal management-token requirement is saved, but the environment reports has_saved_binding:false and current Project #2 reads are denied. User must securely save/apply/publish the value before live setup; scheduled Actions also need their own secret binding."
+  "blocked_reason": "Project #2 population/overview/fields/views are verified through the repository Actions secret. Public docs-only repository/Pages setup remains to be run and verified; cloud management requests still use the limited integration.",
+  "project_live_verified": true,
+  "pages_live_verified": false
 }

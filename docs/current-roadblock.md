@@ -1,4 +1,37 @@
-# Remaining acceptance gates (0.17.0)
+# Remaining acceptance gates (0.20.0)
+
+The product remains a Windows GUI that converts owned 3DS games into individual
+Wii U WUP titles. Current diagnostics do not provide commercial gameplay.
+Approximately 20% implementation and 0/7 accepted full gates remain the assessment.
+
+Reviewed physical reports establish original fresh-launch saves, named TXT
+collection, embedded/SD assets and GX transfer/configuration; pictures and Minus
+return have user confirmation. [Evidence](console-evidence.md) preserves older
+failures separately. No repeat Save/RomFS round is requested.
+
+Current external requirements:
+
+1. **Launch-audio regression:** run only [Audio Check and GX Transfers 0.20.0](launch-audio.md).
+   Return their new TXT results and a note on music/Minus return.
+2. **Platform acceptance:** record exact firmware/Aroma/installer versions and
+   complete native recovery/Home/APT and installed-original-WUP checks.
+3. **Mario input:** privately prepare the exact owned revision with
+   [local decryption](encrypted-input.md) or an already decrypted dump, then
+   supply the [small executable intake](cia-intake.md). Actual assets and
+   exercised CPU/services/PICA/audio requirements remain unknown. Keys stay local.
+4. **Renderer/runtime:** implement actual PICA/GX2 draws, shaders, modules,
+   guest audio and retail save behavior, then measure physical scenes/gameplay.
+5. **Conversion/GUI:** prove the full native Windows conversion and WUP
+   install/rebuild/save continuity, then complete the planned GUI acceptance.
+
+Independent development can continue. It cannot replace title bytes, physical
+console observations or full Windows/install acceptance. Project #2 is populated
+through the repository Actions secret; public docs/dashboard deployment has its
+own operation receipts and must be verified before being called live.
+
+## Historical handoffs
+
+### v0.17.0 handoff
 
 The final product remains an UWUVCI-style **Windows GUI → Inject → per-game WUP →
 Wii U Menu gameplay**. The CLI and original diagnostics are its shared foundations.

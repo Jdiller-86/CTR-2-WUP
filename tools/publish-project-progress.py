@@ -55,10 +55,10 @@ def publish(directory, client, apply=False):
     if not isinstance(tree, str) or not re.fullmatch('[a-f0-9]{40}', tree):
         raise EXPORT.TrackingError('The docs tree identity cannot be verified.')
     result = {'ok': True, 'applied': apply, 'repository': TARGET,
-              'paths': ['progress/' + name for name in FILES], 'application_source_published': False}
+              'paths': ['site/progress/' + name for name in FILES], 'application_source_published': False}
     if apply:
         built = client.api('repos/' + TARGET + '/git/trees', 'POST', {'base_tree': tree, 'tree': [
-            {'path': 'progress/' + name, 'mode': '100644', 'type': 'blob', 'content': contents[name]} for name in FILES]})
+            {'path': 'site/progress/' + name, 'mode': '100644', 'type': 'blob', 'content': contents[name]} for name in FILES]})
         created = client.api('repos/' + TARGET + '/git/commits', 'POST', {
             'message': 'Refresh public aggregate from private Project #2', 'tree': built['sha'], 'parents': [sha]})
         # Never force-update; concurrent documentation publishing causes a safe

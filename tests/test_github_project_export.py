@@ -121,6 +121,69 @@ class FakeGitHub(export.GitHub):
 
 
 class ProjectExportTests(unittest.TestCase):
+    def test_explicit_result_review_changes_only_scoped_task_and_is_idempotent(self):
+        class ReviewGitHub(FakeGitHub):
+            def graphql(api, query, variables):
+                if query.startswith('mutation'):
+                    payload = variables['input']
+                    api.writes.append(payload)
+                    row = next(row for row in api.data['items'] if row['id'] == payload['itemId'])
+                    if 'value' in payload:
+                        set_status(row, 'Done')
+                    else:
+                        row['waiting'] = None
+                    return {'mutation': {'projectV2Item': {'id': row['id']}}}
+                answer = super().graphql(query, variables)
+                if '... on ProjectV2Item {' in query:
+                    answer['node']['isArchived'] = False
+                return answer
+        self.project['items'][1]['waiting'] = {'__typename': 'ProjectV2ItemFieldTextValue', 'text': 'Wii U console results'}
+        api = ReviewGitHub(self.project)
+        result = export.review_result_collection(api, self.source, apply=True)
+        self.assertFalse(result['full_gate_accepted'])
+        self.assertEqual(len(api.writes), 2)
+        _, managed = export.collect(api.data, self.source)
+        self.assertEqual(managed[('work-item', 'm1-results')]['status'], 'Done')
+        self.assertEqual(managed[('work-item', 'm1-results')]['resources'], [])
+        self.assertEqual(managed[('milestone', 'm1')]['status'], 'Planned')
+        self.assertFalse(export.review_result_collection(api, self.source, apply=True)['changed'])
+
+    def test_result_review_preserves_manual_block_and_requires_reviewed_evidence(self):
+        api = FakeGitHub(self.project)
+        self.source['console_result_collection_review'] = {'reviewed': False, 'task_id': 'm1-results'}
+        with self.assertRaises(export.TrackingError):
+            export.review_result_collection(api, self.source, apply=True)
+        self.source['console_result_collection_review']['reviewed'] = True
+        _, managed = export.collect(api.data, self.source)
+        target = managed[('work-item', 'm1-results')]['item_id']
+        set_status(next(row for row in api.data['items'] if row['id'] == target), 'Blocked')
+        with self.assertRaisesRegex(export.TrackingError, 'blocked/custom'):
+            export.review_result_collection(api, self.source, apply=True)
+        self.assertEqual(api.writes, [])
+
+    def test_chart_changes_with_project_status_and_has_visible_freshness(self):
+        before = self.aggregate()
+        first = export.gate_svg(before)
+        set_status(self.project['items'][1], 'Done')
+        changed = export.gate_svg(self.aggregate())
+        self.assertNotEqual(first, changed)
+        self.assertIn('Done 1/5', changed)
+        self.assertIn(NOW.replace('T', ' ').replace('Z', ' UTC'), changed)
+        self.assertIn('0/7 full milestones accepted', changed)
+        self.assertNotIn('PRIVATE_BODY', changed)
+
+    def test_unavailable_chart_has_no_invented_progress_totals(self):
+        chart = export.gate_svg(export.unavailable(NOW))
+        self.assertIn('tracking unavailable', chart)
+        self.assertNotIn('0/7', chart)
+
+    def test_github_default_todo_is_planned_without_changing_board_values(self):
+        self.project['fields'][0]['options'].append({'id': 'todo', 'name': 'Todo'})
+        row = self.project['items'][1]
+        row['status'] = {'__typename': 'ProjectV2ItemFieldSingleSelectValue', 'optionId': 'todo', 'name': 'Todo'}
+        self.assertEqual(self.aggregate()['work_items']['status_counts']['Other'], 0)
+        self.assertEqual(row['status']['name'], 'Todo')
+
     def setUp(self):
         self.source, self.project = fixture()
 
@@ -346,7 +409,7 @@ class ProjectExportTests(unittest.TestCase):
             self.assertEqual(len(client.writes), 3)
             tree = client.writes[0][2]
             self.assertEqual(tree['base_tree'], 'b' * 40)
-            self.assertEqual([entry['path'] for entry in tree['tree']], ['progress/index.html', 'progress/progress.json', 'progress/gates.svg'])
+            self.assertEqual([entry['path'] for entry in tree['tree']], ['site/progress/index.html', 'site/progress/progress.json', 'site/progress/gates.svg'])
             self.assertEqual(client.writes[-1][2], {'sha': 'd' * 40, 'force': False})
 
     def test_publication_refuses_private_docs_repository(self):
