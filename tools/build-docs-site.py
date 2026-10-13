@@ -161,6 +161,11 @@ def verify_site(site: Path, site_url: str) -> dict:
     def verify(source: Path, target: str) -> None:
         nonlocal checked, external
         parsed = urlsplit(target)
+        if target == 'https://jdiller-86.github.io/CTR-2-WUP-docs/progress/':
+            # A separate Project workflow publishes this live endpoint. It is
+            # HTTP-verified during hosting, outside the static docs artifact.
+            external += 1
+            return
         if parsed.scheme or parsed.netloc:
             if (parsed.scheme, parsed.netloc) != (base.scheme, base.netloc):
                 external += 1

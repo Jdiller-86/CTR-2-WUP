@@ -237,8 +237,10 @@ write. It can explicitly create only `Jdiller-86/CTR-2-WUP-docs` as public, conf
 free workflow-based Pages and publish its generated site. Application visibility
 never changes. Both publishers preserve existing tree contents and update main
 without force. Progress lives in `site/progress/`, inside the Pages upload root.
-The prepared site URL is `https://jdiller-86.github.io/CTR-2-WUP-docs/`; live
-publication is established by deployment receipts and HTTP checks.
+[The documentation site](https://jdiller-86.github.io/CTR-2-WUP-docs/) and
+[interactive dashboard](https://jdiller-86.github.io/CTR-2-WUP-docs/progress/) are
+live. Their HTML, aggregate JSON and chart return HTTP 200; publication and Pages
+Actions succeeded. The README embeds the generated chart.
 
 Only seven documented milestone names, aggregate counts, accepted-gate counts,
 fixed waiting-resource categories, freshness and the Project link enter the public

@@ -118,6 +118,8 @@ def static_files(site: Path) -> tuple[dict[str, bytes], list[str]]:
 
 
 def local_target(site: Path, page: Path, target: str, site_url: str) -> tuple[Path, str] | None:
+    if target == 'https://jdiller-86.github.io/CTR-2-WUP-docs/progress/':
+        return None  # Separately published live endpoint; an ordinary external link offline.
     parsed = urlsplit(target)
     base = urlsplit(site_url)
     if parsed.scheme or parsed.netloc:

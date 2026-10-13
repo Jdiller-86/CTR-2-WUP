@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Jdiller-86/CTR-2-WUP/actions/workflows/ci.yml/badge.svg)](https://github.com/Jdiller-86/CTR-2-WUP/actions/workflows/ci.yml)
 
-[Documentation](docs/README.md) · [Releases](https://github.com/Jdiller-86/CTR-2-WUP/releases) · [Project](https://github.com/users/Jdiller-86/projects/2) · [Contributing](CONTRIBUTING.md)
+[Documentation](https://jdiller-86.github.io/CTR-2-WUP-docs/) · [Releases](https://github.com/Jdiller-86/CTR-2-WUP/releases) · [Project](https://github.com/users/Jdiller-86/projects/2) · [Contributing](CONTRIBUTING.md)
 
 CTR2WUP is an experimental 3DS-to-Wii U converter. Its goal is a Windows GUI
 that translates a 3DS game into an individual WUP title, with the top screen
@@ -39,6 +39,12 @@ for the supported subsets and current limits.
   WUP installation and full Windows conversion still require acceptance.
 
 ## Progress
+
+[![Project progress](https://jdiller-86.github.io/CTR-2-WUP-docs/progress/gates.svg)](https://jdiller-86.github.io/CTR-2-WUP-docs/progress/)
+
+The chart is generated from live Project fields and refreshed hourly. It shows
+task status separately from full milestone acceptance. Click it for the
+interactive dashboard and update time; GitHub may cache the embedded image.
 
 [Development Project](https://github.com/users/Jdiller-86/projects/2) tracks the
 seven milestones and their implementation/evidence tasks. Completing a task
