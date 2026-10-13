@@ -22,6 +22,7 @@ void ctr_guest_close(ctr_guest *guest) {
     if (guest->executor_close) guest->executor_close(guest->executor_context);
     for(unsigned i=0;i<16;++i)if(guest->sessions[i].active)ctr_fs_session_closed(guest,i);
     ctr_apt_close(guest);
+    free(guest->gsp.pica_scene);
     for(unsigned i=0;i<2;++i)if(guest->fs_volumes[i] && guest->fs_volumes[i]->mounts)--guest->fs_volumes[i]->mounts;
     if(guest->fs_romfs && guest->fs_romfs->mounts)--guest->fs_romfs->mounts;
     for (unsigned i=0;i<CTR_GUEST_STORAGE_COUNT;++i) free(guest->storage[i]);

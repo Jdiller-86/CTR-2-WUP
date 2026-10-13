@@ -54,6 +54,9 @@ typedef struct {
     uint64_t gx_commands,gx_dma,gx_fills,gx_transfers,gx_copies,gx_cache,gx_pica;
     uint32_t last_gx_header,last_gx_detail;
     ctr_pica_state pica;
+    struct ctr_scene_state *pica_scene;
+    uint64_t pica_draws,pica_triangles,pica_fragments,pica_shader_instructions;
+    uint32_t last_scene_result,last_vertex_result,last_shader_result;
     uint32_t last_pica_result,last_pica_offset,last_pica_register;
 } ctr_guest_gsp;
 #define CTR_GUEST_MAX_THREADS 8u

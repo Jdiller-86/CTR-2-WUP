@@ -78,6 +78,10 @@ int ctr_recomp_instruction(Context *c,uint32_t address,uint32_t opcode) {
         ((uint32_t)c->c<<29)|((uint32_t)c->v<<28);
     bool fpscr_transfer=(opcode&0x0fff0fffu)==0x0ee10a10u || (opcode&0x0fff0fffu)==0x0ef10a10u;
     bool fp_memory=(opcode&0x0f200f00u)==0x0d000a00u || (opcode&0x0f200f00u)==0x0d000b00u;
+    bool fp_multiple=(opcode&0x0e000e00u)==0x0c000a00u &&
+        (((opcode&0x01000000u)==0 && (opcode&0x00800000u)) ||
+         ((opcode&0x01800000u)==0x01000000u && (opcode&0x00200000u)));
+    fp_memory=fp_memory || fp_multiple;
     /* Preserve controls across integer/kernel work. FP data operations under
        unsupported controls still stop before effects; FPSCR bit transport does
        not perform floating arithmetic. */
@@ -89,6 +93,13 @@ int ctr_recomp_instruction(Context *c,uint32_t address,uint32_t opcode) {
             ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
         if(fp_memory && (((opcode&0xf00u)==0xb00u && (opcode&0x400000u)) ||
             (((opcode>>16)&15u)==15u && !(opcode&0x100000u))))ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
+        if(fp_multiple) {
+            unsigned first=((opcode>>12)&15u)*2u,words=opcode&255u;
+            bool wide=(opcode&0x100u)!=0;
+            if(!wide)first|=(opcode>>22)&1u;
+            if(!words || first+words>32u || (wide && (words&1u)) || ((opcode>>16)&15u)==15u)
+                ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
+        }
         if(!fpscr_transfer && !fp_memory && (*c->fpscr&0x07ff9f00u))ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,*c->fpscr);
     }
     uint32_t media=opcode&0x0ff00ff0u;

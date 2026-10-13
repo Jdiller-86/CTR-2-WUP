@@ -45,6 +45,10 @@ static const step scene_steps[]={
     {VIEW_NATIVE,"Triangle picture","Both: RED lower-left / GREEN upper-right square.","R: correct on BOTH   L: wrong or missing picture"},
     {VIEW_NATIVE,"Shared diagonal","Does the square have NO gap along its diagonal?","R: solid square   L: gap, flicker or other problem"}
 };
+static const step pica_steps[]={
+    {VIEW_GUEST,"Guest triangle pictures","BOTH: RED lower-left / GREEN upper-right rectangle.","R: solid diagonal on BOTH   L: wrong or missing"},
+    {GUEST_EXIT,"Guest draws / readback / exit","Waiting for the compiled guest's pixel checks.","Its own PICA draw PASS and exit are checked."}
+};
 static const step gx_steps[]={
     {VIEW_GUEST,"GX transfer picture","TV: GREEN / RED / GREEN. GamePad: BLUE.","R: observed correctly   L: wrong/missing picture"},
     {GUEST_EXIT,"GX operations and exit","Wait for fill/copy/conversion checks and exit.","The original guest's own PASS and exit are checked."}
@@ -52,6 +56,7 @@ static const step gx_steps[]={
 
 static const step *steps(const ctr_test_guide *g, unsigned *count) {
     if(g->kind==CTR_GUIDE_SCENE) { *count=sizeof(scene_steps)/sizeof(*scene_steps);return scene_steps; }
+    if(g->kind==CTR_GUIDE_PICA) { *count=sizeof(pica_steps)/sizeof(*pica_steps);return pica_steps; }
     if(g->kind==CTR_GUIDE_AUDIO) { *count=sizeof(audio_steps)/sizeof(audio_steps[0]);return audio_steps; }
     if(g->kind==CTR_GUIDE_GX) { *count=sizeof(gx_steps)/sizeof(*gx_steps);return gx_steps; }
     if(g->kind==CTR_GUIDE_ASSETS) { *count=sizeof(asset_steps)/sizeof(*asset_steps);return asset_steps; }
