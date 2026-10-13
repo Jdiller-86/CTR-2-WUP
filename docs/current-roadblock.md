@@ -1,4 +1,4 @@
-# Remaining acceptance gates (0.20.0)
+# Remaining acceptance gates (0.23.0)
 
 The product remains a Windows GUI that converts owned 3DS games into individual
 Wii U WUP titles. Current diagnostics do not provide commercial gameplay.
@@ -9,9 +9,14 @@ collection, embedded/SD assets and GX transfer/configuration; pictures and Minus
 return have user confirmation. [Evidence](console-evidence.md) preserves older
 failures separately. No repeat Save/RomFS round is requested.
 
+Physical testing is deferred by the user. Independent renderer/runtime and host
+development continues; these entries identify acceptance evidence to collect
+when testing or private input becomes available. The compiled original guest
+[draw checkpoint](guest-pica-draws.md) now works on host and cross-builds for Wii U.
+
 Current external requirements:
 
-1. **Launch-audio regression:** run only [Audio Check and GX Transfers 0.20.0](launch-audio.md).
+1. **Launch-audio regression, when testing resumes:** run the focused [Audio Check and GX Transfers 0.20.0](launch-audio.md).
    Return their new TXT results and a note on music/Minus return.
 2. **Platform acceptance:** record exact firmware/Aroma/installer versions and
    complete native recovery/Home/APT and installed-original-WUP checks.
@@ -19,8 +24,10 @@ Current external requirements:
    [local decryption](encrypted-input.md) or an already decrypted dump, then
    supply the [small executable intake](cia-intake.md). Actual assets and
    exercised CPU/services/PICA/audio requirements remain unknown. Keys stay local.
-4. **Renderer/runtime:** implement actual PICA/GX2 draws, shaders, modules,
-   guest audio and retail save behavior, then measure physical scenes/gameplay.
+4. **Renderer/runtime:** extend the bounded compiled guest software draw subset
+   with broader shaders/TEV/sampling, native GX2 translation, resource coherency,
+   modules, guest audio and retail saves. Collect the compiled draw guide and
+   measured physical scenes/gameplay when hardware testing resumes.
 5. **Conversion/GUI:** prove the full native Windows conversion and WUP
    install/rebuild/save continuity, then complete the planned GUI acceptance.
 

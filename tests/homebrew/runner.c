@@ -22,10 +22,21 @@ static bool romfs_read(void *context,uint64_t offset,void *output,uint32_t size)
 static char messages[1024];static unsigned used;
 static int pending_input=-1;static unsigned input_samples;
 static bool interactive;static unsigned input_stage;
+#ifdef CTR_DRAW_HOMEBREW
+static bool draw_ready;
+static uint32_t draw_pixel(unsigned x,unsigned y,unsigned screen) {
+    unsigned height=screen?320u:400u,px=239u-y,py=x;
+    if(px<30u || px>=210u || py<height/8u || py>=height*7u/8u)return UINT32_C(0x102031ff);
+    return (2u*px+1u)*height+(2u*py+1u)*240u<480u*height?UINT32_C(0xff0000ff):UINT32_C(0x00ff00ff);
+}
+#endif
 static void message(void *context,const char *text) {
     (void)context;size_t size=strlen(text);if(size+used+2<sizeof(messages)) { memcpy(messages+used,text,size);used+=(unsigned)size;messages[used++]=';'; }
     if(size==21 && !strncmp(text,"CTR2WUP INPUT READY ",20) && text[20]>='0' && text[20]<='2')pending_input=text[20]-'0';
     if(!strcmp(text,"CTR2WUP INTERACTIVE READY")) { interactive=true;pending_input=0; }
+#ifdef CTR_DRAW_HOMEBREW
+    if(!strcmp(text,"CTR2WUP DRAW READY"))draw_ready=true;
+#endif
 }
 static void trace(void *context,const char *event,const char *hash,uint32_t pc,bool thumb,uint32_t detail) {
     (void)context;(void)hash;(void)thumb;
@@ -36,9 +47,19 @@ static bool capture(ctr_guest *g,const char *folder) {
     static uint64_t swaps[2];
     if(!folder || g->gsp.black || !g->gsp.active[0] || !g->gsp.active[1] ||
        (swaps[0]==g->gsp.swaps[0] && swaps[1]==g->gsp.swaps[1]))return true;
+#ifdef CTR_DRAW_HOMEBREW
+    if(!draw_ready)return true;
+#endif
     uint32_t *pixels=malloc(400*240*sizeof(*pixels));if(!pixels)return false;
     bool match=ctr_gsp_pixels(g,0,pixels,400*240)==CTR_MEM_OK;
-    uint32_t color=match?pixels[0]:0;match=match && (color==0x00ff00ff || color==0xff0000ff);
+    uint32_t color=match?pixels[0]:0;
+#ifdef CTR_DRAW_HOMEBREW
+    for(unsigned i=0;match && i<400*240;++i)match=pixels[i]==draw_pixel(i%400u,i/400u,0);
+    match=match && ctr_gsp_pixels(g,1,pixels,320*240)==CTR_MEM_OK;
+    for(unsigned i=0;match && i<320*240;++i)match=pixels[i]==draw_pixel(i%320u,i/320u,1);
+    if(!match) { free(pixels);return false; }
+#else
+    match=match && (color==0x00ff00ff || color==0xff0000ff);
     for(unsigned i=0;match && i<400*240;++i)match=pixels[i]==color;
     match=match && ctr_gsp_pixels(g,1,pixels,320*240)==CTR_MEM_OK;
     for(unsigned i=0;match && i<320*240;++i) {
@@ -46,6 +67,7 @@ static bool capture(ctr_guest *g,const char *folder) {
         uint32_t expected=interactive && input_stage<2 && i==touch?0xffffffff:0x0000ffff;
         match=pixels[i]==expected;
     }
+#endif
     if(match) {
         if(captures==16) { free(pixels);return false; }
         colors[captures]=color;
@@ -112,7 +134,10 @@ int main(int argc,char **argv) {
     printf("{\"state\":\"%s\",\"fault\":\"%s\",\"pc\":%u,\"instructions\":%llu,\"svcs\":%llu,\"switches\":%llu,\"fallback\":%llu,\"ipc_failures\":%llu,\"messages\":\"%s\",\"frames\":[",ctr_guest_state_name(g.state),ctr_cpu_result_name(g.fault),g.cpu.r[15],(unsigned long long)g.cpu.instructions,(unsigned long long)g.svc_count,(unsigned long long)g.context_switches,(unsigned long long)g.cpu.fallback_instructions,(unsigned long long)g.ipc_failures,messages);
     for(unsigned i=0;i<captures;++i)printf("%s%u",i?",":"",colors[i]);
     unsigned depth=0;uint64_t unwinds=0;ctr_recomp_depth_stats(&g,&depth,&unwinds);
-    printf("],\"input_samples\":%u,\"save_commits\":%llu,\"aot_max_depth\":%u,\"aot_unwinds\":%llu,\"gx\":{\"commands\":%llu,\"dma\":%llu,\"fills\":%llu,\"transfers\":%llu,\"copies\":%llu,\"cache\":%llu,\"pica\":%llu},\"pica_state\":{\"lists\":%llu,\"writes\":%llu,\"finalizers\":%llu,\"viewport_width\":%u}}\n",input_samples,(unsigned long long)(filesystem?save.commits:0),depth,(unsigned long long)unwinds,(unsigned long long)g.gsp.gx_commands,(unsigned long long)g.gsp.gx_dma,(unsigned long long)g.gsp.gx_fills,(unsigned long long)g.gsp.gx_transfers,(unsigned long long)g.gsp.gx_copies,(unsigned long long)g.gsp.gx_cache,(unsigned long long)g.gsp.gx_pica,(unsigned long long)g.gsp.pica.committed_lists,(unsigned long long)g.gsp.pica.register_writes,(unsigned long long)g.gsp.pica.finalizations,g.gsp.pica.registers[0x41]);
+    printf("],\"input_samples\":%u,\"save_commits\":%llu,\"aot_max_depth\":%u,\"aot_unwinds\":%llu,\"gx\":{\"commands\":%llu,\"dma\":%llu,\"fills\":%llu,\"transfers\":%llu,\"copies\":%llu,\"cache\":%llu,\"pica\":%llu},\"pica_state\":{\"lists\":%llu,\"writes\":%llu,\"finalizers\":%llu,\"viewport_width\":%u}",input_samples,(unsigned long long)(filesystem?save.commits:0),depth,(unsigned long long)unwinds,(unsigned long long)g.gsp.gx_commands,(unsigned long long)g.gsp.gx_dma,(unsigned long long)g.gsp.gx_fills,(unsigned long long)g.gsp.gx_transfers,(unsigned long long)g.gsp.gx_copies,(unsigned long long)g.gsp.gx_cache,(unsigned long long)g.gsp.gx_pica,(unsigned long long)g.gsp.pica.committed_lists,(unsigned long long)g.gsp.pica.register_writes,(unsigned long long)g.gsp.pica.finalizations,g.gsp.pica.registers[0x41]);
+    printf(",\"pica_render\":{\"draws\":%llu,\"triangles\":%llu,\"fragments\":%llu,\"shader_instructions\":%llu}}\n",
+        (unsigned long long)g.gsp.pica_draws,(unsigned long long)g.gsp.pica_triangles,
+        (unsigned long long)g.gsp.pica_fragments,(unsigned long long)g.gsp.pica_shader_instructions);
     ctr_guest_close(&g);if(!ctr_fs_volume_close(&sd) || (filesystem && !ctr_fs_volume_close(&save)))return 6;
 #ifdef CTR_ROMFS_HOMEBREW
     if(external_assets?!ctr_romfs_file_close(&asset_file):!ctr_fs_romfs_close(&assets))return 10;

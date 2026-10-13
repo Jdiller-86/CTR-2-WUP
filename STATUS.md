@@ -1,6 +1,6 @@
 # CTR2WUP status
 
-Updated **October 13, 2026 (America/New_York)** · **v0.22.0**.
+Updated **October 13, 2026 (America/New_York)** · **v0.23.0**.
 The target remains an UWUVCI-style Windows GUI: select an owned 3DS game, configure
 title/artwork, click Inject, install its individual WUP and play from Wii U Menu.
 [Requirements](docs/project-brief.md), [product plan](docs/development-plan.md),
@@ -17,11 +17,41 @@ is enabled. Current binaries are original homebrew diagnostics.
 |---|---|---|
 | Input/preparation | Bounded CIA/NCSD/NCCH inspection, optional local key/seed imports/decryption, canonical full RomFS IVFC/metadata verification and private asset blobs | Actual user exports/Mario assets, broader forms and Windows acceptance |
 | CPU/runtime | Checked ARM/Thumb/VFP/AOT subsets, owned memory, eight single-core contexts and scoped services | Complete exercised CPU/HLE coverage, modules, guest audio and retail saves |
-| Homebrew | Eight normal-CRT/libctru applications: boot, threads, graphics, input, interactive, filesystem, RomFS and GX transfer | Launch-audio regression, broader services and game integration |
-| Graphics | Direct/shared framebuffer presentation, five display formats, 14 base textures, scoped GX transfers and first original PICA-format loader/MOV-shader/software triangle scenes | Guest draw/resource integration, broader shaders/TEV/sampling, GPU resources/coherency and measured console performance |
+| Homebrew | Nine normal-CRT/libctru applications: boot, threads, graphics, input, interactive, filesystem, RomFS, GX transfer and PICA draws | Launch-audio regression, broader services and game integration |
+| Graphics | Direct/shared framebuffer presentation, five display formats, 14 base textures, scoped GX transfers and compiled original guest PICA/MOV/software draws | broader shaders/TEV/sampling, GPU resources/coherency and measured console performance |
 | Packaging/GUI | Original synthetic packing/decryption verification and conversion foundations; GUI workflow specified | Commercial conversion, actual WUP install/Menu gameplay, clean Windows and final GUI |
 
-## v0.22.0 increment
+## v0.23.0 increment
+
+An original compiled ARM/libctru program now submits two standard GSP PICA
+command lists, retains shader/state across them, draws to owned tiled targets,
+checks the pixels, transfers both framebuffers and exits with its own PASS.
+The route executes **17,420,794 ARM instructions**, zero fallback, four triangles
+and **97,200 covered fragments**. Independent displayed-image checks cover all
+172,800 top/bottom pixels. See [the guest draw contract](docs/guest-pica-draws.md).
+
+Guest physical ownership, permission splits, resource/command/relay aliases,
+retained uploads, late failure and queue completion have **83,108 assertions**.
+The raw VFP push/pop guard now preserves exact bits under CRT FPSCR controls;
+unsupported arithmetic still fails. Required coverage is **380 Python tests and
+22 normal/ASan/UBSan C suites**; the report guide has 636 assertions. Native,
+Scene Check and compiled Guest Draws RPX/WUHB builds and exact reports are retained
+with source/SDK provenance; physical rendering evidence is deferred.
+
+Development is visible in PR #57 (guest draws) and merged PR #58 (tracking).
+Scoped feature issues connect native parents, milestones, Project items and PRs;
+35 established gate tasks retain their acceptance boundaries. AGENTS.md, the
+repository tour, shared runtime manifest and current product plan now provide a
+clear route for incoming contributors. The Actions credential remains in Actions.
+Completed remote/local branches are removed after merge.
+
+CPU software rendering supports the documented canonical target/fragment and
+MOV shader subset. Arithmetic shaders, sampling/general TEV, depth/blend/stencil,
+clipping and native GPU translation remain open. The Audio Check/GX Transfers
+**0.20.0** launch-music regression, commercial profile and all full gates remain
+pending. Host passes and cross-builds do not establish physical acceptance.
+
+## v0.22.0 increment (historical)
 
 The first original scenes now execute PICA-format loader/index state, fixed
 attributes, packed/float32 uniforms and actual MOV/NOP/END shader instructions

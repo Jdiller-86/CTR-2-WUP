@@ -22,6 +22,35 @@ static bool ordinary(unsigned reg) {
            (reg>=0x065u && reg<=0x068u) || (reg>=0x200u && reg<=0x22au) ||
            reg==0x25eu || reg==0x25fu || (reg>=0x2b9u && reg<=0x2bdu);
 }
+static bool target_register(unsigned reg) {
+    static const unsigned tev[]={0xc0,0xc8,0xd0,0xd8,0xf0,0xf8};
+    for(unsigned i=0;i<6;++i)if(reg>=tev[i] && reg<=tev[i]+4u)return true;
+    return reg==0x080u || reg==0x08fu || reg==0x0e0u || reg==0x0fdu ||
+        (reg>=0x100u && reg<=0x107u) || (reg>=0x112u && reg<=0x117u) ||
+        (reg>=0x11bu && reg<=0x11eu);
+}
+static bool configured(const ctr_scene_state *s,unsigned reg,uint32_t value) {
+    return s->register_defined[reg]==15u && s->registers[reg]==value;
+}
+static ctr_scene_result target_pipeline(const ctr_scene_state *s,const ctr_scene_surface *surface,
+                                        uint32_t color_address) {
+    static const unsigned disabled[]={0x080,0x08f,0x100,0x104,0x105,0x106,0x112,0x114,0x115,0x117,0x11b};
+    for(unsigned i=0;i<sizeof(disabled)/sizeof(*disabled);++i)
+        if(!configured(s,disabled[i],0u))return CTR_SCENE_UNSUPPORTED;
+    if(!configured(s,0x102u,3u) || !configured(s,0x107u,UINT32_C(0xf00)) ||
+       !configured(s,0x113u,15u))return CTR_SCENE_UNSUPPORTED;
+    if(s->registers[0x0e0u] || s->registers[0x116u] || s->registers[0x11cu])return CTR_SCENE_UNSUPPORTED;
+    static const unsigned tev[]={0xc0,0xc8,0xd0,0xd8,0xf0,0xf8};
+    for(unsigned i=0;i<6;++i) {
+        if(!configured(s,tev[i],i?UINT32_C(0xf000f):0u) ||
+           !configured(s,tev[i]+1u,0u) || !configured(s,tev[i]+2u,0u) ||
+           !configured(s,tev[i]+4u,0u))return CTR_SCENE_UNSUPPORTED;
+    }
+    uint32_t dimensions=surface->width|((surface->height-1u)<<12)|UINT32_C(0x01000000);
+    if((color_address&7u) || (surface->width&7u) || (surface->height&7u) ||
+       !configured(s,0x11du,color_address>>3) || !configured(s,0x11eu,dimensions))return CTR_SCENE_LAYOUT;
+    return CTR_SCENE_OK;
+}
 static ctr_scene_result packed(const uint32_t words[3],uint32_t bits[4]) {
     uint32_t raw[4]={words[2]&UINT32_C(0xffffff),
         ((words[1]&65535u)<<8)|(words[2]>>24),
@@ -252,7 +281,12 @@ static void raster(const ctr_scene_state *s,const ctr_scene_surface *surface,
 }
 static ctr_scene_result draw(ctr_scene_state *s,const ctr_scene_resources *resources,
                              const ctr_scene_surface *surface,bool indexed,
-                             ctr_vertex *decoded,uint8_t *pixels,ctr_scene_report *report) {
+                             ctr_vertex *decoded,uint8_t *pixels,ctr_scene_report *report,
+                             bool bound,uint32_t color_address) {
+    if(bound) {
+        ctr_scene_result result=target_pipeline(s,surface,color_address);
+        if(result!=CTR_SCENE_OK)return result;
+    }
     unsigned count=s->registers[0x228u];
     if(!count || count%3u)return CTR_SCENE_LAYOUT;
     if(count>CTR_SCENE_MAX_VERTICES || report->draws==CTR_SCENE_MAX_DRAWS)return CTR_SCENE_LIMIT;
@@ -282,9 +316,10 @@ static ctr_scene_result draw(ctr_scene_state *s,const ctr_scene_resources *resou
     ++report->draws;return CTR_SCENE_OK;
 }
 void ctr_scene_init(ctr_scene_state *state) { if(state)memset(state,0,sizeof(*state)); }
-ctr_scene_result ctr_scene_execute(ctr_scene_state *state,const void *commands,size_t size,
+static ctr_scene_result execute(ctr_scene_state *state,const void *commands,size_t size,
                                   const ctr_scene_resources *resources,
-                                  const ctr_scene_surface *surface,ctr_scene_report *out) {
+                                  const ctr_scene_surface *surface,ctr_scene_report *out,
+                                  bool bound,uint32_t color_address) {
     if(!state || !resources || !surface)return CTR_SCENE_ARGUMENT;
     if(!span(state,sizeof(*state)) || !span(resources,sizeof(*resources)) ||
        !span(surface,sizeof(*surface)) || !span(commands,size) ||
@@ -327,7 +362,7 @@ ctr_scene_result ctr_scene_execute(ctr_scene_state *state,const void *commands,s
     *trial=*state;memcpy(pixels,surface->bytes,surface->size);
     ctr_scene_result result=CTR_SCENE_OK;
     ctr_pica_inspect(commands,size,CTR_PICA_MAX_WRITES,writes,wire.writes,&wire);
-    unsigned markers=0;
+    unsigned markers=0,fixed_reg=0,uniform_reg=0;size_t fixed_offset=0,uniform_offset=0;
     for(size_t i=0;i<wire.writes;++i) {
         const ctr_pica_write *write=&writes[i];unsigned reg=write->reg,mask=write->byte_mask;
         uint32_t value=write->value;report.reg=reg;report.byte_offset=write->byte_offset;
@@ -341,15 +376,29 @@ ctr_scene_result ctr_scene_execute(ctr_scene_state *state,const void *commands,s
         } else if(markers)result=CTR_SCENE_WIRE;
         else if(reg==0x22eu || reg==0x22fu) {
             if(mask!=15u || value!=1u)result=CTR_SCENE_UNSUPPORTED;
-            else result=draw(trial,resources,surface,reg==0x22fu,decoded,pixels,&report);
+            else result=draw(trial,resources,surface,reg==0x22fu,decoded,pixels,&report,bound,color_address);
         } else if(reg==0x25fu) {
             if(mask!=15u || value!=1u)result=CTR_SCENE_UNSUPPORTED;
             /* Complete lists have no carried partial primitive to restart. */
-        } else if(ordinary(reg))trial->registers[reg]=ctr_pica_merge(trial->registers[reg],value,mask);
-        else result=upload(trial,reg,value,mask);
+        } else if(ordinary(reg) || (bound && target_register(reg))) {
+            trial->registers[reg]=ctr_pica_merge(trial->registers[reg],value,mask);
+            trial->register_defined[reg]|=(uint8_t)mask;
+        } else if(bound && (reg==0x110u || reg==0x111u)) {
+            if(mask!=15u || value!=1u)result=CTR_SCENE_UNSUPPORTED;
+            /* Owned CPU staging is coherent; no asynchronous cache is claimed. */
+        }
+        else {
+            if(reg>=0x233u && reg<=0x235u && !trial->fixed_words) { fixed_offset=write->byte_offset;fixed_reg=reg; }
+            if(reg>=0x2c1u && reg<=0x2c8u && !trial->uniform_words) { uniform_offset=write->byte_offset;uniform_reg=reg; }
+            result=upload(trial,reg,value,mask);
+        }
         if(result!=CTR_SCENE_OK)break;
     }
-    if(result==CTR_SCENE_OK && (!markers || trial->fixed_words || trial->uniform_words))result=CTR_SCENE_WIRE;
+    if(result==CTR_SCENE_OK && (!markers || trial->fixed_words || trial->uniform_words)) {
+        result=CTR_SCENE_WIRE;
+        if(trial->fixed_words) { report.byte_offset=fixed_offset;report.reg=fixed_reg; }
+        else if(trial->uniform_words) { report.byte_offset=uniform_offset;report.reg=uniform_reg; }
+    }
     if(result==CTR_SCENE_OK) {
         if(trial->lists==UINT64_MAX || report.draws>UINT64_MAX-trial->draws ||
            report.triangles>UINT64_MAX-trial->triangles || report.fragments>UINT64_MAX-trial->fragments ||
@@ -362,6 +411,17 @@ ctr_scene_result ctr_scene_execute(ctr_scene_state *state,const void *commands,s
         }
     }
     free(writes);free(trial);free(pixels);free(decoded);return publish(out,report,result);
+}
+ctr_scene_result ctr_scene_execute(ctr_scene_state *state,const void *commands,size_t size,
+                                  const ctr_scene_resources *resources,
+                                  const ctr_scene_surface *surface,ctr_scene_report *out) {
+    return execute(state,commands,size,resources,surface,out,false,0);
+}
+ctr_scene_result ctr_scene_execute_target(ctr_scene_state *state,const void *commands,size_t size,
+                                         const ctr_scene_resources *resources,
+                                         const ctr_scene_surface *surface,uint32_t color_address,
+                                         ctr_scene_report *out) {
+    return execute(state,commands,size,resources,surface,out,true,color_address);
 }
 const char *ctr_scene_result_name(ctr_scene_result result) {
     static const char *const names[]={"ok","argument","overflow","alias","limit","no-memory",

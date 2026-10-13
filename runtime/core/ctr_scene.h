@@ -11,8 +11,9 @@ typedef enum {
     CTR_SCENE_LIMIT, CTR_SCENE_NO_MEMORY, CTR_SCENE_WIRE, CTR_SCENE_UNSUPPORTED,
     CTR_SCENE_LAYOUT, CTR_SCENE_VERTEX, CTR_SCENE_SHADER, CTR_SCENE_NUMERIC
 } ctr_scene_result;
-typedef struct {
+typedef struct ctr_scene_state {
     uint32_t registers[CTR_PICA_REGISTER_COUNT];
+    uint8_t register_defined[CTR_PICA_REGISTER_COUNT];
     ctr_shader_program shader;
     uint32_t fixed[12][4];uint16_t fixed_defined;
     uint32_t pending_fixed[3],pending_uniform[4];
@@ -56,5 +57,15 @@ ctr_scene_result ctr_scene_execute(ctr_scene_state *state,const void *commands,
                                   const ctr_scene_resources *resources,
                                   const ctr_scene_surface *surface,
                                   ctr_scene_report *report);
+/* Same owned staging boundary with explicit PICA framebuffer/fragment state.
+ * Requires defined untextured primary-color/pass-through TEV, logic COPY,
+ * full opaque color writes, no depth/stencil/alpha/blend, RGBA8, 8x8 tiles,
+ * and unflipped dimensions/address matching the caller-resolved linear target.
+ * The caller resolves, snapshots and commits guest tiled storage separately;
+ * this API never follows an address or reads/writes a guest mapping. */
+ctr_scene_result ctr_scene_execute_target(ctr_scene_state *state,const void *commands,
+                                         size_t command_bytes,const ctr_scene_resources *resources,
+                                         const ctr_scene_surface *surface,uint32_t color_address,
+                                         ctr_scene_report *report);
 const char *ctr_scene_result_name(ctr_scene_result result);
 #endif

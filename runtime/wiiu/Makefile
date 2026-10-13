@@ -1,3 +1,5 @@
+ROOT := ../..
+include $(ROOT)/runtime/core/sources.mk
 DEVKITPRO ?= /workspace/ctr2wup-sdk
 DEVKITPPC ?= $(DEVKITPRO)/devkitPPC
 export DEVKITPRO DEVKITPPC
@@ -12,11 +14,12 @@ FILESYSTEM_HOMEBREW ?= 0
 ROMFS_HOMEBREW ?= 0
 ROMFS_FILE ?= 0
 GX_HOMEBREW ?= 0
+PICA_HOMEBREW ?= 0
 AUDIO_ONLY ?= 0
 SCENE_ONLY ?= 0
 UDP_LOG ?= 0
 CALL_LIMIT ?= 64
-APP_VERSION := 0.22.0
+APP_VERSION := 0.23.0
 UPSTREAM_DIR ?= ../../artifacts/generated-upstream-guest
 ifeq ($(GUEST_DEFAULT),1)
 APP_NAME := CTR2WUP ARM Guest $(APP_VERSION)
@@ -53,6 +56,10 @@ ifeq ($(GX_HOMEBREW),1)
 CFLAGS += -DCTR_GX_HOMEBREW
 APP_NAME := CTR2WUP GX Transfers $(APP_VERSION)
 endif
+ifeq ($(PICA_HOMEBREW),1)
+CFLAGS += -DCTR_PICA_HOMEBREW
+APP_NAME := CTR2WUP Guest Draws $(APP_VERSION)
+endif
 ifeq ($(AUDIO_ONLY),1)
 CFLAGS += -DCTR_AUDIO_ONLY
 APP_NAME := CTR2WUP Audio Check $(APP_VERSION)
@@ -65,25 +72,25 @@ LDFLAGS := -mcpu=750 -meabi -mhard-float -specs="$(WUT)/share/wut.specs" \
            -Wl,-Map,$(OUTPUT)/$(TARGET).map
 SOURCES := main.c viewport.c diagnostic_font.c test_report.c test_guide.c test_lifecycle.c image_scale.c report_storage.c test_result.c diagnostic_audio.c
 OBJECTS := $(addprefix $(BUILD)/,$(SOURCES:.c=.o))
-CORE_SOURCES := ../core/ctr_memory.c ../core/ctr_cpu.c ../core/ctr_cpu_selftest.c \
-                ../core/ctr_guest.c ../core/ctr_ipc.c ../core/ctr_heap.c ../core/ctr_kernel.c ../core/ctr_hid.c ../core/ctr_gsp.c ../core/ctr_gx.c ../core/ctr_pica.c ../core/ctr_transfer.c ../core/ctr_fs.c ../core/ctr_apt.c ../core/ctr_fs_snapshot.c ../core/ctr_guest_fixture.c \
-                ../core/ctr_service_fixture.c \
-                ../core/ctr_heap_fixture.c ../core/ctr_shader.c ../core/ctr_scene.c ../core/ctr_scene_fixture.c \
-                ../core/ctr_kernel_fixture.c \
-                ../core/ctr_hid_fixture.c \
-                ../core/ctr_gsp_fixture.c \
-                ../core/ctr_relay_fixture.c \
-                ../core/ctr_stack_fixture.c ../core/ctr_thread_fixture.c ../core/ctr_sha256.c ../core/ctr_romfs_file.c ../core/ctr_texture.c ../core/ctr_vertex.c \
-                ../../tests/fixtures/threads/thread.generated.c ../../tests/fixtures/threads/thread-image.generated.c \
-                ../../tests/fixtures/stack/stack.generated.c ../../tests/fixtures/stack/stack-image.generated.c \
-                ../../tests/fixtures/relay/relay.generated.c ../../tests/fixtures/relay/relay-image.generated.c \
-                ../../tests/fixtures/gsp/gsp.generated.c ../../tests/fixtures/gsp/gsp-image.generated.c \
-                ../../tests/fixtures/hid/hid.generated.c ../../tests/fixtures/hid/hid-image.generated.c \
-                ../../tests/fixtures/kernel/kernel.generated.c ../../tests/fixtures/kernel/kernel-image.generated.c \
-                ../../tests/fixtures/heap/heap.generated.c ../../tests/fixtures/heap/heap-image.generated.c \
-                ../../tests/fixtures/services/boot.generated.c ../../tests/fixtures/services/boot-image.generated.c \
-                ../../tests/fixtures/cpu/arithmetic.generated.c ../../tests/fixtures/cpu/exit.generated.c \
-                ../../tests/fixtures/guest/framebuffer.generated.c ../../tests/fixtures/guest/image.generated.c
+CORE_SOURCES := $(CTR_RUNTIME_SOURCES) ../core/ctr_cpu_selftest.c \
+    ../core/ctr_fs_snapshot.c ../core/ctr_guest_fixture.c \
+    ../core/ctr_service_fixture.c \
+    ../core/ctr_heap_fixture.c ../core/ctr_scene_fixture.c \
+    ../core/ctr_kernel_fixture.c \
+    ../core/ctr_hid_fixture.c \
+    ../core/ctr_gsp_fixture.c \
+    ../core/ctr_relay_fixture.c \
+    ../core/ctr_stack_fixture.c ../core/ctr_thread_fixture.c ../core/ctr_sha256.c ../core/ctr_romfs_file.c ../core/ctr_texture.c \
+    ../../tests/fixtures/threads/thread.generated.c ../../tests/fixtures/threads/thread-image.generated.c \
+    ../../tests/fixtures/stack/stack.generated.c ../../tests/fixtures/stack/stack-image.generated.c \
+    ../../tests/fixtures/relay/relay.generated.c ../../tests/fixtures/relay/relay-image.generated.c \
+    ../../tests/fixtures/gsp/gsp.generated.c ../../tests/fixtures/gsp/gsp-image.generated.c \
+    ../../tests/fixtures/hid/hid.generated.c ../../tests/fixtures/hid/hid-image.generated.c \
+    ../../tests/fixtures/kernel/kernel.generated.c ../../tests/fixtures/kernel/kernel-image.generated.c \
+    ../../tests/fixtures/heap/heap.generated.c ../../tests/fixtures/heap/heap-image.generated.c \
+    ../../tests/fixtures/services/boot.generated.c ../../tests/fixtures/services/boot-image.generated.c \
+    ../../tests/fixtures/cpu/arithmetic.generated.c ../../tests/fixtures/cpu/exit.generated.c \
+    ../../tests/fixtures/guest/framebuffer.generated.c ../../tests/fixtures/guest/image.generated.c
 ifeq ($(EXTERNAL_AOT),1)
 CFLAGS += -DCTR_EXTERNAL_AOT -I../recomp -I"$(UPSTREAM_DIR)" -ffp-contract=off -fno-fast-math
 CFLAGS += -DCTR_RECOMP_CALL_LIMIT=$(CALL_LIMIT)
@@ -97,7 +104,7 @@ vpath %.c ../core ../recomp ../../tests/fixtures/cpu ../../tests/fixtures/guest 
 all: $(OUTPUT)/$(TARGET).rpx $(OUTPUT)/$(TARGET).wuhb
 $(BUILD):
 	mkdir -p "$@"
-$(BUILD)/%.o: %.c Makefile | $(BUILD)
+$(BUILD)/%.o: %.c $(CTR_RUNTIME_MANIFEST) Makefile | $(BUILD)
 	"$(CC)" $(CFLAGS) -MMD -MP -c "$<" -o "$@"
 $(OUTPUT)/$(TARGET).elf: $(OBJECTS)
 	"$(CC)" $(LDFLAGS) $(OBJECTS) -L"$(WUT)/lib" -lwut -lm -o "$@"

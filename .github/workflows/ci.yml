@@ -196,7 +196,7 @@ jobs:
           if-no-files-found: warn
 
   wiiu:
-    name: Wii U prototype build
+    name: Wii U build and compiled guest draws
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -243,6 +243,38 @@ jobs:
         with:
           name: wiiu-scene-check-${{ github.sha }}
           path: artifacts/ci/scene-check/
+          retention-days: 30
+          if-no-files-found: error
+      - name: Install the pinned original ARM fixture and generation dependencies
+        env:
+          CTR2WUP_SDK_ROOT: ${{ runner.temp }}/ctr2wup-sdk
+        run: |
+          set -euo pipefail
+          bash tools/install-arm-fixtures.sh 2>&1 | tee artifacts/ci/sdk/arm-fixtures.log
+          bash tools/install-translator.sh 2>&1 | tee artifacts/ci/sdk/translator.log
+      - name: Execute and cross-build the original compiled guest draw program
+        run: |
+          set -euo pipefail
+          python3 tools/validate-libctru.py --application draw --wiiu --sanitize \
+            --devkitarm "$DEVKITPRO/devkitARM" --output artifacts/ci/compiled-draw \
+            2>&1 | tee artifacts/ci/sdk/compiled-draw.log
+          mkdir -p artifacts/ci/guest-draws/images artifacts/ci/guest-draws/licenses
+          cp artifacts/ci/compiled-draw/report.json artifacts/ci/guest-draws/
+          cp artifacts/ci/compiled-draw/draw/frame-*.ppm artifacts/ci/guest-draws/images/
+          cp docs/images/guest-draw-*-v023.png artifacts/ci/guest-draws/images/
+          cp artifacts/ci/compiled-draw/draw/wiiu/*.rpx artifacts/ci/compiled-draw/draw/wiiu/*.wuhb artifacts/ci/guest-draws/
+          cp docs/guest-pica-draws.md artifacts/ci/guest-draws/START-HERE.md
+          cp LICENSE THIRD_PARTY_NOTICES artifacts/ci/guest-draws/
+          cp docs/licenses/libctru.txt artifacts/ci/guest-draws/licenses/
+          cp -R "$DEVKITPRO/licenses" artifacts/ci/guest-draws/licenses/sdk
+          cp "$DEVKITPRO/ctr2wup-image-digest.txt" artifacts/ci/guest-draws/sdk-image-digest.txt
+          git rev-parse HEAD > artifacts/ci/guest-draws/source-commit.txt
+          (cd artifacts/ci/guest-draws && sha256sum -- *.rpx *.wuhb > SHA256SUMS)
+      - name: Upload checked compiled guest draws and source provenance
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wiiu-guest-draws-${{ github.sha }}
+          path: artifacts/ci/guest-draws/
           retention-days: 30
           if-no-files-found: error
       - name: Explain the scope of the diagnostic build

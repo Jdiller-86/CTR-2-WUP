@@ -1,5 +1,12 @@
 # Renderer foundation
 
+Version 0.23 adds [compiled original guest draws](guest-pica-draws.md) through
+standard GSP, tracked owned resources and canonical tiled targets. The CPU
+software MOV subset retains shader/state and commits target bytes/completion
+transactionally. Broader shaders/fragment state, native GX2 translation and
+physical renderer acceptance remain open. The sections below record earlier
+foundation boundaries at their named versions.
+
 v0.22.0 executes the [first original software scenes](software-scenes.md)
 through checked PICA-format loader/index state, fixed attributes and uniforms,
 MOV/NOP/END shaders and a bounded opaque triangle raster path. Both index formats
@@ -42,9 +49,10 @@ in all Wii U builds. See `gsp-display.md` for scope and desktop reference images
 Console behavior remains pending. This does not execute PICA draws.
 
 Pending: asynchronous GPU transfer/coherency, broader vertex and
-geometry processing/shaders, texture sampling/mips/resource lifetime, lighting, TEV, guest draw
+geometry processing/shaders, texture sampling/mips/resource lifetime, lighting, TEV, broader guest draw
 submission, caching, hardware/reference scene comparisons, and console timings.
-`execute_draw` raises an explicit unsupported error. Milestone 4 is incomplete.
+The Python `execute_draw` inspection path remains explicitly unsupported; the
+portable/native guest adapter implements only the documented software subset. Milestone 4 is incomplete.
 
 
 v0.16.0 adds an original portable base-texture decoder in

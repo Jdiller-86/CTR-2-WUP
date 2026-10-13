@@ -26,7 +26,7 @@ for vulnerability reports instead of a normal issue.
 
 ## Build and check
 
-Use Python 3.12+, Make and a C compiler. Host checks do not need the Wii U SDK;
+Use Python 3.12+, GNU Make 4.0+ and a C compiler. Host checks do not need the Wii U SDK;
 start with `make help` and `make check`. Install the verified Wii U SDK with the
 repository script; the first installation requires Docker. Optional encrypted
 input/packaging tests use the `cryptography` dependency. The target SDK uses
@@ -70,7 +70,7 @@ when no new file appeared. Include exact firmware, Aroma and launcher versions
 when known, plus observed exit/Menu behavior.
 
 Published diagnostic releases and CI build artifacts demonstrate only their
-documented original fixture/build checks. Commercial games, guest PICA rendering,
+documented original fixture/build checks. Commercial games, broader PICA rendering,
 guest audio and installed playable WUP output still have separate acceptance
 gates in the milestone checklist.
 

@@ -309,13 +309,15 @@
         "Resolve owned linear resources, retained PICA shader/state and tiled RGBA8 targets through standard guest GX commands.",
         "Commit target bytes, counters and completion signals transactionally; preserve queue prefix and reject unsupported state.",
         "Build an original normal-CRT ARM draw application and Wii U diagnostic without game patches.",
-        "Correct raw VFP push/pop under guest FPSCR controls without enabling unsupported arithmetic."
+        "Correct raw VFP push/pop under guest FPSCR controls without enabling unsupported arithmetic.",
+        "Consolidate shared portable runtime sources across host, test, validator and native build recipes."
       ],
       "acceptance": [
         "Two compiled guest command lists produce four exact indexed triangles and 97,200 covered fragments.",
         "Analytic full-surface comparison passes for both targets and displayed RGB565 frames.",
         "Normal and ASan/UBSan guest draw fixtures cover failure rollback, aliasing, permissions, retained state and completion.",
-        "Required portable CI and native RPX/WUHB builds pass."
+        "Required portable CI and native RPX/WUHB builds pass.",
+        "CI retains exact source provenance and independently verifies every captured top/bottom pixel."
       ],
       "evidence": [
         "PR #57; tools/validate-libctru.py --application draw --wiiu --sanitize.",
@@ -537,5 +539,6 @@
     "44": "Planned",
     "45": "Planned",
     "46": "Planned"
-  }
+  },
+  "state_policy": "Feature state is a planning seed; merged PR state is read live. Project #2 owns current status."
 }

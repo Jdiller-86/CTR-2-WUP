@@ -10,4 +10,7 @@ typedef struct { ctr_mem_result memory;uint32_t detail;uint8_t irq;bool signal; 
  * safety. Relay backing is never a device output. PICA draws remain unsupported.
  * Does not consume queue headers or signal interrupts; the caller owns those. */
 ctr_gx_result ctr_gx_execute(ctr_guest *guest,const uint32_t command[8],ctr_gx_completion *completion);
+/* Shared synchronous device-range guard; includes full relay-backing aliases. */
+ctr_gx_result ctr_gx_check_range(ctr_guest *guest,uint32_t address,uint32_t size,
+                               unsigned permissions,ctr_gx_completion *completion);
 #endif

@@ -21,6 +21,9 @@ class ReadOnlyInventory:
             raise AssertionError("preflight must complete before writes")
         if "/pulls/" in path:
             return {"node_id": "pr-8", "base": {"ref": "main", "repo": {"full_name": trace.REPO}}, "merged_at": None if self.unmerged else "2026-10-01"}
+        if "/pulls?" in path:
+            data = json.loads((ROOT / "docs/features.json").read_text())
+            return [{"number": n} for row in data["features"] for n in row["pull_requests"]]
         if "/milestones?" in path:
             return [{"number": n} for n in range(1, 8)]
         return [{"number": n, "node_id": f"issue-{n}", "body": ""} for n in (*range(1, 8), *range(12, 47))]
@@ -84,6 +87,14 @@ class TraceabilityTests(unittest.TestCase):
         trace.reconcile(client, self.source, False, report)
         self.assertEqual(client.writes, [])
         self.assertEqual(report["planned"]["task_parents"], 35)
+
+    def test_untracked_repository_pr_fails_before_writes(self):
+        client = ReadOnlyInventory()
+        original = client.api
+        client.api = lambda path, method="GET", payload=None: [{"number": 999}] if "/pulls?" in path else original(path, method, payload)
+        with self.assertRaisesRegex(trace.tracking.TrackingError, "missing primary feature"):
+            trace.reconcile(client, self.source, True, {"operations": []})
+        self.assertEqual(client.writes, [])
 
 
 if __name__ == "__main__":

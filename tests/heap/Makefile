@@ -1,15 +1,15 @@
 CC ?= gcc
 ROOT := ../..
+include $(ROOT)/runtime/core/sources.mk
 OUT := $(ROOT)/artifacts/heap-tests
 FLAGS := -std=c11 -O2 -g -Wall -Wextra -Wpedantic -Werror -I$(ROOT)/runtime/core
-SOURCES := test_heap.c $(ROOT)/runtime/core/ctr_cpu.c $(ROOT)/runtime/core/ctr_memory.c \
-           $(ROOT)/runtime/core/ctr_guest.c $(ROOT)/runtime/core/ctr_ipc.c $(ROOT)/runtime/core/ctr_heap.c $(ROOT)/runtime/core/ctr_kernel.c $(ROOT)/runtime/core/ctr_hid.c $(ROOT)/runtime/core/ctr_gsp.c $(ROOT)/runtime/core/ctr_gx.c $(ROOT)/runtime/core/ctr_pica.c $(ROOT)/runtime/core/ctr_transfer.c $(ROOT)/runtime/core/ctr_fs.c $(ROOT)/runtime/core/ctr_apt.c \
-           $(ROOT)/runtime/core/ctr_heap_fixture.c \
-           $(ROOT)/tests/fixtures/heap/heap.generated.c $(ROOT)/tests/fixtures/heap/heap-image.generated.c
+SOURCES := $(CTR_RUNTIME_SOURCES) test_heap.c \
+    $(ROOT)/runtime/core/ctr_heap_fixture.c \
+    $(ROOT)/tests/fixtures/heap/heap.generated.c $(ROOT)/tests/fixtures/heap/heap-image.generated.c
 .PHONY: check sanitize
 $(OUT):
 	mkdir -p "$@"
-$(OUT)/heap-tests: $(SOURCES) $(wildcard $(ROOT)/runtime/core/*.h) | $(OUT)
+$(OUT)/heap-tests: $(SOURCES) $(CTR_RUNTIME_MANIFEST) $(wildcard $(ROOT)/runtime/core/*.h) | $(OUT)
 	$(CC) $(FLAGS) $(SOURCES) -o "$@"
 check: $(OUT)/heap-tests
 	"$(OUT)/heap-tests"

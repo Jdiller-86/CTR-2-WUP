@@ -1,9 +1,13 @@
-# PICA command front end (0.18.0)
+# PICA command front end
 
-The native runtime can now process a small **no-draw configuration** command list
+The original v0.18 front end processes a small **no-draw configuration** command list
 through the standard GSP queue. It stores raw viewport/scissor register values,
 applies byte masks and recognizes the finalization emitted by libctru. This is a
 step toward M4. It produces no pixels, runs no shader and submits no GX2 draw.
+
+Version 0.23 also adapts [bounded compiled guest draws](guest-pica-draws.md)
+through the standard queue. The configuration-only API below remains unchanged;
+the separate scene/guest adapter handles its explicitly defined shader/target subset.
 
 ## Wire inspection
 

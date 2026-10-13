@@ -12,6 +12,9 @@ for the free docs-only site and build receipts.
 
 ## Start here
 
+- [Repository tour](repository-guide.md): reader routes, source map and first host check.
+- [Development tracking](development-tracking.md): native feature/task/milestone/PR workflow.
+
 - [Getting started](getting-started.md): downloads, Aroma launch, SD layout and reports.
 - [Troubleshooting](troubleshooting.md): missing reports, storage failures and hangs.
 - [Testing](testing.md): which checks establish desktop, Windows and console evidence.
@@ -33,6 +36,8 @@ for the free docs-only site and build receipts.
 
 - [Renderer status](renderer-status.md), [GX transfers](gx-transfers.md),
   [framebuffer display](gsp-display.md), [shared GSP/VBlank](gsp-queues.md) and [input](hid-input.md).
+- [Compiled guest draws](guest-pica-draws.md): standard GSP queue, exact two-screen
+  captures, owned resources and transactional completion.
 - [First software scenes](software-scenes.md): checked loader/MOV shader/raster
   boundary, independent exact images and focused Scene Check console guide.
 - [Filesystem/saves](filesystem.md), [RomFS assets](romfs-assets.md) and [application lifecycle](compiled-homebrew.md).

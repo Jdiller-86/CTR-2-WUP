@@ -1,260 +1,124 @@
 # CTR2WUP product development plan
 
-Finalized 2026-10-07 following the user's request to realign with the supplied
-preview of “Evaluate 3DS Emulation Viability”, `project-brief.md`, and the user's
-UWUVCI AIO GUI workflow clarification. `gui-workflow.md` specifies the reviewed
-reference, screens, Inject action, output and acceptance criteria.
-The referenced conversation supplies product context; its feasibility scores,
-upstream coverage percentages and compatibility claims are not verified results.
-The original brief remains the requirements document, with the October 12
-user amendment accepting optional local encrypted-input preparation described
-in [encrypted-input.md](encrypted-input.md). This plan corrects the
-execution priorities and preserves its hardware, correctness and licensing gates.
+Updated **October 13, 2026** for **v0.23.0**. The requirements remain
+[the original brief](project-brief.md), the reviewed [GUI workflow](gui-workflow.md)
+and the user amendment allowing [optional local encrypted-input preparation](encrypted-input.md).
+Upstream feasibility scores and compatibility percentages are research context,
+not verified results. [Current status](../STATUS.md) records actual evidence.
 
 ## Product and completion target
 
-Deliver a Windows GUI, **CTR2WUP.exe**, with an UWUVCI-style **3DS Inject** page:
+Deliver **CTR2WUP.exe**, a Windows GUI with an UWUVCI-style **3DS Inject** page:
 
-**Select ROM → configure title/artwork/settings → choose WUP output → Inject →
-install the resulting WUP on Wii U → launch from the Wii U Menu.**
+**Select owned ROM → configure title/artwork/settings → choose WUP output →
+Inject → install on Wii U → launch from the Wii U Menu.**
 
-The GUI runs this conversion sequence behind its Inject action:
+The shared engine must identify one supported Old 3DS revision, validate its
+executable/assets, translate ARM/Thumb/VFP ahead of time, compile the reusable
+Wii U runtime and shader/state data, stage stable per-game metadata/identity and
+produce a validated installable WUP. Decrypted `.3ds`, `.cxi` and supported
+base-application `.cia` inputs are supported intake routes; encrypted input uses
+user-managed local keys. No key or commercial asset is bundled or uploaded.
 
-1. Select a user-owned Old 3DS `.3ds`, `.cxi` or supported base-application `.cia`.
-   Use decrypted input directly, or prepare encrypted input locally using
-   material imported from the user's 3DS; validate the recovered executable/assets.
-   No key is bundled or uploaded. Device extraction and GUI import help remain planned.
-2. Detect the title/revision and report its actual support status.
-3. Analyze and translate its ARM/Thumb/VFP code on the Windows PC.
-4. Compile translated code and the reusable Wii U HLE runtime with devkitPPC;
-   stage the game's required assets and shader/state data.
-5. Generate original Wii U metadata and a stable per-game title identity, then
-   produce a validated installable WUP directory and build report.
-6. Install on the documented homebrew Wii U environment and launch from the Wii U
-   Menu, with top screen on TV and bottom screen/touch on GamePad.
+The first MVP supports **one exact commercial revision**. Super Mario 3D Land is
+the selected candidate, but the received small intake has no executable and no
+profile is enabled. Completion requires clean-Windows GUI conversion, physical
+WUP installation/Menu launch, repeatable gameplay, TV/GamePad mapping, required
+input/touch, audio, save/reload, rebuild/save continuity and useful measured
+performance. Record the revision, environment and remaining limits. The CLI is
+the shared engine; the final user workflow requires no manual shell commands.
 
-The first MVP supports **one exact commercial Old 3DS revision**. Completion
-requires conversion by the Windows GUI, actual WUP installation/Menu launch,
-repeatable interactive gameplay, input/touch as required, audio, save/reload,
-rebuild/save continuity and measured useful performance on physical Wii U.
-Record the supported revision, installer/environment and known limitations.
-Broad compatibility follows that proof.
-The CLI remains the shared build engine and an engineering tool. The finished
-user product is the GUI; normal injection requires no manual shell commands.
+## Current checkpoint
 
-## Foundation and scope correction
+Original normal-CRT/libctru applications now exercise boot, threads, input,
+framebuffer display, interactive execution, save/reload, RomFS, GX transfers and
+bounded guest PICA draws. The new draw route executes compiled ARM code through
+standard GSP commands and compares exact original two-screen scenes. It uses CPU
+software rendering and existing presentation; native GX2 shader translation,
+broader PICA state and physical renderer acceptance remain open.
 
-The version 0.2.0 baseline at commit `f42d449` contains useful container inspection, build
-orchestration, checked guest memory, original CPU tests and native/guest Wii U
-diagnostics. Commercial `build` currently stops at an unsupported-profile error;
-its external lifter adapter performed analysis only. Version 0.3.0 now integrates
-external C generation and checked static linking/execution; see
-`upstream-integration.md`. There is no PICA
-renderer, commercial runtime or Windows executable distribution. Version 0.4.0
-implements an original scoped encrypted writer and independent decrypting
-verifier; installer acceptance and the commercial pipeline remain unverified.
-`packaging.md` defines its exact limits and local-input contract.
+Checked generated-code integration, owned guest memory, scoped services, original
+synthetic packaging and hosted Windows foundations exist. Reviewed physical
+Save/results/assets/GX evidence is retained. The launch-music regression,
+installed-WUP acceptance, commercial conversion and final GUI are still pending.
+**0/7 full milestones are accepted.** Completed scoped features do not change that.
 
-Keep those foundations and use the synthetic guest as a regression test for the
-conversion/runtime boundary. Direct development effort toward integrating the
-audited lifter, reusing suitable HLE behavior, producing WUPs and running the
-selected title. Expand fixtures and CPU/service coverage to resolve concrete
-adapter, title or console failures. Measure progress by working conversion stages
-and supported game behavior, with test counts as supporting evidence.
+## Now, next and later
 
-The planned foundation is the pinned **fearkov/3dsrecomp** host lifter and
-license-cleared **Zakuro CPU/HLE** components or selected behavior ported into a
-WUT-compatible C/C++ runtime. The current Rust/Vulkan desktop runtime is not a
-validated Wii U target. Define an explicit portable generated-code ABI and port
-the required pieces; retain checked little-endian memory and controlled guest
-scheduling. Normal guest execution uses AOT code, with observable, correct
-fallback for supported misses. Adopt upstream implementations only after their
-licenses and target suitability pass the existing audit gates.
+| Priority | Concrete deliverable | Tracking and acceptance |
+| --- | --- | --- |
+| Current checkpoint | Finish the compiled original guest draw route, transactional targets/completion, exact frames and native artifact provenance | M4 #27, with #28/#30 and M2 #18; scoped feature `guest-pica-draws`, PR #57 |
+| Next independent renderer work | Add checked shader arithmetic, then bounded TEV and texture sampling using original reference scenes | M4 #28/#29; separate scoped features with numeric/pixel and rollback criteria |
+| Resource/native renderer work | Version resource caches, prove invalidation/readback, define native shader ABI and translate the proven subset into GX2 | M4 #28/#30; retain software reference and explicit shader/cache misses |
+| Deferred physical evidence | Resume the focused launch-audio check, run the compiled draw guide, record repeat launch/exit, exact-build results and Espresso/rendering costs | M1 #13–#16, M2 #20/#21, M3 #22/#26 and M4 #31; only physical observations accept these gates |
+| Title intake | Privately identify the owned Mario executable/assets and exact revision; create its feature/test-route matrix | M5 #32/#33; title-specific work waits for actual executable evidence |
+| Required game runtime | Implement observed CPU, services, dynamic modules, DSP/audio, saves and rendering requirements | M2/M3/M4 and M5 #34–#36; original probes support shared interfaces, then real title evidence |
+| Conversion engine | Connect proven stages on clean Windows with cancellation, traces, revision caches, stable identities, rebuild and safe diagnostics | M6 #37–#41; structural package checks stay separate from installation/launch |
+| Final GUI | Implement the responsive WPF Inject page, private setup help, saved projects and packaged prerequisites over the proven engine | M7 #42–#46; GUI-to-playable-WUP acceptance completes the MVP |
 
-## Ordered implementation plan
+Physical testing is deferred by the user. Continue original renderer/runtime and
+host development that does not depend on hardware. Keep exact blocked acceptance
+visible; do not treat a host pass as a console result or ask for repeated tests of
+unchanged completed routes. Priorities may change when actual title requirements
+or measured bottlenecks become available.
 
-| Phase | Work and concrete deliverable | Acceptance / original milestone mapping |
-|---|---|---|
-| P1: Resolve conversion foundations | Extend the pinned lifter adapter from analysis to C generation and static linking; normalize its 32-bit ABI, little-endian fast memory paths, SVC/resume state and fallback boundary. Resolve lifter redistribution notices. In parallel, choose a license-cleared WUP packaging route and stage original `code/content/meta` for the existing native app. | Original ARM/Thumb/VFP tests execute through the adapted lifter on desktop and PowerPC; report code size, build/memory costs and fallback timing. Original homebrew WUP is generated and physically installed/launched/exited. Advances M1/M2 and establishes M6 packaging prerequisites. |
-| P2: Select and analyze the first title | Compare a small candidate set using reproduced upstream evidence and service/GPU/module demands. Obtain one user-owned decrypted revision when its private inspection is needed. Extract code, RomFS and required module metadata; create an exact-hash profile and feature/test-route matrix. | A selected revision, traceable requirements, repeatable gameplay/save route and explicit unsupported features. Sets the scope for M3–M5. Title analysis can proceed while P1 console tests are pending. |
-| P3: Run that title through the Wii U runtime | Implement or adapt only the required kernel/SVC/IPC/APT/FS/HID/CFG/GSP behavior, guest scheduling and memory layouts. Implement the required PICA-to-GX2 draws, shaders, textures/TEV/transfers/coherency with reference tests. Add exercised CRO relocation/dispatch, DSP/audio and save/extdata behavior. Use targeted redistributable fixtures for each interface. | Adapted guest fixture works on console; selected game progresses through boot → menu → gameplay → save/reload. Produce a manually staged per-game WUP through P1 packaging and verify Menu launch. Record physical CPU/GPU/fallback timings, memory, accuracy and stability. M3/M4/M5 acceptance remains evidence-based. |
-| P4: Automate the Windows injection engine | Connect all proven stages to the existing host pipeline: detect encryption → optional local decrypt/validate → profile → extract → translate → compile → shader/cache preparation → link/stage → metadata/title ID → pack → validate → publish. Provide real internal `build/rebuild/import-trace/validate-package`, versioned GUI requests/progress events, cancellation, revision-aware caches, stable saves/IDs and actionable diagnostics. | A clean Windows machine converts the selected ROM into the functioning per-game WUP through the engine without hand edits. Verify install/Menu launch, rebuild/save continuity and uninstall behavior. Completes M6 after its console checks; the CLI alone does not complete the product. |
-| P5: Deliver the Windows GUI injector | Build the C# WPF front end on a supported .NET LTS release over the verified engine, following `gui-workflow.md`. Provide the UWUVCI-style 3DS Inject page, ROM/compatibility detection, game name and artwork previews, settings/WUP destination, one Inject action, responsive progress/cancellation, completion/SD-install guidance and saved-project rebuild. Package or provision actual prerequisites through documented setup. | `CTR2WUP.exe` performs the supported injection on clean Windows without manual shell commands. Its WUP installs, launches from the Menu and passes the agreed physical-console gameplay/save test. Completes M7 and the first MVP. |
+## Execution order and gates
 
-P1 has two independent work streams: translator/runtime portability and packaging.
-Resolve packaging early so installer, metadata, certificate and key requirements
-are known before completing the game runtime. P2 supplies the evidence for P3's
-feature priorities. The GUI workflow is specified now; its implementation follows
-the demonstrated conversion pipeline. Every engine stage supports the final
-GUI-driven Inject action.
+1. **P1 — Translation and packaging foundations:** extend exercised CPU/ABI/
+   fallback correctness and measure PowerPC costs. Resolve original-homebrew WUP
+   installer/metadata/certificate prerequisites and prove Menu launch/exit.
+   Host/emulated proofs already exist; physical acceptance remains open.
+2. **P2 — Exact title analysis:** identify the owned revision, code/assets/modules,
+   observed service/GPU demands and a repeatable gameplay/save route. Enable a
+   profile only after actual executable identity and support evidence are recorded.
+3. **P3 — Shared runtime and renderer:** implement the required reusable interfaces,
+   shader/fragment/resource paths, modules, guest audio and retail saves. Advance
+   the selected game through boot, menu, gameplay and save/reload; measure accuracy,
+   timing, memory and stability on Wii U. Independent original probes can proceed now.
+4. **P4 — Automated Windows engine:** connect optional decryption, profile, extraction,
+   translation, compile, shader/cache setup, stage, metadata/title ID, pack, validate
+   and publish. Prove cancellation, trace import, revision-aware rebuild, save
+   continuity and clean-Windows conversion without hand edits. Complete M6 gates.
+5. **P5 — Windows injector:** implement the specified WPF workflow over P4, provision
+   actual prerequisites and prove a normal user can Inject, install and play the
+   supported title. Complete M7 and the first MVP; broader compatibility follows.
 
-## Packaging and reuse decisions
+Packaging and translator portability are independent streams. Resolve installation
+prerequisites early while runtime work continues. The GUI contract is specified
+now; GUI implementation follows the demonstrated conversion pipeline.
 
-The audited nuspacker/CNUS_Packer checkouts have no identified license grant;
-their certificate templates also lack established redistribution provenance.
-Find an applicable grant or a suitable licensed alternative. If neither is
-available, implement an original scoped packer from documented formats with
-license-cleared cryptographic dependencies. Record the selected route and actual
-installation evidence before treating packaging as solved.
+## Tracking and visible development
 
-Complete 3dsrecomp's missing redistribution notices before bundling its executable
-or ABI support. Its existing local invocation can support research while this is
-resolved. Preserve applicable notices for adopted Zakuro code; validate each
-ported subsystem against the portable ABI and target toolchain. A wholesale
-desktop emulator port is outside the selected architecture.
+[Project #2](https://github.com/users/Jdiller-86/projects/2) owns live status. Each
+change belongs to a scoped feature issue with native parent task, M1–M7 repository
+milestone and linked PR. The 35 gate tasks have native milestone parents. The
+reviewed private feature catalog backfills historical PRs and defines renderer
+follow-ups; [development tracking](development-tracking.md) explains the workflow.
 
-Keys and any required certificate material use documented user-managed local
-configuration with redacted diagnostics. ROMs, extracted assets, translated
-commercial code, saves and per-game packages remain private. A structural package
-pass is separate from signature/installer policy and successful installation.
+Use focused branches, attributable commits and early pushed draft PRs. Required
+CI and documentation checks precede merge; completed remote/local branches are
+removed and verified. Trusted-main Actions perform management with the Actions
+credential and retain live audit receipts. A merge completes only its scoped
+feature criteria, never a full hardware/title/Windows gate by inference.
 
-## External inputs and checkpoints
+## Reuse, privacy and feasibility
 
-| Needed input/evidence | When it is needed | What remains pending without it |
-|---|---|---|
-| Physical Wii U results and SD logs for existing native/guest diagnostics | P1; the builds are already available | Platform behavior, actual PowerPC correctness/performance and hardware-dependent fixes |
-| One user-owned decrypted Old 3DS revision and agreed gameplay/save route | P2, before title-specific runtime/renderer work | Exact profile, code/assets/module analysis and commercial requirements/testing |
-| Documented supported homebrew/installer environment and locally configured packaging prerequisites | P1 original homebrew WUP smoke test | Real installation/Menu-launch acceptance; these are not bundled credentials |
-| Clean Windows execution/build results | Host adapter/executable validation, then P4/P5 acceptance | Native Windows toolchain, `.exe` distribution, paths/cancellation and GUI evidence |
-| Physical selected-title gameplay/save/audio/performance evidence | P3–P5 | Commercial compatibility, useful speed and final MVP acceptance |
+The pinned external host lifter has a checked portable ABI and original runtime
+adapter. Complete redistribution notices before bundling the external tool or ABI
+support. Adopt CPU/HLE components only after license and Wii U suitability review;
+a wholesale Rust/Vulkan desktop emulator port is outside the selected architecture.
+External emulator/reference code remains in separate test checkouts.
 
-Continue independent implementation when a hardware check is pending, and record
-the exact blocked acceptance. Reassess feasibility after the adapted-lifter
-PowerPC measurements and first representative renderer workload. Optimize
-measured bottlenecks; document a failed performance gate before widening scope.
-Upstream desktop compatibility and coverage percentages cannot close these gates.
+The original scoped packer/decrypting verifier exists. Earlier nuspacker/
+CNUS_Packer candidates lacked an identified license grant and established
+certificate-template provenance; no such implementation or material is bundled.
+Synthetic package correctness does not establish authenticity, installer policy
+or physical Menu launch. Local packaging requirements remain explicit.
 
-## Resumed implementation checkpoint
+ROMs, keys, assets, translated commercial code, saves, traces and per-game packages
+stay private, with redacted diagnostics and user-managed local setup. Optimize
+measured bottlenecks and document failed performance gates before widening scope.
+Test counts and upstream desktop compatibility cannot replace product acceptance.
 
-The user resumed development. P1's external generation/checked ABI/static-link
-proof now executes on desktop and emulated big-endian PowerPC and builds an RPX.
-Original metadata/artwork staging is implemented. Version 0.4.0 now writes the
-scoped encrypted FST/content/TMD/ticket profile and independently verifies all
-decrypted files. The real RPX passes the offline path with synthetic inputs;
-physical install/Menu launch remains open. The legacy makefst candidate's
-plaintext and test/production certificate combination was not adopted.
-
-The user selected **Super Mario 3D Land** for P2. `first-title.md` records concrete
-upstream source leads and intake commands. Its exact dump/revision is pending;
-profile activation and title-specific implementation follow that evidence.
-`STATUS.md` and `milestones.md` track implemented, verified and pending work.
-
-P2 update, October 7 (America/New_York): the user supplied a CIA, but the
-workspace transfer tool rejects it above 32 MiB. v0.5.0 implements direct
-decrypted-CIA intake and a separate self-contained Windows console helper that
-exports a small private executable view or encryption report. Actual game
-inspection awaits that export; filename region/version claims remain unverified.
-The original CIA can remain local for assets. This helper is not the GUI injector.
-
-October 8 (America/New_York): the user is away from the CIA's computer and asked
-for independent implementation. v0.6.0 advances P3's shared startup foundation:
-checked CP15 TLS access, typed service sessions, bounded SendSyncRequest and
-restricted SRV/CFG reads. An original 89-instruction ARM program exercises those
-interfaces through interpreter/original/external AOT, without title-specific code.
-The console diagnostics embed its original interpreter/AOT self-test. This does
-not activate Mario or close any physical-console milestone; its exact revision,
-broader kernel/services/GPU/audio/saves and installer acceptance remain pending.
-
-The next ROM-independent increment, v0.7.0, implements checked ControlMemory and
-QueryMemory: owned heap/linear CPU backing, atomic partial free/protection, bounds
-and resource limits. Its original ARM lifecycle probe preserves AOT while
-matching all three execution paths. This advances M3/P3; the physical tests,
-shared-memory/thread/kernel work and title-specific requirements remain open.
-GPU/DSP physical-address translation is not supplied by the linear allocation.
-
-The user requested continued execution through concrete roadblocks. v0.8.0
-adds shared-memory ownership, mutex/semaphore objects and wait-any/all as common
-HID/GSP prerequisites. Continue into real input/service integration while
-console/title-specific gates remain open. These are tested single-thread interfaces.
-
-v0.9.0 implements the standard HID shared page/events and connects live Wii U
-VPAD input to an original ARM consumer. The external compiler/target comparisons
-remain ROM-independent. Continue next into the standard GSP framebuffer display
-interface, before title-specific PICA/shader work. Console tests and actual Mario
-intake remain required; the GUI still follows demonstrated execution/packaging.
-
-v0.10.0 adds direct GSP framebuffer submission and five rotated format decoders.
-The original ARM standard-HID/GSP guest now reaches the Wii U presentation backend
-in all builds; actual external execution is verified separately on desktop and
-emulated PPC. The next planned acceptance gate needs physical console evidence
-and Mario executable intake. `current-roadblock.md` records that roadblock and
-precise resume order. Generic runtime work remains possible, but broader game
-feature selection and performance claims need the selected revision/reference
-and console results. All commercial/GUI/full milestone gates stay open.
-
-The user asked whether further development was possible. v0.11.0 resumes shared
-GSP framebuffer queues and a diagnostic VBlank/IRQ relay without a ROM. The ARM
-probe uses LDREX/STREX and tests a device write forcing retry across three
-execution paths. The queued guest is embedded in Wii U builds. Physical acceptance
-and Mario intake still gate compatibility, not all shared development. Further
-ROM-independent work includes thread scheduling, CPU/barrier correctness, general
-IPC/FS and bounded graphics transfers. Prioritize original reference tests for
-each; title-specific PICA/feature selection still needs actual intake/trace.
-
-v0.12.0 advances the ROM-independent CPU foundation: ordinary ARM/Thumb stack
-frames, multiple-register transfers and register BLX calls. The original 47-step
-nested-call fixture and 220 ARM1176/Unicorn cases check real compiled-function
-prerequisites. External fault/unsupported guards preserve checked behavior even
-where the emitter updates a base early or erases an empty transfer. Thread contexts,
-address arbitration, barriers, FS/APT, GX/PICA, audio/saves and exact Mario intake
-remain priorities; this checkpoint does not change the GUI/WUP product goal.
-
-v0.13 advances the shared M3 foundation through normal devkitARM/libctru/newlib
-applications, rather than stopping at hand-authored SVC probes. Implemented
-prerequisites include single-core thread contexts, priority/quanta, owner-aware
-locks, address arbiters, local resource limits, correct partial-page DATA/BSS,
-synthetic kernel configuration, CPU media/barriers/FPSCR/FP word transfers and
-signed halfword accumulation. Real compiled threads/C TLS/LightLock, standard
-HID and all pixels of three CPU-written screen pairs pass without interpreter
-fallback. The additional interactive Wii U build is the concrete next M3
-hardware test. Wider APT/FS/GX/PICA/audio/save implementation and exact Mario
-intake remain required; no full milestone or commercial profile is enabled.
-
-v0.14 continues the independent shared runtime through checked private FS
-archives/files, original compiled save/read/fresh-process reload, snapshot
-validation and standalone APT initialization/event/wakeup/shutdown. The fifth
-console diagnostic makes SD save/reload testable without a ROM. Next selected-title
-work requires the actual private executable/assets and a boot/unsupported trace
-to choose ROMFS/retail-save/module/PICA/audio implementation. Physical save and
-interactive tests remain required, alongside installer and Windows acceptance.
-General unimplemented features are not presumed impossible; this increment does
-not activate a commercial profile or replace the GUI-to-installable-WUP goal.
-
-
-v0.14.6 continues M2/M3/P3 with independent read-back-verified test result files,
-portable save publication/rollback/recovery and read-only current-process RomFS
-asset transport. Normal libctru reads nested/Unicode assets, enumerates directories
-and denies writes in an original fixture, verified on desktop/sanitizers and
-emulated big-endian PPC. Shared time and scoped ARM data semantics were required
-by the actual program. The user reports v0.14.5 Native/Guarded/Compiled success;
-new trace absence and later save failure remain unconfirmed causes. Next physical
-checks are Save and RomFS, followed by actual decrypted Mario revision/asset
-analysis and required PICA/audio/services integration. No GUI, commercial profile
-or full acceptance milestone is enabled by these diagnostics.
-
-
-October 12 user update: optional 3DS key import/local decryption is part of the
-final product. v0.15.0 implements bounded local CIA/NCCH/NCSD main-content
-preparation and plaintext support-file import, verified with original encrypted
-fixtures through small intake, actual external AOT execution and Wii U cross-build.
-It does not acquire keys from a console, ship key material or enable retail
-compatibility. Already-decrypted input remains available. The on-console helper,
-protected Windows key storage and GUI import wizard remain planned; see
-`encrypted-input.md`. This advances P2 preparation and P4/M6 foundations without
-moving GUI work ahead of commercial runtime/renderer/installation proof.
-
-The user is again away and explicitly authorizes continued independent milestones
-using earlier verbal confirmations. Reported environment: U.S. console, latest
-available firmware, latest Aroma and latest WUP Installer GX2. Exact build numbers
-and v0.14.6 result files remain pending. Positive v0.14.5 reports remain usable
-scoped user evidence; no unrelated long retest is requested.
-
-
-October 12 decryption-backend decision: the user's Batch CIA 3DS Decryptor request
-was investigated against pinned original/Redux/readable-engine sources. Its AES
-and seed methods fit the already implemented preparation stage. Retain the
-original local-key engine and validate decrypted CIA/CCI/CXI handoffs; do not
-add opaque Windows binaries, inherited-source license ambiguity, wildcard
-cleanup or network seed fetching to the GUI pipeline. A source-built external
-backend remains an option only if a concrete unmet requirement justifies it.
-See [the audit](batch-decryptor-audit.md) and its original CCI handoff proof.
+See [milestones](milestones.md) for full exit criteria, [repository tour](repository-guide.md)
+for source layout and [development history](development-history.md) for dated checkpoints.

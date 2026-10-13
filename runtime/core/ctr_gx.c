@@ -1,10 +1,11 @@
 /* Original bounded synchronous GX operations; no emulator or hardware backend. */
 #include "ctr_gx.h"
 #include "ctr_transfer.h"
+#include "ctr_guest_pica.h"
 #include <stdlib.h>
 #include <string.h>
 #define LIMIT (4u*1024u*1024u)
-static ctr_gx_result checked(ctr_guest *g,uint32_t address,uint32_t size,unsigned permissions,ctr_gx_completion *c) {
+ctr_gx_result ctr_gx_check_range(ctr_guest *g,uint32_t address,uint32_t size,unsigned permissions,ctr_gx_completion *c) {
     c->detail=address;c->memory=ctr_memory_check_range(&g->memory,address,size,permissions);
     if(c->memory!=CTR_MEM_OK)return CTR_GX_MEMORY;
     if((permissions&CTR_MEM_WRITE) && g->gsp.registered && size) {
@@ -20,6 +21,7 @@ static ctr_gx_result checked(ctr_guest *g,uint32_t address,uint32_t size,unsigne
     }
     return CTR_GX_OK;
 }
+#define checked ctr_gx_check_range
 static ctr_gx_result copied(ctr_guest *g,uint32_t source,uint32_t dest,uint32_t size,ctr_gx_completion *c) {
     if(!size || size>LIMIT)return CTR_GX_UNSUPPORTED;
     ctr_gx_result r=checked(g,source,size,CTR_MEM_READ,c);if(r!=CTR_GX_OK)return r;
@@ -83,9 +85,8 @@ static ctr_gx_result texture_copy(ctr_guest *g,const uint32_t *w,ctr_gx_completi
     free(input);free(bytes);return CTR_GX_OK;
 }
 static ctr_gx_result pica_list(ctr_guest *g,const uint32_t *w,ctr_gx_completion *c) {
-    /* Standard virtual-address command list. The undocumented GSP state flag
-       remains unsupported. Requested cache flushing uses our coherent CPU
-       backing; this subset neither reads GPU resources nor produces pixels. */
+    /* The GX command-list address is virtual; PICA resource/target addresses
+       inside it are physical and pass through the separate owned resolver. */
     c->signal=false;
     uint32_t size=w[2];
     if(!size || size>CTR_PICA_MAX_BYTES || (size&15u) || (w[1]&7u) ||
@@ -98,10 +99,25 @@ static ctr_gx_result pica_list(ctr_guest *g,const uint32_t *w,ctr_gx_completion 
     if(w[7])ctr_cpu_barrier();
     ctr_pica_report report={0};
     ctr_pica_result parsed=ctr_pica_execute(&g->gsp.pica,bytes,size,CTR_PICA_MAX_WRITES,&report);
-    free(bytes);
     g->gsp.last_pica_result=(uint32_t)parsed;
     g->gsp.last_pica_offset=(uint32_t)report.parameter_offset;
     g->gsp.last_pica_register=report.reg;
+    if(parsed==CTR_PICA_UNSUPPORTED) {
+        result=ctr_guest_pica_execute(g,bytes,size,w[1],c);
+        free(bytes);
+        if(result!=CTR_GX_OK)return result;
+        parsed=CTR_PICA_OK;
+    } else {
+        free(bytes);
+        if(parsed==CTR_PICA_OK) {
+            g->gsp.last_scene_result=CTR_SCENE_OK;g->gsp.last_vertex_result=CTR_VERTEX_OK;
+            g->gsp.last_shader_result=CTR_SHADER_OK;
+        }
+        if(parsed==CTR_PICA_OK && g->gsp.pica_scene) {
+            memcpy(g->gsp.pica_scene->registers,g->gsp.pica.registers,sizeof(g->gsp.pica.registers));
+            g->gsp.pica_scene->lists=g->gsp.pica.committed_lists;
+        }
+    }
     if(parsed!=CTR_PICA_OK) {
         c->detail=w[1]+(report.parameter_offset<size?(uint32_t)report.parameter_offset:0);
         return CTR_GX_UNSUPPORTED;

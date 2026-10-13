@@ -114,7 +114,9 @@ reads HID, writes RGB565 and displays through this interface in all Wii U builds
 see `gsp-display.md`. Version 0.11.0 adds one local GSP relay/shared framebuffer
 page, diagnostic VBlank and atomic queued presentation; see `gsp-queues.md`.
 The standard display guest uses this queue. Version 0.17 adds scoped synchronous
-GX commands; see [gx-transfers.md](gx-transfers.md). Guest PICA draw integration remains absent.
+GX commands; see [gx-transfers.md](gx-transfers.md). Version 0.23 connects bounded [compiled guest PICA draws](guest-pica-draws.md)
+with owned physical resources, canonical tiled targets and atomic completion;
+software execution remains separate from native GPU shader translation.
 Its guest mode presents completed ARM-written raw framebuffers through the same
 GX2 copying path. It is separate from PICA/GSP emulation; see `guest-fixture.md`.
 Version 0.12 adds checked user-mode ARM/Thumb multiple-register/stack transfers

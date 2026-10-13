@@ -130,7 +130,9 @@ static bool left_stick_seen,right_stick_seen,guest_fault_seen,allocation_checked
 static bool allocation_failure_seen;
 static int alloc_ok_for_report;
 static uint16_t touch_min_x=UINT16_MAX,touch_min_y=UINT16_MAX,touch_max_x,touch_max_y;
-#ifdef CTR_GX_HOMEBREW
+#ifdef CTR_PICA_HOMEBREW
+#define REPORT_APPLICATION "compiled-pica-draws"
+#elif defined(CTR_GX_HOMEBREW)
 #define REPORT_APPLICATION "compiled-gx-transfer"
 #elif defined(CTR_ROMFS_FILE)
 #define REPORT_APPLICATION "compiled-romfs-file"
@@ -214,7 +216,8 @@ static bool result_snapshot(const char *stage) {
         "Guest: state=%s pc=%08x instructions=%llu fallback=%llu fault=%s detail=%08x memory=%s\n"
         "Frames: host=%u guest=%llu | new_green_after_A=%u latency_ms=%llu\n"
         "GX: completed=%llu DMA=%llu fill=%llu display=%llu texture_copy=%llu cache=%llu last_header=%08x last_detail=%08x\n"
-        "PICA configuration only: completed=%llu lists=%llu writes=%llu finalizers=%llu last_result=%u last_offset=%u last_register=%03x; no draws/shaders\n"
+        "PICA: completed=%llu lists=%llu writes=%llu finalizers=%llu last_result=%u last_offset=%u last_register=%03x\n"
+        "Guest software draws: draws=%llu triangles=%llu fragments=%llu shader_steps=%llu scene_error=%u vertex_error=%u shader_error=%u; no GPU shader translation\n"
         "Host frame us: min=%u mean=%llu max=%u (diagnostic overhead, not game performance)\n"
         "Latest guest message: %s\nSave: load_status=%d persist_errno=%d\n"
         "Full trace: %s | file=%s errno=%d operation=%s FSA=%d commits=%llu\n"
@@ -252,6 +255,13 @@ static bool result_snapshot(const char *stage) {
         final_guest.captured?final_guest.gx.last_pica_result:gsp_guest.gsp.last_pica_result,
         final_guest.captured?final_guest.gx.last_pica_offset:gsp_guest.gsp.last_pica_offset,
         final_guest.captured?final_guest.gx.last_pica_register:gsp_guest.gsp.last_pica_register,
+        (unsigned long long)(final_guest.captured?final_guest.gx.pica_draws:gsp_guest.gsp.pica_draws),
+        (unsigned long long)(final_guest.captured?final_guest.gx.pica_triangles:gsp_guest.gsp.pica_triangles),
+        (unsigned long long)(final_guest.captured?final_guest.gx.pica_fragments:gsp_guest.gsp.pica_fragments),
+        (unsigned long long)(final_guest.captured?final_guest.gx.pica_shader_instructions:gsp_guest.gsp.pica_shader_instructions),
+        final_guest.captured?final_guest.gx.last_scene_result:gsp_guest.gsp.last_scene_result,
+        final_guest.captured?final_guest.gx.last_vertex_result:gsp_guest.gsp.last_vertex_result,
+        final_guest.captured?final_guest.gx.last_shader_result:gsp_guest.gsp.last_shader_result,
         completed_frames?frame_min_us:0,(unsigned long long)(completed_frames?frame_total_us/completed_frames:0),frame_max_us,
         latest_guest_message[0]?latest_guest_message:"none",snapshot_load_result,snapshot_errno,
         report_handler_added && !test_report.failed?"SAVING":"FAILED",test_report.filename,test_report.error_code,
@@ -306,6 +316,7 @@ static void guest_debug(void *context,const char *message) {
             if(latest_guest_message[i]=='\n' || latest_guest_message[i]=='\r')latest_guest_message[i]=' ';
     }
     if(strstr(message,"CTR2WUP compiled interactive PASS") ||
+       strstr(message,"CTR2WUP compiled PICA draws PASS") ||
        strstr(message,"CTR2WUP compiled GX transfers PASS") ||
        strstr(message,"CTR2WUP compiled RomFS PASS") ||
        strstr(message,"CTR2WUP compiled filesystem SAVE 1 PASS") ||
@@ -853,6 +864,8 @@ int main(int argc, char **argv) {
     result_snapshot("native_audio_ready");
 #ifdef CTR_SCENE_ONLY
     ctr_test_guide_init(&test_guide,CTR_GUIDE_SCENE,guide_log,NULL);
+#elif defined(CTR_PICA_HOMEBREW)
+    ctr_test_guide_init(&test_guide,CTR_GUIDE_PICA,guide_log,NULL);
 #elif defined(CTR_AUDIO_ONLY)
     ctr_test_guide_init(&test_guide,CTR_GUIDE_AUDIO,guide_log,NULL);
 #elif defined(CTR_GX_HOMEBREW)
@@ -987,7 +1000,7 @@ int main(int argc, char **argv) {
         uint64_t input_frame_serial=gsp_presented;
 #ifdef CTR_COMPILED_HOMEBREW
         if(pad.trigger&(VPAD_BUTTON_A|VPAD_BUTTON_B|VPAD_BUTTON_PLUS))freeze_trace_frames=64;
-        if(pad.trigger&VPAD_BUTTON_A) {
+        if(test_guide.kind!=CTR_GUIDE_PICA && (pad.trigger&VPAD_BUTTON_A)) {
             a_request_time=OSGetTime();a_request_frame=gsp_presented;a_response_pending=true;
             WHBLogPrintf("A response pending: frame_before=%llu instructions_before=%llu",
                 (unsigned long long)gsp_presented,(unsigned long long)gsp_guest.cpu.instructions);
@@ -997,7 +1010,7 @@ int main(int argc, char **argv) {
         if (pad.trigger&VPAD_BUTTON_A) play_tone();
 #endif
         if (pad.trigger&VPAD_BUTTON_X) alloc_ok=allocation_test();
-        if (test_guide.done && test_guide.kind!=CTR_GUIDE_SCENE && (pad.trigger&VPAD_BUTTON_Y)) {
+        if (test_guide.done && test_guide.kind!=CTR_GUIDE_SCENE && test_guide.kind!=CTR_GUIDE_PICA && (pad.trigger&VPAD_BUTTON_Y)) {
 #ifdef CTR_COMPILED_HOMEBREW
             guest_mode=guest_mode==2?0:2;
 #else
@@ -1005,7 +1018,7 @@ int main(int argc, char **argv) {
 #endif
             WHBLogPrintf("display_mode=%s",guest_mode==2?"standard-hid-gsp":guest_mode==1?"guest-fixture":"native");
         }
-        if (test_guide.done && test_guide.kind!=CTR_GUIDE_SCENE && (pad.trigger&VPAD_BUTTON_PLUS)) restart_guest();
+        if (test_guide.done && test_guide.kind!=CTR_GUIDE_SCENE && test_guide.kind!=CTR_GUIDE_PICA && (pad.trigger&VPAD_BUTTON_PLUS)) restart_guest();
         VPADTouchData touch={0}; uint16_t tx=0, ty=0;
         VPADGetTPCalibratedPointEx(VPAD_CHAN_0,VPAD_TP_1280X720,&touch,&pad.tpNormal);
         int inside=touch.touched && touch.validity==VPAD_VALID &&
@@ -1079,9 +1092,13 @@ int main(int argc, char **argv) {
 #endif
             snprintf(text,sizeof(text),"FRAME %llu / STATE %s",(unsigned long long)gsp_presented,ctr_guest_state_name(gsp_guest.state));
             image_text(top_image,TOP_W,11,text);
-#ifdef CTR_GX_HOMEBREW
+#ifdef CTR_PICA_HOMEBREW
+            image_text(top_image,TOP_W,12,"GUEST TRIANGLES / EXACT PIXEL READBACK");
+            snprintf(text,sizeof(text),"DRAWS %llu / SHADER STEPS %llu",(unsigned long long)gsp_guest.gsp.pica_draws,(unsigned long long)gsp_guest.gsp.pica_shader_instructions);
+            image_text(top_image,TOP_W,13,text);
+#elif defined(CTR_GX_HOMEBREW)
             image_text(top_image,TOP_W,12,"GX FILL / DMA / TILED TRANSFER / COPY");
-            snprintf(text,sizeof(text),"GX %llu / PICA SETUP %llu / NO DRAWS",(unsigned long long)gsp_guest.gsp.gx_commands,(unsigned long long)gsp_guest.gsp.gx_pica);
+            snprintf(text,sizeof(text),"GX %llu / PICA LISTS %llu / DRAWS %llu",(unsigned long long)gsp_guest.gsp.gx_commands,(unsigned long long)gsp_guest.gsp.gx_pica,(unsigned long long)gsp_guest.gsp.pica_draws);
             image_text(top_image,TOP_W,13,text);
 #else
             image_text(top_image,TOP_W,12,"A: GREEN / TOUCH: WHITE / B: EXIT");
