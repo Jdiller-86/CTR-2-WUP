@@ -58,7 +58,7 @@ jobs:
           python-version: '3.12'
       - name: Refresh managed evidence and criteria only
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.CTR2WUP_GITHUB_MANAGEMENT_TOKEN }}
           CTR_REPOSITORY: ${{ github.repository }}
         run: python tools/sync-github-progress.py --repo "$CTR_REPOSITORY" --apply --output "$RUNNER_TEMP/github-evidence.json"
       - name: Populate only the selected existing Project

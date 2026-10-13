@@ -1,5 +1,14 @@
 # CTR2WUP status
 
+**October 13 physical follow-up:** Audio Check and GX Transfers 0.20.0, plus
+Guest Draws 0.23.0, have reviewed scoped passes and user-confirmed silence and
+normal exit. The draw trace reaches the rendered second presentation at 57.33
+seconds; aggregate diagnostic timing is not game performance. Its visual prompt
+accepted an answer before that scene, so accurate presentation gating and phase
+profiling are the next follow-up. The newly supplied CCI exceeds the transfer
+limit; [small private intake](docs/cia-intake.md) is still needed. All full
+milestones remain open. [Evidence review](docs/console-evidence.md).
+
 Updated **October 13, 2026 (America/New_York)** · **v0.23.0**.
 The target remains an UWUVCI-style Windows GUI: select an owned 3DS game, configure
 title/artwork, click Inject, install its individual WUP and play from Wii U Menu.
@@ -36,7 +45,7 @@ The raw VFP push/pop guard now preserves exact bits under CRT FPSCR controls;
 unsupported arithmetic still fails. Required coverage is **384 Python tests and
 22 normal/ASan/UBSan C suites**; the report guide has 636 assertions. Native,
 Scene Check and compiled Guest Draws RPX/WUHB builds and exact reports are retained
-with source/SDK provenance; physical rendering evidence is deferred.
+with source/SDK provenance; the October 13 physical follow-up is reviewed above.
 
 Development is visible in PR #57 (guest draws) and merged PR #58 (tracking).
 Scoped feature issues connect native parents, milestones, Project items and PRs;
@@ -49,9 +58,9 @@ Completed remote/local branches are removed after merge.
 
 CPU software rendering supports the documented canonical target/fragment and
 MOV shader subset. Arithmetic shaders, sampling/general TEV, depth/blend/stencil,
-clipping and native GPU translation remain open. The Audio Check/GX Transfers
-**0.20.0** launch-music regression, commercial profile and all full gates remain
-pending. Host passes and cross-builds do not establish physical acceptance.
+clipping and native GPU translation remain open. The Audio Check/GX Transfers **0.20.0** launch-music regression has reviewed
+physical passes. Commercial profiles, useful performance and all full gates
+remain pending. Host passes and cross-builds do not establish physical acceptance.
 
 ## v0.22.0 increment (historical)
 

@@ -50,7 +50,7 @@ passes establish their stated boundaries, not physical-console execution.
 
 | Milestone | State | Remaining acceptance |
 |---|---|---|
-| [M1: Native Wii U platform](#m1) | Awaiting evidence | Launch-audio regression, platform lifecycle/recovery and installed original WUP evidence |
+| [M1: Native Wii U platform](#m1) | Awaiting evidence | Platform lifecycle/recovery, stability and installed original WUP evidence |
 | [M2: CPU translation and performance](#m2) | In progress | Exercised CPU/ABI/fallback coverage and actual Espresso timing |
 | [M3: Homebrew execution runtime](#m3) | In progress | Stable physical compiled guest plus broader services/modules/audio |
 | [M4: PICA to GX2 rendering](#m4) | In progress | Real PICA/GX2 draws/shaders/TEV/coherency and measured scenes |
@@ -78,7 +78,7 @@ so independent work can overlap without claiming downstream completion.
 
 **Verified desktop/earlier evidence:** Older native reports and the confirmed Minus exit are retained. The user reports Native/Guarded/Compiled completed without errors on v0.14.5; supplied text logs have older headers. A valid visit-1 snapshot proves initial persistence, while a later Save update failed and no new reports appeared. Current independent TXT read-back and save publication/recovery have desktop/sanitizer checks, not new console acceptance.
 
-**Reviewed physical follow-up:** Named TXT collection, original fresh-launch save reload, embedded/SD assets and GX transfers pass their scoped checks; pictures and Minus return have user confirmation. Looping launch music remains an open defect.
+**Reviewed physical follow-up:** Named TXT collection, original fresh-launch save reload, embedded/SD assets and GX transfers pass their scoped checks; pictures and Minus return have user confirmation. October 13 Audio Check/GX reports and user confirmation verify the launch-music regression; full lifecycle/recovery and installed-title acceptance remain open.
 
 **Still needs external evidence/input:** Focused audio regression, exact firmware/Aroma/installer versions and native/installed lifecycle/recovery evidence require the Wii U. No game dump is needed for the original diagnostics.
 
@@ -268,7 +268,7 @@ Acceptance:
 
 **Exit criteria:** A real compiled guest executes on Wii U, updates both screens, responds to required GamePad input/touch and exits or completes a documented stability session. Exercised save/assets behavior is verified. This fixture gate does not require claiming all retail services or PICA draw support.
 
-**Verified desktop/earlier evidence:** Nine original compiled applications cover boot, threads, input, graphics, interactive execution, save/reload, RomFS, GX transfers and bounded PICA draws. Desktop/sanitizer and selected emulated PowerPC checks support exact pixels/state/files. Reviewed physical Save/results/assets/GX evidence is retained; current compiled draw and launch-audio retests remain pending; a native tone does not establish guest DSP/audio.
+**Verified desktop/earlier evidence:** Nine original compiled applications cover boot, threads, input, graphics, interactive execution, save/reload, RomFS, GX transfers and bounded PICA draws. Desktop/sanitizer and selected emulated PowerPC checks support exact pixels/state/files. Reviewed physical Save/results/assets/GX evidence is retained; October 13 compiled draw and launch-audio results are reviewed, with a 57.33-second draw-scene delay and premature visual-prompt guard requiring follow-up; a native tone does not establish guest DSP/audio.
 
 **Still needs external evidence/input:** Original guest modules, audio probes and shared service work can proceed independently. Hardware validates display/input/audio/lifecycle/assets; observed retail service/module/save requirements need M5 intake.
 
@@ -383,7 +383,7 @@ Depends on: none.
 
 Verified foundation: [PICA command contract](pica-commands.md), 353 original builder/reference cases, transactional native state and the compiled standard command-queue fixture. No draws or full task acceptance are claimed.
 
-v0.23.0 connects [compiled guest draws](guest-pica-draws.md) to the standard GSP queue with owned resources, exact target/display checks and preserved failure state. Physical results remain deferred.
+v0.23.0 connects [compiled guest draws](guest-pica-draws.md) to the standard GSP queue with owned resources, exact target/display checks and preserved failure state. October 13 physical own PASS/exit and user picture confirmation are reviewed; rendered presentation at 57.33 seconds and premature guide timing need a focused follow-up.
 
 v0.22.0 adds [owned software scenes](software-scenes.md) with complete-list
 state/pixel rollback, explicit resource binding and independent exact pixels.
@@ -458,7 +458,7 @@ Acceptance:
 
 #### m4-console-scenes: Compare rendered scenes and measure Wii U graphics costs
 
-Use original reference scenes to establish real GX2 output and timing before title-specific visual acceptance.
+Retain reviewed bounded compiled draw results; correct premature visual gating and measure execution/scaling/GPU/wait/memory costs separately before full graphics or title acceptance.
 
 State: **Blocked** · Needs: `needs-console`.
 

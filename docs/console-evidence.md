@@ -1,5 +1,42 @@
 # Console evidence review
 
+## October 13: launch audio, GX transfers and compiled PICA draws
+
+The new private ZIP contains three full traces and two independent 4 KiB result
+files. Audio Check 0.20.0 records both launch-music silence and the native tone
+as PASS in its full trace; its separate result file was not included. GX Transfers
+0.20.0 and Guest Draws 0.23.0 each record both guide steps PASS in matching result
+and trace files, with no failed or skipped steps. All three traces reach
+`main_return`; the user separately confirms no launch music and correct exit.
+This is scoped hardware evidence, not full milestone acceptance.
+
+| Diagnostic | Reviewed physical evidence | Timing and limits |
+|---|---|---|
+| Audio Check 0.20.0 | Silence prompt and native tone on both outputs PASS; five tone requests; clean shutdown | No guest DSP/audio claim; standalone result TXT absent from this upload |
+| GX Transfers 0.20.0 | Original guest PASS/exit, 17 GX operations, four paired presentations, zero fallback/fault | Final transfer presentation at 6,882 ms; mean diagnostic host frame 145,948 us |
+| Guest Draws 0.23.0 | Own PICA draw PASS/exit, four triangles, 97,200 fragments, 36 shader steps, zero fallback/fault; user confirms pictures | Rendered second presentation at 57,330 ms; session 70,021 ms; mean host frame 153,189 us |
+
+The physical draw run executed 17,457,061 instructions. The host reference count
+is 17,420,794; they are different runs, not an exact instruction-count match.
+The user estimates roughly two minutes before the draw picture appeared.
+The trace's first presentation at 1,235 ms is the startup framebuffer, not the
+rendered scene. These aggregate timings include diagnostic overhead and do not
+measure a game frame rate or isolate CPU rasterization, scaling, GPU waits or SD
+publication costs.
+
+The visual prompt accepted R at 10,221 ms, before the drawn second presentation.
+Its guide PASS alone therefore cannot prove the final triangle picture was
+confirmed at the right time. The user's separate confirmation and the later
+guest's own target/readback PASS remain evidence. A focused follow-up must gate
+the visual answer on the drawn presentation, measure individual phases and
+review the fixed 50,000-instruction-per-refresh budget. No audio, Save or RomFS
+repeat is requested solely for this evidence update.
+
+The user is available with Windows 11, an SD reader and current mainstream Wii U
+firmware/Aroma; exact versions were not supplied. Raw files and their SHA-256
+receipt remain in ignored private storage. Full lifecycle/recovery, installed
+WUP, guest audio, broader graphics and useful game performance remain open.
+
 ## October 12 follow-up: current reports and fresh-launch save
 
 Five completed named result files were reviewed from the latest private ZIP.

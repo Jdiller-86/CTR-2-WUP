@@ -50,14 +50,16 @@ installed-WUP acceptance, commercial conversion and final GUI are still pending.
 | Current checkpoint | Finish the compiled original guest draw route, transactional targets/completion, exact frames and native artifact provenance | M4 #27, with #28/#30 and M2 #18; scoped feature `guest-pica-draws`, PR #57 |
 | Next independent renderer work | Add checked shader arithmetic, then bounded TEV and texture sampling using original reference scenes | M4 #28/#29; separate scoped features with numeric/pixel and rollback criteria |
 | Resource/native renderer work | Version resource caches, prove invalidation/readback, define native shader ABI and translate the proven subset into GX2 | M4 #28/#30; retain software reference and explicit shader/cache misses |
-| Deferred physical evidence | Resume the focused launch-audio check, run the compiled draw guide, record repeat launch/exit, exact-build results and Espresso/rendering costs | M1 #13–#16, M2 #20/#21, M3 #22/#26 and M4 #31; only physical observations accept these gates |
+| Physical evidence and performance | Retain reviewed audio/GX/draw results; correct drawn-frame gating, measure diagnostic phases and execution budget, then collect repeat launch/exit and full Espresso/rendering costs | M1 #13–#16, M2 #20/#21, M3 #22/#26 and M4 #31; only physical observations accept these gates |
 | Title intake | Privately identify the owned Mario executable/assets and exact revision; create its feature/test-route matrix | M5 #32/#33; title-specific work waits for actual executable evidence |
 | Required game runtime | Implement observed CPU, services, dynamic modules, DSP/audio, saves and rendering requirements | M2/M3/M4 and M5 #34–#36; original probes support shared interfaces, then real title evidence |
 | Conversion engine | Connect proven stages on clean Windows with cancellation, traces, revision caches, stable identities, rebuild and safe diagnostics | M6 #37–#41; structural package checks stay separate from installation/launch |
 | Final GUI | Implement the responsive WPF Inject page, private setup help, saved projects and packaged prerequisites over the proven engine | M7 #42–#46; GUI-to-playable-WUP acceptance completes the MVP |
 
-Physical testing is deferred by the user. Continue original renderer/runtime and
-host development that does not depend on hardware. Keep exact blocked acceptance
+The user is available for focused physical tests with Windows 11 and Aroma.
+October 13 audio/GX/draw results are reviewed; the draw trace exposes a 57.33-second
+scene delay and premature visual confirmation. Continue original renderer/runtime
+and host development alongside targeted hardware follow-ups. Keep exact blocked acceptance
 visible; do not treat a host pass as a console result or ask for repeated tests of
 unchanged completed routes. Priorities may change when actual title requirements
 or measured bottlenecks become available.

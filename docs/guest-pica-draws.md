@@ -29,7 +29,8 @@ oracle independently compares all **172,800 top/bottom pixels** in the captured
 PPMs. The two images show a dark background and a central region divided diagonally into
 red and green triangles; top and bottom display sizes are 400×240 and 320×240.
 
-Original host captures, with physical display verification still pending:
+Original host captures; the October 13 physical run has separate user picture
+confirmation and the guest's own target/readback PASS:
 
 ![Original compiled guest top screen](images/guest-draw-top-v023.png)
 
@@ -71,11 +72,20 @@ general TEV, clipping, depth/blend/stencil and native GPU translation require
 separate scoped features. A raw VFP push/pop guard fix supports exact bit transfers
 under CRT FPSCR controls; it does not enable unsupported arithmetic modes.
 
-## Deferred physical route
+## Physical route and reviewed follow-up
+
+The October 13 run records both guide steps PASS, own guest exit, zero fallback
+and clean shutdown. The rendered second presentation takes 57.33 seconds in the
+trace; the user estimates roughly two minutes. The first frame is startup output,
+and the visual guide accepted confirmation before the drawn frame. The user's
+separate picture confirmation is retained; presentation gating and phase timing
+need a focused follow-up. See [the evidence review](console-evidence.md). This
+single run does not establish repeat-launch stability or useful game speed.
 
 Copy the artifact's WUHB to `sd:/wiiu/apps/` and launch it in Aroma when physical
-testing resumes. The focused **Guest Draws** guide requires the actual guest
-frame before accepting the visual answer. Confirm the red/green diagonal scene
+testing is requested for a new build. In 0.23.0 the focused **Guest Draws** guide
+requires a guest frame, but startup output also satisfies that guard. Wait for
+the actual red/green diagonal scene
 on TV and GamePad, then confirm the guest's own PASS and orderly exit. Minus
 returns from the native diagnostic. Preserve the named result TXT, source commit
 and artifact hashes; follow [result collection](console-retest.md).
@@ -84,7 +94,8 @@ The compiled program has three known startup service lookup failures (`APT:S`,
 `APT:A`, `ptm:sysm`) under the documented standalone startup profile. It still
 reaches its own main/assertions/exit. This does not claim complete service startup,
 console picture/timing, WUP installation or commercial compatibility. The earlier
-focused Audio Check/GX Transfers 0.20.0 launch-music regression remains pending.
+focused Audio Check/GX Transfers 0.20.0 launch-music regression has reviewed
+October 13 physical passes; it does not establish 3DS guest audio.
 
 ## Tracking
 

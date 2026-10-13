@@ -523,6 +523,69 @@
         "The final audit found an old PICA-draws-not-implemented scaffold sentence above the correct v0.23 goal.",
         "PR #83 fixes ordering and summary readability through the trusted progress workflow; no gate is accepted."
       ]
+    },
+    {
+      "id": "console-evidence-20261013",
+      "title": "Review physical launch-audio, GX and compiled draw evidence",
+      "milestone": 1,
+      "parent_issue": 14,
+      "state": "implemented",
+      "pull_requests": [
+        85
+      ],
+      "scope": [
+        "Review the October 13 uploaded original diagnostics and preserve raw files privately.",
+        "Record scoped audio/GX/draw passes, separate user exit/picture confirmation, draw timing and transfer-blocked CCI input."
+      ],
+      "acceptance": [
+        "Named outcomes and build identities are checked against uploaded result/trace files; missing evidence and timing limits are explicit.",
+        "Current evidence, handoff and native issue/milestone summaries agree without accepting a full gate or publishing private data."
+      ],
+      "evidence": [
+        "docs/console-evidence.md records reviewed October 13 physical outcomes and timing.",
+        "Standalone native-audio result TXT is absent; full trace records both named passes. All full gates remain open.",
+        "Implementation and evidence review: https://github.com/Jdiller-86/CTR-2-WUP/pull/85"
+      ]
+    },
+    {
+      "id": "compiled-draw-progress",
+      "title": "Bound compiled guest execution and measure diagnostic draw startup",
+      "milestone": 2,
+      "parent_issue": 20,
+      "state": "planned",
+      "pull_requests": [],
+      "scope": [
+        "Decouple bounded guest execution from the fixed 50,000 instructions per expensive host refresh while retaining real guest time, input and lifecycle responsiveness.",
+        "Gate the visual answer on a drawn presentation rather than startup output; record execution, scaling, GPU waits/presentation and storage phases."
+      ],
+      "acceptance": [
+        "Original tests cover instruction/time bounds, waiting/yield/no-progress exits and drawn-frame confirmation, with unchanged original guest pixel and own PASS checks.",
+        "A versioned native diagnostic retains phase/progress metrics and a focused physical comparison route; measured hardware speed remains pending until that build is run."
+      ],
+      "evidence": [
+        "October 13 v0.23.0 trace: drawn presentation 57,330 ms; mean host refresh 153,189 us; visual answer accepted at 10,221 ms before the scene.",
+        "Planned focused follow-up; aggregate timing does not establish a renderer bottleneck or useful game performance."
+      ]
+    },
+    {
+      "id": "decrypted-ncsd-cfa-intake",
+      "title": "Inspect decrypted NCSD data partitions without rejecting executable intake",
+      "milestone": 5,
+      "parent_issue": 32,
+      "state": "planned",
+      "pull_requests": [],
+      "scope": [
+        "Accept supported decrypted NCCH v0 CFA data partitions alongside v2 application executables in cartridge inspection and small executable export.",
+        "Keep unsupported prototype/version layouts, v0 executable claims, malformed ranges, hashes and encryption rejected; preserve the source and export boundary."
+      ],
+      "acceptance": [
+        "Original NCSD fixtures with auxiliary v0 CFA inspect and export the same v2 executable revision; prepare-rom main selection remains unchanged.",
+        "Negative version/type/header/hash/encryption fixtures fail before publishing output, and export omits data-partition payloads."
+      ],
+      "evidence": [
+        "Windows user report: direct prepare-intake rejects NCCH version 0; the full CCI has not transferred or been inspected.",
+        "Original main-selection fixture verifies prepare-rom then prepare-intake succeeds with a v2 executable and auxiliary v0 CFA; planned inspector compatibility fix."
+      ]
     }
   ],
   "reviewed_statuses": {

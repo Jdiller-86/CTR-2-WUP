@@ -1,5 +1,34 @@
 # CIA intake and the attachment transfer limit
 
+**October 13 current input:** the user supplied a CCI described as decrypted,
+but it exceeds the executor's 32 MiB transfer limit. No byte from that attachment
+has been inspected; filename identity and decryption remain unverified. On the
+Windows 11 PC with Python 3.12+, install the released CTR2WUP Python wheel, then:
+
+```powershell
+py -m host prepare-rom "C:\path\owned-game.cci" --output "C:\path\new-Mario-prepared"
+py -m host prepare-intake "C:\path\new-Mario-prepared\game.cxi" --output "C:\path\new-Mario-intake"
+```
+
+Return `new-Mario-intake\CTR2WUP-intake.zip` and
+`new-Mario-prepared\preparation-report.json` privately in this chat. The output
+directory must be new. NCSD cartridge input uses the same content-based Python
+route as `.3ds`; renaming or uploading the full CCI again is unnecessary. The
+original file remains unchanged and stays on the PC for later RomFS/module work.
+The archive contains a receipt and, for supported decrypted input, a derived
+executable-only CXI below 30 MiB; it excludes RomFS, tickets, certificates and
+keys. A report-only result still requires resolving its stated blocking error.
+The standalone .NET CIA helper below does not accept CCI.
+
+The user's direct 0.20.0 export reported `unsupported_ncch_version` for version 0.
+CFA data partitions use version 0, while supported application CXIs use version 2.
+The two-step route selects and validates the supported main partition without
+inspecting unsupported auxiliary layouts. An original v2-executable/v0-data
+fixture verifies this route; which partition caused the user's error remains
+unknown until their small intake arrives. A separate planned feature addresses
+strict decrypted CFA inspection. Do not alter the original header or infer
+commercial compatibility from successful intake.
+
 October 11 update: the user returned a valid report-only intake ZIP. The helper
 reports `encrypted_cia_content`; no executable view was exported. This identifies
 the next input as a decrypted executable/CIA copy. The receipt is retained

@@ -1,5 +1,13 @@
 # Launch music check (0.20.0)
 
+**Reviewed October 13:** Audio Check's full trace records silence and the native
+tone PASS; GX Transfers has matching two-step PASS result/trace files. The user
+confirms launch music stopped and both apps exited correctly. The separate
+Audio Check result TXT was not included; its complete trace supplies the named
+observations. This focused regression is complete and needs no repeat. See
+[the evidence review](console-evidence.md). The procedure below is retained for
+a future audio regression, not a pending test request.
+
 The latest Save, RomFS, SD asset and GX tests passed their scoped checks. The
 follow-up Save trace confirms persistence across closing and reopening the app.
 Those checks do not need repeating. See [the evidence review](console-evidence.md).

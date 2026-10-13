@@ -5,11 +5,17 @@ results. The additional Save 0.14.6 trace confirms persistence across closing an
 reopening the app. Correct screens and normal Minus return have the user’s
 confirmation. See [the evidence review](console-evidence.md).
 
-**Run only the short [launch-audio check](launch-audio.md) with Audio Check and GX
-Transfers 0.20.0.** It addresses Wii U launch music continuing during the apps.
+The October 13 [launch-audio check](launch-audio.md) and Guest Draws follow-up
+have reviewed passes, with the user confirming pictures, silence and correct
+exit. The rendered draw scene takes 57.33 seconds in the trace. Its visual
+prompt accepted an answer before that scene, so the next focused work is
+presentation gating and measured diagnostic progress. See
+[the evidence review](console-evidence.md).
 There is no need to repeat Save/RomFS or the long native controls/stability guide
 solely for a version bump. Keep older reports, snapshot and backup siblings.
 
-The guide gives the two app names, prompts, result locations and files to upload.
+A new draw-performance build will require its own focused hardware comparison;
+this run cannot establish a future build's speed. No further test is requested
+for the unchanged audio, Save or RomFS routes.
 These original RPX/WUHB diagnostics have separate acceptance from installed WUPs,
 commercial gameplay and full milestones.
