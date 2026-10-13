@@ -57,9 +57,39 @@ components or changing output.
 Errors distinguish invalid arguments/layout, unsupported formats/values,
 truncated source ranges, configured limits, insufficient capacity, aliases and
 arithmetic overflow. The output remains unchanged on every error. This contract
-does not interpret fixed attributes, retained input state, index buffers,
+does not interpret fixed attributes, retained input state,
 multi-loader overwrite semantics or implicit padding IDs; those require their
 own checked PICA-state adapter.
+
+## Indexed gathering
+
+`ctr_vertex_decode_indexed` uses the same resolved attribute/stream contract and
+adds a caller-owned `ctr_vertex_indices` descriptor. Its format IDs are 0 for
+unsigned 8-bit elements and 1 for unsigned 16-bit little-endian elements. A byte
+offset locates the first index in the supplied span; unaligned index addresses
+are decoded with byte loads. `first_index` and `vertex_count` select elements,
+not byte offsets. Each element selects a source vertex independently in every
+stream, preserving requested order and duplicates.
+
+For example, indices `[2, 0, 2, 1]` produce source records 2, 0, 2 and 1, with
+their input permutation and component defaults intact. Stream offsets resolve
+the source vertex base. The API does not add `first_index` to a decoded index,
+interpret PICA's vertex-offset register, or treat 0xff/0xffff as restart markers.
+The future state adapter must resolve actual guest addresses and loader rules.
+
+The decoder validates the entire selected index byte range and every referenced
+attribute range before publication. It checks finite float encodings only in
+referenced vertices: an unreferenced NaN/Infinity is never read and does not
+reject an otherwise valid gather. A malformed final index or referenced float
+leaves all output unchanged. Validation-only calls obey those same rules.
+
+The same 4,096-output and 4 MiB-per-source limits apply to indices. Index
+descriptors and complete supplied index byte spans, including unselected bytes,
+must not overlap output. Read-only index and attribute source spans may overlap.
+Zero output count validates descriptors/layout without reading index elements
+or source components. Checked first/last-element, width and byte-offset
+arithmetic rejects overflow before a load. The path allocates no heap memory
+and enables no primitive assembly, PICA command, shader or draw.
 
 ## Origin and validation
 
@@ -77,11 +107,21 @@ at `d409087405bc299b88ff35dd5b96b6e2698d5929`. No emulator implementation is cop
 compiled, linked or distributed with the runtime. The C decoder and all test
 data are original.
 
+The unsigned byte/short index distinction and indexed-versus-nonindexed vertex
+offset behavior were inspected in that same pinned reference's
+[pipeline register definitions](https://github.com/azahar-emu/azahar/blob/d409087405bc299b88ff35dd5b96b6e2698d5929/src/video_core/pica/regs_pipeline.h)
+and [draw input selection](https://github.com/azahar-emu/azahar/blob/d409087405bc299b88ff35dd5b96b6e2698d5929/src/video_core/pica/pica_core.cpp).
+This decoder consumes explicit spans rather than implementing those registers.
+
 Run `make -C tests/vertex check sanitize`. The suite checks every signed-short
 value, all byte values, all sixteen format/component descriptor combinations,
 lane defaults, shuffled input slots, twelve-stream layouts, nonzero first vertex,
 unaligned views, exact finite-float bits, late rejection without partial output,
-limits, range arithmetic and descriptor/source aliases. Root `make check-c` and
+limits, range arithmetic and descriptor/source aliases. Indexed cases exercise
+every unsigned byte/short value, including 0xff/0xffff, reordered/repeated
+interleaved and twelve-stream inputs, nonzero first-index/byte offsets,
+unreferenced nonfinite data, late atomic rejection and full index-span aliases.
+The combined suite has **364,123 original assertions**. Root `make check-c` and
 the portable Windows target include this suite, and the native Wii U source list
 cross-compiles the module. Desktop/sanitizer passes and cross-compilation do not
 establish Espresso execution or any rendered scene. Milestone M4 remains open.

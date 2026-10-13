@@ -3,6 +3,17 @@
 All releases are development increments. RPX/WUHB diagnostics and desktop passes
 do not establish commercial-game compatibility or installable WUP acceptance.
 
+## 0.21.0 — 2026-10-13
+
+- Gather bounded vertex streams through unsigned 8-bit/16-bit little-endian
+  indices, retaining duplicates/order and validating all referenced bytes before
+  output changes. Protect complete index spans and descriptors against aliases.
+- Exercise every index value plus original reordered multi-stream/interleaved
+  fixtures, unreferenced nonfinite data, late failure, limits and arithmetic.
+- Keep PICA loader registers, fixed attributes, shaders, primitive assembly and
+  draw submission visibly unsupported; full renderer acceptance remains open.
+- Record Actions-based GitHub management and completed-branch deletion policy.
+
 ## 0.20.0 — 2026-10-13
 
 - Initialize and release a neutral native AX context in every diagnostic;

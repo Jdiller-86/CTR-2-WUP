@@ -23,6 +23,7 @@
 | 3DS key/seed exports | Scoped local import implemented | Plaintext AES key DB retail NCCH KeyX, seeddb and declared decrypted title-key DB; no console extraction, boot9 import or encrypted key DB support |
 | Main RomFS assets | Canonical full IVFC/metadata preparation implemented | Private blob/manifest; bounded names/chains/extents and streamed hashes; file-backed original guest proof; actual game assets/console SD remain unverified |
 | PICA base textures | All 14 format decoders implemented | Original C/Python/reference vectors; no texture sampling, GX2 scene rendering or commercial support |
+| Resolved vertex arrays and indices | Bounded portable decoding implemented | Explicit streams/input permutation, unsigned 8-bit/16-bit indexed gather, transactional range/float/alias checks; no PICA loaders, fixed attributes, shaders or draws |
 | Original compiled GX transfer program | Sanitized desktop/reference checked; console pending | 16 standard operations, exact frames; scoped DMA/fill/transfer/copy/cache; PICA draw command faults |
 | `.3dsx`, update/DLC merges | Unsupported | No corresponding loader/pipeline; renamed input is not accepted as NCCH |
 | Any commercial revision | Unsupported/unverified | Mario CIA exceeds transfer limit; small intake reports encrypted executable and contains no code; required HLE/GPU/audio/save implementation and Wii U gameplay evidence remain absent |

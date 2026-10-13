@@ -1,5 +1,13 @@
 # Renderer foundation
 
+v0.21.0 extends the [resolved vertex decoder](vertex-attributes.md) with checked
+unsigned 8-bit/16-bit little-endian indexed gathers. Duplicates and index order
+are preserved. Complete referenced ranges, finite float values and full-span
+aliases are checked before output changes. This supplies array preparation for
+the future rendering boundary; it enables no PICA loader register, fixed
+attribute, shader, primitive assembly or draw. Exhaustive index tests use
+original bytes and explicitly retain physical renderer acceptance as pending.
+
 `renderer.pica.decode_commands` inspects complete little-endian PICA command
 records, byte masks, repeated/consecutive register writes, and eight-byte
 padding. It bounds input, output count, and the 1,024 wire identifiers, and rejects
