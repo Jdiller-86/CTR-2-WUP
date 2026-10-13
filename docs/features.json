@@ -1,0 +1,517 @@
+{
+  "schema_version": 1,
+  "repository": "Jdiller-86/CTR-2-WUP",
+  "features": [
+    {
+      "id": "delivered-pr-8",
+      "title": "Add GX transfer runtime and GitHub development infrastructure",
+      "milestone": 4,
+      "parent_issue": 30,
+      "state": "implemented",
+      "pull_requests": [
+        8
+      ],
+      "scope": [
+        "Deliver the bounded implementation described in PR #8."
+      ],
+      "acceptance": [
+        "The implementation PR is merged into main with its recorded checks.",
+        "Preserve the documented limitations; this feature does not accept the parent milestone."
+      ],
+      "evidence": [
+        "Implementation, review and validation: https://github.com/Jdiller-86/CTR-2-WUP/pull/8",
+        "Historical checkpoint; see the PR and versioned documentation for its exact scope."
+      ]
+    },
+    {
+      "id": "delivered-pr-9",
+      "title": "Attribute Codex commits without changing human contributions",
+      "milestone": 1,
+      "parent_issue": 1,
+      "state": "implemented",
+      "pull_requests": [
+        9
+      ],
+      "scope": [
+        "Deliver the bounded implementation described in PR #9."
+      ],
+      "acceptance": [
+        "The implementation PR is merged into main with its recorded checks.",
+        "Preserve the documented limitations; this feature does not accept the parent milestone."
+      ],
+      "evidence": [
+        "Implementation, review and validation: https://github.com/Jdiller-86/CTR-2-WUP/pull/9",
+        "Historical checkpoint; see the PR and versioned documentation for its exact scope."
+      ]
+    },
+    {
+      "id": "delivered-pr-10",
+      "title": "Publish offline documentation and prepare free docs-only hosting",
+      "milestone": 1,
+      "parent_issue": 1,
+      "state": "implemented",
+      "pull_requests": [
+        10
+      ],
+      "scope": [
+        "Deliver the bounded implementation described in PR #10."
+      ],
+      "acceptance": [
+        "The implementation PR is merged into main with its recorded checks.",
+        "Preserve the documented limitations; this feature does not accept the parent milestone."
+      ],
+      "evidence": [
+        "Implementation, review and validation: https://github.com/Jdiller-86/CTR-2-WUP/pull/10",
+        "Historical checkpoint; see the PR and versioned documentation for its exact scope."
+      ]
+    },
+    {
+      "id": "delivered-pr-11",
+      "title": "Group actionable work under milestones and track issue, PR and branch status",
+      "milestone": 1,
+      "parent_issue": 1,
+      "state": "implemented",
+      "pull_requests": [
+        11
+      ],
+      "scope": [
+        "Deliver the bounded implementation described in PR #11."
+      ],
+      "acceptance": [
+        "The implementation PR is merged into main with its recorded checks.",
+        "Preserve the documented limitations; this feature does not accept the parent milestone."
+      ],
+      "evidence": [
+        "Implementation, review and validation: https://github.com/Jdiller-86/CTR-2-WUP/pull/11",
+        "Historical checkpoint; see the PR and versioned documentation for its exact scope."
+      ]
+    },
+    {
+      "id": "delivered-pr-47",
+      "title": "Keep project board milestone states aligned with the roadmap",
+      "milestone": 1,
+      "parent_issue": 1,
+      "state": "implemented",
+      "pull_requests": [
+        47
+      ],
+      "scope": [
+        "Deliver the bounded implementation described in PR #47."
+      ],
+      "acceptance": [
+        "The implementation PR is merged into main with its recorded checks.",
+        "Preserve the documented limitations; this feature does not accept the parent milestone."
+      ],
+      "evidence": [
+        "Implementation, review and validation: https://github.com/Jdiller-86/CTR-2-WUP/pull/47",
+        "Historical checkpoint; see the PR and versioned documentation for its exact scope."
+      ]
+    },
+    {
+      "id": "delivered-pr-48",
+      "title": "Process bounded PICA configuration through the guest queue",
+      "milestone": 4,
+      "parent_issue": 27,
+      "state": "implemented",
+      "pull_requests": [
+        48
+      ],
+      "scope": [
+        "Deliver the bounded implementation described in PR #48."
+      ],
+      "acceptance": [
+        "The implementation PR is merged into main with its recorded checks.",
+        "Preserve the documented limitations; this feature does not accept the parent milestone."
+      ],
+      "evidence": [
+        "Implementation, review and validation: https://github.com/Jdiller-86/CTR-2-WUP/pull/48",
+        "Historical checkpoint; see the PR and versioned documentation for its exact scope."
+      ]
+    },
+    {
+      "id": "delivered-pr-49",
+      "title": "Use Project #2 as tracking authority and add checked vertex decoding",
+      "milestone": 4,
+      "parent_issue": 28,
+      "state": "implemented",
+      "pull_requests": [
+        49
+      ],
+      "scope": [
+        "Deliver the bounded implementation described in PR #49."
+      ],
+      "acceptance": [
+        "The implementation PR is merged into main with its recorded checks.",
+        "Preserve the documented limitations; this feature does not accept the parent milestone."
+      ],
+      "evidence": [
+        "Implementation, review and validation: https://github.com/Jdiller-86/CTR-2-WUP/pull/49",
+        "Historical checkpoint; see the PR and versioned documentation for its exact scope."
+      ]
+    },
+    {
+      "id": "delivered-pr-50",
+      "title": "Fix status synchronization for larger GitHub Actions run IDs",
+      "milestone": 1,
+      "parent_issue": 1,
+      "state": "implemented",
+      "pull_requests": [
+        50
+      ],
+      "scope": [
+        "Deliver the bounded implementation described in PR #50."
+      ],
+      "acceptance": [
+        "The implementation PR is merged into main with its recorded checks.",
+        "Preserve the documented limitations; this feature does not accept the parent milestone."
+      ],
+      "evidence": [
+        "Implementation, review and validation: https://github.com/Jdiller-86/CTR-2-WUP/pull/50",
+        "Historical checkpoint; see the PR and versioned documentation for its exact scope."
+      ]
+    },
+    {
+      "id": "delivered-pr-51",
+      "title": "Handle delayed Project item visibility during setup",
+      "milestone": 1,
+      "parent_issue": 1,
+      "state": "implemented",
+      "pull_requests": [
+        51
+      ],
+      "scope": [
+        "Deliver the bounded implementation described in PR #51."
+      ],
+      "acceptance": [
+        "The implementation PR is merged into main with its recorded checks.",
+        "Preserve the documented limitations; this feature does not accept the parent milestone."
+      ],
+      "evidence": [
+        "Implementation, review and validation: https://github.com/Jdiller-86/CTR-2-WUP/pull/51",
+        "Historical checkpoint; see the PR and versioned documentation for its exact scope."
+      ]
+    },
+    {
+      "id": "delivered-pr-52",
+      "title": "Fix launch audio, record console evidence and publish Project-backed docs",
+      "milestone": 1,
+      "parent_issue": 14,
+      "state": "implemented",
+      "pull_requests": [
+        52
+      ],
+      "scope": [
+        "Deliver the bounded implementation described in PR #52."
+      ],
+      "acceptance": [
+        "The implementation PR is merged into main with its recorded checks.",
+        "Preserve the documented limitations; this feature does not accept the parent milestone."
+      ],
+      "evidence": [
+        "Implementation, review and validation: https://github.com/Jdiller-86/CTR-2-WUP/pull/52",
+        "Historical checkpoint; see the PR and versioned documentation for its exact scope."
+      ]
+    },
+    {
+      "id": "delivered-pr-53",
+      "title": "Show live Project progress and finish free GitHub repository features",
+      "milestone": 1,
+      "parent_issue": 1,
+      "state": "implemented",
+      "pull_requests": [
+        53
+      ],
+      "scope": [
+        "Deliver the bounded implementation described in PR #53."
+      ],
+      "acceptance": [
+        "The implementation PR is merged into main with its recorded checks.",
+        "Preserve the documented limitations; this feature does not accept the parent milestone."
+      ],
+      "evidence": [
+        "Implementation, review and validation: https://github.com/Jdiller-86/CTR-2-WUP/pull/53",
+        "Historical checkpoint; see the PR and versioned documentation for its exact scope."
+      ]
+    },
+    {
+      "id": "delivered-pr-54",
+      "title": "Publish the focused audio retest through native GitHub releases",
+      "milestone": 1,
+      "parent_issue": 14,
+      "state": "implemented",
+      "pull_requests": [
+        54
+      ],
+      "scope": [
+        "Deliver the bounded implementation described in PR #54."
+      ],
+      "acceptance": [
+        "The implementation PR is merged into main with its recorded checks.",
+        "Preserve the documented limitations; this feature does not accept the parent milestone."
+      ],
+      "evidence": [
+        "Implementation, review and validation: https://github.com/Jdiller-86/CTR-2-WUP/pull/54",
+        "Historical checkpoint; see the PR and versioned documentation for its exact scope."
+      ]
+    },
+    {
+      "id": "delivered-pr-55",
+      "title": "Add checked indexed vertex decoding for M4",
+      "milestone": 4,
+      "parent_issue": 28,
+      "state": "implemented",
+      "pull_requests": [
+        55
+      ],
+      "scope": [
+        "Deliver the bounded implementation described in PR #55."
+      ],
+      "acceptance": [
+        "The implementation PR is merged into main with its recorded checks.",
+        "Preserve the documented limitations; this feature does not accept the parent milestone."
+      ],
+      "evidence": [
+        "Implementation, review and validation: https://github.com/Jdiller-86/CTR-2-WUP/pull/55",
+        "Historical checkpoint; see the PR and versioned documentation for its exact scope."
+      ]
+    },
+    {
+      "id": "delivered-pr-56",
+      "title": "Render first original PICA MOV shader scenes through a checked software pipeline",
+      "milestone": 4,
+      "parent_issue": 28,
+      "state": "implemented",
+      "pull_requests": [
+        56
+      ],
+      "scope": [
+        "Deliver the bounded implementation described in PR #56."
+      ],
+      "acceptance": [
+        "The implementation PR is merged into main with its recorded checks.",
+        "Preserve the documented limitations; this feature does not accept the parent milestone."
+      ],
+      "evidence": [
+        "Implementation, review and validation: https://github.com/Jdiller-86/CTR-2-WUP/pull/56",
+        "Historical checkpoint; see the PR and versioned documentation for its exact scope."
+      ]
+    },
+    {
+      "id": "guest-pica-draws",
+      "title": "Execute compiled original libctru PICA draws through the standard guest GSP queue",
+      "milestone": 4,
+      "parent_issue": 27,
+      "state": "active",
+      "pull_requests": [
+        57
+      ],
+      "scope": [
+        "Resolve owned linear resources, retained PICA shader/state and tiled RGBA8 targets through standard guest GX commands.",
+        "Commit target bytes, counters and completion signals transactionally; preserve queue prefix and reject unsupported state.",
+        "Build an original normal-CRT ARM draw application and Wii U diagnostic without game patches.",
+        "Correct raw VFP push/pop under guest FPSCR controls without enabling unsupported arithmetic."
+      ],
+      "acceptance": [
+        "Two compiled guest command lists produce four exact indexed triangles and 97,200 covered fragments.",
+        "Analytic full-surface comparison passes for both targets and displayed RGB565 frames.",
+        "Normal and ASan/UBSan guest draw fixtures cover failure rollback, aliasing, permissions, retained state and completion.",
+        "Required portable CI and native RPX/WUHB builds pass."
+      ],
+      "evidence": [
+        "PR #57; tools/validate-libctru.py --application draw --wiiu --sanitize.",
+        "Host rendering and compilation only; physical Wii U execution is deferred.",
+        "No general shader ISA, TEV, depth/blend/sampling or GPU translation claim."
+      ]
+    },
+    {
+      "id": "repository-traceability",
+      "title": "Link development features, native issue hierarchy, milestones and implementation PRs",
+      "milestone": 1,
+      "parent_issue": 1,
+      "state": "active",
+      "pull_requests": [
+        58
+      ],
+      "scope": [
+        "Backfill every existing implementation PR into a scoped feature issue with native PR relationships.",
+        "Create native parents for the 35 gate tasks and their feature children.",
+        "Add scoped next renderer features with explicit acceptance criteria.",
+        "Reconcile reviewed Project statuses without accepting unfinished gates.",
+        "Make management repeatable through a dry-run-first trusted-main Actions workflow."
+      ],
+      "acceptance": [
+        "All catalogued implementation PRs have a milestone, Project item and native linked scoped issue.",
+        "All 35 work items have the correct native milestone parent; features have native task parents.",
+        "Audit verifies relationships from live GitHub after mutation.",
+        "Owner notes and conflicting native parents are preserved; full milestones remain open."
+      ],
+      "evidence": [
+        "The private development-traceability workflow artifact records verified live counts and scoped issue numbers.",
+        "Project #2 remains the status authority; feature completion does not accept a full gate."
+      ]
+    },
+    {
+      "id": "pica-arithmetic",
+      "title": "Expand checked PICA vertex shader arithmetic",
+      "milestone": 4,
+      "parent_issue": 28,
+      "state": "planned",
+      "pull_requests": [],
+      "scope": [
+        "Implement a bounded original arithmetic shader subset with exact input/output and descriptor semantics.",
+        "Reject unsupported instructions and non-finite or incomplete inputs before guest-visible draw effects."
+      ],
+      "acceptance": [
+        "Original arithmetic scenes compare against independent numeric references.",
+        "Negative opcode/state fixtures preserve shader, target and queue completion state."
+      ],
+      "evidence": [
+        "Planned feature; no implementation or acceptance evidence yet.",
+        "Parent acceptance remains open until its complete checklist is reviewed."
+      ]
+    },
+    {
+      "id": "pica-tev",
+      "title": "Implement bounded PICA TEV fragment combinations",
+      "milestone": 4,
+      "parent_issue": 29,
+      "state": "planned",
+      "pull_requests": [],
+      "scope": [
+        "Decode exercised TEV inputs, operands, scales and buffer updates.",
+        "Connect primary color and a checked texture sample to original fragment scenes."
+      ],
+      "acceptance": [
+        "Independent fragment reference covers each supported operation and channel.",
+        "Unsupported blend/depth/stencil/TEV states fail visibly without partial draws."
+      ],
+      "evidence": [
+        "Planned feature; no implementation or acceptance evidence yet.",
+        "Parent acceptance remains open until its complete checklist is reviewed."
+      ]
+    },
+    {
+      "id": "pica-sampler",
+      "title": "Connect checked texture sampling to guest PICA draws",
+      "milestone": 4,
+      "parent_issue": 29,
+      "state": "planned",
+      "pull_requests": [],
+      "scope": [
+        "Resolve tracked owned texture descriptors and mip/sampler state.",
+        "Implement bounded nearest and bilinear behavior with explicit supported wrap modes."
+      ],
+      "acceptance": [
+        "Original sampled scenes compare exact pixels or declared numeric tolerance.",
+        "Bounds, aliasing and unsupported formats leave targets and queue state unchanged."
+      ],
+      "evidence": [
+        "Planned feature; no implementation or acceptance evidence yet.",
+        "Parent acceptance remains open until its complete checklist is reviewed."
+      ]
+    },
+    {
+      "id": "pica-coherency",
+      "title": "Version guest renderer resources and coherent cache invalidation",
+      "milestone": 4,
+      "parent_issue": 30,
+      "state": "planned",
+      "pull_requests": [],
+      "scope": [
+        "Define memory-generation keys for command, vertex, texture and target resources.",
+        "Cover guest writes, readback and explicit cache misses without stale output."
+      ],
+      "acceptance": [
+        "Mutation fixtures prove unchanged data reuses a cache and changed data invalidates it.",
+        "Software reference remains correct across target reads and overlapping ownership boundaries."
+      ],
+      "evidence": [
+        "Planned feature; no implementation or acceptance evidence yet.",
+        "Parent acceptance remains open until its complete checklist is reviewed."
+      ]
+    },
+    {
+      "id": "pica-gx2",
+      "title": "Translate the proven original vertex subset into GX2 shaders",
+      "milestone": 4,
+      "parent_issue": 28,
+      "state": "planned",
+      "pull_requests": [],
+      "scope": [
+        "Specify native shader ABI and translate the exercised PICA subset to GX2.",
+        "Retain software reference and explicit translation/cache failure diagnostics."
+      ],
+      "acceptance": [
+        "Native shader build succeeds and generated resource layouts validate.",
+        "Original scenes have a documented physical comparison route; physical GPU acceptance stays pending until evidence exists."
+      ],
+      "evidence": [
+        "Planned feature; no implementation or acceptance evidence yet.",
+        "Parent acceptance remains open until its complete checklist is reviewed."
+      ]
+    },
+    {
+      "id": "pica-console",
+      "title": "Capture compiled original draw scenes and costs on physical Wii U",
+      "milestone": 4,
+      "parent_issue": 31,
+      "state": "planned",
+      "pull_requests": [],
+      "scope": [
+        "Prepare repeatable visual, completion, exit and TXT collection routes for the compiled draw diagnostic.",
+        "Record physical CPU/GPU timing and memory costs with exact source provenance."
+      ],
+      "acceptance": [
+        "Reviewed physical top/bottom scene captures and own guest PASS are attached privately.",
+        "Repeat launch/exit and valid TXT read-back are recorded for the exact build."
+      ],
+      "evidence": [
+        "Planned feature; no implementation or acceptance evidence yet.",
+        "Parent acceptance remains open until its complete checklist is reviewed."
+      ]
+    }
+  ],
+  "reviewed_statuses": {
+    "1": "Awaiting evidence",
+    "2": "In progress",
+    "3": "In progress",
+    "4": "In progress",
+    "5": "Blocked",
+    "6": "In progress",
+    "7": "Planned",
+    "13": "Awaiting evidence",
+    "14": "Awaiting evidence",
+    "15": "Awaiting evidence",
+    "16": "Awaiting evidence",
+    "17": "In progress",
+    "18": "In progress",
+    "19": "In progress",
+    "20": "Awaiting evidence",
+    "21": "Awaiting evidence",
+    "22": "Awaiting evidence",
+    "23": "In progress",
+    "24": "Planned",
+    "25": "Planned",
+    "26": "Awaiting evidence",
+    "27": "In progress",
+    "28": "In progress",
+    "29": "In progress",
+    "30": "In progress",
+    "31": "Awaiting evidence",
+    "32": "Blocked",
+    "33": "Blocked",
+    "34": "Blocked",
+    "35": "Blocked",
+    "36": "Blocked",
+    "37": "Awaiting evidence",
+    "38": "Blocked",
+    "39": "In progress",
+    "40": "Awaiting evidence",
+    "41": "Awaiting evidence",
+    "42": "In progress",
+    "43": "Planned",
+    "44": "Planned",
+    "45": "Planned",
+    "46": "Planned"
+  }
+}

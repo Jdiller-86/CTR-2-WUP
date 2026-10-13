@@ -111,6 +111,7 @@ nav:
       - First software scenes: docs/software-scenes.md
       - Filesystem and saves: docs/filesystem.md
   - Project:
+      - Development tracking: docs/development-tracking.md
       - Project tracking policy: docs/github-project-overview.md
       - Current status: status.md
       - Product plan: docs/development-plan.md

@@ -52,6 +52,9 @@ seven milestones and their implementation/evidence tasks. Completing a task
 does not accept a full milestone. See [the roadmap](docs/milestones.md) and
 [current status](STATUS.md) for scope and verification details.
 
+[Development tracking](docs/development-tracking.md) explains the native
+milestone → task → feature → PR relationships and the contributor workflow.
+
 ## Getting started
 
 Download a matching [development release](https://github.com/Jdiller-86/CTR-2-WUP/releases)
