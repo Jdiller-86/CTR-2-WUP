@@ -282,29 +282,23 @@ or paid entitlement was changed.
 
 ## Console evidence and inputs still needed
 
-Five new result files establish original Save, embedded RomFS, SD-file assets
-and GX transfer/configuration checks. The additional Save 0.14.6 full trace
-confirms reload in its first guest session after closing and reopening the app.
-All new guides complete without failures/skips; guest fallback/fault are zero.
-The user confirms correct screens and normal Minus return, but reports Wii U
-launch music continuing throughout. Raw uploads remain private and older failures
-are retained separately in [the evidence review](docs/console-evidence.md).
+Reviewed original Save/reload, assets, GX, launch-audio and bounded draw results
+are retained in [the evidence review](docs/console-evidence.md). The user confirms
+pictures, silence and correct Minus return. Exact environment versions, full
+Home/APT/recovery/stability and original installed-WUP acceptance remain open.
 
-The tester reports latest U.S. firmware, Aroma and WUP Installer GX2; exact
-versions remain unknown. No console is attached.
+- **Draw performance/evidence:** investigate the 57.33-second rendered scene and
+  early visual-prompt confirmation. Add accurate gating, bounded guest progress
+  and phase measurements; the existing aggregate host timing is not game speed.
+- **Mario:** the uploaded derived USA executable/revision and private static
+  analysis are verified. The full CCI remains too large to transfer; RomFS/CRO
+  inventory, original full-container provenance and observed runtime requirements
+  remain unavailable. Exact hashes and commercial bytes stay private.
+- **Windows/install:** complete conversion, actual WUP installation/Menu launch,
+  gameplay/audio/save/reload and the planned GUI remain separate gates.
 
-- **Audio:** run only [Audio Check and GX Transfers 0.20.0](docs/launch-audio.md)
-  for launch silence, native tone and compiled stability/exit. No Save/RomFS or
-  long controls-guide repeat is required solely for this version.
-- **Platform:** exact versions, Home/APT routes, recovery and installed original
-  WUP evidence remain separate acceptance work.
-- **Mario:** supplied CIA exceeds the 32 MiB attachment limit; small intake has
-  encrypted content and no executable. Prepare locally or use an already decrypted
-  owned dump, then privately export the small executable intake. Keys remain local.
-  Actual revision/assets/required services and gameplay are unverified.
-- **Windows/install:** full native devkitPPC conversion, actual WUP
-  installation/Menu launch/audio/gameplay/save/reload and GUI acceptance remain
-  separate gates. CI tooling success does not close them.
+No repeat of the completed audio/Save/RomFS routes is requested solely for an
+evidence/version refresh. New builds need their own focused regression results.
 
 ## Continuing work
 

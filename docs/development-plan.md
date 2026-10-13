@@ -21,8 +21,8 @@ base-application `.cia` inputs are supported intake routes; encrypted input uses
 user-managed local keys. No key or commercial asset is bundled or uploaded.
 
 The first MVP supports **one exact commercial revision**. Super Mario 3D Land is
-the selected candidate, but the received small intake has no executable and no
-profile is enabled. Completion requires clean-Windows GUI conversion, physical
+the selected candidate; its uploaded USA executable/revision is privately verified.
+RomFS/CRO inventory and runtime requirements remain open, and no profile is enabled. Completion requires clean-Windows GUI conversion, physical
 WUP installation/Menu launch, repeatable gameplay, TV/GamePad mapping, required
 input/touch, audio, save/reload, rebuild/save continuity and useful measured
 performance. Record the revision, environment and remaining limits. The CLI is
