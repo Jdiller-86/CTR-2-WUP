@@ -20,6 +20,7 @@ tracking = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(tracking)
 REPO = tracking.REPOSITORY
 FEATURE = re.compile(r"<!-- ctr2wup:feature:([a-z0-9-]+) -->")
+COMMAND_REVIEW = "<!-- ctr2wup:reviewed-command-boundary:v023 -->"
 DETAIL = '''query($id:ID!) { node(id:$id) { ... on Issue {
   id number state parent { id number }
   closedByPullRequestsReferences(first:100,includeClosedPrs:true) { nodes { id number } pageInfo { hasNextPage } }
@@ -30,6 +31,9 @@ def catalog(data):
     if data.get("schema_version") != 1 or data.get("repository") != REPO:
         raise tracking.TrackingError("Traceability catalog identity is invalid.")
     rows, ids, prs = data.get("features"), set(), set()
+    completions = data.get("reviewed_completions", [])
+    if not isinstance(completions, list) or completions not in ([], ["m4-pica-commands"]):
+        raise tracking.TrackingError("Only the explicitly reviewed bounded command task can complete; full gates remain open.")
     if not isinstance(rows, list) or not 1 <= len(rows) <= 100:
         raise tracking.TrackingError("Feature catalog exceeds the reviewed budget.")
     reviewed = data.get("reviewed_statuses", {})
@@ -156,6 +160,11 @@ def reconcile(client, data, apply, report):
             if row["state"] == "implemented" and not pr["merged_at"]:
                 raise tracking.TrackingError("Historical completed feature has an unmerged PR.")
             prs[number] = pr
+    review_commands = "m4-pica-commands" in data.get("reviewed_completions", [])
+    if review_commands and (27 not in by_number
+            or "<!-- ctr2wup:work-item:m4-pica-commands -->" not in (by_number[27].get("body") or "")
+            or any(n not in prs or not prs[n]["merged_at"] for n in (48, 57))):
+        raise tracking.TrackingError("Reviewed command completion requires the identified task and both merged implementation PRs.")
     # Preflight all native parents before writes; never steal/reparent an issue.
     edges = [(by_number[n], by_number[1 + (n - 12) // 5]) for n in range(12, 47)]
     edges += [(features[r["id"]], by_number[r["parent_issue"]]) for r in rows if r["id"] in features]
@@ -216,6 +225,22 @@ def reconcile(client, data, apply, report):
     } pageInfo { hasNextPage endCursor }'''
     items = {i["content"]["id"]: i for i in client.connection(project["id"], "items", selection) if i.get("content") and i["content"].get("id")}
     desired = []
+    if review_commands:
+        issue = client.api(f"repos/{REPO}/issues/27")
+        # Record this review once. A later maintainer reopening/status edit is
+        # authoritative and must not be undone by replaying the catalog.
+        if COMMAND_REVIEW not in (issue.get("body") or ""):
+            mutate(client, "addCloseIssueReferences", "AddCloseIssueReferencesInput",
+                   {"issueId": issue["node_id"], "pullRequestIds": [prs[n]["node_id"] for n in (48, 57)]}, "clientMutationId")
+            note = ("\n\n" + COMMAND_REVIEW + "\nReviewed v0.23 bounded command acceptance: PR #48 supplies checked configuration; "
+                    "PR #57 connects standard guest PICA draws to owned tiled targets with transactional state/completion. "
+                    "Original compiled reference traces, 83,108 normal/sanitizer assertions and exact target/display pixels "
+                    "meet this task's two criteria. Native GX2 translation, broader shader/fragment behavior and physical "
+                    "M4 acceptance remain open. This review closes the bounded implementation task, not the full milestone.\n")
+            client.api(f"repos/{REPO}/issues/27", "PATCH", {"body": (issue.get("body") or "") + note,
+                         "state": "closed", "state_reason": "completed"})
+            desired.append((issue["node_id"], "Done", "Task"))
+            report["operations"].append({"reviewed_task_completion": 27, "implementation_prs": [48, 57]})
     for row in rows:
         done = bool(row["pull_requests"]) and all(prs[n]["merged_at"] for n in row["pull_requests"])
         value = "Done" if done else "In progress" if row["state"] == "active" else "Planned"

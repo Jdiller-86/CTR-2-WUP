@@ -26,7 +26,8 @@ class ReadOnlyInventory:
             return [{"number": n} for row in data["features"] for n in row["pull_requests"]]
         if "/milestones?" in path:
             return [{"number": n} for n in range(1, 8)]
-        return [{"number": n, "node_id": f"issue-{n}", "body": ""} for n in (*range(1, 8), *range(12, 47))]
+        return [{"number": n, "node_id": f"issue-{n}", "body": "<!-- ctr2wup:work-item:m4-pica-commands -->" if n == 27 else ""}
+                for n in (*range(1, 8), *range(12, 47))]
 
     def project(self):
         return {"id": "project-2", "fields": [{"name": "Status", "options": [{"name": n, "id": n} for n in trace.tracking.STATUSES[:8]]}]}
@@ -61,6 +62,28 @@ class TraceabilityTests(unittest.TestCase):
             with self.assertRaises(trace.tracking.TrackingError):
                 trace.reconcile(client, data, True, {"operations": []})
             self.assertEqual(client.writes, [])
+
+    def test_completion_review_cannot_accept_a_milestone_or_unreviewed_task(self):
+        for identifier in ("m4", "m4-vertex-shaders", "m1-results"):
+            data = copy.deepcopy(self.source)
+            data["reviewed_completions"] = [identifier]
+            client = ReadOnlyInventory()
+            with self.assertRaises(trace.tracking.TrackingError):
+                trace.reconcile(client, data, True, {"operations": []})
+            self.assertEqual(client.writes, [])
+
+    def test_completion_review_requires_its_original_task_identity(self):
+        client = ReadOnlyInventory()
+        original = client.api
+        def api(path, method="GET", payload=None):
+            result = original(path, method, payload)
+            if "/issues?" in path:
+                next(row for row in result if row["number"] == 27)["body"] = "owner changed task identity"
+            return result
+        client.api = api
+        with self.assertRaisesRegex(trace.tracking.TrackingError, "identified task"):
+            trace.reconcile(client, self.source, True, {"operations": []})
+        self.assertEqual(client.writes, [])
 
     def test_parent_conflict_fails_before_mutations(self):
         client = ReadOnlyInventory(parent_conflict=True)

@@ -377,7 +377,7 @@ References: [Renderer status](renderer-status.md) · [GX transfer contract](gx-t
 
 The standard guest path handles configuration and bounded owned-resource draws through canonical tiled targets, retained shader/state and transactional completion. An original compiled guest verifies exact software scenes; broader pipeline state and native GPU translation remain open.
 
-State: **In progress** · Needs: none for original-fixture development.
+State: **Done (bounded command acceptance reviewed)** · Needs: none for original-fixture development.
 
 Depends on: none.
 
@@ -392,8 +392,13 @@ configuration-only. Full task acceptance remains open.
 
 Acceptance:
 
-- [ ] Original command streams establish register/state changes, draw inputs and validated resource ranges; malformed or unsupported state fails visibly before modifying output.
-- [ ] The decoder feeds a documented renderer boundary, with reference traces that distinguish CPU-written framebuffer presentation from actual PICA draws.
+- [x] Original command streams establish register/state changes, draw inputs and validated resource ranges; malformed or unsupported state fails visibly before modifying output.
+- [x] The decoder feeds a documented renderer boundary, with reference traces that distinguish CPU-written framebuffer presentation from actual PICA draws.
+
+Reviewed implementation: [PR #48](https://github.com/Jdiller-86/CTR-2-WUP/pull/48)
+and [PR #57](https://github.com/Jdiller-86/CTR-2-WUP/pull/57). Their original
+configuration/draw traces and exact output satisfy both criteria. Task #27 closes
+through the recorded Actions review; broader rendering and full M4 remain open.
 
 <a id="m4-vertex-shaders"></a>
 

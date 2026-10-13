@@ -74,3 +74,9 @@ private issue titles, bodies or feature identifiers in the public dashboard.
 
 These are independently reviewable features. Completing a software draw path
 does not establish general PICA compatibility or native GPU translation.
+
+
+The v0.23 command review completes only task #27 after its two criteria are
+verified against merged PR #48/#57 and original reference traces. Its review
+marker is recorded once; later maintainer reopen/status changes are preserved.
+No full milestone or other unreviewed task can complete through that rule.
