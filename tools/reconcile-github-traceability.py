@@ -7,6 +7,7 @@ Full milestone acceptance and owner notes are never inferred from PR merges.
 from __future__ import annotations
 
 import argparse
+import copy
 import importlib.util
 import json
 from pathlib import Path
@@ -96,7 +97,7 @@ def mutate(client, name, kind, value, selection):
 def reconcile(client, data, apply, report):
     report["stage"] = "preflight"
     report["changes_possible"] = False
-    rows = catalog(data)
+    rows = copy.deepcopy(catalog(data))
     issues = [i for i in pages(client, f"repos/{REPO}/issues?state=all") if "pull_request" not in i]
     by_number, features = {i["number"]: i for i in issues}, {}
     for issue in issues:
@@ -116,9 +117,34 @@ def reconcile(client, data, apply, report):
     if any(value not in status for value in data.get("reviewed_statuses", {}).values()):
         raise tracking.TrackingError("A reviewed Project status has no existing option.")
     registered = {n for row in rows for n in row["pull_requests"]}
-    visible_prs = {pr["number"] for pr in pages(client, f"repos/{REPO}/pulls?state=all")}
-    if visible_prs - registered:
-        raise tracking.TrackingError("Repository PRs are missing primary feature justification; update the catalog before applying.")
+    visible = pages(client, f"repos/{REPO}/pulls?state=all")
+    by_feature_node = {issue["node_id"]: key for key, issue in features.items()}
+    by_key = {row["id"]: row for row in rows}
+    report["discovered_native_prs"] = []
+    for pr in visible:
+        if pr["number"] in registered:
+            continue
+        # A new draft can close an already planned feature while its ledger
+        # update is still on the topic branch. Read only native relationships;
+        # never load or execute that branch or arbitrary PR body instructions.
+        query = '''query($number:Int!) { repository(owner:"Jdiller-86",name:"CTR-2-WUP") {
+          pullRequest(number:$number) { closingIssuesReferences(first:100) {
+            nodes { id } pageInfo { hasNextPage }
+          } }
+        } }'''
+        connection = client.graphql(query, {"number": pr["number"]})["repository"]["pullRequest"]["closingIssuesReferences"]
+        candidates = {by_feature_node[node["id"]] for node in connection["nodes"]
+                      if node["id"] in by_feature_node and by_feature_node[node["id"]] in by_key}
+        if connection["pageInfo"]["hasNextPage"] or len(candidates) != 1:
+            raise tracking.TrackingError("Repository PRs are missing primary feature justification; link one known scoped feature before applying.")
+        key = candidates.pop()
+        if features[key]["state"] == "closed" and pr["state"] == "open":
+            raise tracking.TrackingError("A new active PR cannot extend a closed feature; create or reopen its scoped issue first.")
+        by_key[key]["pull_requests"].append(pr["number"])
+        if by_key[key]["state"] == "planned":
+            by_key[key]["state"] = "active"
+        report["discovered_native_prs"].append({"pull_request": pr["number"], "feature": key})
+    catalog(dict(data, features=rows))  # Keep primary ownership and link budgets bounded.
     prs = {}
     for row in rows:
         if row["parent_issue"] not in by_number or row["milestone"] not in milestones:
@@ -231,7 +257,7 @@ def reconcile(client, data, apply, report):
     fresh = client.connection(project["id"], "items", selection)
     members = {i["content"]["id"] for i in fresh if i.get("content") and i["content"].get("id")}
     expected = {i["node_id"] for i in by_number.values() if i["number"] in (*range(1, 8), *range(12, 47))}
-    expected |= {i["node_id"] for i in features.values()} | {p["node_id"] for p in prs.values()}
+    expected |= {features[row["id"]]["node_id"] for row in rows} | {p["node_id"] for p in prs.values()}
     if not expected <= members:
         raise tracking.TrackingError("Project membership did not verify for every managed issue and PR.")
     for row in rows:

@@ -30,6 +30,12 @@ early. Link the scoped issue with `Closes #...`; reference broader unfinished
 tasks with `Refs #...`. Keep the PR in the same milestone and Project. After
 required checks and review, merge and delete both remote and local topic branches.
 
+Run the trusted-main management dry-run and apply after opening the draft. For an
+already planned feature, the tool can discover its new PR through the native
+closing reference even while the catalog edit is on the topic branch. It reads
+GitHub relationships and never executes that branch. An ambiguous relationship,
+unknown feature or active PR extending a closed feature fails before writes.
+
 **Done** means the scoped acceptance criteria were met. It does not mean a parent
 task, console route or full milestone was accepted. Full gates need their entire
 documented checklist and reviewed evidence. Physical testing remains pending

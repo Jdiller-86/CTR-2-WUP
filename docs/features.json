@@ -508,12 +508,14 @@
       "scope": [
         "Lead every native milestone description with the current versioned goal and remaining acceptance.",
         "Retain unrecognized owner text and earlier scaffold summaries verbatim under a clear context heading.",
-        "Keep all seven current goals readable within the existing description budget without truncation."
+        "Keep all seven current goals readable within the existing description budget without truncation.",
+        "Discover a new draft PR from one known native feature closing reference before its topic-branch ledger update reaches main."
       ],
       "acceptance": [
         "Repeated synchronization is idempotent and retains owner prefix/suffix notes exactly once.",
         "Malformed managed boundaries fail before writes.",
-        "All seven native descriptions start with current v0.23 evidence and retain their existing notes."
+        "All seven native descriptions start with current v0.23 evidence and retain their existing notes.",
+        "Native draft discovery is read-only during preflight, preserves source data and rejects ambiguous or closed feature relationships."
       ],
       "evidence": [
         "The final audit found an old PICA-draws-not-implemented scaffold sentence above the correct v0.23 goal.",
