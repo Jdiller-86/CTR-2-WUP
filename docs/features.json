@@ -495,6 +495,30 @@
         "The initial dry-run stopped before mutations because its exact case-sensitive lookup could not find a required status.",
         "PR #59 supplies the focused compatibility correction; full milestone acceptance remains open."
       ]
+    },
+    {
+      "id": "current-milestone-summaries",
+      "title": "Show current milestone evidence first while preserving earlier notes",
+      "milestone": 4,
+      "parent_issue": 4,
+      "state": "active",
+      "pull_requests": [
+        83
+      ],
+      "scope": [
+        "Lead every native milestone description with the current versioned goal and remaining acceptance.",
+        "Retain unrecognized owner text and earlier scaffold summaries verbatim under a clear context heading.",
+        "Keep all seven current goals readable within the existing description budget without truncation."
+      ],
+      "acceptance": [
+        "Repeated synchronization is idempotent and retains owner prefix/suffix notes exactly once.",
+        "Malformed managed boundaries fail before writes.",
+        "All seven native descriptions start with current v0.23 evidence and retain their existing notes."
+      ],
+      "evidence": [
+        "The final audit found an old PICA-draws-not-implemented scaffold sentence above the correct v0.23 goal.",
+        "PR #83 fixes ordering and summary readability through the trusted progress workflow; no gate is accepted."
+      ]
     }
   ],
   "reviewed_statuses": {
