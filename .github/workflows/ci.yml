@@ -261,6 +261,7 @@ jobs:
           mkdir -p artifacts/ci/guest-draws/images artifacts/ci/guest-draws/licenses
           cp artifacts/ci/compiled-draw/report.json artifacts/ci/guest-draws/
           cp artifacts/ci/compiled-draw/draw/frame-*.ppm artifacts/ci/guest-draws/images/
+          cp docs/images/guest-draw-*-v023.png artifacts/ci/guest-draws/images/
           cp artifacts/ci/compiled-draw/draw/wiiu/*.rpx artifacts/ci/compiled-draw/draw/wiiu/*.wuhb artifacts/ci/guest-draws/
           cp docs/guest-pica-draws.md artifacts/ci/guest-draws/START-HERE.md
           cp LICENSE THIRD_PARTY_NOTICES artifacts/ci/guest-draws/

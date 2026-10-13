@@ -86,6 +86,8 @@ def main():
         checks.append({'name':name,'exit_code':r.returncode})
         if r.returncode:raise RuntimeError(name+' failed; see its preserved log')
         return r.stdout
+    source_commit=run('source-commit',['git','-C',str(ROOT),'rev-parse','HEAD']).strip()
+    source_dirty=bool(run('source-state',['git','-C',str(ROOT),'status','--porcelain']))
     pin=run('dependency-pin',['git','-C',str(a.libctru_source),'rev-parse','HEAD']).strip()
     dirty=run('dependency-clean',['git','-C',str(a.libctru_source),'status','--porcelain'])
     if pin!=PIN or dirty:raise RuntimeError('Require the clean audited libctru pin')
@@ -208,8 +210,9 @@ def main():
                         shutil.copy2(rpx,guarded_folder/rpx.name);shutil.copy2(shortcut,guarded_folder/shortcut.name)
                     reports[-1]['guarded_wiiu_artifacts']=[{'name':f.name,'size':f.stat().st_size,'sha256':hashlib.sha256(f.read_bytes()).hexdigest()} for f in sorted(guarded_folder.iterdir())]
         if a.wiiu and not any('wiiu_artifacts' in r for r in reports):raise ValueError('--wiiu requires interactive, filesystem, romfs, transfer or draw')
-    source_commit=run('source-commit',['git','-C',str(ROOT),'rev-parse','HEAD']).strip()
-    source_dirty=bool(run('source-state',['git','-C',str(ROOT),'status','--porcelain']))
+    if source_commit!=run('source-commit-after',['git','-C',str(ROOT),'rev-parse','HEAD']).strip():
+        raise RuntimeError('Source commit changed during validation; retain logs and run again')
+    source_dirty=source_dirty or bool(run('source-state-after',['git','-C',str(ROOT),'status','--porcelain']))
     report={'ok':True,'version':__version__,'source_commit':source_commit,'source_dirty':source_dirty,'libctru_pin':pin,'library_sha256':library_hash,'arm_compiler':arm_version.splitlines()[0],'applications':reports,'checks':checks,'console_verified':False,'native_windows_verified':False,'complete_service_startup':False,'standalone_apt_and_fs_startup':True,'unavailable_startup_services':['APT:S','APT:A','ptm:sysm'],'powerpc_execution':'emulated Linux' if a.static else None}
     (out/'report.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps({'ok':True,'applications':[{'name':r['application'],'instructions':r['guest']['instructions'],'ipc_failures':r['guest']['ipc_failures']} for r in reports],'report':str(out/'report.json')}));return 0
 if __name__=='__main__':raise SystemExit(main())

@@ -29,6 +29,12 @@ oracle independently compares all **172,800 top/bottom pixels** in the captured
 PPMs. The two images show a dark background and a square divided diagonally into
 red and green triangles; top and bottom display sizes are 400×240 and 320×240.
 
+Original host captures, with physical display verification still pending:
+
+![Original compiled guest top screen](images/guest-draw-top-v023.png)
+
+![Original compiled guest bottom screen](images/guest-draw-bottom-v023.png)
+
 CI executes the sanitized original guest and native build on each PR. Download
 `wiiu-guest-draws-<source commit>` for the checked RPX/WUHB, PPM images, report,
 checksums, source/SDK provenance and notices. This artifact contains original
