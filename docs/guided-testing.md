@@ -1,10 +1,10 @@
 # Guided Wii U tests and TXT results (0.14.6)
 
-The kit contains five original homebrew diagnostics, supplied as WUHB and RPX.
-No ROM is required. The current round is the short
-[save and result-file check](console-retest.md), followed by Compiled RomFS.
-The user reports that Native, Guarded AOT and Compiled AOT completed on 0.14.5;
-their ten-minute guides need not be repeated for this round.
+This page preserves the original 0.14.6 controls and reporting contract.
+The current physical results and focused follow-up are in
+[console-evidence.md](console-evidence.md) and [console-retest.md](console-retest.md).
+Save/RomFS, launch audio and bounded guest draws have reviewed scoped results;
+no long guide repetition is requested solely for a version bump.
 
 ## Launch
 

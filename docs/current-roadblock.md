@@ -1,40 +1,38 @@
 # Remaining acceptance gates (0.23.0)
 
 The product remains a Windows GUI that converts owned 3DS games into individual
-Wii U WUP titles. Current diagnostics do not provide commercial gameplay.
-Approximately 20% implementation and 0/7 accepted full gates remain the assessment.
+Wii U WUP titles. Approximately 20% implementation and 0/7 full gates accepted
+remain the assessment. Original diagnostics are separate from commercial play.
 
-Reviewed physical reports establish original fresh-launch saves, named TXT
-collection, embedded/SD assets and GX transfer/configuration; pictures and Minus
-return have user confirmation. [Evidence](console-evidence.md) preserves older
-failures separately. No repeat Save/RomFS round is requested.
+The user is available with Windows 11, an SD reader and Aroma. Reviewed October 13
+Audio Check/GX Transfers 0.20.0 and Guest Draws 0.23.0 results establish scoped
+passes and user-confirmed silence, pictures and exit. Save/RomFS already have
+reviewed results. No blanket repeat is requested. See [evidence](console-evidence.md).
 
-Physical testing is deferred by the user. Independent renderer/runtime and host
-development continues; these entries identify acceptance evidence to collect
-when testing or private input becomes available. The compiled original guest
-[draw checkpoint](guest-pica-draws.md) now works on host and cross-builds for Wii U.
+Current requirements:
 
-Current external requirements:
-
-1. **Launch-audio regression, when testing resumes:** run the focused [Audio Check and GX Transfers 0.20.0](launch-audio.md).
-   Return their new TXT results and a note on music/Minus return.
-2. **Platform acceptance:** record exact firmware/Aroma/installer versions and
-   complete native recovery/Home/APT and installed-original-WUP checks.
-3. **Mario input:** privately prepare the exact owned revision with
-   [local decryption](encrypted-input.md) or an already decrypted dump, then
-   supply the [small executable intake](cia-intake.md). Actual assets and
-   exercised CPU/services/PICA/audio requirements remain unknown. Keys stay local.
-4. **Renderer/runtime:** extend the bounded compiled guest software draw subset
-   with broader shaders/TEV/sampling, native GX2 translation, resource coherency,
-   modules, guest audio and retail saves. Collect the compiled draw guide and
-   measured physical scenes/gameplay when hardware testing resumes.
+1. **Draw progress and accurate evidence:** the rendered second presentation
+   takes 57.33 seconds in the trace; the visual guide accepted an answer before
+   that scene. Gate confirmation on the drawn frame, measure individual phases
+   and investigate the fixed guest-instruction-per-refresh budget. Aggregate
+   host refresh time is not a GPU/CPU breakdown or a game-performance result.
+2. **Mario intake:** the newly supplied CCI is described as decrypted but exceeds
+   the 32 MiB executor transfer limit. Use the existing Windows/Python
+   [small private executable export](cia-intake.md); retain the full file locally
+   for assets/modules. Exact identity and decryption remain unverified. Keys stay local.
+3. **Platform acceptance:** complete documented repeat launch, Home/APT,
+   stability, SD recovery and original WUP install/Menu-launch checks with exact
+   environment/build identity. The three successful sessions do not complete
+   those full criteria.
+4. **Renderer/runtime implementation:** broader shaders, TEV/sampling, native
+   GX2 translation, coherency, dynamic modules, guest audio and retail saves
+   remain open. Independent original-fixture development can continue.
 5. **Conversion/GUI:** prove the full native Windows conversion and WUP
-   install/rebuild/save continuity, then complete the planned GUI acceptance.
+   install/rebuild/save continuity, then complete GUI acceptance.
 
-Independent development can continue. It cannot replace title bytes, physical
-console observations or full Windows/install acceptance. Project #2 is populated
-through the repository Actions secret; public docs and the Project dashboard are
-deployed and HTTP-verified. Direct cloud administration access remains limited.
+GitHub management and publication are working through trusted-main Actions.
+Full Project statuses and gate acceptance remain authoritative; the scoped
+physical passes do not close parent tasks or full milestones automatically.
 
 ## Historical handoffs
 

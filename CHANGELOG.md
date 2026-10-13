@@ -3,6 +3,16 @@
 All releases are development increments. RPX/WUHB diagnostics and desktop passes
 do not establish commercial-game compatibility or installable WUP acceptance.
 
+## Evidence follow-up — 2026-10-13
+
+- Review physical Audio Check/GX Transfers 0.20.0 and Guest Draws 0.23.0 passes,
+  separate picture/Menu-return confirmation, and silence/native-tone results.
+- Record the 57.33-second drawn presentation and premature visual-prompt guard;
+  plan bounded guest progress and separate execution/scaling/wait/storage metrics.
+- Replace completed test handoffs with current evidence and remaining gates.
+- Document the Windows/Python small-intake route for the oversized reportedly
+  decrypted CCI. No uploaded ROM byte, key or private trace is published.
+
 ## 0.23.0 — 2026-10-13
 
 - Execute original compiled guest PICA draws through standard GSP with tracked

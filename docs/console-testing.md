@@ -1,15 +1,11 @@
 # Physical Wii U test checklist
 
-**Current workflow: use the v0.14.6 kit and follow
-[console-retest.md](console-retest.md): Compiled Save, then the automatic Compiled
-RomFS test if exit works.** The user reports Native/Guarded/Compiled completion
-without errors on 0.14.5, but no new TXT reports. Supplied text logs are older;
-the valid snapshot proves initial writing and the later save step failed.
-Independent `result-*-0.14.6-*.txt` files now retain named outcomes and are closed/
-read-back verified. Upload them and the snapshot/siblings in this chat. No long
-native/input repetition is needed. The manual checklist below is historical
-reference for deeper acceptance rounds; [guided-testing.md](guided-testing.md)
-describes current controls and reporting.
+**Current evidence:** October 13 audio/GX/draw results are reviewed in
+[console-evidence.md](console-evidence.md). There is no request to repeat the
+completed Save/RomFS/audio routes. The next draw follow-up addresses measured
+startup delay, phase timing and accurate visual confirmation. See
+[console-retest.md](console-retest.md). The versioned manual checks below are
+historical reference for deeper acceptance, not a new blanket test request.
 
 No console is attached to this environment. Full physical acceptance remains
 open despite the scoped native results. Cross-compilation, host tests and RPX headers do not

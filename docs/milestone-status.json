@@ -12,14 +12,15 @@
       "waiting_labels": [
         "needs-console"
       ],
-      "summary": "Reviewed TXT, original save/reload, assets, pictures and Minus exit evidence exists. Launch-audio regression, platform recovery and installed-original-WUP acceptance remain open.",
+      "summary": "Reviewed TXT, saves, assets, pictures, silence/native tone and Minus exit evidence exists. Platform recovery, complete lifecycle/stability and installed-original-WUP acceptance remain open.",
       "verified_foundations": [
         "Versioned native/guest RPX/WUHB builds and read-back-checked test-report/save publication lifecycle",
         "Older native/control reports, confirmed Minus exit and user-reported Native/Guarded/Compiled v0.14.5 completion retained as scoped evidence",
-        "October 12 physical round: five completed named TXT reports, valid visit-2 snapshot, fresh-launch Save 0.14.6 RELOAD PASS and user-confirmed correct pictures/Minus return; looping launch music recorded separately"
+        "October 12 physical round: five completed named TXT reports, valid visit-2 snapshot, fresh-launch Save 0.14.6 RELOAD PASS and user-confirmed correct pictures/Minus return; looping launch music recorded separately",
+        "October 13 Audio Check 0.20.0 full trace and GX Transfers 0.20.0 result/trace record named passes; user confirms silence and correct exit. Native audio result TXT was not included."
       ],
       "acceptance_remaining": [
-        "Verify focused launch-audio regression and documented SD publication recovery",
+        "Verify documented SD publication recovery and repeat launch/Home/APT lifecycle acceptance",
         "Complete documented native controls/audio/lifecycle/stability evidence",
         "Install an original diagnostic WUP and prove Menu launch/exit"
       ],
@@ -217,7 +218,7 @@
         "Owned memory, eight single-core contexts and scoped kernel/IPC/SRV/CFG/HID/GSP/APT/FS contracts",
         "Original compiled input/framebuffer/save/reload/RomFS/GX applications verified on desktop, sanitizers and selected emulated PowerPC comparisons",
         "Physical Save 0.14.6 fresh-process reload, embedded RomFS 0.14.6, SD-file RomFS 0.16.0 and GX 0.18.0 transfer/configuration guides completed with zero fallback/fault; user confirmed pictures and Minus return.",
-        "Original normal-CRT PICA draw application executes 17,420,794 ARM instructions without fallback, compares exact target/display pixels and builds native RPX/WUHB; physical renderer evidence remains pending."
+        "Original normal-CRT PICA draw guest has host exact-pixel checks and an October 13 physical own PASS/exit with zero fallback/fault; rendered second presentation at 57.33 seconds. User separately confirms pictures and Minus return."
       ],
       "acceptance_remaining": [
         "Prove current compiled guest display/input/exit/save/assets on Wii U",
@@ -229,7 +230,7 @@
         {
           "id": "m3-homebrew-console",
           "title": "Verify the normal-CRT homebrew suite on Wii U",
-          "summary": "Collect focused physical evidence for the original compiled applications, especially Save, RomFS/Asset Files and GX Transfers.",
+          "summary": "Retain reviewed physical Save, RomFS/Asset Files, GX and bounded draw results. The new draw startup delay and guide timing require focused investigation; unchanged completed routes need no blanket repeat.",
           "acceptance_criteria": [
             "Current compiled guests update both screens, respond to the required input/touch, complete their documented exit and retain their versioned observations.",
             "Save fresh-process reload, nested/Unicode read-only assets and GX transfer pictures/results match the documented original fixtures; unresolved errors are investigated instead of marked passed."
@@ -320,7 +321,8 @@
         "Original bounded vertex attribute decoding: four published component formats, explicit streams/input permutation and transactional finite-float/range/alias validation; no shader or draw enabled",
         "v0.21.0 adds unsigned 8-bit/16-bit indexed gathers, exhaustive index-domain checks and full referenced-range/value/alias validation before publication; no shader or draw enabled",
         "v0.22.0 original owned-resource loader/MOV shader/software triangles: 1,393,972 original assertions, exact analytic pixels for both index formats and 12,290 pinned independent encoding checks; focused native Scene Check cross-build, hardware evidence pending",
-        "Standard guest GSP integrates bounded owned-resource PICA draws transactionally; the compiled original draws four exact triangles into both targets and displays them with zero fallback."
+        "Standard guest GSP integrates bounded owned-resource PICA draws transactionally; the compiled original draws four exact triangles into both targets and displays them with zero fallback.",
+        "October 13 Guest Draws 0.23.0 has matching two-step PASS result/trace, four triangles, 97,200 fragments and user-confirmed pictures/exit. Aggregate frame timing and premature visual-prompt timing are recorded; full graphics costs remain unmeasured."
       ],
       "acceptance_remaining": [
         "Implement real PICA command/state, vertex/shader, texture/sampler/TEV and raster behavior",
@@ -398,7 +400,7 @@
         {
           "id": "m4-console-scenes",
           "title": "Compare rendered scenes and measure Wii U graphics costs",
-          "summary": "Use original reference scenes to establish real GX2 output and timing before title-specific visual acceptance.",
+          "summary": "Retain the reviewed original compiled draw pictures and own PASS/exit; correct premature visual gating and separately measure CPU/GPU/transfer/wait/memory costs before full graphics or title acceptance.",
           "acceptance_criteria": [
             "Physical Wii U images match the defined scene tolerances and required visual checks; build/reference identity and unsupported features accompany the results.",
             "CPU submission, GPU work, transfers, waits, memory and frame-time distribution are measured on Wii U; selected-title scenes are later validated through M5."
@@ -423,7 +425,7 @@
         "needs-console",
         "needs-input"
       ],
-      "summary": "Mario is the selected candidate; the received small intake has no executable. Exact owned revision/assets, title requirements and physical gameplay/audio/save/performance remain open.",
+      "summary": "Mario is selected; the newly supplied reportedly decrypted CCI exceeds the transfer limit. Exact owned revision/assets, title requirements and gameplay/audio/save/performance remain unverified.",
       "verified_foundations": [
         "Candidate and proposed private analysis/gameplay route documented",
         "Local preparation/decryption/intake helpers tested with original fixtures; actual commercial executable/assets not inspected"

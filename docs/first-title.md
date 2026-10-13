@@ -1,5 +1,12 @@
 # First supported-title candidate: Super Mario 3D Land
 
+**October 13:** the user supplied a CCI described as decrypted, but the 32 MiB
+executor transfer limit prevents inspecting it. Its decryption, exact identity,
+revision and assets remain unverified. The Windows 11/Python small-intake route
+in [CIA/NCSD intake](cia-intake.md) is ready; title-specific analysis waits for
+that private executable export. Physical original draw/audio passes are separate
+from commercial compatibility.
+
 October 11 update: the user is preparing console tests and has supplied the
 small CIA helper receipt. It reports outer-encrypted executable content and
 contains no executable view. Decrypted executable intake is still needed; no
