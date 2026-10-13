@@ -159,13 +159,15 @@ The separate [Documentation build passed](https://github.com/Jdiller-86/CTR-2-WU
 including real pinned external AOT, Unicode execution and .NET 10 WPF tooling.
 This verifies development tools; full Windows conversion and GUI remain unfinished.
 [GitHub development](docs/github-development.md) explains
-artifacts, release policy and management operations still awaiting access.
+artifacts, release policy and trusted-main management workflows.
 
 The existing GitHub integration rejected Projects creation and repository
 administration/security-setting writes with **Resource not accessible by
 integration**. Issue/milestone writes work. Project #2 is now populated and linked through its Actions secret. Direct cloud
-About/topics/Discussions and security-setting access remains limited; those
-source-repository settings are not falsely marked enabled.
+administration access remains limited. The requested free About/topics,
+Discussions, branch cleanup and dependency-alert settings are applied and
+API-verified through the dedicated repository-features Actions workflow; its
+receipts establish live outcomes.
 Searchable documentation has a strict build, rendered-link checks, an offline
 HTML guide and a free public docs-only Pages export. The user confirms private
 Pages is unavailable on their free plan; application source remains private.

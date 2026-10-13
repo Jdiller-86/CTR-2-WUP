@@ -67,8 +67,7 @@
   },
   "paid_features_enabled": false,
   "visibility_change_requested": false,
-  "live_settings_verified": false,
-  "blocked_reason": "Project #2 and public docs-only Pages/dashboard are verified using repository Actions. Direct cloud Project/administration calls still use the limited integration; source About/Discussions/security settings remain unverified.",
   "project_live_verified": true,
-  "pages_live_verified": true
+  "pages_live_verified": true,
+  "operations_receipts": "Trusted-main repository features, Project tracking and public documentation Actions retain live operation receipts; desired source settings are not a substitute for API verification."
 }

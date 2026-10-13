@@ -151,17 +151,12 @@ opens directly in a browser**, with navigation, search and a print layout. The
 HTML guide requires no account, server or internet connection to read its content.
 Download it from a matching development release or Documentation run artifact.
 
-A separate public **CTR-2-WUP-docs** repository can host the generated site with
-GitHub Pages on the free plan while the application repository remains private.
-The export bundle includes the rendered site, notices, README and a pinned Pages
-workflow; it excludes application code, ROMs, keys and private test data. Initial
-creation/publication still requires repository access. A generated bundle is not
-proof of a published site; only link a live URL after verifying deployment.
-The connected integration rejected creation of `CTR-2-WUP-docs` with HTTP 403
-**Resource not accessible by integration**. The ready export can be uploaded to
-a public repository created by the owner, or published after granting the
-required repository creation/Pages access. The HTML guide is usable immediately.
-Private-source Pages is unavailable on the user's current plan and is not enabled.
+The public [CTR2WUP documentation site](https://jdiller-86.github.io/CTR-2-WUP-docs/)
+is deployed on free GitHub Pages while application source stays private. The
+export contains rendered guides, notices, provenance and a pinned Pages workflow;
+application code, ROMs, keys and private test data are excluded. Publication and
+Pages Actions succeeded, and HTTP checks verify the site, dashboard, JSON and
+chart. Private-source Pages is not used. The offline reader remains available.
 
 ```sh
 python3 -m venv artifacts/docs-build-venv
@@ -255,35 +250,25 @@ Use trusted-main **Project tracking** for setup/export and **Publish public
 documentation** for docs-only publication. Neither runs untrusted PR code with
 the management token. Dry-run tools are available for reviewing mutations.
 
-## Settings requiring additional access
+## Repository settings and authentication
 
-The connected integration can push code, work with issues/milestones and read
-Actions runs, but GitHub rejected `createProjectV2` and repository administration/
-security-setting writes as **Resource not accessible by integration**. These are
-GitHub access denials, not failed source checks or an automatic approval review.
+Normal Git, issues, milestones, PRs and Actions use the connected integration.
+Its direct cloud Project/administration calls remain limited. Trusted-main
+management workflows use the separate repository Actions secret
+`CTR2WUP_GITHUB_MANAGEMENT_TOKEN`; this route has populated Project #2 and
+published the docs-only Pages site. No further token entry is needed for those
+verified operations.
 
-The prepared desired setup is:
+**Repository features** applies the requested About/documentation URL, topics,
+Discussions, merged-branch cleanup and free Dependabot alerts, then verifies the
+result through the API. **Project tracking** owns board setup, explicit reviewed
+task transitions and public aggregates. **Publish public documentation** verifies
+the docs-only export before publication. Each preserves operation receipts.
+The [desired settings](../.github/repository-settings.json) specify mutation scope;
+actual API receipts establish which operations succeeded.
 
-- Private project **CTR2WUP Development**, linked to this repository, containing
-  seven overviews plus 35 work issues, with Planned / In progress / Awaiting
-  evidence / Blocked / Ready for review / Done / Closed / Accepted columns and
-  fields for milestone and waiting resource. Accepted remains reserved for
-  explicitly reviewed full milestones.
-- About description/topics reflecting early development; optional Discussions,
-  delete merged topic branches and free dependency-alert settings.
-
-Grant the GitHub connection the relevant **Projects write** and **repository
-Administration/security-setting and public docs-repository/Pages write** access to finish those protected operations,
-or apply them in repository/account settings.
-
-For this cloud environment, an optional secure personal secret requirement named
-`CTR2WUP_GITHUB_MANAGEMENT_TOKEN` has been saved for `api.github.com` only. The
-[Projects API documentation](https://docs.github.com/en/issues/planning-and-tracking-with-projects/automating-your-project/using-the-api-to-manage-projects)
-specifies a classic personal access token with `project` scope; private repository
-issues/settings additionally need `repo` access. Enter the credential in environment
-settings, review/save the draft and publish the environment changes. Saving the
-requirement alone does not grant access or create a board. Keep the existing
-connection for normal Git/issue/Actions work; use the optional credential only
-for the management operations. No token value should be pasted into chat. The [desired configuration](../.github/repository-settings.json) is
-concrete and reviewable; the live milestone/issues view works while board access
-is pending. Repository visibility and paid entitlements have not been changed.
+Only trusted immutable main code executes with the management token. Values are
+consumed normally by the GitHub CLI and never copied into reports, source or
+chat. Existing owner board values remain authoritative; source synchronization
+cannot overwrite them. No branch protection or paid feature is enabled, and
+application repository visibility remains private.
