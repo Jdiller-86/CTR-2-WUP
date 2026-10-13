@@ -4,6 +4,8 @@
 
 [Documentation](https://jdiller-86.github.io/CTR-2-WUP-docs/) · [Releases](https://github.com/Jdiller-86/CTR-2-WUP/releases) · [Project](https://github.com/users/Jdiller-86/projects/2) · [Contributing](CONTRIBUTING.md)
 
+First visit? [Take the repository tour](docs/repository-guide.md).
+
 CTR2WUP is an experimental 3DS-to-Wii U converter. Its goal is a Windows GUI
 that translates a 3DS game into an individual WUP title, with the top screen
 on the TV and the bottom screen, touch and controls on the GamePad.

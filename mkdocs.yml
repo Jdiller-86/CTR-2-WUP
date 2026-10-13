@@ -74,6 +74,7 @@ extra:
 nav:
   - Overview: index.md
   - Start here:
+      - Repository tour: docs/repository-guide.md
       - Documentation: docs/index.md
       - Download and launch: docs/getting-started.md
       - Testing and evidence: docs/testing.md
