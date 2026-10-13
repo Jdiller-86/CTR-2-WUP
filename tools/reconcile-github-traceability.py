@@ -94,6 +94,8 @@ def mutate(client, name, kind, value, selection):
 
 
 def reconcile(client, data, apply, report):
+    report["stage"] = "preflight"
+    report["changes_possible"] = False
     rows = catalog(data)
     issues = [i for i in pages(client, f"repos/{REPO}/issues?state=all") if "pull_request" not in i]
     by_number, features = {i["number"]: i for i in issues}, {}
@@ -111,6 +113,12 @@ def reconcile(client, data, apply, report):
     for required in ("Planned", "In progress", "Awaiting evidence", "Blocked", "Done"):
         if required not in status:
             raise tracking.TrackingError("Required Project status is absent; preserve existing options.")
+    if any(value not in status for value in data.get("reviewed_statuses", {}).values()):
+        raise tracking.TrackingError("A reviewed Project status has no existing option.")
+    registered = {n for row in rows for n in row["pull_requests"]}
+    visible_prs = {pr["number"] for pr in pages(client, f"repos/{REPO}/pulls?state=all")}
+    if visible_prs - registered:
+        raise tracking.TrackingError("Repository PRs are missing primary feature justification; update the catalog before applying.")
     prs = {}
     for row in rows:
         if row["parent_issue"] not in by_number or row["milestone"] not in milestones:
@@ -132,18 +140,23 @@ def reconcile(client, data, apply, report):
     report["planned"] = {"features": len(rows), "pull_requests": len(prs), "task_parents": 35}
     if not apply:
         return
+    report["changes_possible"] = True
+    report["stage"] = "create-scoped-features"
     labels = {l["name"] for l in pages(client, f"repos/{REPO}/labels")}
     if "feature" not in labels:
         client.api(f"repos/{REPO}/labels", "POST", {"name": "feature", "color": "1D76DB", "description": "Scoped implementation with acceptance criteria, parent task and PR evidence"})
     for row in rows:
         if row["id"] not in features:
             issue = client.api(f"repos/{REPO}/issues", "POST", {"title": row["title"], "body": body(row),
-                                "milestone": row["milestone"], "labels": ["feature"]})
+                                "milestone": row["milestone"], "labels": ["feature", "work-item"]})
             features[row["id"]] = issue
             report["operations"].append({"create_feature": row["id"], "issue": issue["number"]})
     # Link only scoped feature issues as closing references. Broad parents stay open.
+    report["stage"] = "link-feature-prs-and-milestones"
     for row in rows:
         issue = features[row["id"]]
+        if not {"feature", "work-item"} <= {label["name"] for label in issue.get("labels", [])}:
+            client.api(f'repos/{REPO}/issues/{issue["number"]}/labels', "POST", {"labels": ["feature", "work-item"]})
         detail = client.graphql(DETAIL, {"id": issue["node_id"]})["node"]
         if detail["closedByPullRequestsReferences"]["pageInfo"]["hasNextPage"]:
             raise tracking.TrackingError("Issue PR references exceed the review budget.")
@@ -165,6 +178,7 @@ def reconcile(client, data, apply, report):
     edges = [(by_number[n], by_number[1 + (n - 12) // 5]) for n in range(12, 47)]
     edges += [(features[r["id"]], by_number[r["parent_issue"]]) for r in rows]
     for child, parent in edges:
+        report["stage"] = "native-hierarchy"
         detail = client.graphql(DETAIL, {"id": child["node_id"]})["node"]
         if not detail["parent"]:
             mutate(client, "addSubIssue", "AddSubIssueInput", {"issueId": parent["node_id"], "subIssueId": child["node_id"]}, "clientMutationId")
@@ -190,6 +204,7 @@ def reconcile(client, data, apply, report):
         if node in items and (items[node].get("status") or {}).get("name") in (None, "Todo"):
             desired.append((node, value, "Milestone" if int(number) <= 7 else "Task"))
     for node, value, kind in desired:
+        report["stage"] = "project-membership-and-status"
         if node not in items:
             result = mutate(client, "addProjectV2ItemById", "AddProjectV2ItemByIdInput", {"projectId": project["id"], "contentId": node}, "item { id }")
             items[node] = {"id": result["item"]["id"], "status": None}
@@ -203,6 +218,7 @@ def reconcile(client, data, apply, report):
             mutate(client, "updateProjectV2ItemFieldValue", "UpdateProjectV2ItemFieldValueInput",
                    {"projectId": project["id"], "itemId": item["id"], "fieldId": fields["Work type"]["id"], "value": {"singleSelectOptionId": option}}, "projectV2Item { id }")
     # Verify live relationships after mutations, never count attempts as successes.
+    report["stage"] = "verify-live-relationships"
     for child, parent in edges:
         detail = client.graphql(DETAIL, {"id": child["node_id"]})["node"]
         if not detail["parent"] or detail["parent"]["id"] != parent["node_id"]:
@@ -212,8 +228,24 @@ def reconcile(client, data, apply, report):
         linked = {p["number"] for p in detail["closedByPullRequestsReferences"]["nodes"]}
         if not set(row["pull_requests"]) <= linked:
             raise tracking.TrackingError("Native PR links did not verify after reconciliation.")
+    fresh = client.connection(project["id"], "items", selection)
+    members = {i["content"]["id"] for i in fresh if i.get("content") and i["content"].get("id")}
+    expected = {i["node_id"] for i in by_number.values() if i["number"] in (*range(1, 8), *range(12, 47))}
+    expected |= {i["node_id"] for i in features.values()} | {p["node_id"] for p in prs.values()}
+    if not expected <= members:
+        raise tracking.TrackingError("Project membership did not verify for every managed issue and PR.")
+    for row in rows:
+        issue = client.api(f'repos/{REPO}/issues/{features[row["id"]]["number"]}')
+        if (issue.get("milestone") or {}).get("number") != row["milestone"]:
+            raise tracking.TrackingError("Feature milestone assignment did not verify.")
+        for number in row["pull_requests"]:
+            pr = client.api(f"repos/{REPO}/issues/{number}")
+            if (pr.get("milestone") or {}).get("number") != row["milestone"]:
+                raise tracking.TrackingError("PR milestone assignment did not verify.")
     report["verified"] = {"native_parent_links": len(edges), "native_pr_links": len(prs),
+                          "project_members": len(expected), "untracked_pull_requests": 0,
                           "feature_issues": {r["id"]: features[r["id"]]["number"] for r in rows}}
+    report["stage"] = "verified"
 
 
 def main():
