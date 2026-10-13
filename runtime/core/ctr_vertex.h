@@ -16,6 +16,9 @@ typedef enum {
     CTR_VERTEX_SHORT=2, CTR_VERTEX_FLOAT=3
 } ctr_vertex_format;
 typedef enum {
+    CTR_VERTEX_INDEX_UNSIGNED_BYTE=0, CTR_VERTEX_INDEX_UNSIGNED_SHORT=1
+} ctr_vertex_index_format;
+typedef enum {
     CTR_VERTEX_OK, CTR_VERTEX_ARGUMENT, CTR_VERTEX_LAYOUT,
     CTR_VERTEX_UNSUPPORTED, CTR_VERTEX_RANGE, CTR_VERTEX_LIMIT,
     CTR_VERTEX_CAPACITY, CTR_VERTEX_ALIAS, CTR_VERTEX_OVERFLOW
@@ -31,6 +34,11 @@ typedef struct {
     unsigned offset; /* Resolved attribute offset within one vertex's stride. */
 } ctr_vertex_attribute;
 typedef struct {
+    const void *bytes; /* Caller-owned, stable little-endian index bytes. */
+    size_t size, offset; /* offset is the first index, relative to bytes. */
+    unsigned format; /* Unsigned 8-bit or unsigned 16-bit; never a restart marker. */
+} ctr_vertex_indices;
+typedef struct {
     float input[CTR_VERTEX_INPUTS][4];
     uint16_t enabled; /* Only these slots were supplied by the validated layout. */
 } ctr_vertex;
@@ -42,7 +50,7 @@ typedef struct {
  * values convert exactly to host float32. Float32 bytes are little-endian and
  * copied bit-exactly; nonfinite encodings and non-IEEE binary32 hosts fail.
  * No PICA float24 rounding, loader-register parsing, retained/fixed attributes,
- * index-buffer interpretation, guest memory access, shader or draw is performed.
+ * guest memory access, shader or draw is performed. This entry point is nonindexed.
  * NULL output with capacity zero validates only. All layout, source range,
  * float and alias checks complete before any output changes. Input and output
  * spans must be caller-owned and remain stable during the call. */
@@ -52,5 +60,20 @@ ctr_vertex_result ctr_vertex_decode(const ctr_vertex_attribute *attributes,
                                    size_t stream_count, size_t first_vertex,
                                    size_t vertex_count, ctr_vertex *output,
                                    size_t capacity);
+/* Gather vertices in index order, retaining duplicates. first_index/count select
+ * index elements, not bytes or a base vertex. Values 0xff/0xffff are ordinary
+ * unsigned indices. Stream offsets resolve the source vertex base; no PICA
+ * register or vertex-offset interpretation is performed here. Only referenced
+ * vertices are read/checked. The complete index span/descriptor is protected
+ * against output aliases, and every referenced range/value is validated before
+ * publishing any output. Zero count validates configuration without reading
+ * indices; NULL output with zero capacity performs full validation only. */
+ctr_vertex_result ctr_vertex_decode_indexed(const ctr_vertex_attribute *attributes,
+                                           size_t attribute_count,
+                                           const ctr_vertex_stream *streams,
+                                           size_t stream_count,
+                                           const ctr_vertex_indices *indices,
+                                           size_t first_index, size_t vertex_count,
+                                           ctr_vertex *output, size_t capacity);
 const char *ctr_vertex_result_name(ctr_vertex_result result);
 #endif

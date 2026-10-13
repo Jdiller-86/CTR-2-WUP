@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "0.20.0",
+  "version": "0.21.0",
   "updated": "2026-10-13",
   "approximate_implementation_percent": 20,
   "full_milestones_accepted": 0,
@@ -311,12 +311,13 @@
       "waiting_labels": [
         "needs-console"
       ],
-      "summary": "Original texture decoding, scoped CPU-backed GX transfers, transactional PICA configuration and bounded vertex-stream decoding are implemented; loader-state integration, actual draws/shaders/TEV/coherency and console scenes remain open.",
+      "summary": "Original texture decoding, scoped CPU-backed GX transfers, transactional PICA configuration and bounded contiguous/indexed vertex decoding are implemented; loader-state integration, actual draws/shaders/TEV/coherency and console scenes remain open.",
       "verified_foundations": [
         "Direct/shared framebuffer presentation and all 14 base texture formats with original/reference checks",
         "Bounded GSP DMA/fill/display-transfer/raw-texture-copy/cache queue operations and completion interrupts",
         "v0.18 finalized no-draw viewport/scissor PICA command lists, checked wire inspection and transactional guest-queue integration",
-        "Original bounded vertex attribute decoding: four published component formats, explicit streams/input permutation and transactional finite-float/range/alias validation; no shader or draw enabled"
+        "Original bounded vertex attribute decoding: four published component formats, explicit streams/input permutation and transactional finite-float/range/alias validation; no shader or draw enabled",
+        "v0.21.0 adds unsigned 8-bit/16-bit indexed gathers, exhaustive index-domain checks and full referenced-range/value/alias validation before publication; no shader or draw enabled"
       ],
       "acceptance_remaining": [
         "Implement real PICA command/state, vertex/shader, texture/sampler/TEV and raster behavior",
@@ -351,7 +352,8 @@
           "waiting_labels": [],
           "state": "in_progress",
           "evidence": [
-            "v0.19.0 adds the original bounded runtime/core/ctr_vertex byte-stream decoder and exhaustive original tests; resolving PICA loaders, fixed/index attributes, shader execution and actual draws remain required."
+            "v0.19.0 adds the original bounded runtime/core/ctr_vertex byte-stream decoder and exhaustive original tests; resolving PICA loaders, fixed/index attributes, shader execution and actual draws remain required.",
+            "v0.21.0 implements original checked unsigned 8-bit/16-bit indexed array gathering with 364,123 original assertions; PICA loader/fixed state, uniforms, shaders and actual draws remain open."
           ]
         },
         {

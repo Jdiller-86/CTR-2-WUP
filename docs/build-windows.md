@@ -41,6 +41,9 @@ python -m host run-fixture "artifacts/Windows fixture 日本語/ctr2wup-guest.cx
 
 Run Make commands in UCRT64 with native GCC available. `make check-c-portable`
 runs normal C suites; Linux ASan/UBSan results are separate evidence.
+The vertex suite includes every unsigned 8-bit/16-bit index value and original
+multi-stream/interleaved gathers; it uses portable byte loads rather than native
+unaligned index casts. These checks do not prove Wii U rendering or conversion.
 Generated fixtures are original and require no ROM, console key or commercial
 asset. See [encrypted inputs](encrypted-input.md) for private local key handling.
 

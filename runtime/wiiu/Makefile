@@ -15,7 +15,7 @@ GX_HOMEBREW ?= 0
 AUDIO_ONLY ?= 0
 UDP_LOG ?= 0
 CALL_LIMIT ?= 64
-APP_VERSION := 0.20.0
+APP_VERSION := 0.21.0
 UPSTREAM_DIR ?= ../../artifacts/generated-upstream-guest
 ifeq ($(GUEST_DEFAULT),1)
 APP_NAME := CTR2WUP ARM Guest $(APP_VERSION)

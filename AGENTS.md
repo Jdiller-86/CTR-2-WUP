@@ -15,6 +15,11 @@ the existing isolated checkout; do not create a worktree unless asked.
   not establish authenticity or installer acceptance.
 - Maintain STATUS.md, milestone evidence, architecture/build/compatibility docs
   and versioned reports. Do not add a GUI before the execution pipeline works.
+- Use the repository Actions credential through trusted-main workflows for
+  GitHub management operations; keep its value in Actions. The connected
+  integration supplies source transport and workflow dispatch/inspection.
+- After merging a PR, delete its completed remote and local topic branch and
+  verify that the remote branch is gone.
 - For Codex-generated commits, install the opt-in repository hook with
   `python3 tools/codex-attribution.py install`, then use `git codex-commit`.
   Preserve existing hooks and human attribution. See CONTRIBUTING.md for identity

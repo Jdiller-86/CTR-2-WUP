@@ -1,6 +1,6 @@
 # Milestones and remaining work
 
-Updated **October 13, 2026** for **v0.20.0**. The product is an UWUVCI-style
+Updated **October 13, 2026** for **v0.21.0**. The product is an UWUVCI-style
 Windows GUI: **Select owned 3DS ROM → configure title/artwork → Inject →
 install its WUP → play from the Wii U Menu**. The CLI is the shared engine.
 Super Mario 3D Land is the first candidate; its exact revision remains unverified.
@@ -392,9 +392,15 @@ Acceptance:
 
 Choose a license-cleared Latte shader route and validate exercised vertex attributes, uniforms and shader instructions.
 
-State: **Planned** · Needs: none for original-fixture development.
+State: **In progress** · Needs: none for original-fixture development.
 
 Depends on: [m4-pica-commands](#m4-pica-commands).
+
+Verified foundation: [resolved vertex decoding](vertex-attributes.md) now covers
+both contiguous streams and checked 8-bit/16-bit indexed gathers. The original
+suite covers every index value and transactional failure behavior. Loader/fixed
+state, uniforms, shader execution, actual draw scenes and full acceptance remain
+open; decoder checks do not accept this task.
 
 Acceptance:
 

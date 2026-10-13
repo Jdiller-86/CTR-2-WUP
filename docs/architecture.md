@@ -12,6 +12,14 @@ Executable artifacts are the original native diagnostic and controlled guest RPX
 plus the separate .NET CIA intake console utility cross-published for Windows x64.
 An RPX is not an installable WUP directory.
 
+The portable [vertex module](vertex-attributes.md) resolves explicitly supplied
+array streams into shader-input vectors. Its contiguous and indexed entry points
+share layout/range/value validation and commit output only after the complete
+request is valid. The indexed path reads unsigned 8-bit or little-endian 16-bit
+elements, preserving order and duplicates without reading unreferenced vertices.
+It does not follow guest addresses or implement PICA loader state, fixed
+attributes, float24/shader arithmetic, primitive assembly or GX2 submission.
+
 The CIA intake path uses bounded signature-layout/TMD/bitmap/content checks and
 selects index-0 application NCCH with checked absolute file offsets. Its derived
 CXI view preserves ExeFS/exheader code identity while explicitly removing RomFS

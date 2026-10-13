@@ -1,6 +1,6 @@
 # CTR2WUP status
 
-Updated **October 13, 2026 (America/New_York)** · **v0.20.0**.
+Updated **October 13, 2026 (America/New_York)** · **v0.21.0**.
 The target remains an UWUVCI-style Windows GUI: select an owned 3DS game, configure
 title/artwork, click Inject, install its individual WUP and play from Wii U Menu.
 [Requirements](docs/project-brief.md), [product plan](docs/development-plan.md),
@@ -18,10 +18,32 @@ is enabled. Current binaries are original homebrew diagnostics.
 | Input/preparation | Bounded CIA/NCSD/NCCH inspection, optional local key/seed imports/decryption, canonical full RomFS IVFC/metadata verification and private asset blobs | Actual user exports/Mario assets, broader forms and Windows acceptance |
 | CPU/runtime | Checked ARM/Thumb/VFP/AOT subsets, owned memory, eight single-core contexts and scoped services | Complete exercised CPU/HLE coverage, modules, guest audio and retail saves |
 | Homebrew | Eight normal-CRT/libctru applications: boot, threads, graphics, input, interactive, filesystem, RomFS and GX transfer | Launch-audio regression, broader services and game integration |
-| Graphics | Direct/shared framebuffer presentation, five display formats, 14 base textures, scoped CPU-backed GX queues/copies/fills/transfers | PICA vertex/shader/TEV/draw execution, GPU resources/coherency and measured console performance |
+| Graphics | Direct/shared framebuffer presentation, five display formats, 14 base textures, scoped CPU-backed GX queues/copies/fills/transfers and checked contiguous/indexed vertex decoding | PICA loader/fixed attributes, shaders/TEV/draw execution, GPU resources/coherency and measured console performance |
 | Packaging/GUI | Original synthetic packing/decryption verification and conversion foundations; GUI workflow specified | Commercial conversion, actual WUP install/Menu gameplay, clean Windows and final GUI |
 
-## v0.20.0 increment
+## v0.21.0 increment
+
+The original vertex decoder now gathers resolved array attributes through
+unsigned 8-bit or little-endian unsigned 16-bit index buffers. It preserves
+duplicates and index order, handles unaligned buffers and explicit byte offsets,
+and checks every referenced range/value before changing any output. Unreferenced
+nonfinite vertex data does not reject a valid gather; 0xff/0xffff remain ordinary
+indices. Index buffers and descriptors receive the existing full-span alias
+protection. No heap allocation, PICA register interpretation, primitive assembly,
+shader execution or draw submission is introduced.
+
+The focused vertex suite passes **364,123 original assertions**, including every
+8-bit/16-bit index, reordered multi-stream/interleaved records, late rejection,
+aliasing, truncation and overflow. Required full-source and native-build receipts
+are retained in `artifacts/reports/indexed-vertex-v021/`. This advances M4's
+vertex/shader task without accepting the task or any full milestone.
+
+The focused Audio Check/GX Transfers **0.20.0** console handoff remains current;
+this independent vertex increment requires no repeated completed console guide.
+GitHub management continues through its verified Actions credential. Completed
+PR branches are deleted after merge.
+
+## v0.20.0 increment (historical)
 
 All diagnostic variants initialize a fresh native AX context before running
 self-tests or waiting for input. An inherited same-process context is reset;

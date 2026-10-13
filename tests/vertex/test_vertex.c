@@ -120,6 +120,14 @@ static void layout(void) {
         }
     /* Validation-only obeys the same layout and byte contract. */
     CHECK(ctr_vertex_decode(attributes,12,streams,12,0,2,NULL,0)==CTR_VERTEX_OK);
+    uint8_t order[]={1,0,1};ctr_vertex_indices indices={order,sizeof(order),0,0};
+    CHECK(ctr_vertex_decode_indexed(attributes,12,streams,12,&indices,0,3,vertices,3)==CTR_VERTEX_OK);
+    for(unsigned vertex=0;vertex<3;++vertex)
+        for(unsigned a=0;a<12;++a) {
+            unsigned slot=(a*5)%16;
+            CHECK(vertices[vertex].input[slot][0]==(float)((int)a-(int)order[vertex]*100));
+            CHECK(vertices[vertex].input[slot][1]==32767.0f && vertices[vertex].input[slot][3]==1.0f);
+        }
 }
 static void interleaved(void) {
     /* Original triangle-like records: position, raw color bytes, signed texture
@@ -156,6 +164,114 @@ static void interleaved(void) {
         for(unsigned lane=0;lane<2;++lane)CHECK(output[vertex].input[9][lane]==(float)coordinates[vertex][lane]);
         CHECK(output[vertex].input[0][3]==1.0f && output[vertex].input[9][2]==0.0f && output[vertex].input[9][3]==1.0f);
     }
+    /* Skip a prefix in an unaligned little-endian u16 view. The index order
+     * repeats a vertex and does not add a nonindexed first-vertex offset. */
+    uint8_t order_bytes[]={0xee,0xff,0xff,0xff,0xff,2,0,0,0,2,0,1,0};
+    ctr_vertex_indices indices={order_bytes,sizeof(order_bytes),1,CTR_VERTEX_INDEX_UNSIGNED_SHORT};
+    const unsigned order[]={2,0,2,1};
+    CHECK(ctr_vertex_decode_indexed(attributes,3,&stream,1,&indices,2,4,output,4)==CTR_VERTEX_OK);
+    CHECK(!memcmp(bytes,previous,sizeof(bytes)));
+    for(unsigned vertex=0;vertex<4;++vertex) {
+        unsigned id=order[vertex];
+        for(unsigned lane=0;lane<3;++lane)CHECK(float_bits(output[vertex].input[0][lane])==positions[id][lane]);
+        for(unsigned lane=0;lane<4;++lane)CHECK(output[vertex].input[3][lane]==(float)colors[id][lane]);
+        for(unsigned lane=0;lane<2;++lane)CHECK(output[vertex].input[9][lane]==(float)coordinates[id][lane]);
+        CHECK(output[vertex].enabled==((1u<<0)|(1u<<3)|(1u<<9)));
+    }
+}
+static void indexed_formats(void) {
+    static uint8_t source[65536*2+1],encoded[4096*2+2];
+    static ctr_vertex output[4097];
+    ctr_vertex_attribute attribute={0,5,CTR_VERTEX_UNSIGNED_BYTE,2,0};
+    ctr_vertex_stream stream={source+1,65536*2,0,2};
+    for(unsigned id=0;id<65536;++id) {
+        source[1+id*2]=(uint8_t)id;source[2+id*2]=(uint8_t)(id>>8);
+    }
+    memset(output,0xa5,sizeof(output));uint8_t untouched[sizeof(ctr_vertex)];
+    memcpy(untouched,&output[4096],sizeof(untouched));
+    for(unsigned format=0;format<2;++format) {
+        unsigned width=format+1,count=format?4096u:256u,limit=format?65536u:256u;
+        ctr_vertex_indices indices={encoded+1,count*width+1u,1,format};
+        for(unsigned base=0;base<limit;base+=count) {
+            for(unsigned i=0;i<count;++i) {
+                unsigned id=base+count-1-i;
+                encoded[2+i*width]=(uint8_t)id;
+                if(width==2)encoded[3+i*width]=(uint8_t)(id>>8);
+            }
+            CHECK(ctr_vertex_decode_indexed(&attribute,1,&stream,1,&indices,0,count,output,4097)==CTR_VERTEX_OK);
+            for(unsigned i=0;i<count;++i) {
+                unsigned id=base+count-1-i;
+                CHECK(output[i].input[5][0]==(float)(id&255u));
+                CHECK(output[i].input[5][1]==(float)(id>>8));
+                CHECK(output[i].enabled==32 && output[i].input[5][2]==0.0f && output[i].input[5][3]==1.0f);
+            }
+            CHECK(!memcmp(&output[4096],untouched,sizeof(untouched)));
+        }
+    }
+}
+static void indexed_failures(void) {
+    uint8_t bytes[12],encoded[8]={0,2};
+    put32(bytes,UINT32_C(0x3f800000));put32(bytes+4,UINT32_C(0x7fc00000));put32(bytes+8,UINT32_C(0x80000000));
+    ctr_vertex_attribute attribute={0,0,CTR_VERTEX_FLOAT,1,0};
+    ctr_vertex_stream stream={bytes,sizeof(bytes),0,4};
+    ctr_vertex_indices indices={encoded,sizeof(encoded),0,CTR_VERTEX_INDEX_UNSIGNED_BYTE};
+    ctr_vertex output[2],previous[2];memset(output,0xa5,sizeof(output));memcpy(previous,output,sizeof(output));
+#define FAIL(expression,result) do { CHECK((expression)==(result));CHECK(!memcmp(output,previous,sizeof(output))); } while(0)
+#define DECODE(first,count,capacity) ctr_vertex_decode_indexed(&attribute,1,&stream,1,&indices,first,count,output,capacity)
+    FAIL(ctr_vertex_decode_indexed(&attribute,1,&stream,1,NULL,0,1,output,2),CTR_VERTEX_ARGUMENT);
+    FAIL(ctr_vertex_decode_indexed(&attribute,1,&stream,1,(const ctr_vertex_indices *)(UINTPTR_MAX-2),0,1,output,2),CTR_VERTEX_OVERFLOW);
+    FAIL(DECODE(0,4097,2),CTR_VERTEX_LIMIT);
+    FAIL(DECODE(0,2,1),CTR_VERTEX_CAPACITY);
+    indices.format=2;FAIL(DECODE(0,1,2),CTR_VERTEX_UNSUPPORTED);
+    indices.format=0;indices.offset=9;FAIL(DECODE(0,1,2),CTR_VERTEX_RANGE);
+    indices.offset=0;indices.bytes=NULL;FAIL(DECODE(0,1,2),CTR_VERTEX_ARGUMENT);
+    indices.size=0;FAIL(DECODE(0,1,2),CTR_VERTEX_RANGE);
+    CHECK(DECODE(SIZE_MAX,0,0)==CTR_VERTEX_OK);CHECK(!memcmp(output,previous,sizeof(output)));
+    indices.bytes=encoded;indices.size=CTR_VERTEX_MAX_SOURCE_BYTES+1u;
+    FAIL(DECODE(0,0,0),CTR_VERTEX_LIMIT);
+    indices.bytes=(const void *)(UINTPTR_MAX-3);indices.size=8;
+    FAIL(DECODE(0,1,2),CTR_VERTEX_OVERFLOW);
+    indices.bytes=encoded;FAIL(DECODE(SIZE_MAX,2,2),CTR_VERTEX_OVERFLOW);
+    indices.format=CTR_VERTEX_INDEX_UNSIGNED_SHORT;
+    FAIL(DECODE(SIZE_MAX/2+1,1,2),CTR_VERTEX_OVERFLOW);
+    indices.offset=2;FAIL(DECODE(SIZE_MAX/2,1,2),CTR_VERTEX_OVERFLOW);
+    indices.offset=0;indices.size=3;FAIL(DECODE(0,2,2),CTR_VERTEX_RANGE);
+    indices.format=0;indices.size=1;FAIL(DECODE(0,2,2),CTR_VERTEX_RANGE);
+    indices.size=8;encoded[1]=3;FAIL(DECODE(0,2,2),CTR_VERTEX_RANGE);
+    encoded[1]=1;FAIL(DECODE(0,2,2),CTR_VERTEX_UNSUPPORTED);
+    FAIL(ctr_vertex_decode_indexed(&attribute,1,&stream,1,&indices,0,2,NULL,0),CTR_VERTEX_UNSUPPORTED);
+    /* The NaN in the unreferenced middle vertex must not reject this gather. */
+    encoded[1]=2;
+    CHECK(ctr_vertex_decode_indexed(&attribute,1,&stream,1,&indices,0,2,NULL,0)==CTR_VERTEX_OK);
+    CHECK(DECODE(0,2,2)==CTR_VERTEX_OK);
+    CHECK(output[0].input[0][0]==1.0f && float_bits(output[1].input[0][0])==UINT32_C(0x80000000));
+#undef DECODE
+#undef FAIL
+}
+static void indexed_aliases(void) {
+    union { ctr_vertex output[2];ctr_vertex_indices indices;uint8_t bytes[1024]; } storage;
+    uint8_t before[sizeof(storage)],source[4]={1,0,2,3},encoded[]={0};
+    ctr_vertex_attribute attribute={0,0,CTR_VERTEX_UNSIGNED_BYTE,1,0};
+    ctr_vertex_stream stream={source,sizeof(source),0,1};
+    ctr_vertex_indices indices={encoded,sizeof(encoded),0,0};
+    memset(&storage,0xa5,sizeof(storage));storage.indices=indices;memcpy(before,&storage,sizeof(storage));
+    CHECK(ctr_vertex_decode_indexed(&attribute,1,&stream,1,&storage.indices,0,1,storage.output,2)==CTR_VERTEX_ALIAS);
+    CHECK(!memcmp(before,&storage,sizeof(storage)));
+    memset(&storage,0xa5,sizeof(storage));memcpy(before,&storage,sizeof(storage));
+    indices=(ctr_vertex_indices){storage.bytes,sizeof(storage.bytes),800,0};
+    CHECK(ctr_vertex_decode_indexed(&attribute,1,&stream,1,&indices,0,1,storage.output,2)==CTR_VERTEX_ALIAS);
+    CHECK(!memcmp(before,&storage,sizeof(storage)));
+    indices=(ctr_vertex_indices){storage.bytes+sizeof(ctr_vertex)-1,2,1,0};
+    CHECK(ctr_vertex_decode_indexed(&attribute,1,&stream,1,&indices,0,1,storage.output,2)==CTR_VERTEX_ALIAS);
+    CHECK(!memcmp(before,&storage,sizeof(storage)));
+    /* Adjacent output/index spans and shared read-only index/attribute bytes. */
+    storage.bytes[sizeof(ctr_vertex)]=0;
+    indices=(ctr_vertex_indices){storage.bytes+sizeof(ctr_vertex),1,0,0};
+    CHECK(ctr_vertex_decode_indexed(&attribute,1,&stream,1,&indices,0,1,storage.output,1)==CTR_VERTEX_OK);
+    CHECK(storage.output[0].input[0][0]==1.0f && storage.bytes[sizeof(ctr_vertex)]==0);
+    indices=(ctr_vertex_indices){source,sizeof(source),0,0};
+    CHECK(ctr_vertex_decode_indexed(&attribute,1,&stream,1,&indices,0,1,storage.output,1)==CTR_VERTEX_OK);
+    CHECK(storage.output[0].input[0][0]==0.0f);
 }
 static void failures(void) {
     uint8_t bytes[32]={1,2,3,4};ctr_vertex_attribute attributes[2]={{0,0,0,1,0},{0,1,0,1,1}};
@@ -250,6 +366,6 @@ static void aliases(void) {
     CHECK(!strcmp(ctr_vertex_result_name((ctr_vertex_result)99),"unknown"));
 }
 int main(void) {
-    formats();layout();interleaved();failures();aliases();
+    formats();layout();interleaved();indexed_formats();indexed_failures();indexed_aliases();failures();aliases();
     printf("vertex attribute tests: %u assertions passed\n",assertions);return 0;
 }
