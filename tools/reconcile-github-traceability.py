@@ -230,6 +230,19 @@ def reconcile(client, data, apply, report):
         # Record this review once. A later maintainer reopening/status edit is
         # authoritative and must not be undone by replaying the catalog.
         if COMMAND_REVIEW not in (issue.get("body") or ""):
+            scope = json.loads((ROOT / "docs/milestone-status.json").read_text())["milestones"][3]["work_items"][0]
+            current_body = issue.get("body") or ""
+            begin, end = "<!-- ctr2wup:managed:start -->", "<!-- ctr2wup:managed:end -->"
+            if current_body.count(begin) != 1 or current_body.count(end) != 1 or current_body.index(begin) >= current_body.index(end):
+                raise tracking.TrackingError("Command review cannot verify managed acceptance boundaries; preserve and review.")
+            first, last = current_body.index(begin), current_body.index(end)
+            section = current_body[first:last]
+            for criterion in scope["acceptance_criteria"]:
+                unchecked, checked = "- [ ] " + criterion, "- [x] " + criterion
+                if section.count(unchecked) + section.count(checked) != 1:
+                    raise tracking.TrackingError("Command acceptance criteria changed; preserve and review.")
+                section = section.replace(unchecked, checked)
+            reviewed_body = current_body[:first] + section + current_body[last:]
             mutate(client, "addCloseIssueReferences", "AddCloseIssueReferencesInput",
                    {"issueId": issue["node_id"], "pullRequestIds": [prs[n]["node_id"] for n in (48, 57)]}, "clientMutationId")
             note = ("\n\n" + COMMAND_REVIEW + "\nReviewed v0.23 bounded command acceptance: PR #48 supplies checked configuration; "
@@ -237,7 +250,7 @@ def reconcile(client, data, apply, report):
                     "Original compiled reference traces, 83,108 normal/sanitizer assertions and exact target/display pixels "
                     "meet this task's two criteria. Native GX2 translation, broader shader/fragment behavior and physical "
                     "M4 acceptance remain open. This review closes the bounded implementation task, not the full milestone.\n")
-            client.api(f"repos/{REPO}/issues/27", "PATCH", {"body": (issue.get("body") or "") + note,
+            client.api(f"repos/{REPO}/issues/27", "PATCH", {"body": reviewed_body + note,
                          "state": "closed", "state_reason": "completed"})
             desired.append((issue["node_id"], "Done", "Task"))
             report["operations"].append({"reviewed_task_completion": 27, "implementation_prs": [48, 57]})
