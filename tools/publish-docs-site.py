@@ -33,6 +33,8 @@ class GitHub:
             command += ['--input', '-']
         result = subprocess.run(command, input=json.dumps(payload) if payload is not None else None,
                                 capture_output=True, text=True, encoding='utf-8', timeout=60)
+        if result.returncode == 0 and not result.stdout.strip():
+            return None  # Successful 204 responses, such as alert enablement.
         try:
             response = json.loads(result.stdout)
         except ValueError:
