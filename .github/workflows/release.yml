@@ -7,7 +7,7 @@ on:
         description: Version in pyproject.toml; publishes original diagnostics as a prerelease
         required: true
         type: string
-        default: '0.19.0'
+        default: '0.20.0'
 
 permissions:
   contents: read
@@ -84,6 +84,8 @@ jobs:
           make prototype 2>&1 | tee "$RELEASE_WORK/logs/make-prototype.log"
           python -m host build --target prototype --output "$RELEASE_WORK/native" \
             2>&1 | tee "$RELEASE_WORK/logs/native-build.log"
+          python -m host build --target audio-check --output "$RELEASE_WORK/audio-check" \
+            2>&1 | tee "$RELEASE_WORK/logs/audio-check-build.log"
       - name: Install audited original-homebrew and translator dependencies
         run: |
           set -euo pipefail
@@ -144,6 +146,11 @@ jobs:
             --evidence "$RELEASE_WORK/evidence.json" --sdk-receipt "$DEVKITPRO/ctr2wup-image-digest.txt" \
             --documentation-dir artifacts/docs-publication \
             --output "$RELEASE_WORK/publish" 2>&1 | tee "$RELEASE_WORK/logs/package.log"
+          python tools/package-audio-checks.py --release-dir "$RELEASE_WORK/publish" \
+            --audio-check-dir "$RELEASE_WORK/audio-check" \
+            --transfer-report "$RELEASE_WORK/transfer/report.json" \
+            --transfer-dir "$RELEASE_WORK/transfer/transfer/wiiu" \
+            2>&1 | tee "$RELEASE_WORK/logs/audio-kit-package.log"
           (cd "$RELEASE_WORK/publish" && sha256sum --check SHA256SUMS.txt)
       - name: Upload verified release assets
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -251,7 +258,7 @@ jobs:
           cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
           ### Development diagnostic prerelease
 
-          Only the original Native and GX Transfer applications, source, developer wheel,
+          Only the original Native, Audio Check and GX Transfer applications, source, developer wheel,
           exact reference frames, notices and verification receipts are eligible. The build
           identifies its source commit and verifies checksums/ZIP CRCs before publication.
           A draft stays unpublished if upload fails. Published versions are protected from
