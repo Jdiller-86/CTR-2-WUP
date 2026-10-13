@@ -67,6 +67,14 @@ def number(value):
     return value
 
 
+def workflow_run_id(value):
+    # GitHub Actions run IDs already exceed the issue-number range. Keep each
+    # API identifier's own bound instead of accepting arbitrary route text.
+    if type(value) is not int or not 1 <= value <= 2**63 - 1:
+        raise StatusError('Require a positive 64-bit Actions run ID')
+    return value
+
+
 def sha(value):
     if not isinstance(value, str) or not re.fullmatch('[0-9a-f]{40}', value):
         raise StatusError('GitHub returned an invalid commit SHA')
@@ -208,7 +216,7 @@ def event_scope(client, prefix, event, open_prs):
     if 'issue' in event:
         return [number(event['issue']['number'])], explicit, action
     if 'workflow_run' in event:
-        run_id = number(event['workflow_run'].get('id'))
+        run_id = workflow_run_id(event['workflow_run'].get('id'))
         run = client.request(prefix + '/actions/runs/' + str(run_id))
         if run.get('name') not in ('CI', 'Documentation'):
             return [], None, action
