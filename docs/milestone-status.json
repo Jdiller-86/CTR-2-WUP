@@ -425,13 +425,13 @@
         "needs-console",
         "needs-input"
       ],
-      "summary": "Mario is selected; the newly supplied reportedly decrypted CCI exceeds the transfer limit. Exact owned revision/assets, title requirements and gameplay/audio/save/performance remain unverified.",
+      "summary": "The USA Mario executable/revision is privately verified and pinned static analysis succeeds. RomFS/CRO inventory, observed runtime requirements and gameplay/audio/save/performance remain unverified.",
       "verified_foundations": [
         "Candidate and proposed private analysis/gameplay route documented",
-        "Local preparation/decryption/intake helpers tested with original fixtures; actual commercial executable/assets not inspected"
+        "October 13 derived NCCH passes independent stored hashes, decompression and executable-revision checks; metadata establishes USA Mario. Pinned static lifter analysis succeeds. Exact hashes and commercial bytes remain private."
       ],
       "acceptance_remaining": [
-        "Obtain and privately identify an owned executable/assets and exact revision",
+        "Obtain private RomFS/CRO/module inventory and complete the exact-revision asset/runtime matrix",
         "Implement the observed title CPU/services/modules/renderer/audio/retail-save requirements",
         "Prove boot/menu/gameplay/input/audio/save/reload/stability and useful Wii U performance"
       ],
@@ -440,7 +440,7 @@
         {
           "id": "m5-intake",
           "title": "Identify the owned Super Mario 3D Land executable and assets",
-          "summary": "Obtain a locally prepared/decrypted private executable export and asset inventory for the user-selected first candidate.",
+          "summary": "The small uploaded USA executable is independently verified; private RomFS/CRO inventory and full original-container provenance remain needed. No commercial profile is enabled.",
           "acceptance_criteria": [
             "The actual NCCH/container metadata and input/executable hashes establish the exact title, region and revision; filename claims are not treated as verified identity.",
             "Required RomFS/modules/assets are available through the documented private workflow; keys stay local and no commercial payload is placed in issues, source or public artifacts."

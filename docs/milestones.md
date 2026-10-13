@@ -3,7 +3,8 @@
 Updated **October 13, 2026** for **v0.23.0**. The product is an UWUVCI-style
 Windows GUI: **Select owned 3DS ROM → configure title/artwork → Inject →
 install its WUP → play from the Wii U Menu**. The CLI is the shared engine.
-Super Mario 3D Land is the first candidate; its exact revision remains unverified.
+The USA Super Mario 3D Land executable/revision is privately verified; assets,
+observed runtime requirements and commercial compatibility remain unverified.
 
 **Approximately 20% implemented; 0/7 full milestones accepted.** The estimate is
 a rough engineering judgment, not a percentage of issues, tests or commits. These
@@ -54,7 +55,7 @@ passes establish their stated boundaries, not physical-console execution.
 | [M2: CPU translation and performance](#m2) | In progress | Exercised CPU/ABI/fallback coverage and actual Espresso timing |
 | [M3: Homebrew execution runtime](#m3) | In progress | Stable physical compiled guest plus broader services/modules/audio |
 | [M4: PICA to GX2 rendering](#m4) | In progress | Real PICA/GX2 draws/shaders/TEV/coherency and measured scenes |
-| [M5: Super Mario 3D Land revision](#m5) | Blocked | Owned exact-revision intake and Mario gameplay/audio/save/performance |
+| [M5: Super Mario 3D Land revision](#m5) | Blocked | RomFS/CRO inventory, observed runtime requirements and Mario gameplay/audio/save/performance |
 | [M6: Automated ROM to WUP conversion](#m6) | In progress | Full Windows conversion, installer acceptance and rebuild/save continuity |
 | [M7: Windows GUI injector](#m7) | Planned | Responsive packaged Windows GUI Inject-to-playable-WUP workflow |
 
@@ -472,6 +473,13 @@ Acceptance:
 <a id="m5"></a>
 
 ## M5: Super Mario 3D Land revision
+
+**Current private intake:** a derived USA v2 executable has independent stored
+hash/decompression/revision verification and successful pinned static analysis.
+RomFS/CRO inventory is excluded from the export and remains unavailable; declared
+service access is not traced use. The original full container hash is reported,
+not independently verified here. No commercial profile or full gate is accepted.
+See [first-title findings](first-title.md).
 
 **State: Blocked. Full acceptance: open.**
 

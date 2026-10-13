@@ -5,8 +5,9 @@ Guest Draws 0.23.0, have reviewed scoped passes and user-confirmed silence and
 normal exit. The draw trace reaches the rendered second presentation at 57.33
 seconds; aggregate diagnostic timing is not game performance. Its visual prompt
 accepted an answer before that scene, so accurate presentation gating and phase
-profiling are the next follow-up. The newly supplied CCI exceeds the transfer
-limit; [small private intake](docs/cia-intake.md) is still needed. All full
+profiling are the next follow-up. The full CCI exceeds the transfer
+limit, but the [small private intake](docs/cia-intake.md) now verifies the USA
+Mario executable and exact revision identity. RomFS/CRO assets remain unavailable. All full
 milestones remain open. [Evidence review](docs/console-evidence.md).
 
 Updated **October 13, 2026 (America/New_York)** · **v0.23.0**.
@@ -24,11 +25,21 @@ is enabled. Current binaries are original homebrew diagnostics.
 
 | Area | Verified foundation | Main remaining work |
 |---|---|---|
-| Input/preparation | Bounded CIA/NCSD/NCCH inspection, optional local key/seed imports/decryption, canonical full RomFS IVFC/metadata verification and private asset blobs | Actual user exports/Mario assets, broader forms and Windows acceptance |
+| Input/preparation | Bounded CIA/NCSD/NCCH inspection, optional local key/seed imports/decryption, canonical full RomFS IVFC/metadata verification and private asset blobs | RomFS/CRO inventory for the verified USA Mario executable, broader forms and Windows acceptance |
 | CPU/runtime | Checked ARM/Thumb/VFP/AOT subsets, owned memory, eight single-core contexts and scoped services | Complete exercised CPU/HLE coverage, modules, guest audio and retail saves |
 | Homebrew | Nine normal-CRT/libctru applications: boot, threads, graphics, input, interactive, filesystem, RomFS, GX transfer and PICA draws | Launch-audio regression, broader services and game integration |
 | Graphics | Direct/shared framebuffer presentation, five display formats, 14 base textures, scoped GX transfers and compiled original guest PICA/MOV/software draws | broader shaders/TEV/sampling, GPU resources/coherency and measured console performance |
 | Packaging/GUI | Original synthetic packing/decryption verification and conversion foundations; GUI workflow specified | Commercial conversion, actual WUP install/Menu gameplay, clean Windows and final GUI |
+
+## Executable intake follow-up
+
+The derived USA Mario NCCH passes independent hashes, decompression and revision
+checks; pinned static analysis succeeds. Exact hashes and commercial bytes stay
+private. Its declared service list includes DSP and module loading, but runtime
+use and full asset/module inventory remain unverified. The inspector now accepts
+strict decrypted v0 CFA data partitions with original negative/compatibility
+coverage, without accepting prototype or v0 executable layouts. See
+[first-title findings](docs/first-title.md). No commercial profile is enabled.
 
 ## v0.23.0 increment
 
@@ -42,7 +53,7 @@ and **97,200 covered fragments**. Independent displayed-image checks cover all
 Guest physical ownership, permission splits, resource/command/relay aliases,
 retained uploads, late failure and queue completion have **83,108 assertions**.
 The raw VFP push/pop guard now preserves exact bits under CRT FPSCR controls;
-unsupported arithmetic still fails. Required coverage is **384 Python tests and
+unsupported arithmetic still fails. Required coverage is **392 Python tests and
 22 normal/ASan/UBSan C suites**; the report guide has 636 assertions. Native,
 Scene Check and compiled Guest Draws RPX/WUHB builds and exact reports are retained
 with source/SDK provenance; the October 13 physical follow-up is reviewed above.
