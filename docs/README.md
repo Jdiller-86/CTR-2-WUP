@@ -33,6 +33,8 @@ for the free docs-only site and build receipts.
 
 - [Renderer status](renderer-status.md), [GX transfers](gx-transfers.md),
   [framebuffer display](gsp-display.md), [shared GSP/VBlank](gsp-queues.md) and [input](hid-input.md).
+- [First software scenes](software-scenes.md): checked loader/MOV shader/raster
+  boundary, independent exact images and focused Scene Check console guide.
 - [Filesystem/saves](filesystem.md), [RomFS assets](romfs-assets.md) and [application lifecycle](compiled-homebrew.md).
 - [Local encrypted input](encrypted-input.md), [decryptor investigation](batch-decryptor-audit.md),
   [CIA intake](cia-intake.md) and [title staging/packaging](packaging.md).

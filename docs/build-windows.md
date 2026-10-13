@@ -47,6 +47,12 @@ unaligned index casts. These checks do not prove Wii U rendering or conversion.
 Generated fixtures are original and require no ROM, console key or commercial
 asset. See [encrypted inputs](encrypted-input.md) for private local key handling.
 
+The software scene suite also runs under portable Windows GCC. It checks
+PICA-format loader/MOV shader/raster behavior independently of a Wii U build.
+With the verified native SDK installed, `python -m host build --target scene-check
+--output artifacts/scene-check` builds the focused original console diagnostic.
+See [software scenes](software-scenes.md) for the accepted subset and evidence limits.
+
 The Python wheel contains the CLI, translator and preparation modules. It does
 not bundle the SDK, GUI or native runtime/build recipes. Extract the matching
 source distribution for Wii U builds; `CTR2WUP_PROJECT_ROOT` can point an installed

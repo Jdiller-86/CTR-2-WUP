@@ -148,6 +148,19 @@ static void guide_tests(void) {
     CHECK(strstr(results,"Native test tone: PASS")!=NULL);
 
     guide_log_text[0]=0;memset(&in,0,sizeof(in));
+    ctr_test_guide_init(&g,CTR_GUIDE_SCENE,capture,NULL);
+    ctr_test_guide_update(&g,&in);CHECK(!g.done && !g.passed);
+    in.pressed=CTR_GUIDE_R;ctr_test_guide_update(&g,&in);CHECK(g.step==1 && g.passed==1);
+    ctr_test_guide_update(&g,&in);CHECK(g.done && g.passed==2);
+    CHECK(ctr_test_guide_results(&g,results,sizeof(results)));
+    CHECK(strstr(results,"Triangle picture: PASS") && strstr(results,"Shared diagonal: PASS"));
+    ctr_test_guide_init(&g,CTR_GUIDE_SCENE,capture,NULL);in.guest_fault=true;
+    ctr_test_guide_update(&g,&in);CHECK(g.failed==1 && !g.passed);
+    ctr_test_guide_update(&g,&in);CHECK(g.done && g.failed==2);
+    CHECK(ctr_test_guide_results(&g,results,sizeof(results)));
+    CHECK(strstr(results,"Automatic scene test failed"));
+
+    guide_log_text[0]=0;memset(&in,0,sizeof(in));
     ctr_test_guide_init(&g,CTR_GUIDE_SAVE,capture,NULL);
     in.guest_exited=true;ctr_test_guide_update(&g,&in);CHECK(g.failed==1 && !g.passed);
     in.pressed=CTR_GUIDE_FAIL;ctr_test_guide_update(&g,&in);CHECK(g.done && g.failed==2 && !g.passed);

@@ -117,12 +117,27 @@ jobs:
           mkdir -p artifacts/ci/native
           "$CC" --version > artifacts/ci/native/compiler.log
           make check-c 2>&1 | tee artifacts/ci/native/tests.log
+      - name: Compare original scenes with exact pixels and pinned shader encodings
+        if: matrix.cc == 'gcc'
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none https://github.com/neobrain/nihstro.git artifacts/nihstro-reference
+          git -C artifacts/nihstro-reference checkout --detach f4d8659decbfe5d234f04134b5002b82dc515a44
+          python3 tools/validate-scenes.py --sanitize --nihstro-dir artifacts/nihstro-reference \
+            --output artifacts/ci/scenes 2>&1 | tee artifacts/ci/native/scenes.log
       - name: Upload portable C logs
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: native-${{ matrix.cc }}-${{ github.sha }}
-          path: artifacts/ci/native/*.log
+          path: |
+            artifacts/ci/native/*.log
+            artifacts/ci/scenes/*.json
+            artifacts/ci/scenes/*.png
+            artifacts/ci/scenes/*.rgba
+            artifacts/ci/scenes/*.commands
+            artifacts/ci/scenes/*.resources
+            artifacts/ci/scenes/*.bin
           retention-days: 14
           if-no-files-found: warn
 
@@ -211,6 +226,25 @@ jobs:
           cp -R "$DEVKITPRO/licenses" artifacts/ci/wiiu/sdk-licenses
           git rev-parse HEAD > artifacts/ci/wiiu/source-commit.txt
           (cd artifacts/ci/wiiu && sha256sum -- *.rpx *.wuhb > SHA256SUMS)
+      - name: Build the focused original software Scene Check
+        run: |
+          set -euo pipefail
+          python -m host build --target scene-check --output artifacts/ci/scene-check
+          cp LICENSE THIRD_PARTY_NOTICES artifacts/ci/scene-check/
+          cp docs/software-scenes.md artifacts/ci/scene-check/START-HERE.md
+          cp "$DEVKITPRO/ctr2wup-image-digest.txt" artifacts/ci/scene-check/sdk-image-digest.txt
+          cp -R "$DEVKITPRO/licenses" artifacts/ci/scene-check/sdk-licenses
+          mkdir -p artifacts/ci/scene-check/images
+          cp docs/images/software-scene-v022.png artifacts/ci/scene-check/images/
+          git rev-parse HEAD > artifacts/ci/scene-check/source-commit.txt
+          (cd artifacts/ci/scene-check && sha256sum -- *.rpx *.wuhb > SHA256SUMS)
+      - name: Upload the focused Scene Check
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wiiu-scene-check-${{ github.sha }}
+          path: artifacts/ci/scene-check/
+          retention-days: 30
+          if-no-files-found: error
       - name: Explain the scope of the diagnostic build
         if: always()
         run: |

@@ -20,6 +20,15 @@ elements, preserving order and duplicates without reading unreferenced vertices.
 It does not follow guest addresses or implement PICA loader state, fixed
 attributes, float24/shader arithmetic, primitive assembly or GX2 submission.
 
+The separate original [scene boundary](software-scenes.md) now adapts bounded
+PICA loader/index/fixed/uniform/output state to that decoder and an original
+MOV/NOP/END shader executor. It stages owned registers/resources and a complete
+linear target, then rasterizes complete triangles with exact supported numeric
+values and constant opaque colors. A late error rolls back all state and pixels.
+The focused native Scene Check presents these CPU-produced scenes with existing
+GX2 surface copies. Guest GSP draws and general GPU shader translation remain
+unsupported; explicit resource binding is not guest physical-address resolution.
+
 The CIA intake path uses bounded signature-layout/TMD/bitmap/content checks and
 selects index-0 application NCCH with checked absolute file offsets. Its derived
 CXI view preserves ExeFS/exheader code identity while explicitly removing RomFS
@@ -105,7 +114,7 @@ reads HID, writes RGB565 and displays through this interface in all Wii U builds
 see `gsp-display.md`. Version 0.11.0 adds one local GSP relay/shared framebuffer
 page, diagnostic VBlank and atomic queued presentation; see `gsp-queues.md`.
 The standard display guest uses this queue. Version 0.17 adds scoped synchronous
-GX commands; see [gx-transfers.md](gx-transfers.md). PICA rendering remains absent.
+GX commands; see [gx-transfers.md](gx-transfers.md). Guest PICA draw integration remains absent.
 Its guest mode presents completed ARM-written raw framebuffers through the same
 GX2 copying path. It is separate from PICA/GSP emulation; see `guest-fixture.md`.
 Version 0.12 adds checked user-mode ARM/Thumb multiple-register/stack transfers

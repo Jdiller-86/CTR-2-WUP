@@ -1,6 +1,6 @@
 # Milestones and remaining work
 
-Updated **October 13, 2026** for **v0.21.0**. The product is an UWUVCI-style
+Updated **October 13, 2026** for **v0.22.0**. The product is an UWUVCI-style
 Windows GUI: **Select owned 3DS ROM → configure title/artwork → Inject →
 install its WUP → play from the Wii U Menu**. The CLI is the shared engine.
 Super Mario 3D Land is the first candidate; its exact revision remains unverified.
@@ -373,13 +373,18 @@ References: [Renderer status](renderer-status.md) · [GX transfer contract](gx-t
 
 #### m4-pica-commands: Decode PICA state and submit bounded draw commands
 
-The first bounded PICA command/state path now handles finalized viewport/scissor configuration through the standard guest queue. Draw inputs/resources and actual renderer submission remain open.
+The standard guest path handles finalized viewport/scissor configuration. A separate owned-resource scene boundary now validates loader/index/fixed/shader state and produces original software triangles; guest draw integration and broader pipeline state remain open.
 
 State: **In progress** · Needs: none for original-fixture development.
 
 Depends on: none.
 
 Verified foundation: [PICA command contract](pica-commands.md), 353 original builder/reference cases, transactional native state and the compiled standard command-queue fixture. No draws or full task acceptance are claimed.
+
+v0.22.0 adds [owned software scenes](software-scenes.md) with complete-list
+state/pixel rollback, explicit resource binding and independent exact pixels.
+These execute draws in the experimental boundary; the guest queue remains
+configuration-only. Full task acceptance remains open.
 
 Acceptance:
 
@@ -398,9 +403,12 @@ Depends on: [m4-pica-commands](#m4-pica-commands).
 
 Verified foundation: [resolved vertex decoding](vertex-attributes.md) now covers
 both contiguous streams and checked 8-bit/16-bit indexed gathers. The original
-suite covers every index value and transactional failure behavior. Loader/fixed
-state, uniforms, shader execution, actual draw scenes and full acceptance remain
-open; decoder checks do not accept this task.
+suite covers every index value and transactional failure behavior. The first
+owned scenes now exercise loaders/fixed state, uniforms, MOV/NOP/END shaders,
+output maps and opaque triangles. Independent analytic pixels and 12,290 pinned
+encoding comparisons pass, and a focused Wii U diagnostic builds. Broader shader
+behavior, hardware/reference raster evidence, physical measured costs and a
+license-cleared GX2 shader route remain open; this checkpoint does not accept the task.
 
 Acceptance:
 

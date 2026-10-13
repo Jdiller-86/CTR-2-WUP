@@ -91,7 +91,9 @@ def _run_build(command, env, log, cwd, *, stage="compile", timeout=None):
                         details={"exit_code": result, "log": str(log)})
 
 
-def prototype(output: str | Path, guest_path=None, *, backend="original", audio_only=False):
+def prototype(output: str | Path, guest_path=None, *, backend="original", audio_only=False, scene_only=False):
+    if scene_only and (audio_only or guest_path is not None or backend != "original"):
+        raise HostError("invalid_profile", "The original Scene Check requires its own native profile without guest inputs", stage="arguments")
     if audio_only and (guest_path is not None or backend != "original"):
         raise HostError("invalid_profile", "The original native Audio Check does not accept a guest input or external backend", stage="arguments")
     if backend not in ("original","upstream") or (backend=="upstream" and guest_path is None):
@@ -130,6 +132,9 @@ def prototype(output: str | Path, guest_path=None, *, backend="original", audio_
         if audio_only:
             target="ctr2wup-audio-check"
             command += ["OUTPUT=../../artifacts/wiiu-audio", "TARGET="+target, "AUDIO_ONLY=1"]
+        if scene_only:
+            target="ctr2wup-scene-check"
+            command += ["OUTPUT=../../artifacts/wiiu-scene", "TARGET="+target, "SCENE_ONLY=1"]
         if image:
             command += ["OUTPUT=../../artifacts/wiiu-guest", "TARGET="+target, "GUEST_DEFAULT=1"]
         generation=None
@@ -142,7 +147,7 @@ def prototype(output: str | Path, guest_path=None, *, backend="original", audio_
                      "OUTPUT=../../artifacts/"+work.name+"/wiiu","TARGET="+target,"GUEST_DEFAULT=1",
                      "EXTERNAL_AOT=1","UPSTREAM_DIR=../../artifacts/"+work.name+"/aot","-j3"]
         _run_build(command, env, log, repo)
-        artifact = repo / "artifacts" / ("wiiu-guest" if image else "wiiu-audio" if audio_only else "wiiu") / (target+".rpx")
+        artifact = repo / "artifacts" / ("wiiu-guest" if image else "wiiu-audio" if audio_only else "wiiu-scene" if scene_only else "wiiu") / (target+".rpx")
         if work: artifact=work/"wiiu"/(target+".rpx")
         _validate_rpx(artifact)
         shutil.copy2(artifact, staging / artifact.name)
@@ -157,11 +162,11 @@ def prototype(output: str | Path, guest_path=None, *, backend="original", audio_
             published.append(staging / shortcut.name)
         shutil.copy2(log, staging / "build.log")
         manifest = {"schema_version": 1, "ok": True, "stage": "complete",
-                    "target": "guest-fixture" if image else "audio-check" if audio_only else "prototype", "package_format": "RPX",
+                    "target": "guest-fixture" if image else "audio-check" if audio_only else "scene-check" if scene_only else "prototype", "package_format": "RPX",
                     "host_version": __version__, "runtime_version": __version__,
                     "translator_version": ("external-abi4-checked-v1" if backend=="upstream" else "bounded-aot-v2") if image else None,
                     "backend":backend,"generation":generation,
-                    "profile": "ctr2wup-framebuffer-fixture-v1" if image else "native-audio-check" if audio_only else "native-diagnostics",
+                    "profile": "ctr2wup-framebuffer-fixture-v1" if image else "native-audio-check" if audio_only else "owned-software-scenes-v1" if scene_only else "native-diagnostics",
                     "input_identity": image["inspection"]["identity"] if image else None,
                     "executable_revision": image["inspection"]["executable_revision"] if image else None,
                     "package_identity": None,
@@ -180,6 +185,9 @@ def prototype(output: str | Path, guest_path=None, *, backend="original", audio_
             manifest["stages"].insert(0,{"name":"fixture_profile_and_generated_sources","state":"passed"})
             manifest["stages"].append({"name":"guest_framebuffer_input_exit","state":"awaiting_console_test"})
             manifest["limitations"].append("Original controlled ARM fixture with explicit input/raw-framebuffer contract; HID/GSP/IPC/PICA unavailable")
+        if scene_only:
+            manifest["stages"].append({"name":"original_scene_pixels_and_user_display_confirmation","state":"awaiting_console_test"})
+            manifest["limitations"].append("Original bounded PICA MOV scenes rasterized on CPU and copied to GX2 surfaces; guest GSP draws and GPU shader translation remain unsupported")
         (staging / "build-report.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         publish_directory(staging, output)
         return {**manifest, "output": str(output)}

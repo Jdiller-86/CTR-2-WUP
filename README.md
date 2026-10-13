@@ -33,8 +33,9 @@ for the supported subsets and current limits.
   scoped 3DS services.
 - Original compiled homebrew with two-screen framebuffer output, input,
   SD save/reload and read-only assets, including reviewed Wii U test results.
-- Texture decoding, GX memory/display transfers, PICA configuration and vertex
-  decoding. PICA draws, shaders and 3DS guest audio remain unfinished.
+- Texture decoding, GX memory/display transfers, PICA configuration and first
+  original [software triangle scenes](docs/software-scenes.md). General guest
+  PICA rendering, GPU shader translation and 3DS guest audio remain unfinished.
 - Reproducible RPX/WUHB diagnostics and original packaging fixtures. Actual
   WUP installation and full Windows conversion still require acceptance.
 

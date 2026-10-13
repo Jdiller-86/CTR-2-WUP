@@ -1,5 +1,13 @@
 # Renderer foundation
 
+v0.22.0 executes the [first original software scenes](software-scenes.md)
+through checked PICA-format loader/index state, fixed attributes and uniforms,
+MOV/NOP/END shaders and a bounded opaque triangle raster path. Both index formats
+match independently calculated pixels exactly. The focused native Scene Check
+builds and records timings/automatic results, but physical picture/exit evidence
+remains pending. Guest GSP draws and general shader/fragment/GX2 translation
+remain unsupported; full M4 acceptance is open.
+
 v0.21.0 extends the [resolved vertex decoder](vertex-attributes.md) with checked
 unsigned 8-bit/16-bit little-endian indexed gathers. Duplicates and index order
 are preserved. Complete referenced ranges, finite float values and full-span
@@ -33,9 +41,9 @@ all five linear display formats, and an original ARM HID-to-RGB565 display guest
 in all Wii U builds. See `gsp-display.md` for scope and desktop reference images.
 Console behavior remains pending. This does not execute PICA draws.
 
-Pending: asynchronous GPU transfer/coherency, vertex and
-geometry processing, shaders, texture sampling/mips/resource lifetime, lighting, TEV, draw
-submission, caching, trusted reference scene comparisons, and console timings.
+Pending: asynchronous GPU transfer/coherency, broader vertex and
+geometry processing/shaders, texture sampling/mips/resource lifetime, lighting, TEV, guest draw
+submission, caching, hardware/reference scene comparisons, and console timings.
 `execute_draw` raises an explicit unsupported error. Milestone 4 is incomplete.
 
 
