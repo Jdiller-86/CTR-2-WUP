@@ -529,8 +529,10 @@
       "title": "Review physical launch-audio, GX and compiled draw evidence",
       "milestone": 1,
       "parent_issue": 14,
-      "state": "planned",
-      "pull_requests": [],
+      "state": "implemented",
+      "pull_requests": [
+        85
+      ],
       "scope": [
         "Review the October 13 uploaded original diagnostics and preserve raw files privately.",
         "Record scoped audio/GX/draw passes, separate user exit/picture confirmation, draw timing and transfer-blocked CCI input."
@@ -541,7 +543,8 @@
       ],
       "evidence": [
         "docs/console-evidence.md records reviewed October 13 physical outcomes and timing.",
-        "Standalone native-audio result TXT is absent; full trace records both named passes. All full gates remain open."
+        "Standalone native-audio result TXT is absent; full trace records both named passes. All full gates remain open.",
+        "Implementation and evidence review: https://github.com/Jdiller-86/CTR-2-WUP/pull/85"
       ]
     },
     {
