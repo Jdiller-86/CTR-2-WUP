@@ -12,6 +12,15 @@ Do not adopt `mtrdrgz/3ds_recompiler`, `nuspacker`, or `CNUS_Packer` implementat
 
 ## Source and reuse matrix
 
+The v0.22.0 scene increment additionally checks shader encodings against the
+unmodified nihstro headers at `f4d8659decbfe5d234f04134b5002b82dc515a44`,
+BSD-3-Clause, copyright 2014 Tony Wasserka. The original test adapter runs in a
+separate test executable; external headers/code are never copied, linked into
+the runtime or bundled with artifacts. Azahar's pinned PICA register/loader
+descriptions remain a semantic reference only. Its approximate float24 arithmetic
+does not establish hardware accuracy; the new runtime subset uses exact MOV
+values and explicitly rejects arithmetic/rounding. See [software scenes](software-scenes.md).
+
 | Candidate | Inspected commit | License evidence | Decision and build requirements |
 |---|---|---|---|
 | [fearkov/3dsrecomp](https://github.com/fearkov/3dsrecomp) | `f78cd3777a676a7c02538ab993ca574a6d843416` | Root and ABI `Cargo.toml` explicitly declare `MIT`; no `LICENSE`, copyright, or complete permission notice is present in this checkout. | External host lifter candidate. Rust manifest minimum 1.88, tested with 1.95.0; C compiler required for emitted C. Linux/Windows GCC or Clang paths exist. Optional `verify` adds Zakuro CPU and dynamic library loading. Complete redistribution notices before bundling. |

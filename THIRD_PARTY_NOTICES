@@ -145,6 +145,12 @@ toolchain bundle requires a dependency-by-dependency notice and source audit.
 No ROM, commercial game assets, Nintendo SDK, donor title or credential is
 included with this project.
 
+The optional scene encoding tests use external, unmodified nihstro headers at
+f4d8659decbfe5d234f04134b5002b82dc515a44 (BSD-3-Clause, copyright 2014 Tony
+Wasserka). They are compiled only in a separate reference test, not copied,
+linked into the runtime or bundled in distributions. No emulator implementation
+is incorporated by the original loader/MOV shader/software scene increment.
+
 Runtime notices for the diagnostic artifact
 ------------------------------------------
 The diagnostic links WUT and GCC/newlib support. Runtime license texts accompany

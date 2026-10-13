@@ -55,7 +55,7 @@ def parser():
     key_import.add_argument("--decrypted-titlekeys",help="Locally obtained decTitleKeys-format database declared to contain plaintext title keys")
     compile_command = commands.add_parser("build", help="Compile the native diagnostic RPX or check a ROM support gate")
     compile_command.add_argument("path", nargs="?")
-    compile_command.add_argument("--target", choices=("prototype", "audio-check", "guest-fixture", "commercial"), default="commercial")
+    compile_command.add_argument("--target", choices=("prototype", "audio-check", "scene-check", "guest-fixture", "commercial"), default="commercial")
     compile_command.add_argument("--output", required=True)
     compile_command.add_argument("--backend",choices=("original","upstream"),default="original")
     package = commands.add_parser("validate-package", help="Validate a WUP directory; reports structural limits")
@@ -111,10 +111,10 @@ def execute(args):
         from .rom_key_import import import_keys
         return import_keys(args.output,aeskeydb=args.aeskeydb,seeddb=args.seeddb,decrypted_titlekeys=args.decrypted_titlekeys)
     if args.command == "build":
-        if args.target in ("prototype", "audio-check"):
+        if args.target in ("prototype", "audio-check", "scene-check"):
             if args.path:
                 raise HostError("usage", "A native prototype build does not take a ROM", stage="arguments")
-            return build.prototype(args.output,backend=args.backend,audio_only=args.target=="audio-check")
+            return build.prototype(args.output,backend=args.backend,audio_only=args.target=="audio-check",scene_only=args.target=="scene-check")
         if args.target == "guest-fixture":
             if not args.path:
                 raise HostError("usage", "Guest fixture build requires the original fixture .cxi", stage="arguments")

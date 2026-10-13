@@ -108,6 +108,7 @@ nav:
       - Renderer status: docs/renderer-status.md
       - PICA command front end: docs/pica-commands.md
       - Vertex attributes: docs/vertex-attributes.md
+      - First software scenes: docs/software-scenes.md
       - Filesystem and saves: docs/filesystem.md
   - Project:
       - Project tracking policy: docs/github-project-overview.md

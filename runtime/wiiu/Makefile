@@ -13,9 +13,10 @@ ROMFS_HOMEBREW ?= 0
 ROMFS_FILE ?= 0
 GX_HOMEBREW ?= 0
 AUDIO_ONLY ?= 0
+SCENE_ONLY ?= 0
 UDP_LOG ?= 0
 CALL_LIMIT ?= 64
-APP_VERSION := 0.21.0
+APP_VERSION := 0.22.0
 UPSTREAM_DIR ?= ../../artifacts/generated-upstream-guest
 ifeq ($(GUEST_DEFAULT),1)
 APP_NAME := CTR2WUP ARM Guest $(APP_VERSION)
@@ -56,6 +57,10 @@ ifeq ($(AUDIO_ONLY),1)
 CFLAGS += -DCTR_AUDIO_ONLY
 APP_NAME := CTR2WUP Audio Check $(APP_VERSION)
 endif
+ifeq ($(SCENE_ONLY),1)
+CFLAGS += -DCTR_SCENE_ONLY
+APP_NAME := CTR2WUP Scene Check $(APP_VERSION)
+endif
 LDFLAGS := -mcpu=750 -meabi -mhard-float -specs="$(WUT)/share/wut.specs" \
            -Wl,-Map,$(OUTPUT)/$(TARGET).map
 SOURCES := main.c viewport.c diagnostic_font.c test_report.c test_guide.c test_lifecycle.c image_scale.c report_storage.c test_result.c diagnostic_audio.c
@@ -63,7 +68,7 @@ OBJECTS := $(addprefix $(BUILD)/,$(SOURCES:.c=.o))
 CORE_SOURCES := ../core/ctr_memory.c ../core/ctr_cpu.c ../core/ctr_cpu_selftest.c \
                 ../core/ctr_guest.c ../core/ctr_ipc.c ../core/ctr_heap.c ../core/ctr_kernel.c ../core/ctr_hid.c ../core/ctr_gsp.c ../core/ctr_gx.c ../core/ctr_pica.c ../core/ctr_transfer.c ../core/ctr_fs.c ../core/ctr_apt.c ../core/ctr_fs_snapshot.c ../core/ctr_guest_fixture.c \
                 ../core/ctr_service_fixture.c \
-                ../core/ctr_heap_fixture.c \
+                ../core/ctr_heap_fixture.c ../core/ctr_shader.c ../core/ctr_scene.c ../core/ctr_scene_fixture.c \
                 ../core/ctr_kernel_fixture.c \
                 ../core/ctr_hid_fixture.c \
                 ../core/ctr_gsp_fixture.c \

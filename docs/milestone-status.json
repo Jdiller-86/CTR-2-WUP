@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "0.21.0",
+  "version": "0.22.0",
   "updated": "2026-10-13",
   "approximate_implementation_percent": 20,
   "full_milestones_accepted": 0,
@@ -311,13 +311,14 @@
       "waiting_labels": [
         "needs-console"
       ],
-      "summary": "Original texture decoding, scoped CPU-backed GX transfers, transactional PICA configuration and bounded contiguous/indexed vertex decoding are implemented; loader-state integration, actual draws/shaders/TEV/coherency and console scenes remain open.",
+      "summary": "First original owned PICA-format loader/index/fixed/uniform/MOV shader scenes render exact software triangles; guest draw integration, broader shader/TEV/sampling, GPU translation/coherency and physical console evidence remain open.",
       "verified_foundations": [
         "Direct/shared framebuffer presentation and all 14 base texture formats with original/reference checks",
         "Bounded GSP DMA/fill/display-transfer/raw-texture-copy/cache queue operations and completion interrupts",
         "v0.18 finalized no-draw viewport/scissor PICA command lists, checked wire inspection and transactional guest-queue integration",
         "Original bounded vertex attribute decoding: four published component formats, explicit streams/input permutation and transactional finite-float/range/alias validation; no shader or draw enabled",
-        "v0.21.0 adds unsigned 8-bit/16-bit indexed gathers, exhaustive index-domain checks and full referenced-range/value/alias validation before publication; no shader or draw enabled"
+        "v0.21.0 adds unsigned 8-bit/16-bit indexed gathers, exhaustive index-domain checks and full referenced-range/value/alias validation before publication; no shader or draw enabled",
+        "v0.22.0 original owned-resource loader/MOV shader/software triangles: 1,393,972 original assertions, exact analytic pixels for both index formats and 12,290 pinned independent encoding checks; focused native Scene Check cross-build, hardware evidence pending"
       ],
       "acceptance_remaining": [
         "Implement real PICA command/state, vertex/shader, texture/sampler/TEV and raster behavior",
@@ -329,7 +330,7 @@
         {
           "id": "m4-pica-commands",
           "title": "Decode PICA state and submit bounded draw commands",
-          "summary": "The bounded command front end, raw viewport/scissor state, canonical finalization and standard GSP queue path work on original fixtures. Draw inputs/resources and actual renderer submission remain open.",
+          "summary": "The standard queue handles configuration-only PICA lists. A separate experimental owned-resource boundary now validates draw loader/index/fixed/shader state and atomically renders original software triangles; guest draw integration and broader pipeline state remain open.",
           "acceptance_criteria": [
             "Original command streams establish register/state changes, draw inputs and validated resource ranges; malformed or unsupported state fails visibly before modifying output.",
             "The decoder feeds a documented renderer boundary, with reference traces that distinguish CPU-written framebuffer presentation from actual PICA draws."
@@ -341,7 +342,7 @@
         {
           "id": "m4-vertex-shaders",
           "title": "Implement vertex formats, shader execution and GX2 translation",
-          "summary": "Choose a license-cleared Latte shader route and validate exercised vertex attributes, uniforms and shader instructions.",
+          "summary": "First bounded MOV shader and original software scenes pass exact independent pixel/encoding checks. Broader shader coverage, a license-cleared GX2 shader route and measured physical console costs remain open.",
           "acceptance_criteria": [
             "Original vertex/shader scenes compare independently checked outputs across the reference and chosen GX2/software correctness path using stated tolerances.",
             "Shader tooling licenses, generated-code ownership, supported instructions and miss behavior are documented; a software correctness path has measured costs rather than an assumed final speed."
@@ -353,7 +354,8 @@
           "state": "in_progress",
           "evidence": [
             "v0.19.0 adds the original bounded runtime/core/ctr_vertex byte-stream decoder and exhaustive original tests; resolving PICA loaders, fixed/index attributes, shader execution and actual draws remain required.",
-            "v0.21.0 implements original checked unsigned 8-bit/16-bit indexed array gathering with 364,123 original assertions; PICA loader/fixed state, uniforms, shaders and actual draws remain open."
+            "v0.21.0 implements original checked unsigned 8-bit/16-bit indexed array gathering with 364,123 original assertions; PICA loader/fixed state, uniforms, shaders and actual draws remain open.",
+            "v0.22.0 implements original exact-value MOV/NOP/END shaders, loader/fixed/uniform state, output maps and opaque triangles; focused Scene Check builds and exposes automatic pixels/timings plus separate human confirmation. No general shader, guest GSP draw or full task acceptance."
           ]
         },
         {

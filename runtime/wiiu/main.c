@@ -48,6 +48,14 @@
 #include "ctr_fs_snapshot.h"
 #include "ctr_romfs_file.h"
 #include "ctr_sha256.h"
+#ifdef CTR_SCENE_ONLY
+#include "ctr_scene_fixture.h"
+static uint8_t scene_pixels[2][CTR_SCENE_FIXTURE_BYTES];
+static ctr_scene_report scene_reports[2];
+static int scene_test_result=-1;
+static ctr_scene_result scene_results[2]={CTR_SCENE_ARGUMENT,CTR_SCENE_ARGUMENT};
+static uint64_t scene_us[2];
+#endif
 #ifdef CTR_FILESYSTEM_HOMEBREW
 static ctr_fs_volume diagnostic_save;
 static bool diagnostic_save_ready;
@@ -141,6 +149,8 @@ static uint16_t touch_min_x=UINT16_MAX,touch_min_y=UINT16_MAX,touch_max_x,touch_
 #else
 #ifdef CTR_AUDIO_ONLY
 #define REPORT_APPLICATION "native-audio"
+#elif defined(CTR_SCENE_ONLY)
+#define REPORT_APPLICATION "native-software-scene"
 #else
 #define REPORT_APPLICATION "native"
 #endif
@@ -180,7 +190,16 @@ static uint32_t home_button_exit(void *context) {
 
 static bool result_snapshot(const char *stage) {
     if(!test_result.ready || test_result.failed)return false;
-    char body[3456],guide_results[1536];
+    char body[4096],guide_results[1536],scene_summary[384]="";
+#ifdef CTR_SCENE_ONLY
+    snprintf(scene_summary,sizeof(scene_summary),
+        "Owned software scenes: pixel_selftest=%d u8=%s u16=%s render_us=%llu/%llu draws=%u/%u triangles=%u/%u fragments=%u/%u shader_steps=%u/%u; CPU raster/GX2 copy, not guest GSP or GPU shader translation\n",
+        scene_test_result,ctr_scene_result_name(scene_results[0]),ctr_scene_result_name(scene_results[1]),
+        (unsigned long long)scene_us[0],(unsigned long long)scene_us[1],
+        scene_reports[0].draws,scene_reports[1].draws,scene_reports[0].triangles,scene_reports[1].triangles,
+        scene_reports[0].fragments,scene_reports[1].fragments,
+        scene_reports[0].shader_instructions,scene_reports[1].shader_instructions);
+#endif
     if(!ctr_test_guide_results(&test_guide,guide_results,sizeof(guide_results))) {
         test_result.failed=true;test_result.error_code=EMSGSIZE;test_result.error_stage="guide_format";return false;
     }
@@ -190,6 +209,7 @@ static bool result_snapshot(const char *stage) {
         "Fresh-launch save reload confirmed: %u\n"
         "Native audio context: result=%s owned=%u inherited=%u attempts=%u successes=%u failures=%u resets=%u releases=%u tone_ready=%u tone_requests=%u; guest audio unavailable\n"
         "Self-tests finished: %u | CPU=%d services=%d heap=%d objects=%d HID=%d GSP=%d relay=%d stack=%d threads=%d\n"
+        "%s"
         "Input: samples=%u errors=%u A_presses=%u Minus_presses=%u\n"
         "Guest: state=%s pc=%08x instructions=%llu fallback=%llu fault=%s detail=%08x memory=%s\n"
         "Frames: host=%u guest=%llu | new_green_after_A=%u latency_ms=%llu\n"
@@ -208,7 +228,7 @@ static bool result_snapshot(const char *stage) {
         diagnostic_audio.attempts,diagnostic_audio.successes,diagnostic_audio.failures,
         diagnostic_audio.inherited_resets,diagnostic_audio.releases,audio_ready,tone_count,selftests_done,
         cpu_test_result,service_test_result,heap_test_result,kernel_test_result,hid_test_result,gsp_test_result,
-        relay_test_result,stack_test_result,thread_test_result,input_samples,input_errors,button_presses[0],button_presses[2],
+        relay_test_result,stack_test_result,thread_test_result,scene_summary,input_samples,input_errors,button_presses[0],button_presses[2],
         (final_guest.captured?final_guest.opened:gsp_ready)?ctr_guest_state_name(final_guest.captured?final_guest.state:gsp_guest.state):"not-opened",
         final_guest.captured?final_guest.pc:gsp_guest.cpu.r[15],
         (unsigned long long)(final_guest.captured?final_guest.instructions:gsp_guest.cpu.instructions),
@@ -590,6 +610,25 @@ static bool audio_shutdown(void) {
 static void image_text(uint32_t *image, unsigned w, unsigned row, const char *text) {
     ctr_draw_text(image,w,GUEST_H,6,row*10+6,text,0xffffffff);
 }
+#ifdef CTR_SCENE_ONLY
+static void scene_images(void) {
+    uint32_t *images[2]={top_image,bottom_image};unsigned widths[2]={TOP_W,BOTTOM_W};
+    for(unsigned index=0;index<2;++index) {
+        unsigned scale=index?2u:1u,side=64u*scale,left=(widths[index]-side)/2u,top=86u;
+        for(unsigned i=0;i<widths[index]*GUEST_H;++i)images[index][i]=UINT32_C(0x102030ff);
+        for(unsigned y=0;y<side;++y)for(unsigned x=0;x<side;++x) {
+            const uint8_t *p=scene_pixels[index]+((63u-y/scale)*64u+x/scale)*4u;
+            images[index][(top+y)*widths[index]+left+x]=
+                (uint32_t)p[0]<<24|(uint32_t)p[1]<<16|(uint32_t)p[2]<<8|p[3];
+        }
+        if(index) {
+            image_text(bottom_image,BOTTOM_W,0,"SCENE CHECK / SHORT INDICES");
+            image_text(bottom_image,BOTTOM_W,1,scene_test_result || scene_results[0] || scene_results[1]?"AUTOMATIC PIXEL CHECK FAILED":"AUTOMATIC PIXEL CHECK PASSED");
+            image_text(bottom_image,BOTTOM_W,2,"CONFIRM TV GUIDE WITH R OR L");
+        }
+    }
+}
+#endif
 
 static void diagnostic_images(unsigned frame, const VPADStatus *pad,
                               VPADReadError input_error, int touch_inside,
@@ -812,7 +851,9 @@ int main(int argc, char **argv) {
        context. Do this before the long self-tests and any guest input. */
     if(!audio_init(foreground))goto cleanup;
     result_snapshot("native_audio_ready");
-#ifdef CTR_AUDIO_ONLY
+#ifdef CTR_SCENE_ONLY
+    ctr_test_guide_init(&test_guide,CTR_GUIDE_SCENE,guide_log,NULL);
+#elif defined(CTR_AUDIO_ONLY)
     ctr_test_guide_init(&test_guide,CTR_GUIDE_AUDIO,guide_log,NULL);
 #elif defined(CTR_GX_HOMEBREW)
     ctr_test_guide_init(&test_guide,CTR_GUIDE_GX,guide_log,NULL);
@@ -857,6 +898,17 @@ int main(int argc, char **argv) {
     stack_test_result=ctr_stack_selftest();
     WHBLogPrintf("stack_selftest %s result=%d fixture=original_arm_thumb_nested_calls instructions_per_path=47 console_result_required=1",
         stack_test_result?"FAIL":"PASS",stack_test_result);
+#ifdef CTR_SCENE_ONLY
+    scene_test_result=ctr_scene_selftest();
+    for(unsigned i=0;i<2;++i) {
+        ctr_scene_fixture_background(scene_pixels[i],sizeof(scene_pixels[i]));OSTime start=OSGetTime();
+        scene_results[i]=ctr_scene_fixture_render(i!=0,scene_pixels[i],sizeof(scene_pixels[i]),&scene_reports[i]);
+        scene_us[i]=OSTicksToMicroseconds(OSGetTime()-start);
+        WHBLogPrintf("owned_scene index_bytes=%u result=%s pixel_selftest=%d elapsed_us=%llu draws=%u triangles=%u fragments=%u shader_steps=%u console_picture_confirmation_required=1",
+            i+1u,ctr_scene_result_name(scene_results[i]),scene_test_result,(unsigned long long)scene_us[i],
+            scene_reports[i].draws,scene_reports[i].triangles,scene_reports[i].fragments,scene_reports[i].shader_instructions);
+    }
+#endif
     selftests_done=true;result_snapshot("selftests_done");
     if (!WHBGfxInit()) { WHBLogPrintf("FAIL WHBGfxInit"); goto cleanup; }
     gfx_ready=1;
@@ -945,7 +997,7 @@ int main(int argc, char **argv) {
         if (pad.trigger&VPAD_BUTTON_A) play_tone();
 #endif
         if (pad.trigger&VPAD_BUTTON_X) alloc_ok=allocation_test();
-        if (test_guide.done && (pad.trigger&VPAD_BUTTON_Y)) {
+        if (test_guide.done && test_guide.kind!=CTR_GUIDE_SCENE && (pad.trigger&VPAD_BUTTON_Y)) {
 #ifdef CTR_COMPILED_HOMEBREW
             guest_mode=guest_mode==2?0:2;
 #else
@@ -953,7 +1005,7 @@ int main(int argc, char **argv) {
 #endif
             WHBLogPrintf("display_mode=%s",guest_mode==2?"standard-hid-gsp":guest_mode==1?"guest-fixture":"native");
         }
-        if (test_guide.done && (pad.trigger&VPAD_BUTTON_PLUS)) restart_guest();
+        if (test_guide.done && test_guide.kind!=CTR_GUIDE_SCENE && (pad.trigger&VPAD_BUTTON_PLUS)) restart_guest();
         VPADTouchData touch={0}; uint16_t tx=0, ty=0;
         VPADGetTPCalibratedPointEx(VPAD_CHAN_0,VPAD_TP_1280X720,&touch,&pad.tpNormal);
         int inside=touch.touched && touch.validity==VPAD_VALID &&
@@ -969,7 +1021,12 @@ int main(int argc, char **argv) {
         update_input_guest(&hid_guest,hid_ready,hid_origin,&pad,inside!=0,tx,ty,1000);
         freeze_checkpoint("hid_guest_done");
         if(hid_ready)ctr_hid_fixture_snapshot(&hid_guest,hid_snapshot);
-        if (!guest_mode) diagnostic_images(frame,&pad,error,inside,&touch,tx,ty,frame_us,alloc_ok);
+        if (!guest_mode) {
+            diagnostic_images(frame,&pad,error,inside,&touch,tx,ty,frame_us,alloc_ok);
+#ifdef CTR_SCENE_ONLY
+            scene_images();
+#endif
+        }
         else if(guest_mode==2) {
 #ifndef CTR_COMPILED_HOMEBREW
             if(pad.trigger&VPAD_BUTTON_B)ctr_relay_fixture_exit(&gsp_guest);
@@ -1074,6 +1131,10 @@ int main(int argc, char **argv) {
         guide_input.touch_x=tx;guide_input.touch_y=ty;
         guide_input.guest_exited=gsp_guest.state==CTR_GUEST_EXITED;
         guide_input.guest_fault=gsp_guest.state==CTR_GUEST_FAULTED;
+#ifdef CTR_SCENE_ONLY
+        guide_input.guest_fault=guide_input.guest_fault || scene_test_result!=0 ||
+            scene_results[0]!=CTR_SCENE_OK || scene_results[1]!=CTR_SCENE_OK;
+#endif
         guide_input.guest_pass=gsp_pass_seen;guide_input.guest_sessions=guest_sessions;
         guide_input.guest_frame_available=gsp_presented>0;
         guide_input.guest_green_frame=guest_green_frame;

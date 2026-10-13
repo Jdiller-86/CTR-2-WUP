@@ -1,6 +1,6 @@
 # CTR2WUP status
 
-Updated **October 13, 2026 (America/New_York)** · **v0.21.0**.
+Updated **October 13, 2026 (America/New_York)** · **v0.22.0**.
 The target remains an UWUVCI-style Windows GUI: select an owned 3DS game, configure
 title/artwork, click Inject, install its individual WUP and play from Wii U Menu.
 [Requirements](docs/project-brief.md), [product plan](docs/development-plan.md),
@@ -8,7 +8,7 @@ title/artwork, click Inject, install its individual WUP and play from Wii U Menu
 
 **Approximately 20% implemented; 0/7 full milestones accepted.** This is a rough
 engineering estimate, not a test-count percentage or release-date prediction.
-No commercial profile, playable Mario build, PICA draw renderer or finished GUI
+No commercial profile, playable Mario build, general PICA renderer or finished GUI
 is enabled. Current binaries are original homebrew diagnostics.
 
 ## Current implementation
@@ -18,10 +18,35 @@ is enabled. Current binaries are original homebrew diagnostics.
 | Input/preparation | Bounded CIA/NCSD/NCCH inspection, optional local key/seed imports/decryption, canonical full RomFS IVFC/metadata verification and private asset blobs | Actual user exports/Mario assets, broader forms and Windows acceptance |
 | CPU/runtime | Checked ARM/Thumb/VFP/AOT subsets, owned memory, eight single-core contexts and scoped services | Complete exercised CPU/HLE coverage, modules, guest audio and retail saves |
 | Homebrew | Eight normal-CRT/libctru applications: boot, threads, graphics, input, interactive, filesystem, RomFS and GX transfer | Launch-audio regression, broader services and game integration |
-| Graphics | Direct/shared framebuffer presentation, five display formats, 14 base textures, scoped CPU-backed GX queues/copies/fills/transfers and checked contiguous/indexed vertex decoding | PICA loader/fixed attributes, shaders/TEV/draw execution, GPU resources/coherency and measured console performance |
+| Graphics | Direct/shared framebuffer presentation, five display formats, 14 base textures, scoped GX transfers and first original PICA-format loader/MOV-shader/software triangle scenes | Guest draw/resource integration, broader shaders/TEV/sampling, GPU resources/coherency and measured console performance |
 | Packaging/GUI | Original synthetic packing/decryption verification and conversion foundations; GUI workflow specified | Commercial conversion, actual WUP install/Menu gameplay, clean Windows and final GUI |
 
-## v0.21.0 increment
+## v0.22.0 increment
+
+The first original scenes now execute PICA-format loader/index state, fixed
+attributes, packed/float32 uniforms and actual MOV/NOP/END shader instructions
+through a checked software triangle renderer. Byte and short index formats
+produce the same two-triangle square, with exact independent pixel comparison
+and whole-list rollback on late failure. A separate pinned nihstro comparison
+checks **12,290 shader/descriptor encodings**, without copying or linking an
+emulator into the runtime.
+
+The original shader/scene suite passes **1,393,972 assertions**. Required tests
+now include **372 Python tests and 21 normal/ASan/UBSan C suites**; the report
+guide has 624 assertions. Native and focused Scene Check RPX/WUHB cross-builds
+pass. Receipts and actual desktop PNG output are retained in
+`artifacts/reports/first-scenes-v022/`; CI also publishes a focused
+`wiiu-scene-check-<source commit>` artifact with provenance and notices.
+
+See [the scene contract and console guide](docs/software-scenes.md). The focused
+check runs CPU rasterization and existing GX2 surface copies; physical picture,
+timing and exit evidence remains pending. Standard guest GSP still rejects
+draws. Arithmetic, textures/TEV, depth/blend, clipping, GPU shader translation and
+commercial profiles remain unsupported. This is a significant M4 foundation,
+not full M4 acceptance. The Audio Check/GX Transfers **0.20.0** launch-music
+regression remains open. Completed PR branches are deleted after merge.
+
+## v0.21.0 increment (historical)
 
 The original vertex decoder now gathers resolved array attributes through
 unsigned 8-bit or little-endian unsigned 16-bit index buffers. It preserves

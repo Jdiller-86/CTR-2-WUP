@@ -3,6 +3,18 @@
 All releases are development increments. RPX/WUHB diagnostics and desktop passes
 do not establish commercial-game compatibility or installable WUP acceptance.
 
+## 0.22.0 — 2026-10-13
+
+- Execute first original PICA-format loader/index/fixed/uniform/MOV shader scenes
+  through an owned software triangle boundary, with atomic state/pixel commit.
+- Restrict numeric and raster behavior to exact supported values; reject unknown
+  pipeline state, undefined inputs and unsupported shader/fragment operations.
+- Compare both index formats against exact independent pixels and 12,290 pinned
+  nihstro encodings. Add normal/sanitizer/Windows scene coverage and image receipts.
+- Build a focused native Scene Check with automatic pixel checks, console timings,
+  two-screen picture prompts and retained TXT results. Publish its CI artifact.
+- Keep guest GSP draws, GPU shader translation and full M4 acceptance open.
+
 ## 0.21.0 — 2026-10-13
 
 - Gather bounded vertex streams through unsigned 8-bit/16-bit little-endian

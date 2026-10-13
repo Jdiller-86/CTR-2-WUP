@@ -41,12 +41,17 @@ static const step audio_steps[]={
     {VIEW_NATIVE,"Launch music stopped","Has the Wii U launch music stopped?","R: quiet now   L: launch music still playing"},
     {AUDIO,"Native test tone","Press A: a short tone should play on both screens.","R: heard on BOTH   L: missing or wrong sound"}
 };
+static const step scene_steps[]={
+    {VIEW_NATIVE,"Triangle picture","Both: RED lower-left / GREEN upper-right square.","R: correct on BOTH   L: wrong or missing picture"},
+    {VIEW_NATIVE,"Shared diagonal","Does the square have NO gap along its diagonal?","R: solid square   L: gap, flicker or other problem"}
+};
 static const step gx_steps[]={
     {VIEW_GUEST,"GX transfer picture","TV: GREEN / RED / GREEN. GamePad: BLUE.","R: observed correctly   L: wrong/missing picture"},
     {GUEST_EXIT,"GX operations and exit","Wait for fill/copy/conversion checks and exit.","The original guest's own PASS and exit are checked."}
 };
 
 static const step *steps(const ctr_test_guide *g, unsigned *count) {
+    if(g->kind==CTR_GUIDE_SCENE) { *count=sizeof(scene_steps)/sizeof(*scene_steps);return scene_steps; }
     if(g->kind==CTR_GUIDE_AUDIO) { *count=sizeof(audio_steps)/sizeof(audio_steps[0]);return audio_steps; }
     if(g->kind==CTR_GUIDE_GX) { *count=sizeof(gx_steps)/sizeof(*gx_steps);return gx_steps; }
     if(g->kind==CTR_GUIDE_ASSETS) { *count=sizeof(asset_steps)/sizeof(*asset_steps);return asset_steps; }
@@ -97,7 +102,9 @@ void ctr_test_guide_update(ctr_test_guide *g,const ctr_guide_input *in) {
     }
     if(in->pressed&CTR_GUIDE_SKIP) { finish_step(g,"NOT TESTED","User pressed ZL to skip");return; }
     if(in->pressed&CTR_GUIDE_FAIL) { finish_step(g,"FAIL","User pressed ZR to report a problem");return; }
-    if(in->guest_fault && g->kind!=CTR_GUIDE_NATIVE) { finish_step(g,"FAIL","Guest fault observed; inspect diagnostic log");return; }
+    if(in->guest_fault && g->kind!=CTR_GUIDE_NATIVE) {
+        finish_step(g,"FAIL",g->kind==CTR_GUIDE_SCENE?"Automatic scene test failed; inspect diagnostic log":"Guest fault observed; inspect diagnostic log");return;
+    }
     unsigned count;const step *list=steps(g,&count);enum step_type type=list[g->step].type;
     if(type==BUTTONS) {
         const uint32_t required=CTR_GUIDE_A|CTR_GUIDE_B|CTR_GUIDE_X|CTR_GUIDE_Y|CTR_GUIDE_L|CTR_GUIDE_R|
