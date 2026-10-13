@@ -470,6 +470,29 @@
         "Planned feature; no implementation or acceptance evidence yet.",
         "Parent acceptance remains open until its complete checklist is reviewed."
       ]
+    },
+    {
+      "id": "traceability-status-normalization",
+      "title": "Preserve GitHub default status capitalization during native traceability reconciliation",
+      "milestone": 1,
+      "parent_issue": 1,
+      "state": "active",
+      "pull_requests": [
+        59
+      ],
+      "scope": [
+        "Resolve canonical status values case-insensitively while preserving existing option names and IDs.",
+        "Re-run the Actions dry-run before applying the original reviewed catalog."
+      ],
+      "acceptance": [
+        "GitHub default In Progress is accepted as the canonical In progress status without field mutation.",
+        "Read-only preflight and conflict/gate-protection checks pass.",
+        "Live trusted-main dry-run confirms the existing Project schema before writes."
+      ],
+      "evidence": [
+        "The initial dry-run stopped before mutations because its exact case-sensitive lookup could not find a required status.",
+        "PR #59 supplies the focused compatibility correction; full milestone acceptance remains open."
+      ]
     }
   ],
   "reviewed_statuses": {
