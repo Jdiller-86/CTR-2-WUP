@@ -26,12 +26,15 @@ class ReadOnlyInventory:
             return [{"number": n} for row in data["features"] for n in row["pull_requests"]]
         if "/milestones?" in path:
             return [{"number": n} for n in range(1, 8)]
-        return [{"number": n, "node_id": f"issue-{n}", "body": ""} for n in (*range(1, 8), *range(12, 47))]
+        return [{"number": n, "node_id": f"issue-{n}", "body": "<!-- ctr2wup:work-item:m4-pica-commands -->" if n == 27 else ""}
+                for n in (*range(1, 8), *range(12, 47))]
 
     def project(self):
         return {"id": "project-2", "fields": [{"name": "Status", "options": [{"name": n, "id": n} for n in trace.tracking.STATUSES[:8]]}]}
 
     def graphql(self, query, variables):
+        if "closingIssuesReferences" in query:
+            return {"repository": {"pullRequest": {"closingIssuesReferences": {"nodes": [], "pageInfo": {"hasNextPage": False}}}}}
         return {"node": {"parent": {"id": "foreign-parent", "number": 999} if self.parent_conflict else None}}
 
 
@@ -59,6 +62,28 @@ class TraceabilityTests(unittest.TestCase):
             with self.assertRaises(trace.tracking.TrackingError):
                 trace.reconcile(client, data, True, {"operations": []})
             self.assertEqual(client.writes, [])
+
+    def test_completion_review_cannot_accept_a_milestone_or_unreviewed_task(self):
+        for identifier in ("m4", "m4-vertex-shaders", "m1-results"):
+            data = copy.deepcopy(self.source)
+            data["reviewed_completions"] = [identifier]
+            client = ReadOnlyInventory()
+            with self.assertRaises(trace.tracking.TrackingError):
+                trace.reconcile(client, data, True, {"operations": []})
+            self.assertEqual(client.writes, [])
+
+    def test_completion_review_requires_its_original_task_identity(self):
+        client = ReadOnlyInventory()
+        original = client.api
+        def api(path, method="GET", payload=None):
+            result = original(path, method, payload)
+            if "/issues?" in path:
+                next(row for row in result if row["number"] == 27)["body"] = "owner changed task identity"
+            return result
+        client.api = api
+        with self.assertRaisesRegex(trace.tracking.TrackingError, "identified task"):
+            trace.reconcile(client, self.source, True, {"operations": []})
+        self.assertEqual(client.writes, [])
 
     def test_parent_conflict_fails_before_mutations(self):
         client = ReadOnlyInventory(parent_conflict=True)
@@ -95,6 +120,43 @@ class TraceabilityTests(unittest.TestCase):
         with self.assertRaisesRegex(trace.tracking.TrackingError, "missing primary feature"):
             trace.reconcile(client, self.source, True, {"operations": []})
         self.assertEqual(client.writes, [])
+
+    def draft_inventory(self, closed=False, ambiguous=False):
+        client = ReadOnlyInventory()
+        original_api, original_graphql = client.api, client.graphql
+        def api(path, method="GET", payload=None):
+            result = original_api(path, method, payload)
+            if "/pulls?" in path:
+                result.append({"number": 999, "state": "open"})
+            elif "/issues?" in path:
+                result.append({"number": 76, "node_id": "feature-76", "state": "closed" if closed else "open",
+                               "body": "<!-- ctr2wup:feature:pica-arithmetic -->"})
+                if ambiguous:
+                    result.append({"number": 77, "node_id": "feature-77", "state": "open",
+                                   "body": "<!-- ctr2wup:feature:pica-tev -->"})
+            return result
+        def graphql(query, variables):
+            if "closingIssuesReferences" in query:
+                nodes = [{"id": "feature-76"}] + ([{"id": "feature-77"}] if ambiguous else [])
+                return {"repository": {"pullRequest": {"closingIssuesReferences": {"nodes": nodes, "pageInfo": {"hasNextPage": False}}}}}
+            return original_graphql(query, variables)
+        client.api, client.graphql = api, graphql
+        return client
+
+    def test_new_draft_uses_known_native_feature_without_loading_topic_branch(self):
+        client, report = self.draft_inventory(), {"operations": []}
+        before = copy.deepcopy(self.source)
+        trace.reconcile(client, self.source, False, report)
+        self.assertEqual(report["discovered_native_prs"], [{"pull_request": 999, "feature": "pica-arithmetic"}])
+        self.assertEqual(report["planned"]["pull_requests"], sum(len(r["pull_requests"]) for r in self.source["features"]) + 1)
+        self.assertEqual(self.source, before)
+        self.assertEqual(client.writes, [])
+
+    def test_new_draft_cannot_extend_closed_or_ambiguous_feature(self):
+        for client in (self.draft_inventory(closed=True), self.draft_inventory(ambiguous=True)):
+            with self.assertRaises(trace.tracking.TrackingError):
+                trace.reconcile(client, self.source, True, {"operations": []})
+            self.assertEqual(client.writes, [])
 
 
 if __name__ == "__main__":

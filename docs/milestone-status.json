@@ -12,7 +12,7 @@
       "waiting_labels": [
         "needs-console"
       ],
-      "summary": "Reviewed Wii U reports establish named TXT read-back, original save fresh-launch reload, embedded/SD assets and Minus return; launch music needs a focused audio regression and installed-WUP acceptance remains open.",
+      "summary": "Reviewed TXT, original save/reload, assets, pictures and Minus exit evidence exists. Launch-audio regression, platform recovery and installed-original-WUP acceptance remain open.",
       "verified_foundations": [
         "Versioned native/guest RPX/WUHB builds and read-back-checked test-report/save publication lifecycle",
         "Older native/control reports, confirmed Minus exit and user-reported Native/Guarded/Compiled v0.14.5 completion retained as scoped evidence",
@@ -116,7 +116,7 @@
       "waiting_labels": [
         "needs-console"
       ],
-      "summary": "Checked ARM/Thumb/VFP/AOT subsets, independent ARM1176 cases and emulated big-endian PowerPC parity exist; full exercised execution and actual Espresso costs remain open.",
+      "summary": "Checked ARM/Thumb/VFP, portable generated ABI and observable fallback foundations exist. Broader exercised correctness, real Espresso costs and useful performance remain open.",
       "verified_foundations": [
         "Original interpreter/AOT/reference suites and checked little-endian memory across host and emulated big-endian PowerPC",
         "Eight single-core CPU/TLS/VFP contexts, scoped instruction/fault/synchronization semantics and external generated-code integration"
@@ -212,7 +212,7 @@
       "waiting_labels": [
         "needs-console"
       ],
-      "summary": "Original compiled applications now have physical save/reload, RomFS, SD assets and GX-transfer evidence; launch audio, broader runtime integration and full acceptance remain open.",
+      "summary": "Nine original CRT/libctru apps cover startup, threads, input, display, saves, assets, transfers and bounded draws. Broader services/modules/guest audio and stable physical runtime acceptance remain open.",
       "verified_foundations": [
         "Owned memory, eight single-core contexts and scoped kernel/IPC/SRV/CFG/HID/GSP/APT/FS contracts",
         "Original compiled input/framebuffer/save/reload/RomFS/GX applications verified on desktop, sanitizers and selected emulated PowerPC comparisons",
@@ -312,7 +312,7 @@
       "waiting_labels": [
         "needs-console"
       ],
-      "summary": "Original compiled guest GSP draws now resolve owned resources and canonical tiled targets, retain MOV shader/state and produce exact software scenes; broader shader/TEV/sampling, GPU translation/coherency and physical evidence remain open.",
+      "summary": "Compiled guest GSP/MOV draws produce exact CPU software scenes through owned tiled targets. Broader shader/TEV/sampling, native GX2 translation/coherency and physical Wii U acceptance remain open.",
       "verified_foundations": [
         "Direct/shared framebuffer presentation and all 14 base texture formats with original/reference checks",
         "Bounded GSP DMA/fill/display-transfer/raw-texture-copy/cache queue operations and completion interrupts",
@@ -332,7 +332,7 @@
         {
           "id": "m4-pica-commands",
           "title": "Decode PICA state and submit bounded draw commands",
-          "summary": "The standard queue handles configuration-only PICA lists. A separate experimental owned-resource boundary now validates draw loader/index/fixed/shader state and atomically renders original software triangles; guest draw integration and broader pipeline state remain open.",
+          "summary": "The standard guest GSP queue now resolves owned physical resources, retains PICA shader/state and atomically commits bounded original software draws and completion. Both command-task criteria are reviewed; broader renderer and physical M4 acceptance remain open.",
           "acceptance_criteria": [
             "Original command streams establish register/state changes, draw inputs and validated resource ranges; malformed or unsupported state fails visibly before modifying output.",
             "The decoder feeds a documented renderer boundary, with reference traces that distinguish CPU-written framebuffer presentation from actual PICA draws."
@@ -342,6 +342,9 @@
           "state": "in_progress",
           "verified_foundations": [
             "Configuration and bounded compiled guest draw lists retain shader/state, commit tiled targets atomically and signal synchronous P3D only after success."
+          ],
+          "evidence": [
+            "Reviewed v0.23 command acceptance: PR #48 configuration plus PR #57 compiled guest draws, exact target/display reference traces and 83,108 normal/sanitizer assertions meet both bounded command-task criteria; the Actions review records task #27 Done without accepting M4."
           ]
         },
         {
@@ -420,7 +423,7 @@
         "needs-console",
         "needs-input"
       ],
-      "summary": "Super Mario 3D Land is the first user-selected candidate; its exact revision is unverified and the received small intake has no executable. No commercial profile is enabled.",
+      "summary": "Mario is the selected candidate; the received small intake has no executable. Exact owned revision/assets, title requirements and physical gameplay/audio/save/performance remain open.",
       "verified_foundations": [
         "Candidate and proposed private analysis/gameplay route documented",
         "Local preparation/decryption/intake helpers tested with original fixtures; actual commercial executable/assets not inspected"
@@ -532,7 +535,7 @@
         "needs-input",
         "needs-windows"
       ],
-      "summary": "Original encrypted-input/AOT/Wii U build and synthetic packaging proofs exist; hosted Windows baseline and deep AOT/WPF tooling passed. Full commercial conversion/install/rebuild acceptance remains open.",
+      "summary": "Original intake/decryption, AOT builds and synthetic package verification exist. Full clean-Windows commercial conversion, installer/Menu launch and rebuild/save acceptance remain open.",
       "verified_foundations": [
         "Local key/seed import, bounded decryption/intake/RomFS preparation and original encrypted-input to external AOT/RPX/WUHB proof",
         "Original synthetic encrypted packing plus independent decrypt/FST/hash/file verification and atomic output",
@@ -639,7 +642,7 @@
         "needs-input",
         "needs-windows"
       ],
-      "summary": "The UWUVCI-style Windows GUI workflow is specified and supported WPF tooling is checked; GUI implementation is planned after a proven execution/conversion pipeline.",
+      "summary": "The WPF injector workflow and supported development tooling are specified. Implement the GUI over the proven engine, private setup/rebuild/diagnostics and clean-Windows playable-WUP acceptance.",
       "verified_foundations": [
         "User-reviewed Select ROM/configure/Inject/WUP workflow and encrypted-input amendment documented",
         "Hosted .NET 10 WPF toolchain validation is development evidence; no finished GUI exists"

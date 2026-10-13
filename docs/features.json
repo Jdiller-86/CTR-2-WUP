@@ -495,6 +495,34 @@
         "The initial dry-run stopped before mutations because its exact case-sensitive lookup could not find a required status.",
         "PR #59 supplies the focused compatibility correction; full milestone acceptance remains open."
       ]
+    },
+    {
+      "id": "current-milestone-summaries",
+      "title": "Show current milestone evidence first while preserving earlier notes",
+      "milestone": 4,
+      "parent_issue": 4,
+      "state": "active",
+      "pull_requests": [
+        83
+      ],
+      "scope": [
+        "Lead every native milestone description with the current versioned goal and remaining acceptance.",
+        "Retain unrecognized owner text and earlier scaffold summaries verbatim under a clear context heading.",
+        "Keep all seven current goals readable within the existing description budget without truncation.",
+        "Discover a new draft PR from one known native feature closing reference before its topic-branch ledger update reaches main.",
+        "Record the reviewed bounded command task acceptance once, associate its actual implementation PRs and preserve later maintainer reopen/status edits."
+      ],
+      "acceptance": [
+        "Repeated synchronization is idempotent and retains owner prefix/suffix notes exactly once.",
+        "Malformed managed boundaries fail before writes.",
+        "All seven native descriptions start with current v0.23 evidence and retain their existing notes.",
+        "Native draft discovery is read-only during preflight, preserves source data and rejects ambiguous or closed feature relationships.",
+        "Only task #27 can complete through this curated review; its identity and merged PR #48/#57 proof are checked before writes."
+      ],
+      "evidence": [
+        "The final audit found an old PICA-draws-not-implemented scaffold sentence above the correct v0.23 goal.",
+        "PR #83 fixes ordering and summary readability through the trusted progress workflow; no gate is accepted."
+      ]
     }
   ],
   "reviewed_statuses": {
@@ -540,5 +568,8 @@
     "45": "Planned",
     "46": "Planned"
   },
-  "state_policy": "Feature state is a planning seed; merged PR state is read live. Project #2 owns current status."
+  "state_policy": "Feature state is a planning seed; merged PR state is read live. Project #2 owns current status.",
+  "reviewed_completions": [
+    "m4-pica-commands"
+  ]
 }

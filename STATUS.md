@@ -33,14 +33,16 @@ and **97,200 covered fragments**. Independent displayed-image checks cover all
 Guest physical ownership, permission splits, resource/command/relay aliases,
 retained uploads, late failure and queue completion have **83,108 assertions**.
 The raw VFP push/pop guard now preserves exact bits under CRT FPSCR controls;
-unsupported arithmetic still fails. Required coverage is **380 Python tests and
+unsupported arithmetic still fails. Required coverage is **384 Python tests and
 22 normal/ASan/UBSan C suites**; the report guide has 636 assertions. Native,
 Scene Check and compiled Guest Draws RPX/WUHB builds and exact reports are retained
 with source/SDK provenance; physical rendering evidence is deferred.
 
 Development is visible in PR #57 (guest draws) and merged PR #58 (tracking).
 Scoped feature issues connect native parents, milestones, Project items and PRs;
-35 established gate tasks retain their acceptance boundaries. AGENTS.md, the
+35 established gate tasks retain their acceptance boundaries. The bounded
+command task #27 meets both documented criteria and has a recorded Done review;
+full M4 remains open. AGENTS.md, the
 repository tour, shared runtime manifest and current product plan now provide a
 clear route for incoming contributors. The Actions credential remains in Actions.
 Completed remote/local branches are removed after merge.

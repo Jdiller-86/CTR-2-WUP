@@ -7,6 +7,7 @@ Full milestone acceptance and owner notes are never inferred from PR merges.
 from __future__ import annotations
 
 import argparse
+import copy
 import importlib.util
 import json
 from pathlib import Path
@@ -19,6 +20,7 @@ tracking = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(tracking)
 REPO = tracking.REPOSITORY
 FEATURE = re.compile(r"<!-- ctr2wup:feature:([a-z0-9-]+) -->")
+COMMAND_REVIEW = "<!-- ctr2wup:reviewed-command-boundary:v023 -->"
 DETAIL = '''query($id:ID!) { node(id:$id) { ... on Issue {
   id number state parent { id number }
   closedByPullRequestsReferences(first:100,includeClosedPrs:true) { nodes { id number } pageInfo { hasNextPage } }
@@ -29,6 +31,9 @@ def catalog(data):
     if data.get("schema_version") != 1 or data.get("repository") != REPO:
         raise tracking.TrackingError("Traceability catalog identity is invalid.")
     rows, ids, prs = data.get("features"), set(), set()
+    completions = data.get("reviewed_completions", [])
+    if not isinstance(completions, list) or completions not in ([], ["m4-pica-commands"]):
+        raise tracking.TrackingError("Only the explicitly reviewed bounded command task can complete; full gates remain open.")
     if not isinstance(rows, list) or not 1 <= len(rows) <= 100:
         raise tracking.TrackingError("Feature catalog exceeds the reviewed budget.")
     reviewed = data.get("reviewed_statuses", {})
@@ -96,7 +101,7 @@ def mutate(client, name, kind, value, selection):
 def reconcile(client, data, apply, report):
     report["stage"] = "preflight"
     report["changes_possible"] = False
-    rows = catalog(data)
+    rows = copy.deepcopy(catalog(data))
     issues = [i for i in pages(client, f"repos/{REPO}/issues?state=all") if "pull_request" not in i]
     by_number, features = {i["number"]: i for i in issues}, {}
     for issue in issues:
@@ -116,9 +121,34 @@ def reconcile(client, data, apply, report):
     if any(value not in status for value in data.get("reviewed_statuses", {}).values()):
         raise tracking.TrackingError("A reviewed Project status has no existing option.")
     registered = {n for row in rows for n in row["pull_requests"]}
-    visible_prs = {pr["number"] for pr in pages(client, f"repos/{REPO}/pulls?state=all")}
-    if visible_prs - registered:
-        raise tracking.TrackingError("Repository PRs are missing primary feature justification; update the catalog before applying.")
+    visible = pages(client, f"repos/{REPO}/pulls?state=all")
+    by_feature_node = {issue["node_id"]: key for key, issue in features.items()}
+    by_key = {row["id"]: row for row in rows}
+    report["discovered_native_prs"] = []
+    for pr in visible:
+        if pr["number"] in registered:
+            continue
+        # A new draft can close an already planned feature while its ledger
+        # update is still on the topic branch. Read only native relationships;
+        # never load or execute that branch or arbitrary PR body instructions.
+        query = '''query($number:Int!) { repository(owner:"Jdiller-86",name:"CTR-2-WUP") {
+          pullRequest(number:$number) { closingIssuesReferences(first:100) {
+            nodes { id } pageInfo { hasNextPage }
+          } }
+        } }'''
+        connection = client.graphql(query, {"number": pr["number"]})["repository"]["pullRequest"]["closingIssuesReferences"]
+        candidates = {by_feature_node[node["id"]] for node in connection["nodes"]
+                      if node["id"] in by_feature_node and by_feature_node[node["id"]] in by_key}
+        if connection["pageInfo"]["hasNextPage"] or len(candidates) != 1:
+            raise tracking.TrackingError("Repository PRs are missing primary feature justification; link one known scoped feature before applying.")
+        key = candidates.pop()
+        if features[key]["state"] == "closed" and pr["state"] == "open":
+            raise tracking.TrackingError("A new active PR cannot extend a closed feature; create or reopen its scoped issue first.")
+        by_key[key]["pull_requests"].append(pr["number"])
+        if by_key[key]["state"] == "planned":
+            by_key[key]["state"] = "active"
+        report["discovered_native_prs"].append({"pull_request": pr["number"], "feature": key})
+    catalog(dict(data, features=rows))  # Keep primary ownership and link budgets bounded.
     prs = {}
     for row in rows:
         if row["parent_issue"] not in by_number or row["milestone"] not in milestones:
@@ -130,6 +160,11 @@ def reconcile(client, data, apply, report):
             if row["state"] == "implemented" and not pr["merged_at"]:
                 raise tracking.TrackingError("Historical completed feature has an unmerged PR.")
             prs[number] = pr
+    review_commands = "m4-pica-commands" in data.get("reviewed_completions", [])
+    if review_commands and (27 not in by_number
+            or "<!-- ctr2wup:work-item:m4-pica-commands -->" not in (by_number[27].get("body") or "")
+            or any(n not in prs or not prs[n]["merged_at"] for n in (48, 57))):
+        raise tracking.TrackingError("Reviewed command completion requires the identified task and both merged implementation PRs.")
     # Preflight all native parents before writes; never steal/reparent an issue.
     edges = [(by_number[n], by_number[1 + (n - 12) // 5]) for n in range(12, 47)]
     edges += [(features[r["id"]], by_number[r["parent_issue"]]) for r in rows if r["id"] in features]
@@ -190,6 +225,35 @@ def reconcile(client, data, apply, report):
     } pageInfo { hasNextPage endCursor }'''
     items = {i["content"]["id"]: i for i in client.connection(project["id"], "items", selection) if i.get("content") and i["content"].get("id")}
     desired = []
+    if review_commands:
+        issue = client.api(f"repos/{REPO}/issues/27")
+        # Record this review once. A later maintainer reopening/status edit is
+        # authoritative and must not be undone by replaying the catalog.
+        if COMMAND_REVIEW not in (issue.get("body") or ""):
+            scope = json.loads((ROOT / "docs/milestone-status.json").read_text())["milestones"][3]["work_items"][0]
+            current_body = issue.get("body") or ""
+            begin, end = "<!-- ctr2wup:managed:start -->", "<!-- ctr2wup:managed:end -->"
+            if current_body.count(begin) != 1 or current_body.count(end) != 1 or current_body.index(begin) >= current_body.index(end):
+                raise tracking.TrackingError("Command review cannot verify managed acceptance boundaries; preserve and review.")
+            first, last = current_body.index(begin), current_body.index(end)
+            section = current_body[first:last]
+            for criterion in scope["acceptance_criteria"]:
+                unchecked, checked = "- [ ] " + criterion, "- [x] " + criterion
+                if section.count(unchecked) + section.count(checked) != 1:
+                    raise tracking.TrackingError("Command acceptance criteria changed; preserve and review.")
+                section = section.replace(unchecked, checked)
+            reviewed_body = current_body[:first] + section + current_body[last:]
+            mutate(client, "addCloseIssueReferences", "AddCloseIssueReferencesInput",
+                   {"issueId": issue["node_id"], "pullRequestIds": [prs[n]["node_id"] for n in (48, 57)]}, "clientMutationId")
+            note = ("\n\n" + COMMAND_REVIEW + "\nReviewed v0.23 bounded command acceptance: PR #48 supplies checked configuration; "
+                    "PR #57 connects standard guest PICA draws to owned tiled targets with transactional state/completion. "
+                    "Original compiled reference traces, 83,108 normal/sanitizer assertions and exact target/display pixels "
+                    "meet this task's two criteria. Native GX2 translation, broader shader/fragment behavior and physical "
+                    "M4 acceptance remain open. This review closes the bounded implementation task, not the full milestone.\n")
+            client.api(f"repos/{REPO}/issues/27", "PATCH", {"body": reviewed_body + note,
+                         "state": "closed", "state_reason": "completed"})
+            desired.append((issue["node_id"], "Done", "Task"))
+            report["operations"].append({"reviewed_task_completion": 27, "implementation_prs": [48, 57]})
     for row in rows:
         done = bool(row["pull_requests"]) and all(prs[n]["merged_at"] for n in row["pull_requests"])
         value = "Done" if done else "In progress" if row["state"] == "active" else "Planned"
@@ -231,7 +295,7 @@ def reconcile(client, data, apply, report):
     fresh = client.connection(project["id"], "items", selection)
     members = {i["content"]["id"] for i in fresh if i.get("content") and i["content"].get("id")}
     expected = {i["node_id"] for i in by_number.values() if i["number"] in (*range(1, 8), *range(12, 47))}
-    expected |= {i["node_id"] for i in features.values()} | {p["node_id"] for p in prs.values()}
+    expected |= {features[row["id"]]["node_id"] for row in rows} | {p["node_id"] for p in prs.values()}
     if not expected <= members:
         raise tracking.TrackingError("Project membership did not verify for every managed issue and PR.")
     for row in rows:

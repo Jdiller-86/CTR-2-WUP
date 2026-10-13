@@ -30,6 +30,12 @@ early. Link the scoped issue with `Closes #...`; reference broader unfinished
 tasks with `Refs #...`. Keep the PR in the same milestone and Project. After
 required checks and review, merge and delete both remote and local topic branches.
 
+Run the trusted-main management dry-run and apply after opening the draft. For an
+already planned feature, the tool can discover its new PR through the native
+closing reference even while the catalog edit is on the topic branch. It reads
+GitHub relationships and never executes that branch. An ambiguous relationship,
+unknown feature or active PR extending a closed feature fails before writes.
+
 **Done** means the scoped acceptance criteria were met. It does not mean a parent
 task, console route or full milestone was accepted. Full gates need their entire
 documented checklist and reviewed evidence. Physical testing remains pending
@@ -68,3 +74,9 @@ private issue titles, bodies or feature identifiers in the public dashboard.
 
 These are independently reviewable features. Completing a software draw path
 does not establish general PICA compatibility or native GPU translation.
+
+
+The v0.23 command review completes only task #27 after its two criteria are
+verified against merged PR #48/#57 and original reference traces. Its review
+marker is recorded once; later maintainer reopen/status changes are preserved.
+No full milestone or other unreviewed task can complete through that rule.

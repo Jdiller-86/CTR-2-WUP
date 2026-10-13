@@ -188,11 +188,15 @@ def replace_milestone_description(old, generated, old_summary):
         if (old.count(MILESTONE_BEGIN) != 1 or old.count(MILESTONE_END) != 1
                 or old.index(MILESTONE_BEGIN) >= old.index(MILESTONE_END)):
             raise RuntimeError('Managed milestone description boundaries changed; preserve and review')
-        result = old[:old.index(MILESTONE_BEGIN)] + generated + old[old.index(MILESTONE_END) + len(MILESTONE_END):]
+        prefix = old[:old.index(MILESTONE_BEGIN)]
+        suffix = old[old.index(MILESTONE_END) + len(MILESTONE_END):]
+        # The current versioned goal must lead; old seed summaries and owner
+        # notes remain intact below it instead of contradicting it at the top.
+        result = generated + ("\n\n**Preserved notes and earlier context**\n\n" + prefix if prefix.strip() else "") + suffix
     elif not old or old == old_summary:
         result = generated
     else:
-        result = old + '\n\n' + generated  # Retain all unrecognized/manual text verbatim.
+        result = generated + '\n\n**Preserved notes and earlier context**\n\n' + old
     if len(result) > 65536:
         raise ValueError('Merged milestone description exceeds the bounded metadata budget')
     return result

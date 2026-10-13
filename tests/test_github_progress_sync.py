@@ -197,7 +197,8 @@ class GithubProgressSyncTests(unittest.TestCase):
         self.remote.milestones[0]['description'] = manual
         self.run_sync(True)
         description = self.remote.milestones[0]['description']
-        self.assertTrue(description.startswith(manual))
+        self.assertTrue(description.startswith(sync.MILESTONE_BEGIN))
+        self.assertIn(manual, description)
         self.assertEqual(description.count(sync.MILESTONE_BEGIN), 1)
         suffix = '\nManual QA follow-up after the managed section.'
         self.remote.milestones[0]['description'] += suffix
@@ -205,7 +206,8 @@ class GithubProgressSyncTests(unittest.TestCase):
         self.remote.writes = []
         self.run_sync(True)
         description = self.remote.milestones[0]['description']
-        self.assertTrue(description.startswith(manual))
+        self.assertTrue(description.startswith(sync.MILESTONE_BEGIN))
+        self.assertIn(manual, description)
         self.assertTrue(description.endswith(suffix))
         self.assertEqual(description.count(sync.MILESTONE_BEGIN), 1)
         self.remote.writes = []

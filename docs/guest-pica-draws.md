@@ -26,7 +26,7 @@ must pass before it prints `CTR2WUP compiled PICA draws PASS` and exits.
 
 The host runner checks every displayed pixel. A separate integer Python image
 oracle independently compares all **172,800 top/bottom pixels** in the captured
-PPMs. The two images show a dark background and a square divided diagonally into
+PPMs. The two images show a dark background and a central region divided diagonally into
 red and green triangles; top and bottom display sizes are 400×240 and 320×240.
 
 Original host captures, with physical display verification still pending:
