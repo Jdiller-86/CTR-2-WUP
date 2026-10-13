@@ -572,19 +572,23 @@
       "title": "Inspect decrypted NCSD data partitions without rejecting executable intake",
       "milestone": 5,
       "parent_issue": 32,
-      "state": "planned",
-      "pull_requests": [],
+      "state": "implemented",
+      "pull_requests": [
+        89
+      ],
       "scope": [
         "Accept supported decrypted NCCH v0 CFA data partitions alongside v2 application executables in cartridge inspection and small executable export.",
-        "Keep unsupported prototype/version layouts, v0 executable claims, malformed ranges, hashes and encryption rejected; preserve the source and export boundary."
+        "Keep unsupported prototype/version layouts, v0 executable claims, malformed ranges, hashes and encryption rejected; preserve the source and export boundary.",
+        "Record the received private executable verification and static analysis while keeping assets and commercial compatibility unverified."
       ],
       "acceptance": [
         "Original NCSD fixtures with auxiliary v0 CFA inspect and export the same v2 executable revision; prepare-rom main selection remains unchanged.",
         "Negative version/type/header/hash/encryption fixtures fail before publishing output, and export omits data-partition payloads."
       ],
       "evidence": [
-        "Windows user report: direct prepare-intake rejects NCCH version 0; the full CCI has not transferred or been inspected.",
-        "Original main-selection fixture verifies prepare-rom then prepare-intake succeeds with a v2 executable and auxiliary v0 CFA; planned inspector compatibility fix."
+        "Eight original compatibility/negative cases cover decrypted data CFAs, executable revision/export boundaries and rejection of unsupported or damaged input.",
+        "The received derived USA Mario executable is independently inspected and pinned static analysis succeeds; exact hashes, source data and analysis stay private. RomFS/CRO inventory and original full-container verification remain unavailable.",
+        "Implementation: https://github.com/Jdiller-86/CTR-2-WUP/pull/89; no commercial profile or full milestone acceptance."
       ]
     }
   ],

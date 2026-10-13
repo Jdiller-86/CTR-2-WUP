@@ -1,11 +1,25 @@
 # First supported-title candidate: Super Mario 3D Land
 
-**October 13:** the user supplied a CCI described as decrypted, but the 32 MiB
-executor transfer limit prevents inspecting it. Its decryption, exact identity,
-revision and assets remain unverified. The Windows 11/Python small-intake route
-in [CIA/NCSD intake](cia-intake.md) is ready; title-specific analysis waits for
-that private executable export. Physical original draw/audio passes are separate
-from commercial compatibility.
+**October 13 verified executable intake:** the smaller private export contains
+an independently inspected v2 NCCH executable. Stored hashes, decompression and
+exact executable-revision identity match its receipt. Product `CTR-P-AREE`,
+program ID `0004000000054000`, English title and SMDH region mask 2 establish the
+USA candidate from bytes, rather than its filename. The remaster field is 0;
+the filename's `v0.3.0` is not a verified CIA title version.
+
+The decompressed executable is 3,096,576 bytes. The pinned lifter's static
+analysis succeeds; the extended-header allowlist declares 27 services, including
+`dsp::DSP` and `ldr:ro`. These are declared capabilities, not traced runtime IPC
+or supported gameplay. Exact hashes and all commercial analysis stay private.
+
+The full CCI still exceeds transfer limits. The derived view excludes RomFS,
+so assets and CRO inventory remain unavailable. The lifter's zero-module count
+for this asset-free view does not establish that the full game has no modules.
+No commercial profile is enabled. Next work is the private asset/module and
+required-runtime matrix, followed by original probes for confirmed requirements.
+Physical original draw/audio passes remain separate from commercial compatibility.
+
+## Historical intake notes
 
 October 11 update: the user is preparing console tests and has supplied the
 small CIA helper receipt. It reports outer-encrypted executable content and
@@ -73,8 +87,8 @@ The report preserves exact hashes, segment/stack/BSS layout, declared service
 access and section inventory. The external lifter analysis remains private.
 Do not infer implemented/observed IPC from the service allowlist. Later extraction
 and module/shader analysis will use this revision to prioritize concrete runtime
-work. The synthetic intake commands and CIA/executable-export fixtures are
-verified; actual commercial intake remains pending the smaller private export.
+work. The synthetic intake/export fixtures and the received private executable are
+verified. Full assets/modules and observed runtime requirements remain pending.
 
 Proposed manual route, to agree after identifying the dump: cold boot, title
 menu, start a new save, enter/play the first course, test movement/jump/touch as
@@ -83,8 +97,8 @@ save continuity. Record firmware, homebrew environment, installer, screen/audio
 behavior, frame/instruction timings and fault/fallback logs. This route is not
 claimed to have been executed.
 
-While private executable intake is pending, v0.7.0 adds shared heap/linear CPU
+Earlier, while executable intake was pending, v0.7.0 added shared heap/linear CPU
 allocation, free/protection/query and an original three-backend ARM probe. These
 are reusable startup interfaces, not an inferred Mario patch/profile. Its actual
 memory needs, thread/shared-memory behavior and GPU/DSP mappings still require
-the supplied revision and runtime evidence. See `guest-memory.md`.
+private runtime evidence from the now-verified revision. See `guest-memory.md`.

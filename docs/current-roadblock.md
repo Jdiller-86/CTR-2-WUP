@@ -16,10 +16,12 @@ Current requirements:
    that scene. Gate confirmation on the drawn frame, measure individual phases
    and investigate the fixed guest-instruction-per-refresh budget. Aggregate
    host refresh time is not a GPU/CPU breakdown or a game-performance result.
-2. **Mario intake:** the newly supplied CCI is described as decrypted but exceeds
-   the 32 MiB executor transfer limit. Use the existing Windows/Python
-   [small private executable export](cia-intake.md); retain the full file locally
-   for assets/modules. Exact identity and decryption remain unverified. Keys stay local.
+2. **Mario assets and requirements:** the small private export now verifies the
+   USA executable and its exact revision identity, with successful pinned static
+   analysis. The full CCI exceeds transfer limits; RomFS/CRO inventory and observed
+   runtime requirements remain unavailable. Retain the full file locally.
+   [First-title findings](first-title.md) separate verified metadata from gameplay.
+   Keys stay local.
 3. **Platform acceptance:** complete documented repeat launch, Home/APT,
    stability, SD recovery and original WUP install/Menu-launch checks with exact
    environment/build identity. The three successful sessions do not complete

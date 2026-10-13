@@ -158,9 +158,13 @@ def _ncch(reader, base, available, *, partition):
     if header[0x100:0x104] != b"NCCH":
         fail("invalid_magic", f"Partition {partition} is not NCCH")
     version = struct.unpack_from("<H", header, 0x112)[0]
-    if version != 2:
-        fail("unsupported_ncch_version", f"NCCH version {version} is unsupported; require modern v2")
     flags = header[0x188:0x190]
+    # Format 0 is a CFA data container, not an older application executable.
+    # CFA/v2 use the same media-unit layout; prototype v1 remains unsupported.
+    if version not in (0, 2):
+        fail("unsupported_ncch_version", f"Partition {partition}: NCCH version {version} is unsupported; require v2 executables or v0 data CFAs")
+    if version == 0 and ((flags[5] & 3) != 1 or u32(header, 0x180)):
+        fail("unsupported_ncch_version", f"Partition {partition}: NCCH v0 requires a data-only CFA without an executable flag or extended header")
     if not flags[7] & 4:
         fail("encrypted_input", f"Partition {partition} is encrypted. Supply a fully decrypted user-owned dump; no keys are requested by this tool")
     if flags[6] > 8:

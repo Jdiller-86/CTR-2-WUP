@@ -3,6 +3,16 @@
 All releases are development increments. RPX/WUHB diagnostics and desktop passes
 do not establish commercial-game compatibility or installable WUP acceptance.
 
+## Intake compatibility follow-up — 2026-10-13
+
+- Accept strictly checked decrypted v0 CFA data partitions during cartridge
+  inspection/export while retaining v2 executable and integrity requirements.
+- Preserve rejection of prototypes, v0 executable/header claims, encryption,
+  malformed ranges and hash failures; original source and export boundaries hold.
+- Record independently verified private USA Mario executable/revision and
+  successful static analysis. RomFS/CRO assets, runtime support and all full
+  milestone acceptance remain open; no commercial data is published.
+
 ## Evidence follow-up — 2026-10-13
 
 - Review physical Audio Check/GX Transfers 0.20.0 and Guest Draws 0.23.0 passes,

@@ -5,8 +5,9 @@ Guest Draws 0.23.0, have reviewed scoped passes and user-confirmed silence and
 normal exit. The draw trace reaches the rendered second presentation at 57.33
 seconds; aggregate diagnostic timing is not game performance. Its visual prompt
 accepted an answer before that scene, so accurate presentation gating and phase
-profiling are the next follow-up. The newly supplied CCI exceeds the transfer
-limit; [small private intake](docs/cia-intake.md) is still needed. All full
+profiling are the next follow-up. The full CCI exceeds the transfer
+limit, but the [small private intake](docs/cia-intake.md) now verifies the USA
+Mario executable and exact revision identity. RomFS/CRO assets remain unavailable. All full
 milestones remain open. [Evidence review](docs/console-evidence.md).
 
 Updated **October 13, 2026 (America/New_York)** · **v0.23.0**.
@@ -24,11 +25,21 @@ is enabled. Current binaries are original homebrew diagnostics.
 
 | Area | Verified foundation | Main remaining work |
 |---|---|---|
-| Input/preparation | Bounded CIA/NCSD/NCCH inspection, optional local key/seed imports/decryption, canonical full RomFS IVFC/metadata verification and private asset blobs | Actual user exports/Mario assets, broader forms and Windows acceptance |
+| Input/preparation | Bounded CIA/NCSD/NCCH inspection, optional local key/seed imports/decryption, canonical full RomFS IVFC/metadata verification and private asset blobs | RomFS/CRO inventory for the verified USA Mario executable, broader forms and Windows acceptance |
 | CPU/runtime | Checked ARM/Thumb/VFP/AOT subsets, owned memory, eight single-core contexts and scoped services | Complete exercised CPU/HLE coverage, modules, guest audio and retail saves |
 | Homebrew | Nine normal-CRT/libctru applications: boot, threads, graphics, input, interactive, filesystem, RomFS, GX transfer and PICA draws | Launch-audio regression, broader services and game integration |
 | Graphics | Direct/shared framebuffer presentation, five display formats, 14 base textures, scoped GX transfers and compiled original guest PICA/MOV/software draws | broader shaders/TEV/sampling, GPU resources/coherency and measured console performance |
 | Packaging/GUI | Original synthetic packing/decryption verification and conversion foundations; GUI workflow specified | Commercial conversion, actual WUP install/Menu gameplay, clean Windows and final GUI |
+
+## Executable intake follow-up
+
+The derived USA Mario NCCH passes independent hashes, decompression and revision
+checks; pinned static analysis succeeds. Exact hashes and commercial bytes stay
+private. Its declared service list includes DSP and module loading, but runtime
+use and full asset/module inventory remain unverified. The inspector now accepts
+strict decrypted v0 CFA data partitions with original negative/compatibility
+coverage, without accepting prototype or v0 executable layouts. See
+[first-title findings](docs/first-title.md). No commercial profile is enabled.
 
 ## v0.23.0 increment
 
@@ -42,7 +53,7 @@ and **97,200 covered fragments**. Independent displayed-image checks cover all
 Guest physical ownership, permission splits, resource/command/relay aliases,
 retained uploads, late failure and queue completion have **83,108 assertions**.
 The raw VFP push/pop guard now preserves exact bits under CRT FPSCR controls;
-unsupported arithmetic still fails. Required coverage is **384 Python tests and
+unsupported arithmetic still fails. Required coverage is **392 Python tests and
 22 normal/ASan/UBSan C suites**; the report guide has 636 assertions. Native,
 Scene Check and compiled Guest Draws RPX/WUHB builds and exact reports are retained
 with source/SDK provenance; the October 13 physical follow-up is reviewed above.
@@ -271,29 +282,23 @@ or paid entitlement was changed.
 
 ## Console evidence and inputs still needed
 
-Five new result files establish original Save, embedded RomFS, SD-file assets
-and GX transfer/configuration checks. The additional Save 0.14.6 full trace
-confirms reload in its first guest session after closing and reopening the app.
-All new guides complete without failures/skips; guest fallback/fault are zero.
-The user confirms correct screens and normal Minus return, but reports Wii U
-launch music continuing throughout. Raw uploads remain private and older failures
-are retained separately in [the evidence review](docs/console-evidence.md).
+Reviewed original Save/reload, assets, GX, launch-audio and bounded draw results
+are retained in [the evidence review](docs/console-evidence.md). The user confirms
+pictures, silence and correct Minus return. Exact environment versions, full
+Home/APT/recovery/stability and original installed-WUP acceptance remain open.
 
-The tester reports latest U.S. firmware, Aroma and WUP Installer GX2; exact
-versions remain unknown. No console is attached.
+- **Draw performance/evidence:** investigate the 57.33-second rendered scene and
+  early visual-prompt confirmation. Add accurate gating, bounded guest progress
+  and phase measurements; the existing aggregate host timing is not game speed.
+- **Mario:** the uploaded derived USA executable/revision and private static
+  analysis are verified. The full CCI remains too large to transfer; RomFS/CRO
+  inventory, original full-container provenance and observed runtime requirements
+  remain unavailable. Exact hashes and commercial bytes stay private.
+- **Windows/install:** complete conversion, actual WUP installation/Menu launch,
+  gameplay/audio/save/reload and the planned GUI remain separate gates.
 
-- **Audio:** run only [Audio Check and GX Transfers 0.20.0](docs/launch-audio.md)
-  for launch silence, native tone and compiled stability/exit. No Save/RomFS or
-  long controls-guide repeat is required solely for this version.
-- **Platform:** exact versions, Home/APT routes, recovery and installed original
-  WUP evidence remain separate acceptance work.
-- **Mario:** supplied CIA exceeds the 32 MiB attachment limit; small intake has
-  encrypted content and no executable. Prepare locally or use an already decrypted
-  owned dump, then privately export the small executable intake. Keys remain local.
-  Actual revision/assets/required services and gameplay are unverified.
-- **Windows/install:** full native devkitPPC conversion, actual WUP
-  installation/Menu launch/audio/gameplay/save/reload and GUI acceptance remain
-  separate gates. CI tooling success does not close them.
+No repeat of the completed audio/Save/RomFS routes is requested solely for an
+evidence/version refresh. New builds need their own focused regression results.
 
 ## Continuing work
 
