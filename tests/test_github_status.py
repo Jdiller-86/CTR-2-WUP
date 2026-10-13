@@ -250,6 +250,19 @@ class GitHubStatusTests(unittest.TestCase):
         report = status.reconcile(api, 'example/fixture', apply=True, event={'workflow_run': {'id': 21}})
         self.assertEqual(report['items'], [])
 
+    def test_large_actions_run_id_does_not_relax_issue_number_validation(self):
+        api = FakeGitHub([pr(2)])
+        ident = 38325263464
+        api.runs[ident] = {'name': 'CI', 'head_sha': HEAD, 'pull_requests': [{'number': 2}]}
+        report = status.reconcile(api, 'example/fixture', event={'workflow_run': {'id': ident}})
+        self.assertEqual([item['number'] for item in report['items']], [2])
+        self.assertIn(PREFIX + '/actions/runs/' + str(ident), api.reads)
+        with self.assertRaises(status.StatusError):
+            status.number(ident)
+        for invalid in (None, True, str(ident), 0, -1, 2**63):
+            with self.assertRaises(status.StatusError):
+                status.workflow_run_id(invalid)
+
     def test_midflight_new_commit_or_manual_status_is_not_overwritten(self):
         for mutate in (lambda item: item['head'].update(sha='d' * 40),
                        lambda item: item.update(labels=labels('status:awaiting-evidence'))):
