@@ -15,6 +15,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import time
 
 ROOT = Path(__file__).resolve().parents[1]
 STATUSES = ('Planned', 'In progress', 'Awaiting evidence', 'Blocked',
@@ -473,6 +474,25 @@ def plan(context, report):
     return report
 
 
+def refresh_item(client, project_id, content_id):
+    """Wait for a confirmed addition to appear in the indexed item connection.
+
+    Never repeat the mutation. Access errors and archived items fail immediately;
+    only a missing connection entry receives bounded read-after-write retries.
+    """
+    for attempt in range(5):
+        project = client.snapshot(project_id)
+        fields, items, views = validate_project(project)
+        item = items.get(content_id)
+        if item:
+            if item.get('isArchived'):
+                raise SetupError('Managed project item is archived; preserve and review')
+            return project, fields, items, views
+        if attempt < 4:
+            time.sleep(0.5 * (2 ** attempt))
+    raise SetupError('Confirmed managed item is not readable after bounded refresh; preserve and review')
+
+
 def apply(client, context, report):
     completed = report['completed_operations']
     owner, repository, project = context['owner'], context['repository'], context['project']
@@ -548,8 +568,7 @@ def apply(client, context, report):
                           {'projectId': project_id, 'contentId': issue['node_id']}, 'item { id }')
             completed.append({'kind': 'add-existing-issue', 'id': planned['id']})
         # Refresh before each managed item; preserve values entered concurrently.
-        project = client.snapshot(project_id)
-        fields, items, _ = validate_project(project)
+        project, fields, items, _ = refresh_item(client, project_id, issue['node_id'])
         item = items.get(issue['node_id'])
         if not item or item.get('isArchived'):
             raise SetupError('Managed project item unavailable/archived after setup: ' + planned['id'])

@@ -4,6 +4,7 @@ import importlib.util
 import json
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('github_project_setup', ROOT / 'tools/setup-github-project.py')
@@ -145,6 +146,27 @@ class FakeGitHub:
 
 
 class GithubProjectTests(unittest.TestCase):
+    def test_confirmed_addition_retries_only_reads_until_visible(self):
+        snapshot = copy.deepcopy(self.api.remote_project)
+        missing = copy.deepcopy(snapshot)
+        missing['items'] = missing['items'][1:]
+        content_id = snapshot['items'][0]['content']['id']
+        with patch.object(self.api, 'snapshot', side_effect=[missing, missing, snapshot]) as reads, \
+             patch.object(setup.time, 'sleep') as pause:
+            _, _, items, _ = setup.refresh_item(self.api, 'project-1', content_id)
+        self.assertIn(content_id, items)
+        self.assertEqual(reads.call_count, 3)
+        self.assertEqual(pause.call_count, 2)
+        self.assertEqual(self.api.writes, [])
+
+    def test_missing_confirmed_addition_has_bounded_reads_and_no_mutation(self):
+        with patch.object(setup.time, 'sleep'), \
+             patch.object(self.api, 'snapshot', wraps=self.api.snapshot) as reads:
+            with self.assertRaisesRegex(setup.SetupError, 'bounded refresh'):
+                setup.refresh_item(self.api, 'project-1', 'unreadable-issue')
+        self.assertEqual(reads.call_count, 5)
+        self.assertEqual(self.api.writes, [])
+
     def test_existing_default_capitalization_keeps_option_ids_and_is_not_duplicated(self):
         field = self.api.remote_project['fields'][1]
         option = next(o for o in field['options'] if o['name'] == 'In progress')
