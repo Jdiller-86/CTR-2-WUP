@@ -40,7 +40,7 @@ helpers remain in their own recipes. Standalone component suites keep narrow lis
 
 ## First host check
 
-Use Python 3.12+, Make and a C compiler. The SDK and external lifter are optional
+Use Python 3.12+, GNU Make 4.0+ and a C compiler. The SDK and external lifter are optional
 for this first check:
 
 ```sh

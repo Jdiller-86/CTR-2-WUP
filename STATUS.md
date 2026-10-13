@@ -34,7 +34,7 @@ Guest physical ownership, permission splits, resource/command/relay aliases,
 retained uploads, late failure and queue completion have **83,108 assertions**.
 The raw VFP push/pop guard now preserves exact bits under CRT FPSCR controls;
 unsupported arithmetic still fails. Required coverage is **380 Python tests and
-22 normal/ASan/UBSan C suites**; the report guide has 630 assertions. Native,
+22 normal/ASan/UBSan C suites**; the report guide has 636 assertions. Native,
 Scene Check and compiled Guest Draws RPX/WUHB builds and exact reports are retained
 with source/SDK provenance; physical rendering evidence is deferred.
 

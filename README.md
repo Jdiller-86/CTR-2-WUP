@@ -66,7 +66,7 @@ contents to your SD root and launch the WUHB in Aroma. Follow its prompts;
 plain-text results are saved to `sd:/ctr2wup/`. Original diagnostics need no ROM
 or key. See [getting started](docs/getting-started.md) and [console testing](docs/console-testing.md).
 
-For development, use Python 3.12+, Make and a C compiler. Host checks run without the SDK. Its first setup
+For development, use Python 3.12+, GNU Make 4.0+ and a C compiler. Host checks run without the SDK. Its first setup
 also requires Docker. From the repository root:
 
 ```sh

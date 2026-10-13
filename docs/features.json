@@ -539,5 +539,6 @@
     "44": "Planned",
     "45": "Planned",
     "46": "Planned"
-  }
+  },
+  "state_policy": "Feature state is a planning seed; merged PR state is read live. Project #2 owns current status."
 }

@@ -26,7 +26,7 @@ for vulnerability reports instead of a normal issue.
 
 ## Build and check
 
-Use Python 3.12+, Make and a C compiler. Host checks do not need the Wii U SDK;
+Use Python 3.12+, GNU Make 4.0+ and a C compiler. Host checks do not need the Wii U SDK;
 start with `make help` and `make check`. Install the verified Wii U SDK with the
 repository script; the first installation requires Docker. Optional encrypted
 input/packaging tests use the `cryptography` dependency. The target SDK uses
