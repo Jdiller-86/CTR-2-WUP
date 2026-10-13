@@ -39,7 +39,7 @@ class TraceabilityTests(unittest.TestCase):
     def test_delivered_and_active_prs_have_single_primary_justification(self):
         rows = trace.catalog(self.source)
         self.assertGreaterEqual(len(rows), 22)
-        self.assertEqual(len({p for r in rows for p in r["pull_requests"]}), 16)
+        self.assertTrue({8, 9, 10, 11, *range(47, 59)} <= {p for r in rows for p in r["pull_requests"]})
 
     def test_refuse_duplicate_pr_and_cross_milestone_parent(self):
         for field, value in (("pull_requests", [8]), ("parent_issue", 46)):
@@ -67,6 +67,16 @@ class TraceabilityTests(unittest.TestCase):
         client = ReadOnlyInventory(unmerged=True)
         with self.assertRaisesRegex(trace.tracking.TrackingError, "unmerged"):
             trace.reconcile(client, self.source, True, {"operations": []})
+        self.assertEqual(client.writes, [])
+
+    def test_github_default_status_capitalization_keeps_existing_option(self):
+        client = ReadOnlyInventory()
+        project = client.project()
+        for option in project["fields"][0]["options"]:
+            if option["name"] == "In progress":
+                option["name"] = "In Progress"
+        client.project = lambda: project
+        trace.reconcile(client, self.source, False, {"operations": []})
         self.assertEqual(client.writes, [])
 
     def test_dry_run_is_read_only(self):

@@ -106,7 +106,8 @@ def reconcile(client, data, apply, report):
     milestones = {m["number"]: m for m in pages(client, f"repos/{REPO}/milestones?state=all")}
     project = client.project()
     fields = {f["name"]: f for f in project["fields"]}
-    status = {o["name"]: o["id"] for o in fields["Status"]["options"]}
+    options = {o["name"].casefold(): o["id"] for o in fields["Status"]["options"]}
+    status = {name: options[name.casefold()] for name in tracking.STATUSES[:8] if name.casefold() in options}
     for required in ("Planned", "In progress", "Awaiting evidence", "Blocked", "Done"):
         if required not in status:
             raise tracking.TrackingError("Required Project status is absent; preserve existing options.")
