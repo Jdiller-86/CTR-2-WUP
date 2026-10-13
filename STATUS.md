@@ -42,7 +42,7 @@ Source tracking still cannot overwrite existing board values. Docs-only Pages
 publication and the dynamic chart are live through a reviewed trusted-main workflow.
 The site, dashboard, JSON and SVG return HTTP 200. Application source remains private.
 
-Validation: 363 Python tests and 20 normal/ASan/UBSan C suites pass;
+Validation: 371 Python tests and 20 normal/ASan/UBSan C suites pass;
 report/guide has 603 assertions and AX lifecycle has 149. Current Audio Check and
 compiled GX RPX/WUHB cross-builds passed. The pinned PICA matrix passes 353 original cases. Strict docs/link and public
 export/privacy checks pass; hosting/chart receipts are retained with this increment. Full milestone acceptance remains 0/7.
