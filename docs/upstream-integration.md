@@ -160,3 +160,13 @@ six empty/unpredictable Thumb forms, including ones the emitter erases.
 `--multiple-api` adds the stack/transfer API suite (24 compiler/target checks
 total). An ARM LDM abort restores an early-emitter writeback; prior successful
 loads remain visible. See `cpu-stack.md` for constraints and independent evidence.
+
+
+## Raw VFP memory under CRT controls
+
+Version 0.23 keeps VPUSH/VPOP and the exercised VLDM/VSTM forms as raw bit
+transport under the CRT FPSCR flush/default-NaN controls. Register ranges and
+word counts are checked before effects; NaN/denormal payload bits and FPSCR are
+preserved. Unsupported arithmetic modes still reject before execution. This
+scoped fix enables the original compiled draw program without claiming general
+VFP control-mode support. The progress suite retains its separate dispatch checks.

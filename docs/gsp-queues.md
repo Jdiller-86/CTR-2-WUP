@@ -71,7 +71,8 @@ implementation was copied. Later runtime work supplies the scoped service
 threads, address arbitration and standalone graphics startup used by the
 original compiler-built applications. Version 0.17 adds synchronous GX DMA,
 fills, display transfers and raw texture copies; see [gx-transfers.md](gx-transfers.md).
-Physical/VRAM address translation, PICA rendering and guest DSP/audio remain
-unimplemented. Private diagnostic saves are described in [filesystem.md](filesystem.md). Wider
+Version 0.23 connects [compiled guest software draws](guest-pica-draws.md)
+using tracked owned linear physical ranges and transactional tiled targets. General
+physical/VRAM mapping, broader PICA/GX2 translation and guest DSP/audio remain open. Private diagnostic saves are described in [filesystem.md](filesystem.md). Wider
 shared runtime development can continue without a ROM; exact Mario requirements
 and physical acceptance still need private intake and console results.

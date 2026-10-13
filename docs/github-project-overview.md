@@ -55,13 +55,20 @@ reports separately from versioned logs.
 
 ## Console handoff
 
-The current focused round is Save/result persistence, embedded RomFS, GX/PICA
-setup and optional SD assets. Original diagnostics require no ROM or key. Upload
-their named TXT reports and retained snapshot siblings privately in the Codex
-chat, with observed exit/pictures and exact environment versions when available.
+Named TXT collection, fresh-launch Save, embedded/SD RomFS and GX/configuration
+results are already reviewed. Physical testing is currently deferred; the focused
+Audio Check/GX Transfers 0.20.0 launch-music regression remains pending. The new
+compiled Guest Draws guide supplies a separate renderer route when testing resumes.
+Original diagnostics require no ROM or key. Retain named TXT reports and observed
+exit/pictures privately, with exact source and environment versions when available.
 Do not publish game dumps, decryption keys, retail saves or commercial traces.
 
 [Requirements](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/docs/project-brief.md)
 · [Acceptance criteria](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/docs/milestones.md)
 · [Build evidence](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/STATUS.md)
 · [Development releases](https://github.com/Jdiller-86/CTR-2-WUP/releases)
+
+
+Native feature/task/PR relationships and their live verification are documented
+in [development tracking](development-tracking.md). The initial reviewed status
+migration only replaces old empty/Todo values; later owner edits are preserved.
