@@ -1,7 +1,10 @@
 ## Change
 
 Explain the problem and resulting behavior. Link the issue or milestone this advances.
-Link the focused work issue and its parent milestone. Use `Closes #...` only when
+Link the scoped feature issue, its native parent task, repository milestone and
+[Project item](https://github.com/users/Jdiller-86/projects/2). Add the PR to
+`docs/features.json`; push a draft early so ongoing work remains visible.
+Use `Closes #...` only when
 that issue's acceptance criteria are met; milestone overviews require their full
 reviewed exit criteria.
 
@@ -27,3 +30,5 @@ State unsupported behavior, changed contracts and any remaining acceptance gates
 - [ ] Dependency licenses, pinned versions and notices were reviewed where dependencies changed.
 - [ ] Runtime and visual evidence are recorded, with unavailable checks left pending.
 - [ ] The PR targets `main` from a focused topic branch; `Required CI` and `Documentation build` have passed before merge.
+- [ ] The issue and PR have native Project membership and milestone assignment; the scoped issue has a native parent and linked PR.
+- [ ] Completed remote and local topic branches will be deleted and their absence verified after merge.
