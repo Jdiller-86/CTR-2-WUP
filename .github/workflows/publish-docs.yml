@@ -1,0 +1,79 @@
+name: Publish public documentation
+
+on:
+  workflow_dispatch:
+    inputs:
+      create_repository:
+        description: Create the authorized public docs-only repository if missing
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths:
+      - 'README.md'
+      - 'STATUS.md'
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - 'docs-requirements.txt'
+      - 'tools/*docs*.py'
+      - '.github/workflows/publish-docs.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-documentation-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'Jdiller-86/CTR-2-WUP' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Resolve immutable trusted main
+        id: trusted
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TRUSTED_SHA="$(gh api repos/Jdiller-86/CTR-2-WUP/commits/main --jq .sha)"
+          [[ "$TRUSTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          printf 'sha=%s\n' "$TRUSTED_SHA" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.trusted.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Build and validate the public docs-only export
+        run: |
+          set -euo pipefail
+          python -m pip install --requirement docs-requirements.txt
+          python -m pip check
+          python tools/build-docs-site.py
+          python tools/package-docs-site.py
+      - name: Publish reviewed documentation and configure free Pages
+        env:
+          GH_TOKEN: ${{ secrets.CTR2WUP_GITHUB_MANAGEMENT_TOKEN }}
+          SOURCE_COMMIT: ${{ steps.trusted.outputs.sha }}
+          CREATE_REPOSITORY: ${{ github.event_name == 'workflow_dispatch' && inputs.create_repository }}
+        run: |
+          set -euo pipefail
+          ARGS=()
+          if [[ "$CREATE_REPOSITORY" == 'true' ]]; then ARGS+=(--create); fi
+          python tools/publish-docs-site.py --input artifacts/docs-publication \
+            --source-commit "$SOURCE_COMMIT" --apply "${ARGS[@]}" \
+            --output artifacts/docs-publication/hosting-receipt.json
+      - name: Retain publication receipt and verified export
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: docs-hosting-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            artifacts/docs-publication/
+            artifacts/docs-site/build-report.json
+            artifacts/docs-site/build.log
+          retention-days: 14
+          if-no-files-found: warn

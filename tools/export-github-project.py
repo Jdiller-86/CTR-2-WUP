@@ -13,6 +13,7 @@ import argparse
 from collections import Counter
 from datetime import datetime, timezone
 import json
+from html import escape
 from pathlib import Path
 import re
 import subprocess
@@ -160,6 +161,8 @@ def status_value(row, options):
     name = options.get(value.get('optionId'))
     if name is None or value.get('name') != name:
         raise TrackingError('Project Status option identity changed during the read.')
+    if name.casefold() == 'todo':
+        return 'Planned'  # GitHub's default option; preserve its name and ID.
     return next((canonical for canonical in STATUSES[:8] if canonical.casefold() == name.casefold()), 'Other')
 
 
@@ -264,6 +267,56 @@ def aggregate(milestones, managed, now):
     return result
 
 
+def review_result_collection(client, source, apply=False):
+    """Explicit one-task evidence review; never run by scheduled source sync."""
+    evidence = source.get('console_result_collection_review', {})
+    if evidence.get('reviewed') is not True or evidence.get('task_id') != 'm1-results':
+        raise TrackingError('No reviewed physical result-collection record is present.')
+    project = client.project()
+    _, managed = collect(project, source)
+    row = managed[('work-item', 'm1-results')]
+    if row['status'] == 'Done' and not row['resources']:
+        return {'ok': True, 'changed': False, 'full_gate_accepted': False}
+    if row['status'] not in ('Planned', 'In progress', 'Awaiting evidence', 'Ready for review', 'Done') or any(resource != 'Console testing' for resource in row['resources']):
+        raise TrackingError('Preserve a blocked/custom result-collection status or resource for review.')
+    fields = {field['name']: field for field in project['fields']}
+    choices = [option['id'] for option in fields['Status']['options'] if option['name'] == 'Done']
+    if len(choices) != 1:
+        raise TrackingError('The Done option cannot be identified uniquely.')
+    if not apply:
+        return {'ok': True, 'changed': False, 'would_set': 'Done', 'full_gate_accepted': False}
+    query = '''query($id:ID!) { node(id:$id) { ... on ProjectV2Item {
+      isArchived content { ... on Issue { id } }
+      status:fieldValueByName(name:"Status") { __typename ... on ProjectV2ItemFieldSingleSelectValue { optionId name } }
+      waiting:fieldValueByName(name:"Waiting resource") { __typename ... on ProjectV2ItemFieldTextValue { text } }
+    } } }'''
+    fresh = client.graphql(query, {'id': row['item_id']}).get('node')
+    if (not fresh or fresh.get('isArchived') is not False or fresh.get('content', {}).get('id') != row['issue_id']
+            or fresh.get('status') != row['raw_status'] or resources(fresh) != row['resources']):
+        raise TrackingError('Result-collection item changed during review; no update applied.')
+    mutation = '''mutation($input:UpdateProjectV2ItemFieldValueInput!) {
+      updateProjectV2ItemFieldValue(input:$input) { projectV2Item { id } }
+    }'''
+    client.graphql(mutation, {'input': {'projectId': project['id'], 'itemId': row['item_id'],
+                    'fieldId': fields['Status']['id'], 'value': {'singleSelectOptionId': choices[0]}}})
+    if row['resources']:
+        current = client.graphql(query, {'id': row['item_id']}).get('node')
+        if (not current or current.get('isArchived') is not False
+                or current.get('content', {}).get('id') != row['issue_id']
+                or current.get('status', {}).get('optionId') != choices[0]
+                or resources(current) != row['resources']):
+            raise TrackingError('Result status was updated, but its resource changed; preserve it for review.')
+        mutation = '''mutation($input:DeleteProjectV2ItemFieldValueInput!) {
+          deleteProjectV2ItemFieldValue(input:$input) { projectV2Item { id } }
+        }'''
+        client.graphql(mutation, {'input': {'projectId': project['id'], 'itemId': row['item_id'],
+                        'fieldId': fields['Waiting resource']['id']}})
+    final = client.graphql(query, {'id': row['item_id']}).get('node')
+    if not final or final.get('status', {}).get('optionId') != choices[0] or resources(final):
+        raise TrackingError('Result-collection review was not readable after the update; verify its current board values.')
+    return {'ok': True, 'changed': True, 'task': 'm1-results', 'full_gate_accepted': False}
+
+
 def unavailable(now):
     # A failed request must never silently display invented zero-progress totals.
     return {'schema_version': 1, 'state': 'unavailable', 'project_url': PROJECT_URL,
@@ -335,16 +388,44 @@ def mirror_labels(client, managed, apply=False, report=None):
 
 
 def gate_svg(public):
-    value = (str(public['full_gates']['accepted']) + '/7 gates accepted') if public['state'] == 'available' else 'tracking unavailable'
-    color = '#238636' if public['state'] == 'available' else '#9e6a03'
-    svg = ('<svg xmlns="http://www.w3.org/2000/svg" width="270" height="28" role="img" '
-           'aria-label="Project snapshot: ' + value + '"><title>Project #2 snapshot '
-           + public['generated_at'] + ': ' + value + '</title>'
-           '<rect width="270" height="28" rx="5" fill="#24292f"/>'
-           '<rect x="100" width="170" height="28" rx="5" fill="' + color + '"/>'
-           '<g fill="white" text-anchor="middle" font-family="Verdana,sans-serif" font-size="11">'
-           '<text x="50" y="18">Snapshot</text><text x="185" y="18">' + value + '</text></g></svg>\n')
-    return svg
+    # GitHub Markdown displays this server-generated chart without JavaScript.
+    # Every bar comes from the current Project fields, never the source seeds.
+    parts = ['<svg xmlns="http://www.w3.org/2000/svg" width="800" height="390" viewBox="0 0 800 390" role="img" aria-labelledby="title desc">',
+             '<title id="title">CTR2WUP Project progress</title>',
+             '<desc id="desc">Work-item statuses from Project #2. Completed tasks do not accept a full milestone.</desc>',
+             '<rect width="800" height="390" rx="8" fill="#0d1117"/>',
+             '<g font-family="Verdana,sans-serif" fill="#e6edf3">',
+             '<text x="24" y="34" font-size="18">CTR2WUP development</text>']
+    if public['state'] != 'available':
+        parts += ['<text x="24" y="80" font-size="14">Project tracking unavailable; no current totals published.</text>',
+                  '<text x="24" y="112" font-size="12">Open the dashboard to review freshness and access status.</text>']
+    else:
+        groups = [('Planned', '#8b949e', ('Planned',)), ('Active', '#58a6ff', ('In progress', 'Ready for review')),
+                  ('Awaiting evidence', '#d29922', ('Awaiting evidence',)), ('Blocked', '#f85149', ('Blocked',)),
+                  ('Done', '#3fb950', ('Done',)), ('Other', '#bc8cff', ('Closed', 'Unassigned', 'Other'))]
+        accepted = public['full_gates']['accepted']
+        parts.append(f'<text x="24" y="60" font-size="12">{accepted}/7 full milestones accepted · 35 tracked work items</text>')
+        for index, (label, color, _) in enumerate(groups):
+            x = 24 + index * 126
+            parts += [f'<rect x="{x}" y="79" width="10" height="10" fill="{color}"/>',
+                      f'<text x="{x+15}" y="89" font-size="10">{label}</text>']
+        for index, row in enumerate(public['milestones']):
+            y = 126 + index * 30
+            label = escape(row['title'])
+            parts.append(f'<text x="24" y="{y}" font-size="11">{label}</text>')
+            x = 362
+            for group, color, statuses in groups:
+                count = sum(row['status_counts'][status] for status in statuses)
+                if count:
+                    width = count * 64
+                    parts.append(f'<rect x="{x}" y="{y-14}" width="{width}" height="20" fill="{color}"><title>{label}: {group} {count}/5</title></rect>')
+                    x += width
+            state = 'Accepted' if row['accepted'] else escape(row['status'])
+            parts.append(f'<text x="696" y="{y}" font-size="9">{state}</text>')
+        parts.append('<text x="24" y="350" font-size="11">Bars show task status. Milestone acceptance requires the complete reviewed gate.</text>')
+    stamp = escape(public['generated_at'].replace('T', ' ').replace('Z', ' UTC'))
+    parts += [f'<text x="24" y="374" font-size="10" fill="#8b949e">Project snapshot: {stamp} · Open the dashboard for current freshness.</text>', '</g></svg>\n']
+    return ''.join(parts)
 
 
 def write_site(output, public):

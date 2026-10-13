@@ -1,6 +1,6 @@
 # Milestones and remaining work
 
-Updated **October 12, 2026** for **v0.19.0**. The product is an UWUVCI-style
+Updated **October 13, 2026** for **v0.20.0**. The product is an UWUVCI-style
 Windows GUI: **Select owned 3DS ROM → configure title/artwork → Inject →
 install its WUP → play from the Wii U Menu**. The CLI is the shared engine.
 Super Mario 3D Land is the first candidate; its exact revision remains unverified.
@@ -48,7 +48,7 @@ passes establish their stated boundaries, not physical-console execution.
 
 | Milestone | State | Remaining acceptance |
 |---|---|---|
-| [M1: Native Wii U platform](#m1) | Awaiting evidence | Current SD results/save/lifecycle and installed original WUP evidence |
+| [M1: Native Wii U platform](#m1) | Awaiting evidence | Launch-audio regression, platform lifecycle/recovery and installed original WUP evidence |
 | [M2: CPU translation and performance](#m2) | In progress | Exercised CPU/ABI/fallback coverage and actual Espresso timing |
 | [M3: Homebrew execution runtime](#m3) | In progress | Stable physical compiled guest plus broader services/modules/audio |
 | [M4: PICA to GX2 rendering](#m4) | In progress | Real PICA/GX2 draws/shaders/TEV/coherency and measured scenes |
@@ -76,7 +76,9 @@ so independent work can overlap without claiming downstream completion.
 
 **Verified desktop/earlier evidence:** Older native reports and the confirmed Minus exit are retained. The user reports Native/Guarded/Compiled completed without errors on v0.14.5; supplied text logs have older headers. A valid visit-1 snapshot proves initial persistence, while a later Save update failed and no new reports appeared. Current independent TXT read-back and save publication/recovery have desktop/sanitizer checks, not new console acceptance.
 
-**Still needs external evidence/input:** Current Save/results/RomFS observations, exact firmware/Aroma/installer versions and native/installed lifecycle evidence require the Wii U. No game dump is needed for the original diagnostics.
+**Reviewed physical follow-up:** Named TXT collection, original fresh-launch save reload, embedded/SD assets and GX transfers pass their scoped checks; pictures and Minus return have user confirmation. Looping launch music remains an open defect.
+
+**Still needs external evidence/input:** Focused audio regression, exact firmware/Aroma/installer versions and native/installed lifecycle/recovery evidence require the Wii U. No game dump is needed for the original diagnostics.
 
 References: [Console evidence](console-evidence.md) · [Short follow-up](console-retest.md) · [Guided tests](guided-testing.md) · [Console guide](console-testing.md).
 
@@ -86,7 +88,7 @@ References: [Console evidence](console-evidence.md) · [Short follow-up](console
 
 #### m1-results: Verify current TXT result collection on Wii U
 
-Run the short current Save/RomFS follow-up and establish why the earlier completed runs produced no new report.
+Current Save/RomFS/SD-asset/GX named reports are physically verified, including fresh-launch save reload. Retain older failed/missing reports separately; their exact original cause remains unknown. Project review records this scoped collection task independently of M1 acceptance.
 
 State: **Awaiting evidence** · Needs: `needs-console`.
 

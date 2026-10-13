@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "version": "0.19.0",
-  "updated": "2026-10-12",
+  "version": "0.20.0",
+  "updated": "2026-10-13",
   "approximate_implementation_percent": 20,
   "full_milestones_accepted": 0,
   "milestones": [
@@ -12,13 +12,14 @@
       "waiting_labels": [
         "needs-console"
       ],
-      "summary": "Native RPX/WUHB builds, older control/exit evidence and user-reported v0.14.5 success exist; current persistence, lifecycle and installed-WUP acceptance need physical evidence.",
+      "summary": "Reviewed Wii U reports establish named TXT read-back, original save fresh-launch reload, embedded/SD assets and Minus return; launch music needs a focused audio regression and installed-WUP acceptance remains open.",
       "verified_foundations": [
         "Versioned native/guest RPX/WUHB builds and read-back-checked test-report/save publication lifecycle",
-        "Older native/control reports, confirmed Minus exit and user-reported Native/Guarded/Compiled v0.14.5 completion retained as scoped evidence"
+        "Older native/control reports, confirmed Minus exit and user-reported Native/Guarded/Compiled v0.14.5 completion retained as scoped evidence",
+        "October 12 physical round: five completed named TXT reports, valid visit-2 snapshot, fresh-launch Save 0.14.6 RELOAD PASS and user-confirmed correct pictures/Minus return; looping launch music recorded separately"
       ],
       "acceptance_remaining": [
-        "Verify current named TXT reports, SD save/reload and recovery on Wii U",
+        "Verify focused launch-audio regression and documented SD publication recovery",
         "Complete documented native controls/audio/lifecycle/stability evidence",
         "Install an original diagnostic WUP and prove Menu launch/exit"
       ],
@@ -27,7 +28,7 @@
         {
           "id": "m1-results",
           "title": "Verify current TXT result collection on Wii U",
-          "summary": "Run the short current Save/RomFS follow-up and establish why the earlier completed runs produced no new report.",
+          "summary": "Current named TXT collection is physically verified across Save, RomFS, SD assets and GX; preserve older missing-report failures separately. Project review can mark this scoped task Done without accepting M1.",
           "acceptance_criteria": [
             "A fresh launch creates a uniquely named, closed-file read-back-verified TXT report in the documented SD results directory; its header identifies the tested build and diagnostic.",
             "Upload the requested TXT files and preserved snapshot/siblings through the private intake route; retain automatic observations, user confirmations, failures and skips separately."
@@ -36,7 +37,10 @@
           "waiting_labels": [
             "needs-console"
           ],
-          "state": "awaiting_evidence"
+          "state": "awaiting_evidence",
+          "verified_foundations": [
+            "Five completed named read-back reports and the full fresh-launch Save trace were privately reviewed; no failure or skip in their guides."
+          ]
         },
         {
           "id": "m1-lifecycle",
@@ -208,10 +212,11 @@
       "waiting_labels": [
         "needs-console"
       ],
-      "summary": "Eight original normal-CRT/libctru applications exercise shared startup/runtime, input/display, private saves, RomFS and GX transfers; new physical evidence and broader runtime integration remain open.",
+      "summary": "Original compiled applications now have physical save/reload, RomFS, SD assets and GX-transfer evidence; launch audio, broader runtime integration and full acceptance remain open.",
       "verified_foundations": [
         "Owned memory, eight single-core contexts and scoped kernel/IPC/SRV/CFG/HID/GSP/APT/FS contracts",
-        "Original compiled input/framebuffer/save/reload/RomFS/GX applications verified on desktop, sanitizers and selected emulated PowerPC comparisons"
+        "Original compiled input/framebuffer/save/reload/RomFS/GX applications verified on desktop, sanitizers and selected emulated PowerPC comparisons",
+        "Physical Save 0.14.6 fresh-process reload, embedded RomFS 0.14.6, SD-file RomFS 0.16.0 and GX 0.18.0 transfer/configuration guides completed with zero fallback/fault; user confirmed pictures and Minus return."
       ],
       "acceptance_remaining": [
         "Prove current compiled guest display/input/exit/save/assets on Wii U",
@@ -728,5 +733,11 @@
     }
   ],
   "tracking_authority": "https://github.com/users/Jdiller-86/projects/2",
-  "state_fields_usage": "Initial seeding and dated evidence snapshots only; never overwrite existing Project status or waiting resources."
+  "state_fields_usage": "Initial seeding and dated evidence snapshots only; never overwrite existing Project status or waiting resources.",
+  "console_result_collection_review": {
+    "task_id": "m1-results",
+    "reviewed": true,
+    "evidence": "docs/console-evidence.md",
+    "scope": "Named TXT collection and private original snapshot intake; no full milestone acceptance"
+  }
 }

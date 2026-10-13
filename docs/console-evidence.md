@@ -1,5 +1,38 @@
 # Console evidence review
 
+## October 12 follow-up: current reports and fresh-launch save
+
+Five completed named result files were reviewed from the latest private ZIP.
+The user confirms correct screens and normal Minus return. All apps continued
+playing Wii U launch music; that remains an open audio defect. Raw uploads,
+snapshots and receipts stay in ignored private storage.
+
+| Test | Purpose | Reviewed result |
+|---|---|---|
+| Save 0.14.6 | Write original save bytes and reload the SD snapshot | Two steps PASS; follow-up trace confirms fresh-launch reload |
+| Embedded RomFS 0.14.6 | Read nested/Unicode assets and reject writes | One step PASS in each of two launches |
+| SD Asset Files 0.16.0 | Read a tiny original asset blob from SD | One step PASS |
+| GX Transfers 0.18.0 | Copy/fill/transfer pixels and finalize no-draw PICA configuration | Two steps PASS; 17 GX operations, 11 configuration writes |
+
+Every new result reports an exited guest, zero interpreter fallback and no guest
+fault. The 88-byte snapshot has a valid CRC and both original visit-2 records.
+The follow-up Save trace identifies 0.14.6, loads the existing snapshot in its
+first guest session, records `RELOAD PASS`, completes both steps without failures
+or skips and states **Fresh-launch save reload confirmed: YES**. Cleanup reaches
+`main_return`; Menu return also has the user's separate confirmation. No new
+Save or RomFS run is requested.
+
+The ZIP retains older failed Save 0.14.5 traces and an empty Guarded file, separate
+from current successes. A nonempty Guarded 0.14.5 trace records all eight guide
+steps PASS. This does not identify the cause of older failures or establish
+universal freeze recovery.
+
+Next: [the short launch-audio check](launch-audio.md). Exact platform versions,
+Home/APT routes, installed WUP acceptance, actual PICA draws and commercial title
+requirements remain open. Scoped successes do not accept a full milestone.
+
+## Earlier intake history
+
 Received October 12, 2026 UTC (October 11 in America/New_York).
 The raw TXT and SHA-256 receipt are retained privately, outside source bundles.
 

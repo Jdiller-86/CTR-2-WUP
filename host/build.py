@@ -91,7 +91,9 @@ def _run_build(command, env, log, cwd, *, stage="compile", timeout=None):
                         details={"exit_code": result, "log": str(log)})
 
 
-def prototype(output: str | Path, guest_path=None, *, backend="original"):
+def prototype(output: str | Path, guest_path=None, *, backend="original", audio_only=False):
+    if audio_only and (guest_path is not None or backend != "original"):
+        raise HostError("invalid_profile", "The original native Audio Check does not accept a guest input or external backend", stage="arguments")
     if backend not in ("original","upstream") or (backend=="upstream" and guest_path is None):
         raise HostError("invalid_backend", "Upstream builds require the original guest fixture", stage="arguments")
     repo = repository_root()
@@ -125,6 +127,9 @@ def prototype(output: str | Path, guest_path=None, *, backend="original"):
         env = tool_environment()
         command = [shutil.which("make", path=env.get("PATH")), "-C", str(makefile.parent)]
         target="ctr2wup-guest-fixture" if image else "ctr2wup-prototype"
+        if audio_only:
+            target="ctr2wup-audio-check"
+            command += ["OUTPUT=../../artifacts/wiiu-audio", "TARGET="+target, "AUDIO_ONLY=1"]
         if image:
             command += ["OUTPUT=../../artifacts/wiiu-guest", "TARGET="+target, "GUEST_DEFAULT=1"]
         generation=None
@@ -137,7 +142,7 @@ def prototype(output: str | Path, guest_path=None, *, backend="original"):
                      "OUTPUT=../../artifacts/"+work.name+"/wiiu","TARGET="+target,"GUEST_DEFAULT=1",
                      "EXTERNAL_AOT=1","UPSTREAM_DIR=../../artifacts/"+work.name+"/aot","-j3"]
         _run_build(command, env, log, repo)
-        artifact = repo / "artifacts" / ("wiiu-guest" if image else "wiiu") / (target+".rpx")
+        artifact = repo / "artifacts" / ("wiiu-guest" if image else "wiiu-audio" if audio_only else "wiiu") / (target+".rpx")
         if work: artifact=work/"wiiu"/(target+".rpx")
         _validate_rpx(artifact)
         shutil.copy2(artifact, staging / artifact.name)
@@ -152,11 +157,11 @@ def prototype(output: str | Path, guest_path=None, *, backend="original"):
             published.append(staging / shortcut.name)
         shutil.copy2(log, staging / "build.log")
         manifest = {"schema_version": 1, "ok": True, "stage": "complete",
-                    "target": "guest-fixture" if image else "prototype", "package_format": "RPX",
+                    "target": "guest-fixture" if image else "audio-check" if audio_only else "prototype", "package_format": "RPX",
                     "host_version": __version__, "runtime_version": __version__,
                     "translator_version": ("external-abi4-checked-v1" if backend=="upstream" else "bounded-aot-v2") if image else None,
                     "backend":backend,"generation":generation,
-                    "profile": "ctr2wup-framebuffer-fixture-v1" if image else "native-diagnostics",
+                    "profile": "ctr2wup-framebuffer-fixture-v1" if image else "native-audio-check" if audio_only else "native-diagnostics",
                     "input_identity": image["inspection"]["identity"] if image else None,
                     "executable_revision": image["inspection"]["executable_revision"] if image else None,
                     "package_identity": None,

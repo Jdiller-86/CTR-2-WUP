@@ -128,11 +128,24 @@ static void guide_tests(void) {
     in.pressed=0;ctr_test_guide_update(&g,&in);CHECK(!g.done); /* Old process PASS does not establish reload. */
     in.guest_sessions=2;ctr_test_guide_update(&g,&in);CHECK(g.done && g.passed==2);
     ctr_test_guide_view(&g,0,view);CHECK(strstr(view[6],"BOTH reports")!=NULL);
+    CHECK(strstr(view[0],"FRESH LAUNCH STILL NEEDED")!=NULL);
+    CHECK(strstr(view[2],"open this SAME app again")!=NULL);
     ctr_test_guide_init(&g,CTR_GUIDE_SAVE,capture,NULL);in.guest_sessions=1;in.fresh_save_reload=true;
     ctr_test_guide_update(&g,&in);CHECK(g.fresh_reload_confirmed);
     in.pressed=CTR_GUIDE_PLUS;ctr_test_guide_update(&g,&in);CHECK(ctr_test_guide_take_restart(&g));
     in.pressed=0;in.guest_sessions=2;ctr_test_guide_update(&g,&in);CHECK(g.done);
     ctr_test_guide_view(&g,0,view);CHECK(strstr(view[6],"testing complete")!=NULL);
+
+    guide_log_text[0]=0;memset(&in,0,sizeof(in));
+    ctr_test_guide_init(&g,CTR_GUIDE_AUDIO,capture,NULL);
+    ctr_test_guide_view(&g,0,view);CHECK(strstr(view[1],"Launch music stopped")!=NULL);
+    in.pressed=CTR_GUIDE_R;ctr_test_guide_update(&g,&in);CHECK(g.step==1 && g.passed==1);
+    ctr_test_guide_update(&g,&in);CHECK(!g.done); /* Hearing launch music cannot stand in for requesting the original tone. */
+    in.pressed=CTR_GUIDE_A;ctr_test_guide_update(&g,&in);CHECK(!g.done);
+    in.pressed=CTR_GUIDE_R;ctr_test_guide_update(&g,&in);CHECK(g.done && g.passed==2 && !g.failed);
+    CHECK(ctr_test_guide_results(&g,results,sizeof(results)));
+    CHECK(strstr(results,"Launch music stopped: PASS")!=NULL);
+    CHECK(strstr(results,"Native test tone: PASS")!=NULL);
 
     guide_log_text[0]=0;memset(&in,0,sizeof(in));
     ctr_test_guide_init(&g,CTR_GUIDE_SAVE,capture,NULL);

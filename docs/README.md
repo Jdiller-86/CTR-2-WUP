@@ -41,7 +41,8 @@ for the free docs-only site and build receipts.
 
 [Compatibility](compatibility.md) describes supported boundaries.
 [Console evidence](console-evidence.md) separates supplied logs from verbal
-reports. The [pending save/result round](console-retest.md) remains open.
+reports. Original fresh-launch save/results/assets are verified; the focused
+[launch-audio regression](launch-audio.md) remains open.
 [Development history](development-history.md) preserves earlier implementation
 notes and receipts; its old pending statements are historical.
 

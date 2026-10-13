@@ -2,133 +2,59 @@
 
 [![CI](https://github.com/Jdiller-86/CTR-2-WUP/actions/workflows/ci.yml/badge.svg)](https://github.com/Jdiller-86/CTR-2-WUP/actions/workflows/ci.yml)
 
-[Project tracking](https://github.com/users/Jdiller-86/projects/2) · [Documentation](docs/README.md) · [Development releases](https://github.com/Jdiller-86/CTR-2-WUP/releases) · [Roadmap issues](https://github.com/Jdiller-86/CTR-2-WUP/issues?q=is%3Aissue+label%3Amilestone) · [Contributing](CONTRIBUTING.md)
+[Documentation](docs/README.md) · [Releases](https://github.com/Jdiller-86/CTR-2-WUP/releases) · [Project](https://github.com/users/Jdiller-86/projects/2) · [Contributing](CONTRIBUTING.md)
 
-**A project to turn 3DS games into individual Wii U titles through a Windows GUI.**
+CTR2WUP is an experimental 3DS-to-Wii U converter. Its goal is a Windows GUI
+that translates a 3DS game into an individual WUP title, with the top screen
+on the TV and the bottom screen, touch and controls on the GamePad.
 
-The intended experience follows [UWUVCI AIO](https://github.com/stuff-by-3-random-dudes/UWUVCI-AIO-WPF):
-choose a game, use a decrypted dump or import locally obtained 3DS key material,
-customize its name and artwork, click **Inject**, and
-receive a WUP package to install and launch from the Wii U Menu.
-The TV displays the top screen; the GamePad supplies the bottom screen, touch,
-and controls.
+**Early development: commercial games, playable-game WUP conversion and the
+Windows GUI are not available yet.** Current releases provide developer tools
+and original homebrew diagnostics. Super Mario 3D Land is the first planned
+compatibility target.
 
-**CTR2WUP is in early development. It cannot yet convert or play commercial 3DS
-games, and the Windows GUI has not been implemented.** Current builds are
-developer tools and original homebrew diagnostics. **Super Mario 3D Land** is the
-first planned supported game; its exact revision still needs private analysis.
+## Approach
 
-## How it will work
+The PC translates ARM game code ahead of time into C, which is compiled for
+Wii U PowerPC. A shared native runtime supplies the required 3DS services,
+graphics, input, audio and saves. The intended workflow is:
 
-**Select game → Configure title → Inject → Install WUP → Play on Wii U**
+**Select game → Configure title and artwork → Inject → Install WUP → Play**
 
-During injection, the PC will translate the game's ARM code into code compiled
-for the Wii U's PowerPC CPU. A shared compatibility runtime will provide the
-required 3DS services, graphics, input, audio, and saves. Each package will contain
-the translated program, runtime, and game assets.
+Support will expand as the shared runtime implements more game requirements.
+See [architecture](docs/architecture.md) and [compatibility](docs/compatibility.md)
+for the supported subsets and current limits.
 
-The first release targets one verified game revision. Support for additional
-games will grow as the shared runtime gains the features they require. See the
-[product plan](docs/development-plan.md) and [GUI workflow](docs/gui-workflow.md).
+## Current capabilities
 
-## Overall progress
+- Bounded 3DS/CXI/CIA inspection, optional local decryption with supplied keys,
+  RomFS integrity checks and private asset preparation.
+- ARM/Thumb/VFP translation foundations, checked memory, guest threads and
+  scoped 3DS services.
+- Original compiled homebrew with two-screen framebuffer output, input,
+  SD save/reload and read-only assets, including reviewed Wii U test results.
+- Texture decoding, GX memory/display transfers, PICA configuration and vertex
+  decoding. PICA draws, shaders and 3DS guest audio remain unfinished.
+- Reproducible RPX/WUHB diagnostics and original packaging fixtures. Actual
+  WUP installation and full Windows conversion still require acceptance.
 
-**[Open the live development Project →](https://github.com/users/Jdiller-86/projects/2)**
+## Progress
 
-Project #2 is the authority for task status, waiting resources and milestone
-acceptance. Its board and filtered views update as work is reviewed. The
-[Project-backed dashboard](docs/github-development.md#project-backed-progress)
-provides an interactive aggregate view once its access and publication are
-configured; GitHub README pages cannot run interactive JavaScript.
+[Development Project](https://github.com/users/Jdiller-86/projects/2) tracks the
+seven milestones and their implementation/evidence tasks. Completing a task
+does not accept a full milestone. See [the roadmap](docs/milestones.md) and
+[current status](STATUS.md) for scope and verification details.
 
-**Assessment: October 12, 2026 · version 0.19.0.** About **20%** is a rough
-engineering estimate toward the finished GUI-to-playable-WUP product, not a
-measured task percentage or a compatibility rating. **0 of 7 full milestones
-have met their acceptance criteria.** Most renderer, commercial-game, GUI, and
-hardware validation work remains.
+## Getting started
 
-| Milestone | Current status | Main remaining work |
-|---|---|---|
-| M1 · Wii U platform | Native guide/exit have evidence; three v0.14.5 apps reported passing | Verified new result files, save behavior and WUP installation |
-| M2 · CPU translation | Tested subset and AOT integration | Broader instruction support and Wii U performance |
-| M3 · Homebrew runtime | Eight original applications; saves, RomFS assets and GX transfers | Broader services, retail integration and console acceptance |
-| M4 · PICA → GX2 graphics | Textures, GX transfers, PICA setup and vertex decoding; draws remain open | 3DS draws, shaders, sampling, and reference scenes |
-| M5 · First commercial game | Mario selected; dump analysis pending | Boot, gameplay, guest audio, and retail saves |
-| M6 · Automated WUP conversion | Local decryption, build and packaging foundations tested | Commercial end-to-end conversion, Windows, and installer acceptance |
-| M7 · Windows GUI | Workflow specified | Implement and verify the complete Inject experience |
+Download a matching [development release](https://github.com/Jdiller-86/CTR-2-WUP/releases)
+and check its `SHA256SUMS.txt`. For Wii U diagnostics, copy the kit's `sd-card/`
+contents to your SD root and launch the WUHB in Aroma. Follow its prompts;
+plain-text results are saved to `sd:/ctr2wup/`. Original diagnostics need no ROM
+or key. See [getting started](docs/getting-started.md) and [console testing](docs/console-testing.md).
 
-Read the [completion assessment](docs/progress.md) for the reasoning and evidence,
-or the [milestone checklist](docs/milestones.md) for detailed acceptance gates.
-
-## What works today
-
-- **Game preparation:** bounded 3DS/CXI/CIA inspection plus optional local
-  decryption using user-supplied keys/seeds. Supported key database imports,
-  recovered-code hashes and original encrypted pipeline tests are implemented.
-  Full RomFS hash verification and private asset preparation are implemented.
-  Console extraction and native Windows key handling still need validation.
-- **Translation and runtime foundations:** ARM/Thumb/VFP subsets, external AOT
-  integration, checked memory, guest threads, and scoped 3DS services.
-- **Original homebrew execution:** normal compiler-built programs exercise boot,
-  threads, input, CPU-written two-screen images, private save/reload, and
-  standalone application startup and exit, and read-only RomFS asset access.
-- **Wii U diagnostic builds:** the retained v0.14.6 follow-up kit includes Native,
-  Compiled AOT, Guarded AOT, Save and RomFS. The user reports the first three
-  passed on v0.14.5, but found no new reports and a save failure. v0.14.6 adds
-  independent read-back-verified TXT results and safer save publication;
-  their console checks are pending.
-- **Texture decoding:** all 14 base formats, tiled layouts and ETC1 compression
-  have original fixture/reference checks. This does not yet render 3DS game scenes.
-- **Standard GX operations:** original stock-libctru code exercises memory fills,
-  DMA, tiled display conversion and raw copies through the graphics command queue.
-  The GX Transfers diagnostic provides a short guided console test. v0.18 adds
-  finalized PICA viewport/scissor configuration; actual 3DS draws remain pending.
-  See the [command contract](docs/pica-commands.md).
-- **Packaging foundations:** original metadata/artwork staging and encrypted
-  packing with independent decryption and file checks using synthetic test inputs.
-  Actual WUP installation remains unverified.
-
-The v0.16.0 asset increment also builds an optional **Asset Files** diagnostic
-that reads a tiny original SD blob and records guided TXT results. Its console
-test is pending; see [asset preparation and testing](docs/romfs-assets.md).
-
-CPU-written framebuffer display is implemented; **3DS PICA rendering and guest
-audio are not**. Homebrew snapshot persistence does not establish commercial save
-compatibility. Commercial conversion requests fail explicitly instead of producing
-a placeholder package. The separate Windows CIA intake helper is a console
-utility, not the planned injector GUI.
-
-The owner-created [development Project](https://github.com/users/Jdiller-86/projects/2)
-owns the state of the seven overview gates and 35 focused tasks. Source documents
-record scope and build evidence; they cannot overwrite an existing board status.
-Initial population and live dashboard publication require the configured personal
-credential to reach the session. The current integration still denies Project reads.
-
-## Download and test
-
-Use a matching [development release](https://github.com/Jdiller-86/CTR-2-WUP/releases)
-and its checksums. Copy the kit’s `sd-card/` contents to SD root and launch the
-named WUHB in Aroma. Guided TXT results are saved under `sd:/ctr2wup/`.
-See [getting started](docs/getting-started.md) for prerequisites, launch routes
-and the exact files to return. No ROM or key is needed for original diagnostics.
-
-GitHub groups 35 focused work issues under seven milestone overviews. Status,
-area, resource and priority labels show each task’s state; PR checks and workflow
-reports also show branch readiness. CI
-provides versioned build/test artifacts; [the GitHub guide](docs/github-development.md)
-explains automatic checks, manual Windows validation and agent profiles.
-Searchable [documentation builds](https://github.com/Jdiller-86/CTR-2-WUP/actions/workflows/docs.yml)
-include an offline HTML guide and a free public docs-only Pages export. The
-application source stays private. Topic branches, pull requests and passing CI
-support maintenance on GitHub Free. Codex-generated commits carry explicit attribution through
-an opt-in [repository hook](CONTRIBUTING.md#codex-commit-attribution).
-
-## Try the developer tools
-
-The following Linux/cloud workflow builds an original Wii U diagnostic and runs
-an original synthetic 3DS fixture. Use the repository root with Python 3.12+,
-Make, and a C compiler; the SDK installer provisions the Wii U toolchain.
-The first SDK installation also requires Docker.
+For development, use Python 3.12+, Make and a C compiler. The first SDK setup
+also requires Docker. From the repository root:
 
 ```sh
 python3 -m venv .venv
@@ -137,47 +63,27 @@ python3 -m pip install -e '.[packaging,decryption]'
 bash tools/install-wiiu-sdk.sh
 python3 -m host doctor
 make check
-python3 -m host build --target prototype --output "artifacts/my diagnostic"
-python3 -m host make-fixture --output "artifacts/my fixture"
-python3 -m host run-fixture "artifacts/my fixture/ctr2wup-guest.cxi" --output "artifacts/my guest frames"
+python3 -m host build --target prototype --output "artifacts/my-diagnostic"
 ```
 
-The outputs are **RPX/WUHB diagnostics and reference images**, not installable
-commercial-game WUPs. Generated builds and reports are kept in ignored
-`artifacts/` directories. See [fixture builds](docs/guest-fixture.md),
-[compiled homebrew](docs/compiled-homebrew.md), [RomFS assets](docs/romfs-assets.md), and
-[external translation setup](docs/upstream-integration.md) for further workflows.
+This builds an original RPX/WUHB diagnostic. [Build instructions](docs/README.md#build-and-development),
+[Windows notes](docs/build-windows.md) and [compiled homebrew](docs/compiled-homebrew.md)
+cover other workflows. Generated files stay under ignored `artifacts/`; local
+ROMs, keys and derived game data belong under ignored `private/`.
 
-To inspect a decrypted dump locally, run `python3 -m host inspect PATH`.
-Keep ROMs and derived game data under ignored `private/` directories.
-See [CIA intake](docs/cia-intake.md) for the small private executable export helper,
-and [local encrypted-input preparation](docs/encrypted-input.md) for the new engine
-commands. Keys stay on your PC; the app does not obtain them from a 3DS yet.
+## Contributing
 
-## Development and testing
-
-- [Guided console tests and TXT uploads](docs/guided-testing.md) — v0.14.6 adds verified result files; test Save, then RomFS.
-- [Console evidence review](docs/console-evidence.md) — separates older uploaded logs, reported v0.14.5 successes and the valid snapshot.
-- [Current status and reports](STATUS.md) — implementation history and verification evidence.
-- [Next testing and input gates](docs/current-roadblock.md) — what awaits a dump, Wii U, or Windows test.
-- [Console testing](docs/console-testing.md) — launch and record the diagnostic results.
-- [Windows build notes](docs/build-windows.md) — prerequisites and pending native Windows checks.
-- [Architecture](docs/architecture.md) and [compatibility](docs/compatibility.md) — supported behavior and limits.
-- [Packaging](docs/packaging.md) — local requirements and the distinction between integrity and installation.
-- [Project requirements](docs/project-brief.md) — the original development brief.
-
-No ROMs, commercial assets, keys, or proprietary SDK are bundled. Keep saves,
-translated commercial code, packages, traces, and credentials private as well.
-Original fixtures and linked support carry the notices recorded in
-[THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES). Dependency and redistribution limits
-are documented in the [foundation audit](docs/foundation-audit.md).
+Focused fixes, original reference fixtures, documentation and reproducible
+console reports are welcome. Start with [Contributing](CONTRIBUTING.md),
+[open work items](https://github.com/Jdiller-86/CTR-2-WUP/issues?q=is%3Aissue+is%3Aopen+label%3Awork-item)
+and the [Project](https://github.com/users/Jdiller-86/projects/2). Report bugs with
+build identity and relevant test results; keep game data and keys out of issues.
+Security reports follow [SECURITY.md](SECURITY.md).
 
 ## License and acknowledgments
 
-CTR2WUP source is [MIT licensed](LICENSE). Linked runtime support and external
-tools retain their own licenses; see [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES).
-Development builds use [devkitPro](https://devkitpro.org),
-[WUT](https://github.com/devkitPro/wut), and
-[libctru](https://github.com/devkitPro/libctru). The
-[foundation audit](docs/foundation-audit.md) records translator/runtime references
-and redistribution boundaries. UWUVCI AIO informs the planned user workflow.
+CTR2WUP source is [MIT licensed](LICENSE). Dependencies retain their own licenses;
+see [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES) and the [dependency audit](docs/foundation-audit.md).
+Builds use [devkitPro](https://devkitpro.org), [WUT](https://github.com/devkitPro/wut)
+and [libctru](https://github.com/devkitPro/libctru). The planned injector workflow
+is inspired by [UWUVCI AIO](https://github.com/stuff-by-3-random-dudes/UWUVCI-AIO-WPF).

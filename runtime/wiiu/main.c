@@ -33,6 +33,7 @@
 #include "report_storage.h"
 #include "test_guide.h"
 #include "test_lifecycle.h"
+#include "diagnostic_audio.h"
 #include "image_scale.h"
 #include "ctr_cpu.h"
 #include "ctr_guest_fixture.h"
@@ -138,7 +139,11 @@ static uint16_t touch_min_x=UINT16_MAX,touch_min_y=UINT16_MAX,touch_max_x,touch_
 #elif CTR_GUEST_DEFAULT == 1
 #define REPORT_APPLICATION "original-guest"
 #else
+#ifdef CTR_AUDIO_ONLY
+#define REPORT_APPLICATION "native-audio"
+#else
 #define REPORT_APPLICATION "native"
+#endif
 #endif
 static const uint32_t input_masks[]={VPAD_BUTTON_A,VPAD_BUTTON_B,VPAD_BUTTON_MINUS,VPAD_BUTTON_PLUS,
     VPAD_BUTTON_RIGHT,VPAD_BUTTON_LEFT,VPAD_BUTTON_UP,VPAD_BUTTON_DOWN,VPAD_BUTTON_R,VPAD_BUTTON_L,
@@ -149,6 +154,7 @@ static AXVoice *tone_voice;
 #endif
 static unsigned tone_count;
 static int audio_ready;
+static ctr_diagnostic_audio diagnostic_audio;
 static int cpu_test_result;
 static int service_test_result;
 static int heap_test_result;
@@ -182,6 +188,7 @@ static bool result_snapshot(const char *stage) {
         "Stage: %s\nHost exit result: %d (-1 means still running)\nGuest sessions: %u\n"
         "Guide: %s | passed=%u failed=%u skipped=%u current_step=%u\n"
         "Fresh-launch save reload confirmed: %u\n"
+        "Native audio context: result=%s owned=%u inherited=%u attempts=%u successes=%u failures=%u resets=%u releases=%u tone_ready=%u tone_requests=%u; guest audio unavailable\n"
         "Self-tests finished: %u | CPU=%d services=%d heap=%d objects=%d HID=%d GSP=%d relay=%d stack=%d threads=%d\n"
         "Input: samples=%u errors=%u A_presses=%u Minus_presses=%u\n"
         "Guest: state=%s pc=%08x instructions=%llu fallback=%llu fault=%s detail=%08x memory=%s\n"
@@ -196,7 +203,10 @@ static bool result_snapshot(const char *stage) {
         "User must separately report picture accuracy and launcher return.\n"
         "No commercial-game compatibility or full milestone PASS is established.\n",
         stage,app_exit_result,guest_sessions,!test_guide.started?"NOT_STARTED":test_guide.done?"COMPLETE":test_guide.cancelled?"CANCELLED":"RUNNING",
-        test_guide.passed,test_guide.failed,test_guide.skipped,test_guide.step+1,test_guide.fresh_reload_confirmed,selftests_done,
+        test_guide.passed,test_guide.failed,test_guide.skipped,test_guide.step+1,test_guide.fresh_reload_confirmed,
+        ctr_diagnostic_audio_result_name(diagnostic_audio.result),diagnostic_audio.owned,diagnostic_audio.last_inherited,
+        diagnostic_audio.attempts,diagnostic_audio.successes,diagnostic_audio.failures,
+        diagnostic_audio.inherited_resets,diagnostic_audio.releases,audio_ready,tone_count,selftests_done,
         cpu_test_result,service_test_result,heap_test_result,kernel_test_result,hid_test_result,gsp_test_result,
         relay_test_result,stack_test_result,thread_test_result,input_samples,input_errors,button_presses[0],button_presses[2],
         (final_guest.captured?final_guest.opened:gsp_ready)?ctr_guest_state_name(final_guest.captured?final_guest.state:gsp_guest.state):"not-opened",
@@ -433,6 +443,10 @@ static void session_summary(int result) {
         relay_test_result,stack_test_result,thread_test_result);
     WHBLogPrintf("Allocation latest: %s | Allocation failure ever seen: %s | Audio configured: %s | Tone requests: %u",
         !allocation_checked?"NOT TESTED":alloc_ok_for_report?"PASS":"FAIL",allocation_failure_seen?"YES":"NO",audio_ready?"YES":"NO",tone_count);
+    WHBLogPrintf("Native audio context: result=%s owned=%u inherited=%u attempts=%u successes=%u failures=%u resets=%u releases=%u; guest audio unavailable",
+        ctr_diagnostic_audio_result_name(diagnostic_audio.result),diagnostic_audio.owned,diagnostic_audio.last_inherited,
+        diagnostic_audio.attempts,diagnostic_audio.successes,diagnostic_audio.failures,
+        diagnostic_audio.inherited_resets,diagnostic_audio.releases);
     WHBLogPrintf("Input samples: %u | Input errors: %u | Left stick moved: %s | Right stick moved: %s",
         input_samples,input_errors,left_stick_seen?"YES":"NO",right_stick_seen?"YES":"NO");
     for(unsigned i=0;i<12;++i)WHBLogPrintf("Button %s presses: %u",input_names[i],button_presses[i]);
@@ -498,16 +512,17 @@ static int allocation_test(void) {
 }
 
 #ifndef CTR_COMPILED_HOMEBREW
-static bool audio_owned;
-static void audio_init(void) {
-    AXInitParams params={0};
-    params.renderer=AX_INIT_RENDERER_48KHZ;
-    params.pipeline=AX_INIT_PIPELINE_SINGLE;
-    audio_owned=!AXIsInit();
-    if(audio_owned)AXInitWithParams(&params);
-    if (!AXIsInit()) { WHBLogPrintf("audio FAIL AX initialization"); return; }
+static void tone_shutdown(void *context) {
+    (void)context;
+    if(tone_voice && AXIsInit()) {
+        AXSetVoiceState(tone_voice,AX_VOICE_STATE_STOPPED);AXFreeVoice(tone_voice);
+    }
+    tone_voice=NULL;audio_ready=0;
+}
+static void tone_init(void) {
     tone_voice=AXAcquireVoice(31, NULL, NULL);
     if (!tone_voice) { WHBLogPrintf("audio FAIL no AX voice"); return; }
+    AXSetVoiceState(tone_voice,AX_VOICE_STATE_STOPPED);
     for (unsigned i=0;i<AUDIO_SAMPLES;++i) {
         /* 250ms, 440Hz, 10% amplitude with a 10ms fade at both ends. */
         float gain=(i<480 ? i/480.0f : i>AUDIO_SAMPLES-480 ? (AUDIO_SAMPLES-i)/480.0f:1.0f);
@@ -521,7 +536,7 @@ static void audio_init(void) {
     AXSetVoiceOffsets(tone_voice, &offsets);
     AXSetVoiceSrcType(tone_voice, AX_VOICE_SRC_TYPE_NONE);
     if (AXSetVoiceSrcRatio(tone_voice, 1.0f)!=AX_VOICE_RATIO_RESULT_SUCCESS) {
-        WHBLogPrintf("audio FAIL sample rate ratio"); return;
+        WHBLogPrintf("audio FAIL sample rate ratio");tone_shutdown(NULL);return;
     }
     AXVoiceVeData volume={0x8000,0};
     AXSetVoiceVe(tone_voice, &volume);
@@ -533,6 +548,7 @@ static void audio_init(void) {
     audio_ready=(tv==AX_RESULT_SUCCESS && drc==AX_RESULT_SUCCESS);
     WHBLogPrintf("audio configured=%u TV_result=%d DRC_result=%d rate=%u",
                   audio_ready, (int)tv, (int)drc, AXGetInputSamplesPerSec());
+    if(!audio_ready)tone_shutdown(NULL);
 }
 
 static void play_tone(void) {
@@ -542,15 +558,34 @@ static void play_tone(void) {
     AXSetVoiceState(tone_voice, AX_VOICE_STATE_PLAYING);
     WHBLogPrintf("tone request=%u frequency_hz=440 duration_ms=250", ++tone_count);
 }
-static void audio_shutdown(void) {
-    if(tone_voice) {
-        AXSetVoiceState(tone_voice,AX_VOICE_STATE_STOPPED);AXFreeVoice(tone_voice);tone_voice=NULL;
-    }
-    audio_ready=0;
-    if(audio_owned && AXIsInit())AXQuit();
-    audio_owned=false;
-}
 #endif
+
+static bool audio_init(bool foreground) {
+    bool already_owned=diagnostic_audio.owned;
+    bool ready=ctr_diagnostic_audio_begin(&diagnostic_audio,foreground);
+    WHBLogPrintf("Native audio begin: result=%s owned=%u inherited=%u attempts=%u failures=%u resets=%u; launcher silence requires human check",
+        ctr_diagnostic_audio_result_name(diagnostic_audio.result),diagnostic_audio.owned,diagnostic_audio.last_inherited,
+        diagnostic_audio.attempts,diagnostic_audio.failures,diagnostic_audio.inherited_resets);
+#ifndef CTR_COMPILED_HOMEBREW
+    if(ready && !already_owned)tone_init();
+#else
+    (void)already_owned;
+#endif
+    return ready;
+}
+static bool audio_shutdown(void) {
+    bool released=ctr_diagnostic_audio_end(&diagnostic_audio,
+#ifndef CTR_COMPILED_HOMEBREW
+        tone_shutdown,
+#else
+        NULL,
+#endif
+        NULL);
+    WHBLogPrintf("Native audio end: result=%s owned=%u releases=%u failures=%u",
+        ctr_diagnostic_audio_result_name(diagnostic_audio.result),diagnostic_audio.owned,
+        diagnostic_audio.releases,diagnostic_audio.failures);
+    return released;
+}
 
 static void image_text(uint32_t *image, unsigned w, unsigned row, const char *text) {
     ctr_draw_text(image,w,GUEST_H,6,row*10+6,text,0xffffffff);
@@ -676,9 +711,7 @@ static void cleanup_resources(void *context) {
 #ifdef CTR_COMPILED_HOMEBREW
     if(compiled_sd_ready)ctr_fs_volume_close(&compiled_sd);
 #endif
-#ifndef CTR_COMPILED_HOMEBREW
-    audio_shutdown();
-#endif
+    if(!audio_shutdown()) { result=1;exit->result=1;app_exit_result=1; }
     WHBLogPrintf("EXIT stage=audio_cleanup_done");
     WHBLogPrintf("EXIT stage=graphics_cleanup_begin");
     if (exit->gfx_ready && exit->foreground) GX2DrawDone();
@@ -774,7 +807,14 @@ int main(int argc, char **argv) {
         report_handler_added?"SAVING":"FAILED",test_report.error_code);
     if(report_handler_added)report_commit("startup");
     result_snapshot("startup");
-#ifdef CTR_GX_HOMEBREW
+    /* Launch transition music is native platform sound, separate from the
+       optional diagnostic tone. Even compiled guests need a fresh, silent AX
+       context. Do this before the long self-tests and any guest input. */
+    if(!audio_init(foreground))goto cleanup;
+    result_snapshot("native_audio_ready");
+#ifdef CTR_AUDIO_ONLY
+    ctr_test_guide_init(&test_guide,CTR_GUIDE_AUDIO,guide_log,NULL);
+#elif defined(CTR_GX_HOMEBREW)
     ctr_test_guide_init(&test_guide,CTR_GUIDE_GX,guide_log,NULL);
 #elif defined(CTR_ROMFS_HOMEBREW)
     ctr_test_guide_init(&test_guide,CTR_GUIDE_ASSETS,guide_log,NULL);
@@ -836,10 +876,8 @@ int main(int argc, char **argv) {
                   drc_view.width,drc_view.height,drc_source.imageSize,drc_source.pitch);
     int alloc_ok=allocation_test();
 #ifdef CTR_COMPILED_HOMEBREW
-    WHBLogPrintf("Compiled test: native AX/tone disabled; A is guest input only; guest audio unavailable");
+    WHBLogPrintf("Compiled test: native AX context owned for launcher silence; tone disabled; A is guest input only; guest audio unavailable");
     WHBLogPrintf("AOT call_limit=%u variant=%s",CTR_RECOMP_CALL_LIMIT,REPORT_APPLICATION);
-#else
-    audio_init();
 #endif
     restart_guest();
 #ifndef CTR_COMPILED_HOMEBREW
@@ -866,18 +904,15 @@ int main(int argc, char **argv) {
         }
         if(status==CTR_PROC_RELEASE) {
             ctr_report_storage_close(&report_storage);
-#ifndef CTR_COMPILED_HOMEBREW
-            audio_shutdown();
-#endif
+            if(!audio_shutdown())goto cleanup;
             foreground=false;ProcUIDrawDoneRelease();continue;
         }
         if(status!=CTR_PROC_FOREGROUND) {
             foreground=false;wait_proc_messages(NULL);continue;
         }
-#ifndef CTR_COMPILED_HOMEBREW
-        if(!foreground)audio_init();
-#endif
+        bool reacquired=!foreground;
         foreground=true;
+        if(reacquired && !audio_init(foreground))goto cleanup;
         OSTime frame_start=OSGetTime();
         VPADStatus sample={0};
         int32_t count=VPADRead(VPAD_CHAN_0,&sample,1,&error);
@@ -1141,6 +1176,7 @@ cleanup:
     {
         native_exit_context exit={result,gfx_ready,udp_ready,foreground,&tv_source,&drc_source};
         if(!ctr_test_complete_exit(&lifecycle,exit_observed,&exit_ops,&exit))result=1;
+        else result=exit.result;
     }
     ctr_report_storage_close(&report_storage);
     WHBRemoveLogHandler(system_log);

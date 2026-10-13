@@ -217,48 +217,41 @@ integration and returns **Resource not accessible by integration**.
 
 ## Project-backed progress
 
-`tools/export-github-project.py` reads live Project Status/Waiting resource values.
-It verifies all seven overview and 35 task identities, paginates within explicit
-budgets and rejects missing, archived, duplicate or ambiguous managed items. It
-never substitutes historical source states for a failed read. Project values
-mirror managed issue status and known resource tags; PR readiness remains based
-on current checks. No tool automatically closes issues or accepts a gate.
+[Project #2](https://github.com/users/Jdiller-86/projects/2) is the authority for
+Status, Waiting resource and full-gate acceptance. Its seven overview issues and
+35 focused tasks, detailed overview, work-type/priority fields and filtered views
+are populated and verified through the repository Actions secret. Existing owner
+values and notes are preserved. GitHub's default Todo option is shown as Planned
+in the aggregate without changing the option or its ID.
 
-The dashboard refreshes its aggregate JSON every minute, supports milestone-status
-filtering, shows the snapshot timestamp and marks data older than two hours stale.
-A failed refresh is visible and cannot turn unavailable tracking into zero progress.
-Only overview **Accepted** counts as a full gate; work Done/Closed/Other remains
-separate. The implementation estimate is not calculated from task counts.
+The tracking workflow reads Project fields hourly and on request, then publishes
+an allowlisted JSON snapshot, stacked milestone chart and interactive dashboard.
+Bars show five work items per milestone; completed children never automatically
+accept a full gate. Chart timestamps are visible; the dashboard marks snapshots
+older than two hours stale and preserves the previous update time on read errors.
+GitHub can cache README images; open the dashboard for current freshness.
 
-```sh
-python3 tools/export-github-project.py --output artifacts/project-progress
-python3 tools/publish-project-progress.py --input artifacts/project-progress
-```
+The public docs publisher runs reviewed immutable main source, requires a strict
+searchable documentation build and verifies the docs-only archive before any
+write. It can explicitly create only `Jdiller-86/CTR-2-WUP-docs` as public, configure
+free workflow-based Pages and publish its generated site. Application visibility
+never changes. Both publishers preserve existing tree contents and update main
+without force. Progress lives in `site/progress/`, inside the Pages upload root.
+The prepared site URL is `https://jdiller-86.github.io/CTR-2-WUP-docs/`; live
+publication is established by deployment receipts and HTTP checks.
 
-The generated `index.html`, `progress.json` and timestamped `gates.svg` can be
-published under `progress/` in the public docs-only repository. The dashboard's
-expected URL is `https://jdiller-86.github.io/CTR-2-WUP-docs/progress/` **after a
-successful Pages deployment**; that deployment is not yet verified. The README
-links the actual Project instead of displaying a static progress drawing or
-claiming that a pending website is live. GitHub README Markdown cannot execute
-interactive JavaScript; a hosted dashboard is the interactive view.
+Only seven documented milestone names, aggregate counts, accepted-gate counts,
+fixed waiting-resource categories, freshness and the Project link enter the public
+snapshot. No private issue title/body/number, item ID, owner note, ROM, key or trace
+is exported. Unknown custom status/resource values remain in fixed Other buckets.
 
-The public export is an explicit allowlist: seven already-documented milestone
-names, state/category counts, the Project link and freshness metadata. Private
-issue titles, numbers, bodies, IDs and free-form waiting notes are excluded.
-No browser receives a token. Publication changes only those three progress files
-on the existing public docs repository's main branch, without a force push.
-A concurrent publication fails visibly rather than discarding another change.
-
-The **Project tracking** workflow executes immutable trusted main code on hourly,
-manual and scoped main updates. Its optional manual bootstrap populates the
-existing board. The separate repository Actions secret
-`CTR2WUP_GITHUB_MANAGEMENT_TOKEN` needs personal Projects access, private Issues
-write and public docs Contents write; the cloud environment binding cannot be
-copied or extracted into it. Missing/access-denied credentials produce an honest
-failure receipt and leave prior published data aging visibly stale. Configure
-the Actions secret securely in repository settings if unattended updates are
-wanted; successful cloud API access alone does not prove Actions access.
+Configure `CTR2WUP_GITHUB_MANAGEMENT_TOKEN` in repository Actions secrets with
+Project and the required repository/Pages permissions. Cloud-environment secrets
+are separate; the Actions route is verified, while cloud Project calls still use
+a limited integration. Tokens are never requested in chat or copied into reports.
+Use trusted-main **Project tracking** for setup/export and **Publish public
+documentation** for docs-only publication. Neither runs untrusted PR code with
+the management token. Dry-run tools are available for reviewing mutations.
 
 ## Settings requiring additional access
 

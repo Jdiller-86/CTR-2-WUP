@@ -72,6 +72,10 @@ def rewrite_markdown(text: str, source: Path, destination: Path, mapping: dict[s
     # Pages visitors. Keep its CI destination as a text link in the staged site.
     badge = re.compile(r"\[!\[([^]]+)\]\(" + re.escape(repository) + r"/actions/workflows/[^)]+/badge\.svg\)\]\(([^)]+)\)")
     text = badge.sub(lambda match: "[" + match.group(1) + " results](" + match.group(2) + ")", text)
+    # The separately published live chart is an external link in the offline
+    # documentation build. Never embed invented/static Project counts here.
+    chart = '[![Project progress](https://jdiller-86.github.io/CTR-2-WUP-docs/progress/gates.svg)](https://jdiller-86.github.io/CTR-2-WUP-docs/progress/)'
+    text = text.replace(chart, '[Live Project progress](https://github.com/users/Jdiller-86/projects/2)')
     def rewrite(target: str) -> str:
         wrapped = target.startswith("<") and target.endswith(">")
         parsed = urlsplit(target[1:-1] if wrapped else target)
@@ -281,8 +285,8 @@ def build(options: argparse.Namespace) -> dict:
     home.feed((output / "site/index.html").read_text(encoding="utf-8"))
     text = " ".join(" ".join(home.text).split())
     gates = f"{status['full_milestones_accepted']} of {len(status['milestones'])}"
-    if gates not in text or "Windows GUI" not in text:
-        raise ValueError("Homepage lost the maintained product goal or acceptance status")
+    if "Windows GUI" not in text or "Early development" not in text:
+        raise ValueError("Homepage lost the maintained product goal or development status")
     report = {"ok": True, "source_commit": commit, "site_url": site_url,
               "project_version": status["version"], "dependency_versions": dependencies,
               "site_directory": str(output / "site"), "strict_build": True,
