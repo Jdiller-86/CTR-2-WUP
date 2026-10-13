@@ -55,7 +55,11 @@ The applications test:
   and cache commands with checked pixels, padding and event waits; see
   [GX transfers](gx-transfers.md).
 
-The default validator now runs all **eight** applications. The current console
+- `draw`: standard GX/PICA lists, owned tiled targets, retained shader/state,
+  exact target/transfer/display assertions and own PASS/exit. See
+  [compiled guest draws](guest-pica-draws.md) for the bounded fragment contract.
+
+The default validator now runs all **nine** applications. The current console
 kit includes Native, interactive, guarded interactive, Save and RomFS variants.
 The RomFS guest also passes under ASan/UBSan and emulated big-endian PPC Linux;
 this does not establish physical Wii U execution.
@@ -74,9 +78,10 @@ run successfully. The boot checks its active state and `aptMainLoop`. Use
 startup lookup failures are APT:S, APT:A and optional ptm:sysm. Privileged/system
 services and general applets are not supplied. See `filesystem.md` for exact
 state, ownership, persistence and limits. No NCCH/IVFC authentication or retail save integration, DSP/audio, CRO,
-PICA commands, GPU physical addresses or commercial compatibility is claimed.
-Native diagnostic tone remains platform audio; v0.14.5 interactive/guarded completion is user-reported. New independent result
-files, save updates, RomFS and native Windows acceptance remain pending. Do not enable a commercial profile from these homebrew passes.
+general PICA commands/physical mappings or commercial compatibility is claimed;
+the bounded GX/draw profiles are documented separately.
+Native diagnostic tone remains platform audio; v0.14.5 interactive/guarded completion is user-reported. Reviewed named results, fresh-launch saves and RomFS evidence are retained;
+new draw/launch-audio physical results and full Windows conversion remain pending. Do not enable a commercial profile from these homebrew passes.
 
 The original source is under `tests/homebrew`. Optional locally generated guest
 images link external libctru/newlib/compiler support. The library's full license

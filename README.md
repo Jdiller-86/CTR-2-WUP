@@ -36,8 +36,9 @@ for the supported subsets and current limits.
 - Original compiled homebrew with two-screen framebuffer output, input,
   SD save/reload and read-only assets, including reviewed Wii U test results.
 - Texture decoding, GX memory/display transfers, PICA configuration and first
-  original [software triangle scenes](docs/software-scenes.md). General guest
-  PICA rendering, GPU shader translation and 3DS guest audio remain unfinished.
+  original [software triangle scenes](docs/software-scenes.md), now driven by a
+  [compiled guest through standard GSP](docs/guest-pica-draws.md). Broader PICA
+  state, GPU shader translation and 3DS guest audio remain unfinished.
 - Reproducible RPX/WUHB diagnostics and original packaging fixtures. Actual
   WUP installation and full Windows conversion still require acceptance.
 
@@ -65,16 +66,17 @@ contents to your SD root and launch the WUHB in Aroma. Follow its prompts;
 plain-text results are saved to `sd:/ctr2wup/`. Original diagnostics need no ROM
 or key. See [getting started](docs/getting-started.md) and [console testing](docs/console-testing.md).
 
-For development, use Python 3.12+, Make and a C compiler. The first SDK setup
+For development, use Python 3.12+, Make and a C compiler. Host checks run without the SDK. Its first setup
 also requires Docker. From the repository root:
 
 ```sh
 python3 -m venv .venv
 . .venv/bin/activate
 python3 -m pip install -e '.[packaging,decryption]'
-bash tools/install-wiiu-sdk.sh
+make help
 python3 -m host doctor
 make check
+bash tools/install-wiiu-sdk.sh
 python3 -m host build --target prototype --output "artifacts/my-diagnostic"
 ```
 

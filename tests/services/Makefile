@@ -4,8 +4,8 @@ include $(ROOT)/runtime/core/sources.mk
 OUT := $(ROOT)/artifacts/service-tests
 FLAGS := -std=c11 -O2 -g -Wall -Wextra -Wpedantic -Werror -I$(ROOT)/runtime/core
 SOURCES := $(CTR_RUNTIME_SOURCES) test_services.c \
-           $(ROOT)/runtime/core/ctr_service_fixture.c \
-           $(ROOT)/tests/fixtures/services/boot.generated.c $(ROOT)/tests/fixtures/services/boot-image.generated.c
+    $(ROOT)/runtime/core/ctr_service_fixture.c \
+    $(ROOT)/tests/fixtures/services/boot.generated.c $(ROOT)/tests/fixtures/services/boot-image.generated.c
 .PHONY: check sanitize
 $(OUT):
 	mkdir -p "$@"

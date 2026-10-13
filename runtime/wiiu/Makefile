@@ -72,25 +72,25 @@ LDFLAGS := -mcpu=750 -meabi -mhard-float -specs="$(WUT)/share/wut.specs" \
            -Wl,-Map,$(OUTPUT)/$(TARGET).map
 SOURCES := main.c viewport.c diagnostic_font.c test_report.c test_guide.c test_lifecycle.c image_scale.c report_storage.c test_result.c diagnostic_audio.c
 OBJECTS := $(addprefix $(BUILD)/,$(SOURCES:.c=.o))
-CORE_SOURCES := $(CTR_RUNTIME_SOURCES)   ../core/ctr_cpu_selftest.c \
-                            ../core/ctr_fs_snapshot.c ../core/ctr_guest_fixture.c \
-                ../core/ctr_service_fixture.c \
-                ../core/ctr_heap_fixture.c   ../core/ctr_scene_fixture.c \
-                ../core/ctr_kernel_fixture.c \
-                ../core/ctr_hid_fixture.c \
-                ../core/ctr_gsp_fixture.c \
-                ../core/ctr_relay_fixture.c \
-                ../core/ctr_stack_fixture.c ../core/ctr_thread_fixture.c ../core/ctr_sha256.c ../core/ctr_romfs_file.c ../core/ctr_texture.c  \
-                ../../tests/fixtures/threads/thread.generated.c ../../tests/fixtures/threads/thread-image.generated.c \
-                ../../tests/fixtures/stack/stack.generated.c ../../tests/fixtures/stack/stack-image.generated.c \
-                ../../tests/fixtures/relay/relay.generated.c ../../tests/fixtures/relay/relay-image.generated.c \
-                ../../tests/fixtures/gsp/gsp.generated.c ../../tests/fixtures/gsp/gsp-image.generated.c \
-                ../../tests/fixtures/hid/hid.generated.c ../../tests/fixtures/hid/hid-image.generated.c \
-                ../../tests/fixtures/kernel/kernel.generated.c ../../tests/fixtures/kernel/kernel-image.generated.c \
-                ../../tests/fixtures/heap/heap.generated.c ../../tests/fixtures/heap/heap-image.generated.c \
-                ../../tests/fixtures/services/boot.generated.c ../../tests/fixtures/services/boot-image.generated.c \
-                ../../tests/fixtures/cpu/arithmetic.generated.c ../../tests/fixtures/cpu/exit.generated.c \
-                ../../tests/fixtures/guest/framebuffer.generated.c ../../tests/fixtures/guest/image.generated.c
+CORE_SOURCES := $(CTR_RUNTIME_SOURCES) ../core/ctr_cpu_selftest.c \
+    ../core/ctr_fs_snapshot.c ../core/ctr_guest_fixture.c \
+    ../core/ctr_service_fixture.c \
+    ../core/ctr_heap_fixture.c ../core/ctr_scene_fixture.c \
+    ../core/ctr_kernel_fixture.c \
+    ../core/ctr_hid_fixture.c \
+    ../core/ctr_gsp_fixture.c \
+    ../core/ctr_relay_fixture.c \
+    ../core/ctr_stack_fixture.c ../core/ctr_thread_fixture.c ../core/ctr_sha256.c ../core/ctr_romfs_file.c ../core/ctr_texture.c \
+    ../../tests/fixtures/threads/thread.generated.c ../../tests/fixtures/threads/thread-image.generated.c \
+    ../../tests/fixtures/stack/stack.generated.c ../../tests/fixtures/stack/stack-image.generated.c \
+    ../../tests/fixtures/relay/relay.generated.c ../../tests/fixtures/relay/relay-image.generated.c \
+    ../../tests/fixtures/gsp/gsp.generated.c ../../tests/fixtures/gsp/gsp-image.generated.c \
+    ../../tests/fixtures/hid/hid.generated.c ../../tests/fixtures/hid/hid-image.generated.c \
+    ../../tests/fixtures/kernel/kernel.generated.c ../../tests/fixtures/kernel/kernel-image.generated.c \
+    ../../tests/fixtures/heap/heap.generated.c ../../tests/fixtures/heap/heap-image.generated.c \
+    ../../tests/fixtures/services/boot.generated.c ../../tests/fixtures/services/boot-image.generated.c \
+    ../../tests/fixtures/cpu/arithmetic.generated.c ../../tests/fixtures/cpu/exit.generated.c \
+    ../../tests/fixtures/guest/framebuffer.generated.c ../../tests/fixtures/guest/image.generated.c
 ifeq ($(EXTERNAL_AOT),1)
 CFLAGS += -DCTR_EXTERNAL_AOT -I../recomp -I"$(UPSTREAM_DIR)" -ffp-contract=off -fno-fast-math
 CFLAGS += -DCTR_RECOMP_CALL_LIMIT=$(CALL_LIMIT)

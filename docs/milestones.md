@@ -1,13 +1,13 @@
 # Milestones and remaining work
 
-Updated **October 13, 2026** for **v0.22.0**. The product is an UWUVCI-style
+Updated **October 13, 2026** for **v0.23.0**. The product is an UWUVCI-style
 Windows GUI: **Select owned 3DS ROM → configure title/artwork → Inject →
 install its WUP → play from the Wii U Menu**. The CLI is the shared engine.
 Super Mario 3D Land is the first candidate; its exact revision remains unverified.
 
 **Approximately 20% implemented; 0/7 full milestones accepted.** The estimate is
 a rough engineering judgment, not a percentage of issues, tests or commits. These
-**35 remaining work items** make the work actionable; creating or closing an issue
+**35 gate work items** make the work actionable; creating or closing an issue
 does not automatically accept a milestone or raise the completion estimate.
 
 The [project brief](project-brief.md) defines requirements, the
@@ -23,7 +23,9 @@ item below is a separate implementation or evidence task feeding its milestone.
 status, blockers and reviewed full acceptance. [milestone-status.json](milestone-status.json)
 records versioned scope/evidence and initial seed values; it cannot overwrite
 existing Project values. The states below are a dated evidence snapshot. Manual
-issue notes and acceptance checkmarks remain reviewable.
+issue notes and acceptance checkmarks remain reviewable. Native feature/PR links
+and the one-time empty/Todo status migration are documented in
+[development tracking](development-tracking.md); later owner edits remain authoritative.
 
 | State | Meaning |
 |---|---|
@@ -266,7 +268,7 @@ Acceptance:
 
 **Exit criteria:** A real compiled guest executes on Wii U, updates both screens, responds to required GamePad input/touch and exits or completes a documented stability session. Exercised save/assets behavior is verified. This fixture gate does not require claiming all retail services or PICA draw support.
 
-**Verified desktop/earlier evidence:** Eight original compiled applications cover boot, threads, input, graphics, interactive execution, save/reload, RomFS and GX transfers. Desktop/sanitizer and selected emulated PowerPC checks support exact pixels/state/files. Current physical Save/results/assets/GX checks remain pending; a native tone does not establish guest DSP/audio.
+**Verified desktop/earlier evidence:** Nine original compiled applications cover boot, threads, input, graphics, interactive execution, save/reload, RomFS, GX transfers and bounded PICA draws. Desktop/sanitizer and selected emulated PowerPC checks support exact pixels/state/files. Reviewed physical Save/results/assets/GX evidence is retained; current compiled draw and launch-audio retests remain pending; a native tone does not establish guest DSP/audio.
 
 **Still needs external evidence/input:** Original guest modules, audio probes and shared service work can proceed independently. Hardware validates display/input/audio/lifecycle/assets; observed retail service/module/save requirements need M5 intake.
 
@@ -373,13 +375,15 @@ References: [Renderer status](renderer-status.md) · [GX transfer contract](gx-t
 
 #### m4-pica-commands: Decode PICA state and submit bounded draw commands
 
-The standard guest path handles finalized viewport/scissor configuration. A separate owned-resource scene boundary now validates loader/index/fixed/shader state and produces original software triangles; guest draw integration and broader pipeline state remain open.
+The standard guest path handles configuration and bounded owned-resource draws through canonical tiled targets, retained shader/state and transactional completion. An original compiled guest verifies exact software scenes; broader pipeline state and native GPU translation remain open.
 
 State: **In progress** · Needs: none for original-fixture development.
 
 Depends on: none.
 
 Verified foundation: [PICA command contract](pica-commands.md), 353 original builder/reference cases, transactional native state and the compiled standard command-queue fixture. No draws or full task acceptance are claimed.
+
+v0.23.0 connects [compiled guest draws](guest-pica-draws.md) to the standard GSP queue with owned resources, exact target/display checks and preserved failure state. Physical results remain deferred.
 
 v0.22.0 adds [owned software scenes](software-scenes.md) with complete-list
 state/pixel rollback, explicit resource binding and independent exact pixels.

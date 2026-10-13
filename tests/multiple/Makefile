@@ -4,7 +4,7 @@ include $(ROOT)/runtime/core/sources.mk
 OUT := $(ROOT)/artifacts/multiple-tests
 FLAGS := -std=c11 -O2 -g -Wall -Wextra -Wpedantic -Werror -I$(ROOT)/runtime/core
 SOURCES := $(CTR_RUNTIME_SOURCES) test_multiple.c $(addprefix $(ROOT)/runtime/core/,ctr_stack_fixture.c) \
-           $(ROOT)/tests/fixtures/stack/stack.generated.c $(ROOT)/tests/fixtures/stack/stack-image.generated.c
+    $(ROOT)/tests/fixtures/stack/stack.generated.c $(ROOT)/tests/fixtures/stack/stack-image.generated.c
 .PHONY: check sanitize
 $(OUT):
 	mkdir -p "$@"

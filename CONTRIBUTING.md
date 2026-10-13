@@ -70,7 +70,7 @@ when no new file appeared. Include exact firmware, Aroma and launcher versions
 when known, plus observed exit/Menu behavior.
 
 Published diagnostic releases and CI build artifacts demonstrate only their
-documented original fixture/build checks. Commercial games, guest PICA rendering,
+documented original fixture/build checks. Commercial games, broader PICA rendering,
 guest audio and installed playable WUP output still have separate acceptance
 gates in the milestone checklist.
 

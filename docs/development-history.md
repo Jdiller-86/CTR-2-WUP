@@ -829,3 +829,141 @@ network, credentials and repository membership were preserved. It requires revie
 save and publication in environment settings. Saving the draft is not environment publication or proof of a new-task snapshot.
 Git/API read access works with existing authentication; no new secret is needed
 for local development. The manual Windows workflow has not been dispatched.
+
+## Archived implementation-plan checkpoints through v0.22.0
+
+These dated checkpoints preserve earlier scopes and pending claims. Read
+[the current plan](development-plan.md) and [STATUS.md](../STATUS.md) for today’s state.
+
+The user resumed development. P1's external generation/checked ABI/static-link
+proof now executes on desktop and emulated big-endian PowerPC and builds an RPX.
+Original metadata/artwork staging is implemented. Version 0.4.0 now writes the
+scoped encrypted FST/content/TMD/ticket profile and independently verifies all
+decrypted files. The real RPX passes the offline path with synthetic inputs;
+physical install/Menu launch remains open. The legacy makefst candidate's
+plaintext and test/production certificate combination was not adopted.
+
+The user selected **Super Mario 3D Land** for P2. `first-title.md` records concrete
+upstream source leads and intake commands. Its exact dump/revision is pending;
+profile activation and title-specific implementation follow that evidence.
+`STATUS.md` and `milestones.md` track implemented, verified and pending work.
+
+P2 update, October 7 (America/New_York): the user supplied a CIA, but the
+workspace transfer tool rejects it above 32 MiB. v0.5.0 implements direct
+decrypted-CIA intake and a separate self-contained Windows console helper that
+exports a small private executable view or encryption report. Actual game
+inspection awaits that export; filename region/version claims remain unverified.
+The original CIA can remain local for assets. This helper is not the GUI injector.
+
+October 8 (America/New_York): the user is away from the CIA's computer and asked
+for independent implementation. v0.6.0 advances P3's shared startup foundation:
+checked CP15 TLS access, typed service sessions, bounded SendSyncRequest and
+restricted SRV/CFG reads. An original 89-instruction ARM program exercises those
+interfaces through interpreter/original/external AOT, without title-specific code.
+The console diagnostics embed its original interpreter/AOT self-test. This does
+not activate Mario or close any physical-console milestone; its exact revision,
+broader kernel/services/GPU/audio/saves and installer acceptance remain pending.
+
+The next ROM-independent increment, v0.7.0, implements checked ControlMemory and
+QueryMemory: owned heap/linear CPU backing, atomic partial free/protection, bounds
+and resource limits. Its original ARM lifecycle probe preserves AOT while
+matching all three execution paths. This advances M3/P3; the physical tests,
+shared-memory/thread/kernel work and title-specific requirements remain open.
+GPU/DSP physical-address translation is not supplied by the linear allocation.
+
+The user requested continued execution through concrete roadblocks. v0.8.0
+adds shared-memory ownership, mutex/semaphore objects and wait-any/all as common
+HID/GSP prerequisites. Continue into real input/service integration while
+console/title-specific gates remain open. These are tested single-thread interfaces.
+
+v0.9.0 implements the standard HID shared page/events and connects live Wii U
+VPAD input to an original ARM consumer. The external compiler/target comparisons
+remain ROM-independent. Continue next into the standard GSP framebuffer display
+interface, before title-specific PICA/shader work. Console tests and actual Mario
+intake remain required; the GUI still follows demonstrated execution/packaging.
+
+v0.10.0 adds direct GSP framebuffer submission and five rotated format decoders.
+The original ARM standard-HID/GSP guest now reaches the Wii U presentation backend
+in all builds; actual external execution is verified separately on desktop and
+emulated PPC. The next planned acceptance gate needs physical console evidence
+and Mario executable intake. `current-roadblock.md` records that roadblock and
+precise resume order. Generic runtime work remains possible, but broader game
+feature selection and performance claims need the selected revision/reference
+and console results. All commercial/GUI/full milestone gates stay open.
+
+The user asked whether further development was possible. v0.11.0 resumes shared
+GSP framebuffer queues and a diagnostic VBlank/IRQ relay without a ROM. The ARM
+probe uses LDREX/STREX and tests a device write forcing retry across three
+execution paths. The queued guest is embedded in Wii U builds. Physical acceptance
+and Mario intake still gate compatibility, not all shared development. Further
+ROM-independent work includes thread scheduling, CPU/barrier correctness, general
+IPC/FS and bounded graphics transfers. Prioritize original reference tests for
+each; title-specific PICA/feature selection still needs actual intake/trace.
+
+v0.12.0 advances the ROM-independent CPU foundation: ordinary ARM/Thumb stack
+frames, multiple-register transfers and register BLX calls. The original 47-step
+nested-call fixture and 220 ARM1176/Unicorn cases check real compiled-function
+prerequisites. External fault/unsupported guards preserve checked behavior even
+where the emitter updates a base early or erases an empty transfer. Thread contexts,
+address arbitration, barriers, FS/APT, GX/PICA, audio/saves and exact Mario intake
+remain priorities; this checkpoint does not change the GUI/WUP product goal.
+
+v0.13 advances the shared M3 foundation through normal devkitARM/libctru/newlib
+applications, rather than stopping at hand-authored SVC probes. Implemented
+prerequisites include single-core thread contexts, priority/quanta, owner-aware
+locks, address arbiters, local resource limits, correct partial-page DATA/BSS,
+synthetic kernel configuration, CPU media/barriers/FPSCR/FP word transfers and
+signed halfword accumulation. Real compiled threads/C TLS/LightLock, standard
+HID and all pixels of three CPU-written screen pairs pass without interpreter
+fallback. The additional interactive Wii U build is the concrete next M3
+hardware test. Wider APT/FS/GX/PICA/audio/save implementation and exact Mario
+intake remain required; no full milestone or commercial profile is enabled.
+
+v0.14 continues the independent shared runtime through checked private FS
+archives/files, original compiled save/read/fresh-process reload, snapshot
+validation and standalone APT initialization/event/wakeup/shutdown. The fifth
+console diagnostic makes SD save/reload testable without a ROM. Next selected-title
+work requires the actual private executable/assets and a boot/unsupported trace
+to choose ROMFS/retail-save/module/PICA/audio implementation. Physical save and
+interactive tests remain required, alongside installer and Windows acceptance.
+General unimplemented features are not presumed impossible; this increment does
+not activate a commercial profile or replace the GUI-to-installable-WUP goal.
+
+
+v0.14.6 continues M2/M3/P3 with independent read-back-verified test result files,
+portable save publication/rollback/recovery and read-only current-process RomFS
+asset transport. Normal libctru reads nested/Unicode assets, enumerates directories
+and denies writes in an original fixture, verified on desktop/sanitizers and
+emulated big-endian PPC. Shared time and scoped ARM data semantics were required
+by the actual program. The user reports v0.14.5 Native/Guarded/Compiled success;
+new trace absence and later save failure remain unconfirmed causes. Next physical
+checks are Save and RomFS, followed by actual decrypted Mario revision/asset
+analysis and required PICA/audio/services integration. No GUI, commercial profile
+or full acceptance milestone is enabled by these diagnostics.
+
+
+October 12 user update: optional 3DS key import/local decryption is part of the
+final product. v0.15.0 implements bounded local CIA/NCCH/NCSD main-content
+preparation and plaintext support-file import, verified with original encrypted
+fixtures through small intake, actual external AOT execution and Wii U cross-build.
+It does not acquire keys from a console, ship key material or enable retail
+compatibility. Already-decrypted input remains available. The on-console helper,
+protected Windows key storage and GUI import wizard remain planned; see
+`encrypted-input.md`. This advances P2 preparation and P4/M6 foundations without
+moving GUI work ahead of commercial runtime/renderer/installation proof.
+
+The user is again away and explicitly authorizes continued independent milestones
+using earlier verbal confirmations. Reported environment: U.S. console, latest
+available firmware, latest Aroma and latest WUP Installer GX2. Exact build numbers
+and v0.14.6 result files remain pending. Positive v0.14.5 reports remain usable
+scoped user evidence; no unrelated long retest is requested.
+
+
+October 12 decryption-backend decision: the user's Batch CIA 3DS Decryptor request
+was investigated against pinned original/Redux/readable-engine sources. Its AES
+and seed methods fit the already implemented preparation stage. Retain the
+original local-key engine and validate decrypted CIA/CCI/CXI handoffs; do not
+add opaque Windows binaries, inherited-source license ambiguity, wildcard
+cleanup or network seed fetching to the GUI pipeline. A source-built external
+backend remains an option only if a concrete unmet requirement justifies it.
+See [the audit](batch-decryptor-audit.md) and its original CCI handoff proof.

@@ -4,8 +4,8 @@ include $(ROOT)/runtime/core/sources.mk
 OUT := $(ROOT)/artifacts/heap-tests
 FLAGS := -std=c11 -O2 -g -Wall -Wextra -Wpedantic -Werror -I$(ROOT)/runtime/core
 SOURCES := $(CTR_RUNTIME_SOURCES) test_heap.c \
-           $(ROOT)/runtime/core/ctr_heap_fixture.c \
-           $(ROOT)/tests/fixtures/heap/heap.generated.c $(ROOT)/tests/fixtures/heap/heap-image.generated.c
+    $(ROOT)/runtime/core/ctr_heap_fixture.c \
+    $(ROOT)/tests/fixtures/heap/heap.generated.c $(ROOT)/tests/fixtures/heap/heap-image.generated.c
 .PHONY: check sanitize
 $(OUT):
 	mkdir -p "$@"

@@ -3,8 +3,7 @@ ROOT := ../..
 include $(ROOT)/runtime/core/sources.mk
 OUT := ../../artifacts/recomp-progress-tests
 FLAGS := -std=c11 -O2 -g -Wall -Wextra -Werror -I../../runtime/core -I../../runtime/recomp
-CORE := 
-SOURCES := $(CTR_RUNTIME_SOURCES) test_progress.c $(CORE) ../../runtime/recomp/ctr_recomp.c
+SOURCES := $(CTR_RUNTIME_SOURCES) test_progress.c ../../runtime/recomp/ctr_recomp.c
 HEADERS := $(wildcard ../../runtime/core/*.h ../../runtime/recomp/*.h)
 .PHONY: check sanitize
 $(OUT):

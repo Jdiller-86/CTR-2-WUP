@@ -6,6 +6,9 @@ red at lower left and green at upper right. Both unsigned byte and unsigned
 short index formats produce identical pixels. This is a software correctness
 checkpoint for M4; full renderer acceptance remains open.
 
+Version 0.23 connects this owned renderer to [standard compiled guest draws](guest-pica-draws.md).
+The focused native check below remains a separate original diagnostic.
+
 ## Focused Wii U check
 
 Build with `python -m host build --target scene-check --output artifacts/my-scene-check`.
@@ -68,7 +71,7 @@ in-place swizzles and rejects undefined lanes or missing code/END.
 
 The native Scene Check runs this CPU path, flips its owned image rows for display,
 then uses the established GX2 surface-copy presentation. It does not submit a
-PICA shader as a Latte shader. The standard guest GSP queue continues to use the
+PICA shader as a Latte shader. The v0.22 standard guest GSP queue continues to use the
 separate configuration-only PICA executor and rejects draws.
 
 ## Evidence and reference limits

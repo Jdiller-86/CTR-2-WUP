@@ -3,6 +3,24 @@
 All releases are development increments. RPX/WUHB diagnostics and desktop passes
 do not establish commercial-game compatibility or installable WUP acceptance.
 
+## 0.23.0 — 2026-10-13
+
+- Execute original compiled guest PICA draws through standard GSP with tracked
+  physical resources, canonical tiled RGBA8 targets and retained shader/state.
+- Commit pixels/state/counters/completion atomically; reject unsupported state,
+  permission/ownership violations and resource/command/relay feedback aliases.
+- Check every original guest target and displayed pixel; retain independent Python
+  image comparisons, ASan/UBSan execution, native builds and exact source provenance
+  in CI's compiled Guest Draws artifact and focused console guide.
+- Preserve raw VFP push/pop bits under CRT FPSCR controls while continuing to reject
+  unsupported arithmetic modes.
+- Connect scoped feature issues, native parents, milestones, Project membership and
+  historical/active PRs through reviewed trusted-main Actions with audit receipts.
+- Refine AGENTS.md, repository tour, contributor policy and current plan; centralize
+  portable guest runtime sources across host, test, validator and native builds.
+- Keep physical rendering/audio retests, general PICA/GX2 translation, commercial
+  conversion and all full milestone acceptance open.
+
 ## 0.22.0 — 2026-10-13
 
 - Execute first original PICA-format loader/index/fixed/uniform/MOV shader scenes

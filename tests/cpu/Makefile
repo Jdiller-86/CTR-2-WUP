@@ -3,8 +3,8 @@ ROOT := ../..
 OUT := $(ROOT)/artifacts/cpu
 FLAGS := -std=c11 -O2 -g -Wall -Wextra -Wpedantic -Werror -I$(ROOT)/runtime/core -I$(ROOT)/runtime/wiiu
 SOURCES := test_core.c $(ROOT)/runtime/core/ctr_cpu.c $(ROOT)/runtime/core/ctr_memory.c \
-           $(ROOT)/runtime/core/ctr_cpu_selftest.c $(ROOT)/runtime/wiiu/viewport.c \
-           $(ROOT)/tests/fixtures/cpu/arithmetic.generated.c $(ROOT)/tests/fixtures/cpu/exit.generated.c
+    $(ROOT)/runtime/core/ctr_cpu_selftest.c $(ROOT)/runtime/wiiu/viewport.c \
+    $(ROOT)/tests/fixtures/cpu/arithmetic.generated.c $(ROOT)/tests/fixtures/cpu/exit.generated.c
 .PHONY: all check sanitize
 all: $(OUT)/core-tests
 $(OUT):
