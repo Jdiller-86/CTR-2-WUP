@@ -33,9 +33,15 @@ games will grow as the shared runtime gains the features they require. See the
 
 ## Overall progress
 
-![Estimated implementation progress: approximately 20%; zero of seven full milestones accepted.](docs/images/progress.svg)
+**[Open the live development Project →](https://github.com/users/Jdiller-86/projects/2)**
 
-**Assessment: October 12, 2026 · version 0.18.0.** About **20%** is a rough
+Project #2 is the authority for task status, waiting resources and milestone
+acceptance. Its board and filtered views update as work is reviewed. The
+[Project-backed dashboard](docs/github-development.md#project-backed-progress)
+provides an interactive aggregate view once its access and publication are
+configured; GitHub README pages cannot run interactive JavaScript.
+
+**Assessment: October 12, 2026 · version 0.19.0.** About **20%** is a rough
 engineering estimate toward the finished GUI-to-playable-WUP product, not a
 measured task percentage or a compatibility rating. **0 of 7 full milestones
 have met their acceptance criteria.** Most renderer, commercial-game, GUI, and
@@ -46,7 +52,7 @@ hardware validation work remains.
 | M1 · Wii U platform | Native guide/exit have evidence; three v0.14.5 apps reported passing | Verified new result files, save behavior and WUP installation |
 | M2 · CPU translation | Tested subset and AOT integration | Broader instruction support and Wii U performance |
 | M3 · Homebrew runtime | Eight original applications; saves, RomFS assets and GX transfers | Broader services, retail integration and console acceptance |
-| M4 · PICA → GX2 graphics | Textures, GX transfers and PICA setup; draw renderer not implemented | 3DS draws, shaders, sampling, and reference scenes |
+| M4 · PICA → GX2 graphics | Textures, GX transfers, PICA setup and vertex decoding; draws remain open | 3DS draws, shaders, sampling, and reference scenes |
 | M5 · First commercial game | Mario selected; dump analysis pending | Boot, gameplay, guest audio, and retail saves |
 | M6 · Automated WUP conversion | Local decryption, build and packaging foundations tested | Commercial end-to-end conversion, Windows, and installer acceptance |
 | M7 · Windows GUI | Workflow specified | Implement and verify the complete Inject experience |
@@ -93,8 +99,10 @@ a placeholder package. The separate Windows CIA intake helper is a console
 utility, not the planned injector GUI.
 
 The owner-created [development Project](https://github.com/users/Jdiller-86/projects/2)
-is the selected tracking board. Automatic population of the 42 roadmap issues
-awaits Projects access for the connected GitHub integration.
+owns the state of the seven overview gates and 35 focused tasks. Source documents
+record scope and build evidence; they cannot overwrite an existing board status.
+Initial population and live dashboard publication require the configured personal
+credential to reach the session. The current integration still denies Project reads.
 
 ## Download and test
 

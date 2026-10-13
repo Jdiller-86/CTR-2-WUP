@@ -1,6 +1,6 @@
 # CTR2WUP status
 
-Updated **October 12, 2026 (America/New_York)** · **v0.18.0**.
+Updated **October 12, 2026 (America/New_York)** · **v0.19.0**.
 The target remains an UWUVCI-style Windows GUI: select an owned 3DS game, configure
 title/artwork, click Inject, install its individual WUP and play from Wii U Menu.
 [Requirements](docs/project-brief.md), [product plan](docs/development-plan.md),
@@ -21,6 +21,36 @@ is enabled. Current binaries are original homebrew diagnostics.
 | Graphics | Direct/shared framebuffer presentation, five display formats, 14 base textures, scoped CPU-backed GX queues/copies/fills/transfers | PICA vertex/shader/TEV/draw execution, GPU resources/coherency and measured console performance |
 | Packaging/GUI | Original synthetic packing/decryption verification and conversion foundations; GUI workflow specified | Commercial conversion, actual WUP install/Menu gameplay, clean Windows and final GUI |
 
+## v0.19.0 increment
+
+An original bounded vertex-attribute decoder handles signed8, unsigned8, signed16
+and finite little-endian float32 from explicit streams/input permutations. It
+checks complete layouts, ranges, capacity and aliases before publishing output.
+Lane defaults are explicit; fixed/index attributes, PICA loader-state adaptation,
+float24 arithmetic, shaders and draws remain unsupported. See
+[the vertex contract](docs/vertex-attributes.md). GCC and Clang normal/ASan/UBSan
+and emulated big-endian PowerPC Linux pass **166,547 original assertions** each.
+The devkitPPC module compiles; its measured decoder stack frame is 64 bytes.
+This is not physical Espresso execution or a rendered scene.
+
+Project #2 now owns tracking policy. Prepared tooling adds a preserved detailed
+Project overview, priority/work-type fields and filtered views, reads canonical
+board values, mirrors issue status/resources and exports safe aggregates for an
+interactive dashboard. Source sync carries requirements/evidence only, never
+existing tracking state. The README's static progress image is removed. Live
+population and hosted publication remain blocked: the secure personal requirement
+is saved, but the environment reports no saved binding and Project reads remain
+forbidden. No Project, website or token-enabled Actions run is falsely marked live.
+
+The focused console handoff is in `artifacts/delivery/console-focus-2026-10-12/`.
+Its hash-verified ZIP combines GX/PICA setup 0.18.0, retained Save/RomFS result
+fixes 0.14.6 and optional SD assets 0.16.0; every app version is explicit. Existing
+reports/snapshot siblings are preserved. The tester is now at their Wii U;
+new console evidence remains pending until reviewed. No long native/input rerun
+is required solely for the version increment.
+
+Reports: `artifacts/reports/project-vertex-v019/` and the earlier vertex host receipt.
+
 ## v0.18.0 increment
 
 The bounded native PICA command front end now executes finalized raw viewport/
@@ -39,7 +69,7 @@ transfer pictures. Native and compiled GX v0.18.0 RPX/WUHB cross-builds pass.
 Physical console behavior, actual draws/shaders and full M4 acceptance remain open.
 
 The owner supplied [Project #2](https://github.com/users/Jdiller-86/projects/2).
-The tracking tool now selects it directly and cannot create a duplicate on access
+The tracking tool selects it directly and cannot create a duplicate on access
 failure. Direct Project reads still return Resource not accessible by integration;
 its fields/items and automated population remain unverified. Normal repository
 Git/issue/CI work continues.
@@ -133,12 +163,12 @@ are retained as scoped evidence; [console-evidence.md](docs/console-evidence.md)
 distinguishes logs and verbal confirmation.
 
 The tester reports a U.S. Wii U with latest firmware, Aroma and WUP Installer GX2;
-exact versions remain unknown. No console is attached. The user is away and
-permits continued independent development using earlier verbal successes.
+exact versions remain unknown. No console is attached. The user is now available for a focused new test round. Earlier verbal successes
+remain scoped evidence while current logs are pending.
 
 - **Save/results/RomFS:** the existing v0.14.6 follow-up remains pending.
   Preserve snapshot/siblings/reports; see [console-retest.md](docs/console-retest.md).
-- **Assets/GX:** optional v0.16 Asset Files and v0.17 GX Transfers await physical
+- **Assets/GX:** optional v0.16 Asset Files and v0.18 GX/PICA setup await physical
   SD/read/picture/lifecycle evidence. Neither requires a ROM/key. Do not repeat
   completed long guides merely for a source version bump.
 - **Mario:** supplied CIA exceeds the 32 MiB attachment limit; small intake has

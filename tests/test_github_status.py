@@ -92,6 +92,16 @@ class FakeGitHub:
 
 
 class GitHubStatusTests(unittest.TestCase):
+    def test_project_managed_issue_never_uses_manual_or_closed_state(self):
+        for role, identifier in [('milestone', 'm1'), ('work-item', 'm1-results')]:
+            task = issue(1, 'status:awaiting-evidence')
+            task.update(body=f'<!-- ctr2wup:{role}:{identifier} -->', state='closed', state_reason='completed')
+            api = FakeGitHub([task])
+            report = status.reconcile(api, 'example/fixture', apply=True, selected=1, explicit='done')
+            self.assertIsNone(report['items'][0]['state'])
+            self.assertIn('Project', report['items'][0]['skipped'])
+            self.assertEqual(api.writes, [])
+
     def test_stale_merge_success_cannot_make_new_head_ready(self):
         api = FakeGitHub([pr(2)])
         api.commits[MERGE]['parents'] = [{'sha': 'd' * 40}, {'sha': MAIN}]

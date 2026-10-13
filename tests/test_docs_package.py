@@ -29,7 +29,7 @@ class DocsPackageTests(unittest.TestCase):
         (self.site/'docs/milestone-status.json').write_text(json.dumps(progress))
         (self.site/'docs/images/progress.svg').write_text('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 40"><defs><linearGradient id="color"><stop stop-color="blue"/></linearGradient></defs><rect width="100" height="40" fill="url(#color)"/><text>0/7</text></svg>')
         (self.site/'site-licenses/notice.txt').write_text('Original synthetic license notice.')
-        overview = f'<h1 id="goal">Windows GUI to playable WUP</h1><p>0 of 7 accepted.</p><h2 id="shared">Overview section</h2><a href="#shared">here</a><a href="docs/guide/#shared">guide</a><a href="site-licenses/notice.txt">notice</a><img src="docs/images/progress.svg" alt="progress"><a href="https://github.com/example/private/blob/{COMMIT}/README.md">source</a><pre>&lt;img src="private.key"&gt;</pre>'
+        overview = f'<h1 id="goal">Windows GUI to playable WUP</h1><p>0 of 7 accepted.</p><h2 id="shared">Overview section</h2><a href="#shared">here</a><a href="docs/guide/#shared">guide</a><a href="site-licenses/notice.txt">notice</a><img src="docs/images/progress.svg" alt="progress"><a href="https://github.com/users/Jdiller-86/projects/2">Live Project</a><a href="https://github.com/example/private/blob/{COMMIT}/README.md">source</a><pre>&lt;img src="private.key"&gt;</pre>'
         guide = '<h1 id="guide">Original guide</h1><h2 id="shared">Guide section</h2><p>Independent original fixture and irregular whitespace.</p><a href="../../index.html#shared">overview</a>'
         self.page('index.html',overview)
         self.page('docs/guide/index.html',guide)
@@ -73,6 +73,16 @@ class DocsPackageTests(unittest.TestCase):
         for row in receipt['artifacts']:
             self.assertEqual(DOCS.digest((self.options.output/row['name']).read_bytes()),row['sha256'])
         with self.assertRaises(ValueError):DOCS.package(self.options)
+
+    def test_project_link_replaces_the_required_static_progress_image(self):
+        page = self.site / 'index.html'
+        page.write_text(page.read_text().replace('<img src="docs/images/progress.svg" alt="progress">', ''))
+        (self.site / 'docs/images/progress.svg').unlink()
+        result = DOCS.package(self.options)
+        reader = (self.options.output / result['standalone_html']).read_text()
+        self.assertNotIn('<svg', reader)
+        self.assertIn('https://github.com/users/Jdiller-86/projects/2', reader)
+        self.assertFalse(result['external_runtime_dependencies'])
 
     def test_missing_page_or_fragment_is_rejected(self):
         for href in ['missing/','#missing']:

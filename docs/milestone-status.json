@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "0.18.0",
+  "version": "0.19.0",
   "updated": "2026-10-12",
   "approximate_implementation_percent": 20,
   "full_milestones_accepted": 0,
@@ -306,11 +306,12 @@
       "waiting_labels": [
         "needs-console"
       ],
-      "summary": "Framebuffer/textures and scoped GX transfers are joined by a bounded native PICA command front end and finalized viewport/scissor raw configuration. Actual PICA draws, shader/TEV execution and GX2 scene acceptance remain open.",
+      "summary": "Original texture decoding, scoped CPU-backed GX transfers, transactional PICA configuration and bounded vertex-stream decoding are implemented; loader-state integration, actual draws/shaders/TEV/coherency and console scenes remain open.",
       "verified_foundations": [
         "Direct/shared framebuffer presentation and all 14 base texture formats with original/reference checks",
         "Bounded GSP DMA/fill/display-transfer/raw-texture-copy/cache queue operations and completion interrupts",
-        "v0.18 finalized no-draw viewport/scissor PICA command lists, checked wire inspection and transactional guest-queue integration"
+        "v0.18 finalized no-draw viewport/scissor PICA command lists, checked wire inspection and transactional guest-queue integration",
+        "Original bounded vertex attribute decoding: four published component formats, explicit streams/input permutation and transactional finite-float/range/alias validation; no shader or draw enabled"
       ],
       "acceptance_remaining": [
         "Implement real PICA command/state, vertex/shader, texture/sampler/TEV and raster behavior",
@@ -343,7 +344,10 @@
             "m4-pica-commands"
           ],
           "waiting_labels": [],
-          "state": "planned"
+          "state": "in_progress",
+          "evidence": [
+            "v0.19.0 adds the original bounded runtime/core/ctr_vertex byte-stream decoder and exhaustive original tests; resolving PICA loaders, fixed/index attributes, shader execution and actual draws remain required."
+          ]
         },
         {
           "id": "m4-fragment-pipeline",
@@ -722,5 +726,7 @@
         }
       ]
     }
-  ]
+  ],
+  "tracking_authority": "https://github.com/users/Jdiller-86/projects/2",
+  "state_fields_usage": "Initial seeding and dated evidence snapshots only; never overwrite existing Project status or waiting resources."
 }

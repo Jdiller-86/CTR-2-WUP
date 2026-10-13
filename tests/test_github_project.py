@@ -145,6 +145,16 @@ class FakeGitHub:
 
 
 class GithubProjectTests(unittest.TestCase):
+    def test_existing_default_capitalization_keeps_option_ids_and_is_not_duplicated(self):
+        field = self.api.remote_project['fields'][1]
+        option = next(o for o in field['options'] if o['name'] == 'In progress')
+        option['name'] = 'In Progress'
+        old_options = copy.deepcopy(field['options'])
+        context, report = self.preflight()
+        setup.apply(self.api, context, report)
+        self.assertEqual(field['options'], old_options)
+        self.assertEqual(self.api.writes, [])
+
     def setUp(self):
         self.settings, self.state = source()
         self.api = FakeGitHub(self.state)

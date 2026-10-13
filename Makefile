@@ -13,6 +13,7 @@ check-c:
 	$(MAKE) -C tests/gsp check sanitize
 	$(MAKE) -C tests/gx check sanitize
 	$(MAKE) -C tests/pica check sanitize
+	$(MAKE) -C tests/vertex check sanitize
 	$(MAKE) -C tests/relay check sanitize
 	$(MAKE) -C tests/multiple check sanitize
 	$(MAKE) -C tests/threads check sanitize
@@ -23,7 +24,7 @@ check-c:
 	$(MAKE) -C tests/report check sanitize
 	$(MAKE) -C tests/recomp-progress check sanitize
 check-c-portable:
-	@set -e; for suite in cpu guest services heap kernel hid gsp gx pica relay multiple threads filesystem assets textures apt report recomp-progress; do $(MAKE) -C tests/$$suite check; done
+	@set -e; for suite in cpu guest services heap kernel hid gsp gx pica vertex relay multiple threads filesystem assets textures apt report recomp-progress; do $(MAKE) -C tests/$$suite check; done
 prototype:
 	$(MAKE) -C runtime/wiiu -j 3
 doctor:

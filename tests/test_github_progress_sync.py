@@ -138,7 +138,7 @@ class GithubProgressSyncTests(unittest.TestCase):
         self.assertEqual([report['references'][f'm{i}']['number'] for i in range(1, 8)], list(range(1, 8)))
         self.assertEqual(self.remote.writes, [])
 
-    def test_apply_creates_work_issues_associations_parent_dependency_links_and_initial_status(self):
+    def test_apply_creates_scope_links_without_source_status_or_waiting_labels(self):
         comments = copy.deepcopy(self.remote.comments)
         report = self.run_sync(True)
         self.assertEqual(len(self.remote.issues), 42)
@@ -152,7 +152,10 @@ class GithubProgressSyncTests(unittest.TestCase):
                 self.assertIn('work-item', sync.label_names(issue))
                 self.assertIn('p2', sync.label_names(issue))
                 self.assertIn(milestone['area'], sync.label_names(issue))
-                self.assertIn('status:' + item['state'].replace('_', '-'), sync.label_names(issue))
+                self.assertFalse(any(label.startswith('status:') for label in sync.label_names(issue)))
+                self.assertFalse(set(sync.label_names(issue)) & sync.WAITING)
+                self.assertIn('Project #2', issue['body'])
+                self.assertNotIn('Source planning state', issue['body'])
                 self.assertIn(report['references'][milestone['id']]['url'], issue['body'])
                 for dependency in item['depends_on']:
                     self.assertIn(report['references'][dependency]['url'], issue['body'])
@@ -179,7 +182,8 @@ class GithubProgressSyncTests(unittest.TestCase):
             self.assertTrue(description.startswith(sync.MILESTONE_BEGIN))
             self.assertEqual(description.count(sync.MILESTONE_BEGIN), 1)
             self.assertIn('**Goal:**', description)
-            self.assertIn('**Planning state:**', description)
+            self.assertIn('**Tracking authority:**', description)
+            self.assertNotIn('**Planning state:**', description)
             self.assertIn('**Focused work:** 5 issues', description)
             self.assertIn('**Remaining full acceptance:**', description)
             self.assertIn(report['references'][source_milestone['id']]['url'], description)
@@ -288,17 +292,29 @@ class GithubProgressSyncTests(unittest.TestCase):
         issue['labels'] = [{'name': n} for n in sync.label_names(issue) if not n.startswith('status:')]
         self.run_sync(True)
         self.assertEqual(issue['state'], 'closed')
-        self.assertIn('status:closed', sync.label_names(issue))
+        self.assertFalse(any(label.startswith('status:') for label in sync.label_names(issue)))
         self.assertEqual(self.state['full_milestones_accepted'], 0)
         self.assertEqual(self.remote.issues[1]['state'], 'open')
 
-    def test_missing_status_and_labels_are_added_without_losing_manual_labels(self):
+    def test_missing_scope_labels_are_added_without_initializing_tracking_status(self):
         self.remote.issues[1]['labels'] = [{'name': 'manual-extra'}]
         self.run_sync(True)
         names = sync.label_names(self.remote.issues[1])
         self.assertIn('manual-extra', names)
-        self.assertIn('status:awaiting-evidence', names)
+        self.assertFalse(any(label.startswith('status:') for label in names))
         self.assertIn('milestone', names)
+
+    def test_historical_status_and_resource_edits_never_change_tracking(self):
+        self.populate()
+        issue = self.work_issue('m1-results')
+        issue['labels'] += [{'name': 'status:done'}, {'name': 'needs-windows'}]
+        before = copy.deepcopy(issue['labels'])
+        self.state['milestones'][0]['work_items'][0]['state'] = 'blocked'
+        self.state['milestones'][0]['work_items'][0]['waiting_labels'] = ['needs-input']
+        self.run_sync(True)
+        self.assertEqual(issue['labels'], before)
+        self.assertNotIn('**Source planning state:**', issue['body'])
+        self.assertNotIn('0/7 full gates accepted', issue['body'])
 
     def test_source_duplicate_ids_unknown_dependencies_cycles_and_states_fail_before_reads(self):
         for bad in ('duplicate', 'unknown', 'self', 'cycle', 'state', 'waiting'):

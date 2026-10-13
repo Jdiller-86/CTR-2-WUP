@@ -277,8 +277,8 @@ class Reader:
         commit = escape(report["source_commit"])
         gates = progress["full_milestones_accepted"]
         count = len(progress["milestones"])
-        header = f'<header><div><strong>CTR2WUP documentation</strong><span>Version {version} · {gates}/{count} full milestones accepted</span></div><label for="guide-search">Search this guide</label><input id="guide-search" type="search" placeholder="Search topics and article text" autocomplete="off"><button id="theme-toggle" type="button">Light / dark</button><button id="print-guide" type="button">Print</button></header>'
-        banner = f'<p class="scope">The planned product is a Windows GUI that injects an owned 3DS game into a playable Wii U WUP. Current releases are original diagnostics; commercial games and the GUI remain unfinished. Reading and search work offline. External source/issue links need internet and may require repository access. Source commit: <code>{commit}</code>.</p>'
+        header = f'<header><div><strong>CTR2WUP documentation</strong><span>Version {version} · dated assessment: {gates}/{count} full milestones accepted</span></div><label for="guide-search">Search this guide</label><input id="guide-search" type="search" placeholder="Search topics and article text" autocomplete="off"><button id="theme-toggle" type="button">Light / dark</button><button id="print-guide" type="button">Print</button></header>'
+        banner = f'<p class="scope">The planned product is a Windows GUI that injects an owned 3DS game into a playable Wii U WUP. Current releases are original diagnostics; commercial games and the GUI remain unfinished. This guide records evidence at its source version; <a href="https://github.com/users/Jdiller-86/projects/2">Project #2 owns current tracking and acceptance</a>. Reading and search work offline. External source/issue links need internet and may require repository access. Source commit: <code>{commit}</code>.</p>'
         return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>CTR2WUP documentation ' + version + '</title><style>' + CSS + '</style></head><body>' + header + '<div class="layout"><aside aria-label="Document navigation"><p id="search-status" role="status" aria-live="polite"></p><nav>' + "".join(navigation) + '</nav></aside><main>' + banner + "".join(sections) + '</main></div><script>' + SCRIPT + '</script></body></html>'
 
 
@@ -470,8 +470,9 @@ def package(options: argparse.Namespace) -> dict:
     if len(standalone.encode())>16*1024*1024:
         raise ValueError("Standalone guide exceeds its bounded size")
     audit=audit_reader(standalone)
-    if commit not in standalone or "Windows GUI" not in standalone or f"{progress['full_milestones_accepted']}/{len(progress['milestones'])}" not in standalone or "<svg" not in standalone:
-        raise ValueError("Standalone guide lost source identity, goal, progress or its SVG")
+    project_url = "https://github.com/users/Jdiller-86/projects/2"
+    if commit not in standalone or "Windows GUI" not in standalone or f"{progress['full_milestones_accepted']}/{len(progress['milestones'])}" not in standalone or project_url not in standalone:
+        raise ValueError("Standalone guide lost source identity, goal, dated assessment or its authoritative Project link")
     html_name=f"CTR2WUP-Documentation-{version}.html";zip_name=f"CTR2WUP-Public-Docs-{version}.zip"
     old_url=report["site_url"].rstrip('/')+'/';rebased={}
     for relative,data in files.items():
