@@ -200,9 +200,8 @@ def reconcile(client, data, apply, report):
     expected_members.update({features[row['id']]['node_id']: {'kind': 'issue', 'number': features[row['id']]['number']}
                              for row in rows if row['id'] in features})
     expected_members.update({pr['node_id']: {'kind': 'pull_request', 'number': number} for number, pr in prs.items()})
-    if hasattr(client, 'connection'):
-        report['membership_preflight'] = membership_report(expected_members,
-            client.connection(project['id'], 'items', MEMBER_SELECTION))
+    report['membership_preflight'] = membership_report(expected_members,
+        client.connection(project['id'], 'items', MEMBER_SELECTION))
     if not apply:
         return
     report["changes_possible"] = True

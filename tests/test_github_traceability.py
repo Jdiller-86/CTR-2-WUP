@@ -32,6 +32,9 @@ class ReadOnlyInventory:
     def project(self):
         return {"id": "project-2", "fields": [{"name": "Status", "options": [{"name": n, "id": n} for n in trace.tracking.STATUSES[:8]]}]}
 
+    def connection(self, project_id, name, selection):
+        return []
+
     def graphql(self, query, variables):
         if "closingIssuesReferences" in query:
             return {"repository": {"pullRequest": {"closingIssuesReferences": {"nodes": [], "pageInfo": {"hasNextPage": False}}}}}
