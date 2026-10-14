@@ -46,6 +46,9 @@ for the supported subsets and current limits.
   original [software triangle scenes](docs/software-scenes.md), now driven by a
   [compiled guest through standard GSP](docs/guest-pica-draws.md). Broader PICA
   state, GPU shader translation and 3DS guest audio remain unfinished.
+- Unreleased [512-word vertex code capacity](docs/software-scenes.md#vertex-code-capacity)
+  has original upload/entry/rollback probes in draft PR #98; required platform
+  checks remain pending.
 - Reproducible RPX/WUHB diagnostics and original packaging fixtures. Actual
   WUP installation and full Windows conversion still require acceptance.
 

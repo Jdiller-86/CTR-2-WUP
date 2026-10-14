@@ -137,6 +137,28 @@ static void rollback(void) {
     CHECK(!memcmp(pixels,backing(&g)+0x2000u,BYTES) && g.gsp.pica_draws==2);
     ctr_guest_close(&g);
 }
+static void shader_capacity(void) {
+    ctr_guest g;list l;ctr_gx_completion c;open(&g,&l,false);
+    set(&l,0x2cb,509);set(&l,0x2ba,509);
+    CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK && c.signal && c.irq==5);
+    CHECK(g.gsp.pica_scene->shader.code[511]==UINT32_C(0x88000000) &&
+          g.gsp.pica_scene->shader.code_defined[511] && g.gsp.pica_scene->registers[0x2cb]==512u);
+    golden(&g,true);
+    ctr_scene_state before=*g.gsp.pica_scene;ctr_pica_state state=g.gsp.pica;
+    uint8_t pixels[BYTES];memcpy(pixels,backing(&g)+0x2000u,BYTES);
+    /* The failed list stages two more draws, overwrites the final code word and
+     * then crosses the capacity. Preserve storage, pixels, generations and IRQ. */
+    trim(&l);add(&l,0x2cb,511);add(&l,0x2d3,UINT32_C(0x84000000));add(&l,0x2cc,UINT32_C(0x88000000));finish(&l);
+    CHECK(ctr_memory_write_bytes(&g.memory,BASE,l.bytes,(uint32_t)l.size)==CTR_MEM_OK);
+    uint64_t generation=g.memory.generation,code=g.memory.code_generation;g.cpu.exclusive_valid=true;
+    uint32_t command[]={0x01000101,BASE,(uint32_t)l.size,0,0,0,0,1};
+    CHECK(ctr_gx_execute(&g,command,&c)==CTR_GX_UNSUPPORTED && !c.signal);
+    CHECK(g.gsp.last_scene_result==CTR_SCENE_LIMIT && g.gsp.last_pica_register==0x2cc);
+    CHECK(!memcmp(&before,g.gsp.pica_scene,sizeof(before)) && !memcmp(&state,&g.gsp.pica,sizeof(state)));
+    CHECK(!memcmp(pixels,backing(&g)+0x2000u,BYTES) && g.gsp.pica_draws==2u);
+    CHECK(g.memory.generation==generation && g.memory.code_generation==code && g.cpu.exclusive_valid);
+    ctr_guest_close(&g);
+}
 static uint32_t read_word(ctr_guest *g,uint32_t address) { uint32_t value;CHECK(ctr_memory_read(&g->memory,address,4,CTR_MEM_READ,&value)==CTR_MEM_OK);return value; }
 static void write_word(ctr_guest *g,uint32_t address,uint32_t value) { CHECK(ctr_memory_write(&g->memory,address,4,value)==CTR_MEM_OK); }
 static unsigned relay(ctr_guest *g) {
@@ -148,19 +170,29 @@ static unsigned relay(ctr_guest *g) {
     g->cpu.r[0]=out[4];g->cpu.r[1]=0x10002000;g->cpu.r[2]=3;g->cpu.r[3]=3;ctr_guest_svc(g,0x1f);CHECK(!g->cpu.r[0]);return owner;
 }
 static void queues(void) {
-    ctr_guest g;list l,bad;open(&g,&l,false);unsigned owner=relay(&g);bad=l;trim(&bad);add(&bad,0x123,0);finish(&bad);
-    CHECK(ctr_memory_write_bytes(&g.memory,BASE,l.bytes,(uint32_t)l.size)==CTR_MEM_OK);
-    CHECK(ctr_memory_write_bytes(&g.memory,BASE+0x800u,bad.bytes,(uint32_t)bad.size)==CTR_MEM_OK);
-    write_word(&g,0x10002800,14u|(2u<<8));
-    for(unsigned entry=0;entry<2;++entry) {
-        uint32_t w[]={0x01000101,BASE+(entry?0x800u:0),(uint32_t)(entry?bad.size:l.size),0,0,0,0,1};
-        for(unsigned i=0;i<8;++i)write_word(&g,0x10002820u+(entry?0:14u)*32u+i*4u,w[i]);
+    ctr_guest g;list l,bad;
+    for(unsigned kind=0;kind<2;++kind) {
+        open(&g,&l,false);unsigned owner=relay(&g);
+        if(kind) { set(&l,0x2cb,509);set(&l,0x2ba,509); }
+        bad=l;trim(&bad);
+        if(kind) { add(&bad,0x2cb,511);add(&bad,0x2cc,0);add(&bad,0x2cc,0); }
+        else add(&bad,0x123,0);
+        finish(&bad);
+        CHECK(ctr_memory_write_bytes(&g.memory,BASE,l.bytes,(uint32_t)l.size)==CTR_MEM_OK);
+        CHECK(ctr_memory_write_bytes(&g.memory,BASE+0x800u,bad.bytes,(uint32_t)bad.size)==CTR_MEM_OK);
+        write_word(&g,0x10002800,14u|(2u<<8));
+        for(unsigned entry=0;entry<2;++entry) {
+            uint32_t w[]={0x01000101,BASE+(entry?0x800u:0),(uint32_t)(entry?bad.size:l.size),0,0,0,0,1};
+            for(unsigned i=0;i<8;++i)write_word(&g,0x10002820u+(entry?0:14u)*32u+i*4u,w[i]);
+        }
+        uint32_t trigger[]={0xc0000},out[8];unsigned count;
+        CHECK(!ctr_gsp_request(&g,owner,trigger,out,&count) && g.state==CTR_GUEST_FAULTED);
+        CHECK(read_word(&g,0x10002800)==0x100u && g.gsp.gx_commands==1 && g.gsp.gx_pica==1 && g.gsp.pica_draws==2);
+        CHECK(g.shared[g.gsp.relay_shared].storage[1]==1 && g.shared[g.gsp.relay_shared].storage[12]==5);
+        if(kind)CHECK(g.gsp.pica_scene->shader.code[511]==UINT32_C(0x88000000) &&
+                     g.gsp.pica_scene->registers[0x2cb]==512u && g.gsp.last_scene_result==CTR_SCENE_LIMIT);
+        CHECK(g.events[g.gsp.relay_event].signaled);golden(&g,true);ctr_guest_close(&g);
     }
-    uint32_t trigger[]={0xc0000},out[8];unsigned count;
-    CHECK(!ctr_gsp_request(&g,owner,trigger,out,&count) && g.state==CTR_GUEST_FAULTED);
-    CHECK(read_word(&g,0x10002800)==0x100u && g.gsp.gx_commands==1 && g.gsp.gx_pica==1 && g.gsp.pica_draws==2);
-    CHECK(g.shared[g.gsp.relay_shared].storage[1]==1 && g.shared[g.gsp.relay_shared].storage[12]==5);
-    CHECK(g.events[g.gsp.relay_event].signaled);golden(&g,true);ctr_guest_close(&g);
     /* Relay alias through a device allocation is rejected before any mutation. */
     open(&g,&l,false);relay(&g);ctr_guest_shared *shared=&g.shared[g.gsp.relay_shared];uint8_t *old=shared->storage;
     shared->storage=backing(&g)+0x2000u;ctr_gx_completion c;
@@ -168,4 +200,4 @@ static void queues(void) {
     CHECK(execute(&g,&l,BASE,&c)==CTR_GX_MEMORY && c.memory==CTR_MEM_OVERLAP && !c.signal);
     CHECK(!memcmp(before,shared->storage,BYTES) && !g.gsp.pica_scene);shared->storage=old;ctr_guest_close(&g);
 }
-int main(void) { successful();rollback();queues();printf("guest PICA draw tests: %u assertions passed\n",assertions);return 0; }
+int main(void) { successful();rollback();shader_capacity();queues();printf("guest PICA draw tests: %u assertions passed\n",assertions);return 0; }

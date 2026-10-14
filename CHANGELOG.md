@@ -3,6 +3,16 @@
 All releases are development increments. RPX/WUHB diagnostics and desktop passes
 do not establish commercial-game compatibility or installable WUP acceptance.
 
+## Unreleased shader capacity — 2026-10-14
+
+- Expand checked vertex code storage to 512 words while retaining MOV/NOP/END
+  semantics, explicit undefined/unsupported failures and bounded execution.
+- Probe every slot/entry, upload ports/batches, final END, exhausted cursors and
+  late failure after staged draws; preserve guest state, pixels and queue completion.
+- Measure 1,280 added bytes per retained/staged scene and unchanged native stack
+  frames. Scoped issue #97/PR #98 advances #28/M4; required platform validation
+  and Project membership remain pending, so no merge or full gate is accepted.
+
 ## Development continuity — 2026-10-14
 
 - Add named-credential direct API preflight and clean-current-main management commands without hosted runners.

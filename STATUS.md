@@ -8,6 +8,14 @@ credential still returns 403 for personal Project #2; live M5 status/resource
 review, native catalog reconciliation and public tracker refresh remain pending.
 Source milestone/table evidence is In progress. No full gate is accepted.
 
+**Unreleased shader capacity:** draft [PR #98](https://github.com/Jdiller-86/CTR-2-WUP/pull/98)
+under [#97](https://github.com/Jdiller-86/CTR-2-WUP/issues/97), native parent #28/M4,
+expands checked vertex code storage to 512 words with original high-entry,
+upload/END and transactional guest rollback probes. Each scene state grows by
+1,280 bytes; native compiler stack frames are unchanged. Required Windows/hosted
+coverage and Project membership remain pending; MOV-only semantics and commercial
+compatibility limits hold. See [the capacity contract](docs/software-scenes.md#vertex-code-capacity).
+
 **October 13 physical follow-up:** Audio Check and GX Transfers 0.20.0, plus
 Guest Draws 0.23.0, have reviewed scoped passes and user-confirmed silence and
 normal exit. The draw trace reaches the rendered second presentation at 57.33

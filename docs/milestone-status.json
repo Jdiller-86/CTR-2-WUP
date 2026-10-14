@@ -322,7 +322,8 @@
         "v0.21.0 adds unsigned 8-bit/16-bit indexed gathers, exhaustive index-domain checks and full referenced-range/value/alias validation before publication; no shader or draw enabled",
         "v0.22.0 original owned-resource loader/MOV shader/software triangles: 1,393,972 original assertions, exact analytic pixels for both index formats and 12,290 pinned independent encoding checks; focused native Scene Check cross-build, hardware evidence pending",
         "Standard guest GSP integrates bounded owned-resource PICA draws transactionally; the compiled original draws four exact triangles into both targets and displays them with zero fallback.",
-        "October 13 Guest Draws 0.23.0 has matching two-step PASS result/trace, four triangles, 97,200 fragments and user-confirmed pictures/exit. Aggregate frame timing and premature visual-prompt timing are recorded; full graphics costs remain unmeasured."
+        "October 13 Guest Draws 0.23.0 has matching two-step PASS result/trace, four triangles, 97,200 fragments and user-confirmed pictures/exit. Aggregate frame timing and premature visual-prompt timing are recorded; full graphics costs remain unmeasured.",
+        "Unreleased scoped #97/PR #98 expands vertex code storage to 512 words with original entry/upload/rollback probes and native storage/stack measurements. Required platform checks and Project membership remain pending; #28/M4 acceptance remains open."
       ],
       "acceptance_remaining": [
         "Implement real PICA command/state, vertex/shader, texture/sampler/TEV and raster behavior",
@@ -365,7 +366,8 @@
           "evidence": [
             "v0.19.0 adds the original bounded runtime/core/ctr_vertex byte-stream decoder and exhaustive original tests; resolving PICA loaders, fixed/index attributes, shader execution and actual draws remain required.",
             "v0.21.0 implements original checked unsigned 8-bit/16-bit indexed array gathering with 364,123 original assertions; PICA loader/fixed state, uniforms, shaders and actual draws remain open.",
-            "v0.22.0 implements original exact-value MOV/NOP/END shaders, loader/fixed/uniform state, output maps and opaque triangles; focused Scene Check builds and exposes automatic pixels/timings plus separate human confirmation. No general shader, guest GSP draw or full task acceptance."
+            "v0.22.0 implements original exact-value MOV/NOP/END shaders, loader/fixed/uniform state, output maps and opaque triangles; focused Scene Check builds and exposes automatic pixels/timings plus separate human confirmation. No general shader, guest GSP draw or full task acceptance.",
+            "Unreleased #97/PR #98 checks all 512 vertex code slots/entries, exhausted upload cursors and late state/pixel/guest queue rollback. Scene storage adds 1280 bytes; native shader/scene/adapter stack frames are unchanged. Required platform checks and full task acceptance remain pending."
           ]
         },
         {

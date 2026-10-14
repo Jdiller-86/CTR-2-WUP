@@ -55,6 +55,12 @@ Personal Project access is still 403; live M5 review/catalog/dashboard updates
 remain queued. Independent renderer/runtime work can proceed on focused branches.
 No spending or full-gate acceptance change is implied.
 
+Draft PR #98 implements the scoped #97/#28/M4 vertex code capacity increment:
+512 checked words with original upload/entry/rollback probes and native storage/
+stack measurements. Required platform checks and Project membership remain
+pending. Arithmetic/control and broader renderer work follow this capacity
+boundary; the draft does not establish commercial shader execution.
+
 ## Now, next and later
 
 | Priority | Concrete deliverable | Tracking and acceptance |

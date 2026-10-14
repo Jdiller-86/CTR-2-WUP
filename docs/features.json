@@ -694,7 +694,9 @@
       "milestone": 4,
       "parent_issue": 28,
       "state": "active",
-      "pull_requests": [],
+      "pull_requests": [
+        98
+      ],
       "scope": [
         "Support the documented hardware shader code capacity through checked program storage, uploads, entry bounds and transactional retained state.",
         "Measure native storage/stack effects and preserve explicit unsupported instructions and the independent software reference."
@@ -704,9 +706,11 @@
         "GCC/Clang sanitizers, portable/Windows and native build checks prove capacity safety without enabling unsupported arithmetic/control/geometry or claiming title execution."
       ],
       "evidence": [
-        "Three bounded private CGFX shader regions declare 472, 428 and 264 code words, beyond the current 256-word limit.",
+        "Three bounded private CGFX shader regions declare 472, 428 and 264 code words, beyond the former 256-word limit.",
         "Actual runtime entry selection remains untraced; commercial code is never used as a redistributable fixture.",
-        "Scoped issue #97 has verified native parent #28 and M4 assignment. Project membership remains pending because the new environment's named binding cannot read personal Project #2."
+        "Scoped issue #97 has verified native parent #28 and M4 assignment; associated draft PR #98 shares M4. Project membership remains pending because the new environment's named binding cannot read personal Project #2.",
+        "Original probes execute every entry and upload every code slot, compare high-entry scenes against analytic pixels, and preserve retained guest state, pixels and queue completion on late overflow.",
+        "devkitPPC GCC 16.1.0 measures shader/scene objects at 4836/10232 bytes (1280 bytes added each); shader/scene/guest-adapter stack frames remain 640/928/272 bytes. Required platform coverage remains pending."
       ]
     },
     {
