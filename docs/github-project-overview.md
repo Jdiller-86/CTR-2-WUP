@@ -3,7 +3,7 @@
 **Product:** a Windows GUI that turns an owned 3DS game into its own installable
 Wii U WUP. Select a game, configure its title/artwork, Inject, install, and play
 from Wii U Menu. Super Mario 3D Land is the first candidate. Current releases are
-original diagnostics; commercial gameplay, the draw renderer and the GUI remain
+original diagnostics; commercial gameplay, general PICA/GX2 rendering and the GUI remain
 unfinished.
 
 ## Tracking authority
@@ -56,12 +56,20 @@ reports separately from versioned logs.
 ## Console handoff
 
 Named TXT collection, fresh-launch Save, embedded/SD RomFS and GX/configuration
-results are already reviewed. Physical testing is currently deferred; the focused
-Audio Check/GX Transfers 0.20.0 launch-music regression remains pending. The new
-compiled Guest Draws guide supplies a separate renderer route when testing resumes.
+results are already reviewed. October 13 Audio Check/GX Transfers 0.20.0 and
+Guest Draws 0.23.0 have scoped passes for silence, expected pictures and normal
+exit. Preserve those results without repeating unchanged guides. Correct the
+drawn-frame confirmation gate and profile its 57.33-second presentation delay;
+full platform, commercial and Windows conversion acceptance remain open.
 Original diagnostics require no ROM or key. Retain named TXT reports and observed
 exit/pictures privately, with exact source and environment versions when available.
 Do not publish game dumps, decryption keys, retail saves or commercial traces.
+
+The USA Mario executable, matching preparation/inventory reports and all seven
+selected payloads are verified privately. M5/intake/requirements analysis can
+proceed. Broader modules, actual runtime use and full game acceptance remain open.
+Source, maintained articles and aggregate tracking share
+[the canonical project site](https://jdiller-86.github.io/CTR-2-WUP/).
 
 [Requirements](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/docs/project-brief.md)
 · [Acceptance criteria](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/docs/milestones.md)
