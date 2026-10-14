@@ -643,8 +643,10 @@
       "title": "Verify selected private Mario bytes and refine the shared runtime matrix",
       "milestone": 5,
       "parent_issue": 33,
-      "state": "planned",
-      "pull_requests": [],
+      "state": "implemented",
+      "pull_requests": [
+        94
+      ],
       "scope": [
         "Independently bind seven selected sample payloads to the received manifests, preparation report and verified executable revision.",
         "Privately inspect selected compression/archive/shader/system/audio structures and publish only reviewed aggregate requirements; refine all affected milestone evidence and agent handoff guidance."
@@ -656,7 +658,8 @@
       "evidence": [
         "Private bytes: 15,304,637 selected bytes, exact seven-file selection and bounded receipt; independent payload/provenance checks pass.",
         "Three Yaz0/NARC samples expose direct DVLB, CGFX and BYML structures; CSAR/CSTM block bounds are checked; two streams declare stereo DSP ADPCM at 32 kHz.",
-        "M5 source plan/intake/matrix move to In progress; explicit live Project review is planned separately. No commercial payload or digest is published."
+        "M5 source plan/intake/matrix move to In progress; explicit live Project review is planned separately. No commercial payload or digest is published.",
+        "Reviewed aggregate findings and handoff: https://github.com/Jdiller-86/CTR-2-WUP/pull/94"
       ]
     },
     {
