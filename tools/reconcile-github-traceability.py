@@ -13,6 +13,7 @@ import json
 from pathlib import Path
 import re
 import sys
+import time
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("tracking", ROOT / "tools/export-github-project.py")
@@ -98,6 +99,49 @@ def mutate(client, name, kind, value, selection):
     return client.graphql(f"mutation($input:{kind}!) {{ {name}(input:$input) {{ {selection} }} }}", {"input": value})[name]
 
 
+MEMBER_SELECTION = '''nodes { id isArchived content { __typename
+  ... on Issue { id number } ... on PullRequest { id number }
+} status:fieldValueByName(name:"Status") {
+  ... on ProjectV2ItemFieldSingleSelectValue { name }
+} } pageInfo { hasNextPage endCursor }'''
+
+
+def membership_report(expected, observed):
+    """Expose only repository-public references, never Project notes or identities."""
+    members = {row['content']['id'] for row in observed if row.get('content') and row['content'].get('id')}
+    references = {(row['content'].get('__typename'), row['content'].get('number'))
+                  for row in observed if row.get('content')}
+    missing = [{**reference, 'same_reference_with_different_identity':
+                ('PullRequest' if reference['kind'] == 'pull_request' else 'Issue', reference['number']) in references}
+               for node, reference in expected.items() if node not in members]
+    return {'expected_total': len(expected), 'observed_total': len(observed),
+            'matched_total': len(set(expected) & members),
+            'missing': sorted(missing, key=lambda row: (row['kind'], row['number'])),
+            'archived_managed_total': sum(bool(row.get('isArchived')) for row in observed
+                if (row.get('content') or {}).get('id') in expected)}
+
+
+def verify_membership(client, project_id, expected, added, report):
+    """Refresh only confirmed additions awaiting Project connection indexing.
+
+    Missing pre-existing members and API errors fail immediately. Mutations are
+    never repeated to turn an unverifiable operation into reported success.
+    """
+    for attempt in range(5):
+        fresh = client.connection(project_id, 'items', MEMBER_SELECTION)
+        members = {row['content']['id'] for row in fresh if row.get('content') and row['content'].get('id')}
+        report['membership_readback'] = membership_report(expected, fresh)
+        report['membership_readback_attempts'] = attempt + 1
+        missing = set(expected) - members
+        if not missing:
+            return members
+        if not missing <= added:
+            break
+        if attempt < 4:
+            time.sleep(0.5 * (2 ** attempt))
+    raise tracking.TrackingError('Project membership did not verify for every managed issue and PR.')
+
+
 def reconcile(client, data, apply, report):
     report["stage"] = "preflight"
     report["changes_possible"] = False
@@ -173,6 +217,13 @@ def reconcile(client, data, apply, report):
         if detail["parent"] and detail["parent"]["id"] != parent["node_id"]:
             raise tracking.TrackingError("Existing native issue parent differs; preserve and review.")
     report["planned"] = {"features": len(rows), "pull_requests": len(prs), "task_parents": 35}
+    expected_members = {i['node_id']: {'kind': 'issue', 'number': i['number']} for i in by_number.values()
+                        if i['number'] in (*range(1, 8), *range(12, 47))}
+    expected_members.update({features[row['id']]['node_id']: {'kind': 'issue', 'number': features[row['id']]['number']}
+                             for row in rows if row['id'] in features})
+    expected_members.update({pr['node_id']: {'kind': 'pull_request', 'number': number} for number, pr in prs.items()})
+    report['membership_preflight'] = membership_report(expected_members,
+        client.connection(project['id'], 'items', MEMBER_SELECTION))
     if not apply:
         return
     report["changes_possible"] = True
@@ -186,6 +237,8 @@ def reconcile(client, data, apply, report):
                                 "milestone": row["milestone"], "labels": ["feature", "work-item"]})
             features[row["id"]] = issue
             report["operations"].append({"create_feature": row["id"], "issue": issue["number"]})
+    expected_members.update({features[row['id']]['node_id']: {'kind': 'issue', 'number': features[row['id']]['number']}
+                             for row in rows})
     # Link only scoped feature issues as closing references. Broad parents stay open.
     report["stage"] = "link-feature-prs-and-milestones"
     for row in rows:
@@ -220,9 +273,7 @@ def reconcile(client, data, apply, report):
             report["operations"].append({"set_parent": child["number"], "parent": parent["number"]})
     project = client.project()
     # Include PR content explicitly: the public aggregate reader deliberately omits it.
-    selection = '''nodes { id content { ... on Issue { id } ... on PullRequest { id } }
-      status:fieldValueByName(name:"Status") { ... on ProjectV2ItemFieldSingleSelectValue { name } }
-    } pageInfo { hasNextPage endCursor }'''
+    selection = MEMBER_SELECTION
     items = {i["content"]["id"]: i for i in client.connection(project["id"], "items", selection) if i.get("content") and i["content"].get("id")}
     desired = []
     if review_commands:
@@ -267,11 +318,14 @@ def reconcile(client, data, apply, report):
         # Migrate only the old empty/Todo values. Later owner edits stay authoritative.
         if node in items and (items[node].get("status") or {}).get("name") in (None, "Todo"):
             desired.append((node, value, "Milestone" if int(number) <= 7 else "Task"))
+    added_nodes = set()
     for node, value, kind in desired:
         report["stage"] = "project-membership-and-status"
         if node not in items:
             result = mutate(client, "addProjectV2ItemById", "AddProjectV2ItemByIdInput", {"projectId": project["id"], "contentId": node}, "item { id }")
             items[node] = {"id": result["item"]["id"], "status": None}
+            added_nodes.add(node)
+            report['operations'].append({'project_member_added': expected_members[node]})
         item = items[node]
         previous = (item.get("status") or {}).get("name")
         if previous != value and (value == "Done" or previous in (None, "Todo", "Planned") or node in {by_number[int(n)]["node_id"] for n in data.get("reviewed_statuses", {})}):
@@ -292,12 +346,7 @@ def reconcile(client, data, apply, report):
         linked = {p["number"] for p in detail["closedByPullRequestsReferences"]["nodes"]}
         if not set(row["pull_requests"]) <= linked:
             raise tracking.TrackingError("Native PR links did not verify after reconciliation.")
-    fresh = client.connection(project["id"], "items", selection)
-    members = {i["content"]["id"] for i in fresh if i.get("content") and i["content"].get("id")}
-    expected = {i["node_id"] for i in by_number.values() if i["number"] in (*range(1, 8), *range(12, 47))}
-    expected |= {features[row["id"]]["node_id"] for row in rows} | {p["node_id"] for p in prs.values()}
-    if not expected <= members:
-        raise tracking.TrackingError("Project membership did not verify for every managed issue and PR.")
+    verify_membership(client, project['id'], expected_members, added_nodes, report)
     for row in rows:
         issue = client.api(f'repos/{REPO}/issues/{features[row["id"]]["number"]}')
         if (issue.get("milestone") or {}).get("number") != row["milestone"]:
@@ -307,7 +356,7 @@ def reconcile(client, data, apply, report):
             if (pr.get("milestone") or {}).get("number") != row["milestone"]:
                 raise tracking.TrackingError("PR milestone assignment did not verify.")
     report["verified"] = {"native_parent_links": len(edges), "native_pr_links": len(prs),
-                          "project_members": len(expected), "untracked_pull_requests": 0,
+                          "project_members": len(expected_members), "untracked_pull_requests": 0,
                           "feature_issues": {r["id"]: features[r["id"]]["number"] for r in rows}}
     report["stage"] = "verified"
 

@@ -38,7 +38,7 @@ def redirect(target):
             '<script>' + script + '</script></html>').encode()
 
 
-def plan(files):
+def plan(files, source_commit=None, legacy_base=None):
     manifest = files.get('SHA256SUMS.txt', b'').decode()
     expected = {}
     for line in manifest.splitlines():
@@ -82,6 +82,29 @@ def plan(files):
             '[the canonical site](' + CANONICAL + ').\n\n'
             'This repository retains migration redirects and historical generated files.\n'
             'The text below is an archived earlier export; do not maintain it independently.\n\n---\n\n' + readme).encode()
+    if source_commit is not None or legacy_base is not None:
+        if not all(isinstance(value, str) and re.fullmatch('[0-9a-f]{40}', value)
+                   for value in (source_commit, legacy_base)):
+            raise publisher.PublishError('Migration provenance requires exact source and legacy commits.')
+        backup = 'historical-documentation-SHA256SUMS.txt'
+        previous = json.loads(files.get('migration-provenance.json', b'{}'))
+        if backup in files and previous.get('migration_id') != MARKER:
+            raise publisher.PublishError('Preserve an unexpected historical checksum file for review.')
+        original = files.get(backup, files['SHA256SUMS.txt'])
+        if backup not in files:
+            changes[backup] = original
+        changes['migration-provenance.json'] = (json.dumps({
+            'migration_id': MARKER, 'source_commit': source_commit, 'legacy_base': legacy_base,
+            'canonical_url': CANONICAL, 'history_preserved': True,
+            'historical_manifest': backup, 'historical_manifest_sha256': hashlib.sha256(original).hexdigest(),
+            'redirect_deployment_verified': False,
+        }, indent=2) + '\n').encode()
+        current = {**files, **changes}
+        names = (set(expected) | set(changes)) - {'SHA256SUMS.txt'}
+        if not names <= set(current):
+            raise publisher.PublishError('A legacy checksummed file is missing; preserve the repository for review.')
+        changes['SHA256SUMS.txt'] = ''.join(hashlib.sha256(current[name]).hexdigest() + '  ' + name + '\n'
+                                            for name in sorted(names)).encode()
     return changes
 
 
@@ -119,7 +142,7 @@ def migrate(client, apply=False):
                 if total > 64 * 1024 * 1024:
                     raise publisher.PublishError('Legacy files exceed the bounded migration budget.')
                 files[path.relative_to(checkout).as_posix()] = path.read_bytes()
-        changes = plan(files)
+        changes = plan(files, commit, base)
     report = {'ok': True, 'applied': apply, 'source_commit': commit, 'legacy_repository': LEGACY,
               'canonical_url': CANONICAL, 'legacy_base': base, 'changed_paths': sorted(changes),
               'history_preserved': True, 'legacy_archived': False, 'redirect_deployment_verified': False}
@@ -134,13 +157,49 @@ def migrate(client, apply=False):
     return report
 
 
+def retire(client, apply=False, verify=None):
+    """Archive only deployed redirects; restore write access if Pages verification fails."""
+    if verify is None:
+        spec = importlib.util.spec_from_file_location('legacy_site_verification', ROOT / 'tools/verify-project-site.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        verify = module.verify
+    repository = client.api('repos/' + LEGACY)
+    if (repository.get('full_name') != LEGACY or repository.get('private') is not False
+            or repository.get('default_branch') != 'main' or type(repository.get('archived')) is not bool):
+        raise publisher.PublishError('Preserve unexpected legacy repository settings before archival.')
+    base = client.api('repos/' + LEGACY + '/git/ref/heads/main')['object']['sha']
+    commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+    verify(commit, legacy=True)
+    if client.api('repos/' + LEGACY + '/git/ref/heads/main')['object']['sha'] != base:
+        raise publisher.PublishError('Legacy source changed during verification; preserve it for review.')
+    report = {'ok': True, 'applied': apply, 'source_commit': commit, 'legacy_repository': LEGACY,
+              'legacy_commit': base, 'history_preserved': True,
+              'legacy_archived': repository['archived'], 'redirect_deployment_verified': True}
+    if apply and not repository['archived']:
+        client.api('repos/' + LEGACY, 'PATCH', {'archived': True})
+        try:
+            if client.api('repos/' + LEGACY).get('archived') is not True:
+                raise ValueError('Archive read-back failed')
+            verify(commit, legacy=True)
+        except (publisher.PublishError, OSError, ValueError, KeyError, TypeError):
+            client.api('repos/' + LEGACY, 'PATCH', {'archived': False})
+            if client.api('repos/' + LEGACY).get('archived') is not False:
+                raise publisher.PublishError('Legacy archive rollback could not be verified; inspect repository state.') from None
+            raise publisher.PublishError('Legacy archive did not retain verified Pages; archive was rolled back.') from None
+        report['legacy_archived'] = True
+    return report
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--apply', action='store_true')
+    parser.add_argument('--archive', action='store_true', help='Retire only verified deployed redirects, preserving history')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     try:
-        report = migrate(publisher.GitHub(), args.apply)
+        operation = retire if args.archive else migrate
+        report = operation(publisher.GitHub(), args.apply)
     except (publisher.PublishError, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
         report = {'ok': False, 'error': str(error) if isinstance(error, publisher.PublishError) else
                   'Legacy migration could not be verified; preserve existing files and review the operation.'}

@@ -1,8 +1,10 @@
 """Legacy redirects preserve reviewed scope, owner edits, history and deep links."""
 import hashlib
 import importlib.util
+import json
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location('legacy_migration', ROOT / 'tools/migrate-legacy-docs.py')
@@ -50,6 +52,63 @@ class LegacyMigrationTests(unittest.TestCase):
         with self.assertRaises(migration.publisher.PublishError):
             migration.redirect('https://example.org/elsewhere')
         self.assertIn(b'rel="canonical"', migration.redirect(migration.CANONICAL))
+
+    def test_redirect_checksums_match_current_bytes_and_preserve_original_manifest(self):
+        files = self.files()
+        original = files['SHA256SUMS.txt']
+        changes = migration.plan(files, 'a' * 40, 'b' * 40)
+        merged = {**files, **changes}
+        self.assertEqual(merged['historical-documentation-SHA256SUMS.txt'], original)
+        for line in merged['SHA256SUMS.txt'].decode().splitlines():
+            digest, name = line.split('  ', 1)
+            self.assertEqual(hashlib.sha256(merged[name]).hexdigest(), digest)
+        provenance = json.loads(merged['migration-provenance.json'])
+        self.assertEqual(provenance['source_commit'], 'a' * 40)
+        self.assertFalse(provenance['redirect_deployment_verified'])
+        replay = migration.plan(merged, 'c' * 40, 'd' * 40)
+        self.assertNotIn('historical-documentation-SHA256SUMS.txt', replay)
+
+    def test_unknown_historical_checksum_file_is_never_overwritten(self):
+        files = self.files()
+        files['historical-documentation-SHA256SUMS.txt'] = b'Original owner file'
+        with self.assertRaisesRegex(migration.publisher.PublishError, 'unexpected historical'):
+            migration.plan(files, 'a' * 40, 'b' * 40)
+
+    def test_archive_requires_verified_redirects_and_preserves_history(self):
+        class Client:
+            def __init__(self):
+                self.archived = False
+                self.writes = []
+            def api(self, path, method='GET', payload=None):
+                if method == 'PATCH':
+                    self.writes.append(payload)
+                    self.archived = payload['archived']
+                if path.endswith('/git/ref/heads/main'):
+                    return {'object': {'sha': 'b' * 40}}
+                return {'full_name': migration.LEGACY, 'private': False,
+                        'default_branch': 'main', 'archived': self.archived}
+        client = Client()
+        calls = []
+        def verify(commit, legacy):
+            calls.append((commit, legacy))
+        with patch.object(migration.subprocess, 'check_output', return_value='a' * 40):
+            dry = migration.retire(client, verify=verify)
+            self.assertFalse(dry['legacy_archived'])
+            self.assertEqual(client.writes, [])
+            result = migration.retire(client, apply=True, verify=verify)
+            self.assertTrue(result['legacy_archived'])
+            self.assertTrue(result['history_preserved'])
+            self.assertEqual(client.writes, [{'archived': True}])
+            self.assertTrue(all(legacy for _, legacy in calls))
+            migration.retire(client, apply=True, verify=verify)
+            self.assertEqual(client.writes, [{'archived': True}])
+            client.archived = False
+            def fail_after_archive(commit, legacy):
+                if client.archived:
+                    raise ValueError('Original simulated Pages loss')
+            with self.assertRaisesRegex(migration.publisher.PublishError, 'rolled back'):
+                migration.retire(client, apply=True, verify=fail_after_archive)
+            self.assertFalse(client.archived)
 
 
 if __name__ == '__main__':

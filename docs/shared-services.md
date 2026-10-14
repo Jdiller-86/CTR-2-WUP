@@ -107,16 +107,13 @@ No upstream implementation was vendored. Interface facts were checked against:
 - Audited Azahar's documented result-code fields and service-result descriptions;
   no GPL implementation is incorporated.
 
-Hardware equivalence and broader CFG/Mii/save identity behavior await the selected
-Mario revision and appropriate reference/console tests. FS/APT/GSP/PICA,
-multi-thread kernel behavior, audio, saves and CROs remain implementation work.
-HID pad/touch support is now defined in `hid-input.md`; motion remains absent.
-The restricted direct GSP display interface is defined in `gsp-display.md`;
-shared framebuffer/relay support is defined in `gsp-queues.md`. Stock graphics
-startup and the scoped synchronous GX commands are implemented; see
-[gx-transfers.md](gx-transfers.md). PICA rendering remains absent.
-
-v0.11.0 extends GSP with one local retained relay event/shared page, checked
-framebuffer queues and diagnostic VBlank/IRQ delivery; see `gsp-queues.md`.
-This does not supply stock libctru service threads, address arbitration, barriers
-or GPU register/command initialization. Those remain explicit unsupported paths.
+Hardware equivalence and broader CFG/Mii/save identity behavior need appropriate
+reference/console tests. The USA Mario revision and selected payloads are
+verified privately; broader modules and observed service use remain open.
+Scoped FS/APT, eight-context kernel, HID and GSP support is implemented in the
+current runtime. See [HID](hid-input.md), [direct display](gsp-display.md),
+[shared queues](gsp-queues.md), [filesystem](filesystem.md),
+[GX transfers](gx-transfers.md) and [bounded guest draws](guest-pica-draws.md).
+Motion, general applets, guest DSP/audio, retail saves and native GX2 translation
+remain outside those implemented contracts. Earlier service boundaries are
+retained in Git history; they do not override current versioned contracts.

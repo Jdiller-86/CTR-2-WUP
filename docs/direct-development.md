@@ -20,6 +20,9 @@ Dispatch **Reviewed GitHub management** from `main` with a fixed operation and
 review `mario-input-received-v023`. Traceability, evidence and progress are
 separate operations. After canonical publication, `legacy-docs` plans/applies
 reviewed redirects and `verify-sites` checks both sites over HTTP without writes.
+`overview` refreshes only the managed Project description while preserving owner
+notes and existing fields/views. `archive-legacy` retires the legacy repository
+only after redirect verification; it restores write access if Pages no longer verifies.
 All privileged runs resolve and check out immutable trusted
 main; no arbitrary PR code runs with the secret. Public receipts contain managed
 identities/counts/operations, never raw Project resource notes or credentials.

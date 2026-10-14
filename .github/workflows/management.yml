@@ -6,7 +6,7 @@ on:
       operation:
         description: Fixed management operation on immutable trusted main
         type: choice
-        options: [preflight, traceability, evidence, review, progress, legacy-docs, verify-sites]
+        options: [preflight, traceability, evidence, review, progress, overview, legacy-docs, archive-legacy, verify-sites]
         default: preflight
       apply:
         description: Apply only after inspecting the corresponding dry-run receipt
@@ -76,6 +76,11 @@ jobs:
               report = json.loads(path.read_text())
               print(json.dumps({'receipt': 'evidence', 'data': {key: report[key] for key in
                   ('ok', 'applied', 'tracker_count', 'work_item_count', 'writes_attempted', 'error') if key in report}}))
+          path = root / 'overview.json'
+          if path.is_file():
+              report = json.loads(path.read_text())
+              print(json.dumps({'receipt': 'overview', 'data': {key: report[key] for key in
+                  ('ok', 'applied', 'enrichment_operations', 'completed_operations', 'managed_overview_verified', 'error', 'partial_changes') if key in report}}))
           PY
       - name: Retain receipts without command logs or Project notes
         if: always()
@@ -91,6 +96,7 @@ jobs:
             artifacts/reviewed-management/project.json
             artifacts/reviewed-management/legacy.json
             artifacts/reviewed-management/sites.json
+            artifacts/reviewed-management/overview.json
             artifacts/reviewed-management/progress/
           retention-days: 14
           if-no-files-found: error

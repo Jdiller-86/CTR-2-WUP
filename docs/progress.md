@@ -1,140 +1,62 @@
 # Project completion assessment
 
-Updated **October 13, 2026**, against version **0.20.0** and the
-[product plan](development-plan.md).
-
-The [live Project](https://github.com/users/Jdiller-86/projects/2) owns current
-task states, waiting resources and reviewed acceptance. This article is a dated
-engineering assessment and evidence record. Its rough implementation estimate
-is independent of the Project's task counts.
+Updated **October 14, 2026**, against source **0.23.0** and the
+[product plan](development-plan.md). The [live dashboard](https://jdiller-86.github.io/CTR-2-WUP/progress/)
+reads Project #2; this article records the engineering assessment.
 
 ## Estimated implementation: approximately 20%
 
-The completion target is a Windows GUI that converts one verified commercial
-3DS revision into a WUP, followed by successful Wii U installation, Menu launch,
-interactive gameplay, audio, and save/reload. Clean Windows operation, rebuild/save
-continuity, stability, and measured useful performance are part of acceptance.
-Broad game compatibility is a later goal.
+The completion target is a Windows GUI that converts one verified owned 3DS
+revision into a WUP, followed by Wii U installation, Menu launch, gameplay,
+audio, save/reload, rebuild continuity and useful measured performance. Broad
+game compatibility follows the first supported revision.
 
-**About 20%** is a rough engineering judgment about implementation toward that
-target. It is not calculated from tests, commits, version numbers, or subsystem
-counts. The remaining work includes large, uncertain areas, so this estimate
-does not predict a release date or mean that 80% of the time remains.
-
-The earlier estimate was roughly 15% at v0.12. Subsequent work added normal
-compiler-built homebrew execution, guest thread/context support, standard input
-and CPU-framebuffer applications, private filesystem save/reload, and standalone
-application lifecycle support. These advance a reusable runtime needed by the
-injector. They do not yet demonstrate commercial game execution.
-
-**Full milestone acceptance: 0 of 7.** This separate measure tracks complete
-requirements and required hardware evidence. Partial implementation can exist
-while every full acceptance checkbox remains open. See the
-[milestone checklist](milestones.md) for each verified portion and missing gate.
+**Approximately 20%** remains a rough implementation judgment. It is independent
+of test counts, commits, versions and Project task totals, and predicts no date.
+**0/7 full milestones are accepted.** Scoped implementation and diagnostic passes
+do not accept a complete hardware/title/Windows gate. See [the full criteria](milestones.md).
 
 ## What supports the estimate
 
-| Area | Verified implementation | Limits for the finished product |
-|---|---|---|
-| Host preparation | Container inspection, optional local key/seed import and decryption, executable loading, private intake, external code generation, static builds, original metadata/artwork staging | Original encrypted execution fixture passes; no complete commercial conversion, actual user-key import or clean Windows execution |
-| CPU and shared runtime | Bounded ARM/Thumb/VFP support, checked AOT boundary, memory, eight single-core guest thread contexts, scoped services | Incomplete CPU/HLE coverage; actual game and Wii U timing requirements unknown |
-| Homebrew execution | Eight original normal-CRT/libctru applications, input/exact CPU-written frames, save/reload, standalone lifecycle and read-only RomFS assets | Desktop/sanitizer/emulated PPC checks plus physical original fresh-launch save, embedded/SD assets and GX results; broader runtime acceptance remains open |
-| Packaging | Original encrypted writer and independent decrypt/hash/FST/file verification, including real diagnostic RPX payloads | Synthetic credentials; no installer acceptance or retained installable package |
-| Wii U platform | Named TXT read-back, fresh-launch save reload, current pictures/Minus return and earlier controls evidence | Launch-music regression, exact platform versions, recovery and installed-WUP acceptance remain open |
+| Area | Verified foundation | Main remaining acceptance |
+| --- | --- | --- |
+| Preparation | Bounded container inspection/decryption, executable intake, full local RomFS verification and selected-file provenance | Reusable nested readers, observed runtime requirements and clean Windows commercial conversion |
+| CPU/runtime | Checked ARM/Thumb/VFP/AOT subsets, owned memory, eight single-core guest contexts and scoped services | Exercised game CPU/HLE coverage, modules, guest DSP/audio and retail saves |
+| Homebrew | Nine original normal-CRT/libctru applications; save/assets, GX and bounded PICA draws | Complete platform lifecycle/recovery, broader runtime and measured Wii U performance |
+| Graphics | Exact original software frames, MOV/NOP/END and checked 512-word vertex storage | Arithmetic/control, TEV/sampling, coherency, general rendering and native GX2 translation |
+| Conversion/GUI | Original synthetic package verification and specified GUI workflow | Actual WUP installation/Menu launch, complete Windows conversion and final GUI acceptance |
 
-v0.14.6 passes **184 Python tests** and fourteen C suites normally and with
-ASan/UBSan, including 1,892 FS and 574 report/guide assertions in each mode.
-Fourteen external AOT probes pass 28 compile/execute checks; 944 independent
-ARM1176 cases verify the scoped CPU additions. The new RomFS program passes
-normally, under sanitizers and on emulated big-endian PowerPC with zero fallback.
-The compiled save/interactive regressions and guarded/live-input replays pass.
-These are supporting checks, not a measurement of product completion.
-
-Current reports are under `artifacts/reports/console-results-v0146/`; the
-five-app kit and matching source are under
-`artifacts/delivery/console-results-0.14.6/`. Private uploaded logs/snapshots are
-excluded. [STATUS.md](../STATUS.md) records validation and the remaining gates.
-These local artifacts are not a published playable-game release.
+The October 13 Audio Check/GX Transfers 0.20.0 and Guest Draws 0.23.0 results
+have reviewed scoped passes: expected pictures, silence and normal exit. Earlier
+Save/RomFS results remain valid. The draw trace reaches its second presentation
+at 57.33 seconds and exposed premature picture confirmation; accurate gating and
+phase profiling remain scoped follow-ups. New cross-builds do not create new
+console evidence or require repeats of unchanged passed guides.
 
 ## Largest unfinished work
 
-- **PICA-to-GX2 renderer:** actual game draws, shaders, textures, transfers, and
-  coherency. Displaying CPU-written pixels does not implement this renderer.
-- **Commercial runtime integration:** Retail asset integration, required services/modules,
-  guest DSP/audio, retail saves, and any CPU behavior exercised by the first game.
-- **Selected-title proof:** exact Mario revision analysis, boot, menu, gameplay,
-  audio, save/reload, stability, and useful Wii U performance.
-- **Finished injection engine:** commercial end-to-end orchestration, caching,
-  cancellation/rebuild behavior, native Windows execution, and real WUP installation.
-- **Windows GUI:** the specified UWUVCI-style workflow is designed but not
-  implemented. Its Inject action will use the proven conversion engine.
+- Broader shaders, fragment state, native PICA-to-GX2 translation, resources and coherency.
+- Required game services/modules, guest audio and retail saves.
+- Mario boot/menu/gameplay/audio/save/reload, stability and useful Wii U costs.
+- Complete Windows conversion, cancellation/rebuild/save continuity and installed WUP acceptance.
+- The final packaged GUI over the demonstrated conversion engine.
 
 ## Evidence and inputs still needed
 
-The supplied Mario CIA has not been inspected: it exceeds the attachment tool's
-32 MiB transfer limit. The [CIA intake helper](cia-intake.md) can export a small
-private executable view for revision and code analysis when the user's computer
-is available. An encrypted executable can now be prepared locally with the new
-[optional decryption stage](encrypted-input.md), using locally obtained material.
-Real console export and native Windows acceptance remain pending. That export excludes
-game assets; commercial asset integration will require access to those separately.
+The USA Mario executable, matching preparation/inventory reports and all seven
+selected asset payloads are verified privately. Selected Yaz0/NARC, DVLB/CGFX/
+BYML and CSAR/CSTM structures inform shared shader and DSP ADPCM work. Input
+absence no longer blocks M5/intake/requirements analysis. Broader nested modules
+and actual runtime use remain unverified; no commercial profile is enabled.
+See [the current title matrix](first-title.md).
 
-The native guide and later Minus exit have user-provided console evidence.
-The user now reports Native/Guarded/Compiled completed without errors on 0.14.5.
-No new logs were saved; supplied logs have older build headers. Save failed,
-though a valid two-record visit-1 snapshot was received. v0.14.6 supplies an
-independent named TXT result with closed-file read-back and portable save
-publication/rollback/recovery. The exact prior console failure causes remain
-unconfirmed. The [follow-up](console-retest.md) requests Save, then a quick
-original RomFS test, with no long native/input repetition.
+Record exact firmware/Aroma/installer versions, full platform recovery/stability,
+original WUP installation/Menu launch, commercial runtime results and clean
+Windows conversion. Hosted Windows tests and source/cross-build checks supply
+their stated evidence without filling these gates.
 
-Actual WUP installation also needs the documented console environment and local
-packaging prerequisites. Native Windows tests remain pending.
-
-Missing inputs block those acceptance checks and title-specific decisions.
-Further reusable runtime work remains possible; it does not substitute for the
-missing evidence. Reassess progress after title boot/rendering, physical diagnostic
-tests, successful installation, and GUI-driven conversion provide new evidence.
-The next steps are maintained in [current-roadblock.md](current-roadblock.md).
-
-
-v0.15.0 advances the same approximately-20% foundation: local encrypted main-content
-preparation and support-file import have original fixture/known-vector checks and
-an actual AOT/RPX/WUHB pipeline proof. The reported U.S. latest-firmware/Aroma/
-WUP Installer GX2 setup and earlier successes allow continued independent work;
-exact versions/hard logs remain pending. Commercial rendering/runtime, installed
-WUP gameplay and GUI proof still dominate remaining work, so no full acceptance
-gate or percentage increase follows from the decryption increment.
-
-
-v0.16.0 adds full canonical RomFS IVFC/metadata verification, private asset blob
-preparation, a SHA-256 checked file provider and all 14 base texture formats.
-These advance reusable M3/M4/M6 foundations while the user is away. They do not
-establish game rendering, Mario gameplay, Wii U file I/O acceptance or installed
-WUP behavior. The approximately-20% estimate and 0/7 full gates remain unchanged.
-Current validation/delivery: `artifacts/reports/assets-textures-v016/` and
-`artifacts/delivery/assets-textures-0.16.0/`.
-
-
-v0.17.0 adds standard CPU-backed GX queue operations and a stock-libctru transfer
-application with exact frame checks. GitHub now exposes seven tracked milestone
-issues, CI/artifacts, review templates and agent guidance. These improve shared
-runtime foundations and development visibility. They do not supply the missing
-PICA draws, actual Mario/console/Windows/installed-WUP/GUI acceptance, so the
-approximately-20% estimate and 0/7 full gates remain unchanged.
-
-
-v0.18.0 adds a bounded PICA command front end, transactional raw viewport/scissor
-configuration and standard queue/P3D completion, verified by original pinned
-libctru command construction and a compiled guest. Draw/shader/GX2 scene work
-and console acceptance remain open, so the rough estimate remains 20% and 0/7
-full gates. The owner supplied Project #2; automated population still requires
-Projects access, and the tool cannot create a duplicate after an access failure.
-
-
-v0.20.0 records reviewed physical TXT collection, original save fresh-launch
-reload, embedded/SD assets and GX transfer/configuration evidence. The looping
-launch music remains an open regression with a short Audio Check/GX handoff.
-Project #2 is populated through Actions; its task fields remain authoritative.
-These scoped successes do not accept a full gate or materially change the
-approximately-20% implementation estimate.
+Source, maintained documentation and the dashboard share the public
+[CTR-2-WUP repository](https://github.com/Jdiller-86/CTR-2-WUP).
+[Current status](../STATUS.md) records verified deployment and management receipts;
+Project fields own live states and waiting resources. Historical checkpoints are
+retained in [development history](development-history.md) and Git history.

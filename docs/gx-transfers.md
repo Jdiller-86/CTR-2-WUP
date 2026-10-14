@@ -1,8 +1,10 @@
-# GSP command queue and CPU-backed GX transfers (0.18.0)
+# GSP command queue and CPU-backed GX transfers
 
 This M3/M4 foundation lets ordinary libctru GX calls clear/copy/convert buffers
-through the standard shared command ring. It supplies no PICA draw renderer or
-native GX2 transfer acceleration. No game patch or commercial data is involved.
+through the standard shared command ring. Transfers use CPU-backed memory;
+native GX2 transfer acceleration remains open. Version 0.23 also routes bounded
+[PICA software draws](guest-pica-draws.md) through that ring. No game patch or
+commercial data is involved.
 
 ## Supported boundary
 
@@ -20,7 +22,7 @@ Documented stop/should-stop states are retained, not silently erased.
 | Display transfer (3) | All five display formats, linear/tiled/same layout, vertical flip | Equal dimensions in 1..1024; tiled multiples of 8; no scaling/crop/raw-display copy |
 | Texture copy (4) | Raw copy with independent 16-byte-unit line widths/gaps | Flags8, lengths in whole 16-byte units; bounded spans; gaps preserved |
 | Cache regions (5) | Checked coherent CPU-backed ranges and barrier | No asynchronous GPU/DSP cache model |
-| PICA command list (1) | Finalized raw viewport/scissor configuration and P3D completion | All draws, shaders/uploads and other register state remain unsupported; see [the contract](pica-commands.md) |
+| PICA command list (1) | Finalized no-draw configuration and the separately checked v0.23 guest scene adapter | Only the documented MOV/owned-target draw subset is supported; broader shaders/TEV/GX2 remain open; see [the contracts](pica-commands.md) |
 
 DMA accepts the virtual addresses defined by the GSP command wire. This is not
 a general physical/VRAM translator. All source/destination spans, permissions,
@@ -56,8 +58,13 @@ reference comparisons. Required checks and WUT builds are recorded separately.
 
 ## Optional console round
 
-The 0.18.0 kit places `ctr2wup-libctru-transfer.wuhb` in `sd-card/wiiu/apps/`.
-Copy the contents of `sd-card` to SD root and launch **CTR2WUP GX Transfers 0.18.0**
+The October 13 0.20.0 pictures, silence and normal exit have reviewed scoped
+passes. This procedure is retained for a changed-path regression, not a request
+to repeat an unchanged passed test. Use the version/source in the kit manifest;
+version numbers below illustrate current 0.23.0 builds.
+
+The 0.23.0 kit places `ctr2wup-libctru-transfer.wuhb` in `sd-card/wiiu/apps/`.
+Copy the contents of `sd-card` to SD root and launch **CTR2WUP GX Transfers 0.23.0**
 in Aroma. This test needs **no ROM, key or extra blob**.
 
 1. Watch the TV change green/red/green with a blue GamePad image. The guide asks
@@ -67,11 +74,12 @@ in Aroma. This test needs **no ROM, key or extra blob**.
    when complete and separately report whether it returned to Menu/launcher.
 
 Results are under **`sd:/ctr2wup/`**, named
-**`result-compiled-gx-transfer-0.18.0-*.txt`**, plus any full trace. They include
+**`result-compiled-gx-transfer-0.23.0-*.txt`**, plus any full trace. They include
 operation counts and the last GX command/fault. ZIP those TXT files together and
 attach the ZIP to a console-result issue or the development conversation. Preserve
 existing saves/reports. Completed long native/input guides need not be repeated.
-Actual SD/lifecycle/pictures and console timings remain pending until that round.
+New bytes have no separate physical acceptance; full platform recovery/stability
+and measured performance still need their documented evidence.
 
 The v0.18 fixture also submits an original libctru-built no-draw PICA configuration
 list and waits for P3D. Its TXT report includes PICA list/write/finalizer counts

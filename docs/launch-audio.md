@@ -1,4 +1,4 @@
-# Launch music check (0.20.0)
+# Launch music diagnostic
 
 **Reviewed October 13:** Audio Check's full trace records silence and the native
 tone PASS; GX Transfers has matching two-step PASS result/trace files. The user
@@ -12,22 +12,28 @@ The latest Save, RomFS, SD asset and GX tests passed their scoped checks. The
 follow-up Save trace confirms persistence across closing and reopening the app.
 Those checks do not need repeating. See [the evidence review](console-evidence.md).
 
-The Wii U launch sound continued throughout the apps. This build takes a fresh
+Before the reviewed fix, Wii U launch sound continued throughout the apps.
+The diagnostic takes a fresh
 native AX audio context on launch and releases it on exit/foreground changes.
 Compiled guests do not acquire a tone voice or implement 3DS audio. Host checks
-and Wii U cross-builds verify the code; hearing silence needs this short round.
+and Wii U cross-builds verify code; audible behavior belongs to an actual
+versioned console observation.
 
 ## Run these two apps
+
+For a future changed-path regression, use the version/source in the kit manifest.
+The prompts and result examples below use current 0.23.0 builds; the reviewed
+October 13 observations above remain bound to their earlier 0.20.0 bytes.
 
 1. Copy the ZIP's `sd-card/` contents to your SD root. Keep `sd:/ctr2wup/` and
    all its reports and saves. Launch from Aroma as before; no WUP installation
    or ROM/key is needed.
-2. Open **CTR2WUP Audio Check 0.20.0**. Turn up TV and GamePad volume. At the
+2. Open **CTR2WUP Audio Check 0.23.0**. Turn up TV and GamePad volume. At the
    launch-music prompt press **R** if it is quiet, or **L** if the launch sound
    still plays. At the next prompt press **A** for the short native tone, then
    **R** if it plays through both TV and GamePad, or **L** to record a problem.
    Press **Minus** to exit.
-3. Open **CTR2WUP GX Transfers 0.20.0**. At the two picture prompts confirm
+3. Open **CTR2WUP GX Transfers 0.23.0**. At the two picture prompts confirm
    with **R**, or report an incorrect picture with **L**. The TV should show
    green, then red, then green; the GamePad stays blue. No test tone should play.
    Press **Minus** to exit.
@@ -40,8 +46,8 @@ files it saved. Repeating a failure is not needed to produce a report.
 The apps display **RESULT VERIFIED** and the result filename. Plain-text files
 are in **`sd:/ctr2wup/`**:
 
-- `result-native-audio-0.20.0-*.txt`
-- `result-compiled-gx-transfer-0.20.0-*.txt`
+- `result-native-audio-0.23.0-*.txt`
+- `result-compiled-gx-transfer-0.23.0-*.txt`
 - Matching `native-audio-*.txt` and `compiled-gx-transfer-*.txt` full traces, if present.
 
 Upload those new files in this chat, together or as a ZIP below 32 MiB. Add one

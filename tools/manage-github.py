@@ -43,7 +43,7 @@ def preflight(client, source, report, operation='preflight'):
             or repository.get('private') is not False or repository.get('default_branch') != 'main'
             or repository.get('permissions', {}).get('push') is not True):
         raise tracking.TrackingError('Public source identity and repository write access could not be verified.')
-    if operation in ('preflight', 'traceability', 'review', 'progress'):
+    if operation in ('preflight', 'traceability', 'review', 'progress', 'overview'):
         report['stage'] = 'project'
         project = client.project()
         tracking.collect(project, source)
@@ -99,6 +99,10 @@ def commands(args, output, sha):
         result.append(('docs', 'publish-docs-site.py', ['--input', str(args.input), '--source-commit', sha, '--output', str(output / 'docs.json'), *apply]))
     elif args.operation == 'legacy-docs':
         result.append(('legacy', 'migrate-legacy-docs.py', ['--output', str(output / 'legacy.json'), *apply]))
+    elif args.operation == 'archive-legacy':
+        result.append(('legacy', 'migrate-legacy-docs.py', ['--archive', '--output', str(output / 'legacy.json'), *apply]))
+    elif args.operation == 'overview':
+        result.append(('overview', 'flesh-github-project.py', ['--output', str(output / 'overview.json'), *apply]))
     elif args.operation == 'verify-sites':
         result.append(('sites', 'verify-project-site.py', ['--legacy', '--output', str(output / 'sites.json')]))
     return result
@@ -114,7 +118,7 @@ def output_directory(path):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('operation', choices=('preflight', 'traceability', 'evidence', 'review', 'progress', 'docs', 'legacy-docs', 'verify-sites'))
+    parser.add_argument('operation', choices=('preflight', 'traceability', 'evidence', 'review', 'progress', 'docs', 'legacy-docs', 'archive-legacy', 'overview', 'verify-sites'))
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--review')
     parser.add_argument('--input', type=Path)

@@ -137,6 +137,10 @@ def enrich(client, context, report, content, apply=False):
                            "value": {"singleSelectOptionId": option}}, "projectV2Item { id }")
             report["completed_operations"].append({"kind": "initialize-empty-extra-field",
                                                    "item": tracker["planned"]["id"], "field": name})
+    live = client.snapshot(project["id"])
+    if overview(live.get("readme") or "", content) != (live.get("readme") or ""):
+        raise setup.SetupError("Managed Project overview did not verify after update; preserve and review")
+    report["managed_overview_verified"] = True
 
 
 def main():
