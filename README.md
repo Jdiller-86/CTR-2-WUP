@@ -13,8 +13,8 @@ on the TV and the bottom screen, touch and controls on the GamePad.
 **Early development: commercial games, playable-game WUP conversion and the
 Windows GUI are not available yet.** Current releases provide developer tools
 and original homebrew diagnostics. Super Mario 3D Land is the first planned
-compatibility target. Its private USA executable intake is verified; assets,
-runtime requirements and gameplay support remain unfinished.
+compatibility target. Its private USA executable intake is verified; the local asset reports match its revision. Selected asset formats, runtime
+requirements and gameplay support remain unfinished.
 
 ## Approach
 

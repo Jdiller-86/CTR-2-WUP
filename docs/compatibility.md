@@ -27,7 +27,7 @@
 | Original owned software scenes | Exact desktop scenes verified; focused Wii U cross-build available | PICA-format loader/index/fixed/uniform/MOV shader and bounded opaque triangles; atomic rollback; bounded standard guest GSP integration; no sampling/general TEV/depth or GPU shader translation; hardware evidence pending |
 | Original compiled GX transfer program | Sanitized desktop/reference checked; console pending | 16 standard operations, exact frames; scoped DMA/fill/transfer/copy/cache; PICA draw command faults |
 | `.3dsx`, update/DLC merges | Unsupported | No corresponding loader/pipeline; renamed input is not accepted as NCCH |
-| Any commercial revision | Unsupported/unverified | USA Mario executable/revision now privately verified; full RomFS/CRO inventory remains unavailable; required HLE/GPU/audio/save implementation and Wii U gameplay evidence remain absent |
+| Any commercial revision | Unsupported/unverified | USA Mario executable/revision now privately verified; local outer asset inventory is matched, but selected archive bytes/nested modules remain uninspected; required HLE/GPU/audio/save implementation and Wii U gameplay evidence remain absent |
 | WUP installation | Unverified/unavailable | Original encrypted writer and independent verification pass synthetic-input checks; installer acceptance and actual installable output remain pending |
 
 Stable inspection identity uses the 3DS program ID for save identity. Executable

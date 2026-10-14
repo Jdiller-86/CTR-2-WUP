@@ -7,7 +7,8 @@ seconds; aggregate diagnostic timing is not game performance. Its visual prompt
 accepted an answer before that scene, so accurate presentation gating and phase
 profiling are the next follow-up. The full CCI exceeds the transfer
 limit, but the [small private intake](docs/cia-intake.md) now verifies the USA
-Mario executable and exact revision identity. RomFS/CRO assets remain unavailable. All full
+Mario executable and exact revision identity. Local RomFS inventory reports now match the verified executable; selected asset
+bytes and nested module formats remain uninspected here. All full
 milestones remain open. [Evidence review](docs/console-evidence.md).
 
 Updated **October 13, 2026 (America/New_York)** · **v0.23.0**.
@@ -25,7 +26,7 @@ is enabled. Current binaries are original homebrew diagnostics.
 
 | Area | Verified foundation | Main remaining work |
 |---|---|---|
-| Input/preparation | Bounded CIA/NCSD/NCCH inspection, optional local key/seed imports/decryption, canonical full RomFS IVFC/metadata verification and private asset blobs | RomFS/CRO inventory for the verified USA Mario executable, broader forms and Windows acceptance |
+| Input/preparation | Bounded CIA/NCSD/NCCH inspection, optional local key/seed imports/decryption, canonical full RomFS IVFC/metadata verification and private asset blobs | Inspect selected archive/shader/audio bytes and nested module formats; broader forms and Windows acceptance |
 | CPU/runtime | Checked ARM/Thumb/VFP/AOT subsets, owned memory, eight single-core contexts and scoped services | Complete exercised CPU/HLE coverage, modules, guest audio and retail saves |
 | Homebrew | Nine normal-CRT/libctru applications: boot, threads, graphics, input, interactive, filesystem, RomFS, GX transfer and PICA draws | Launch-audio regression, broader services and game integration |
 | Graphics | Direct/shared framebuffer presentation, five display formats, 14 base textures, scoped GX transfers and compiled original guest PICA/MOV/software draws | broader shaders/TEV/sampling, GPU resources/coherency and measured console performance |
@@ -36,7 +37,9 @@ is enabled. Current binaries are original homebrew diagnostics.
 The derived USA Mario NCCH passes independent hashes, decompression and revision
 checks; pinned static analysis succeeds. Exact hashes and commercial bytes stay
 private. Its declared service list includes DSP and module loading, but runtime
-use and full asset/module inventory remain unverified. The inspector now accepts
+use, raw archive contents and nested module requirements remain unverified. The
+new local asset/preparation reports agree on source, revision and IVFC evidence;
+1,756 outer files are inventoried, with selected bytes still needed here. The inspector now accepts
 strict decrypted v0 CFA data partitions with original negative/compatibility
 coverage, without accepting prototype or v0 executable layouts. See
 [first-title findings](docs/first-title.md). No commercial profile is enabled.
@@ -291,9 +294,10 @@ Home/APT/recovery/stability and original installed-WUP acceptance remain open.
   early visual-prompt confirmation. Add accurate gating, bounded guest progress
   and phase measurements; the existing aggregate host timing is not game speed.
 - **Mario:** the uploaded derived USA executable/revision and private static
-  analysis are verified. The full CCI remains too large to transfer; RomFS/CRO
-  inventory, original full-container provenance and observed runtime requirements
-  remain unavailable. Exact hashes and commercial bytes stay private.
+  analysis are verified. The original-container and local RomFS preparation reports now match the
+  executable revision and asset source hash. Raw CCI/blob bytes remain local;
+  selected archive/shader/audio contents and observed runtime requirements
+  still need inspection. Exact hashes and commercial bytes stay private.
 - **Windows/install:** complete conversion, actual WUP installation/Menu launch,
   gameplay/audio/save/reload and the planned GUI remain separate gates.
 

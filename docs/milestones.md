@@ -3,7 +3,7 @@
 Updated **October 13, 2026** for **v0.23.0**. The product is an UWUVCI-style
 Windows GUI: **Select owned 3DS ROM → configure title/artwork → Inject →
 install its WUP → play from the Wii U Menu**. The CLI is the shared engine.
-The USA Super Mario 3D Land executable/revision is privately verified; assets,
+The USA Super Mario 3D Land executable/revision is privately verified; reported local asset inventory is matched; selected byte formats,
 observed runtime requirements and commercial compatibility remain unverified.
 
 **Approximately 20% implemented; 0/7 full milestones accepted.** The estimate is
@@ -55,7 +55,7 @@ passes establish their stated boundaries, not physical-console execution.
 | [M2: CPU translation and performance](#m2) | In progress | Exercised CPU/ABI/fallback coverage and actual Espresso timing |
 | [M3: Homebrew execution runtime](#m3) | In progress | Stable physical compiled guest plus broader services/modules/audio |
 | [M4: PICA to GX2 rendering](#m4) | In progress | Real PICA/GX2 draws/shaders/TEV/coherency and measured scenes |
-| [M5: Super Mario 3D Land revision](#m5) | Blocked | RomFS/CRO inventory, observed runtime requirements and Mario gameplay/audio/save/performance |
+| [M5: Super Mario 3D Land revision](#m5) | Blocked | Selected asset formats/nested modules, observed runtime requirements and Mario gameplay/audio/save/performance |
 | [M6: Automated ROM to WUP conversion](#m6) | In progress | Full Windows conversion, installer acceptance and rebuild/save continuity |
 | [M7: Windows GUI injector](#m7) | Planned | Responsive packaged Windows GUI Inject-to-playable-WUP workflow |
 
@@ -476,14 +476,16 @@ Acceptance:
 
 **Current private intake:** a derived USA v2 executable has independent stored
 hash/decompression/revision verification and successful pinned static analysis.
-RomFS/CRO inventory is excluded from the export and remains unavailable; declared
+The newly received local preparation/asset reports match the executable and
+report 1,756 outer files with identical IVFC evidence. Payload bytes remain local;
+selected archive/shader/audio formats and nested modules need inspection. Declared
 service access is not traced use. The original full container hash is reported,
 not independently verified here. No commercial profile or full gate is accepted.
 See [first-title findings](first-title.md).
 
 **State: Blocked. Full acceptance: open.**
 
-**Entry:** The user supplies a privately prepared executable and required assets for an owned exact Old 3DS revision. The uploaded USA Mario executable/revision is verified; required assets and original full-container provenance remain incomplete.
+**Entry:** The user supplies a privately prepared executable and required assets for an owned exact Old 3DS revision. The uploaded USA Mario executable/revision is verified; local asset provenance reports are now matched, while selected payload bytes and original full-container integrity remain uninspected here.
 
 **Deliverables:** An exact-hash revision profile, observed feature/test-route matrix, required shared runtime/renderer/audio/retail-save integration and a measured supported-title console acceptance report.
 
@@ -491,7 +493,7 @@ See [first-title findings](first-title.md).
 
 **Historical intake evidence:** The original CIA attachment exceeds the workspace attachment transfer limit. The received small intake reports encrypted executable content and contains no executable; it supplies no observed game behavior. Local preparation and original-fixture proofs establish tooling only. Upstream source observations are leads, not reproduced CTR2WUP compatibility.
 
-**Still needs external evidence/input:** The executable is available for private analysis; full acceptance remains blocked on RomFS/CRO inventory, observed runtime requirements and later console gameplay. Keys remain local; no commercial code, assets or traces are posted in GitHub issues or public artifacts. Actual Wii U gameplay evidence follows implementation.
+**Still needs external evidence/input:** The executable is available for private analysis; full acceptance remains blocked on selected asset-format/nested-module inspection, observed runtime requirements and later console gameplay. Keys remain local; no commercial code, assets or traces are posted in GitHub issues or public artifacts. Actual Wii U gameplay evidence follows implementation.
 
 References: [First-title intake](first-title.md) · [CIA helper](cia-intake.md) · [Local encrypted input](encrypted-input.md) · [Compatibility](compatibility.md).
 
@@ -501,7 +503,7 @@ References: [First-title intake](first-title.md) · [CIA helper](cia-intake.md) 
 
 #### m5-intake: Identify the owned Super Mario 3D Land executable and assets
 
-Retain the verified private USA executable/revision and obtain the missing RomFS/CRO inventory and original-container provenance for the first candidate.
+Retain the verified private USA executable and matched local preparation/asset reports; inspect selected payload formats, possible nested modules and full original-container integrity for the first candidate.
 
 State: **Blocked** · Needs: `needs-input`.
 

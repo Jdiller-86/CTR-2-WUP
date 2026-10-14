@@ -3,6 +3,14 @@
 All releases are development increments. RPX/WUHB diagnostics and desktop passes
 do not establish commercial-game compatibility or installable WUP acceptance.
 
+## Asset inventory review — 2026-10-13
+
+- Match private preparation/output, asset-source and executable revision reports.
+- Check reported inventory extents/totals and identical local IVFC evidence;
+  retain aggregate counts while keeping raw reports, hashes and assets private.
+- Plan bounded selected sample export for actual shader/system/audio inspection;
+  outer module absence and declared services do not establish runtime behavior.
+
 ## Intake compatibility follow-up — 2026-10-13
 
 - Accept strictly checked decrypted v0 CFA data partitions during cartridge

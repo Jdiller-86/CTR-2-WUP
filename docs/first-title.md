@@ -12,12 +12,24 @@ analysis succeeds; the extended-header allowlist declares 27 services, including
 `dsp::DSP` and `ldr:ro`. These are declared capabilities, not traced runtime IPC
 or supported gameplay. Exact hashes and all commercial analysis stay private.
 
-The full CCI still exceeds transfer limits. The derived view excludes RomFS,
-so assets and CRO inventory remain unavailable. The lifter's zero-module count
-for this asset-free view does not establish that the full game has no modules.
-No commercial profile is enabled. Next work is the private asset/module and
-required-runtime matrix, followed by original probes for confirmed requirements.
-Physical original draw/audio passes remain separate from commercial compatibility.
+**October 13 asset reports received:** the preparation report's output hash and
+revision match both the executable intake and the asset manifest. The two local
+reports contain identical full IVFC verification evidence. Inventory paths,
+file hashes, offsets/sizes, totals and source/revision bindings were cross-checked
+here. The original CCI and RomFS payload bytes remain on the user's PC; their
+full hashes and integrity are reported local evidence, not recomputed here.
+
+The manifest lists 1,756 files in 19 directories and a 298,080,796-byte Level-3
+blob: 1,666 `.szs` archives, 88 `.bcstm` streams, one `.bcsar` archive and one
+`.bsm` file. Two shader-named archives total about 20 KiB. No outer `.cro`/`.crs`
+entry is listed; nested archive contents remain unknown. This does not prove
+absence of dynamic modules or identify archive formats from extensions alone.
+
+Next: export explicit bounded shader/system/audio samples with matching hashes,
+inspect actual container/instruction/sample formats privately, then refine the
+required shared runtime matrix and original probes. Declared `ldr:ro`/DSP access
+is separate from observed use. No commercial profile is enabled, and the scoped
+original draw/audio passes do not establish commercial compatibility.
 
 ## Historical intake notes
 
