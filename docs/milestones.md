@@ -1,6 +1,6 @@
 # Milestones and remaining work
 
-Updated **October 14, 2026** for **v0.24.0 source (unreleased)**. The product is an UWUVCI-style
+Updated **October 14, 2026** for **v0.24.1 hardware evaluation**. The product is an UWUVCI-style
 Windows GUI: **Select owned 3DS ROM → configure title/artwork → Inject →
 install its WUP → play from the Wii U Menu**. The CLI is the shared engine.
 The USA Super Mario 3D Land executable/revision is privately verified; reported local asset inventory is matched; selected byte formats,

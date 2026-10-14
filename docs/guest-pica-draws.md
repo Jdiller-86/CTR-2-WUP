@@ -1,5 +1,11 @@
 # Compiled original guest PICA draws
 
+For the **0.24.1** hardware snapshot, follow [the current two-app guide](console-retest.md).
+PR #106 gates confirmation on a successfully decoded/submitted drawn frame,
+adds a measured bounded runner and an automatic second-run prompt, and supplies
+source-bound results plus a Windows return-log collector. Those new bytes still
+need their own physical observations; the earlier results below remain dated evidence.
+
 Version **0.23.0** connects a bounded PICA draw subset to the standard guest GSP
 queue. An original normal-CRT ARM application uses unmodified pinned libctru to
 submit two command lists, retain uploaded shader/state between them, render

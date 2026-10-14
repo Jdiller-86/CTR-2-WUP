@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "0.24.0",
+  "version": "0.24.1",
   "updated": "2026-10-14",
   "approximate_implementation_percent": 20,
   "full_milestones_accepted": 0,
@@ -17,7 +17,8 @@
         "Versioned native/guest RPX/WUHB builds and read-back-checked test-report/save publication lifecycle",
         "Older native/control reports, confirmed Minus exit and user-reported Native/Guarded/Compiled v0.14.5 completion retained as scoped evidence",
         "October 12 physical round: five completed named TXT reports, valid visit-2 snapshot, fresh-launch Save 0.14.6 RELOAD PASS and user-confirmed correct pictures/Minus return; looping launch music recorded separately",
-        "October 13 Audio Check 0.20.0 full trace and GX Transfers 0.20.0 result/trace record named passes; user confirms silence and correct exit. Native audio result TXT was not included."
+        "October 13 Audio Check 0.20.0 full trace and GX Transfers 0.20.0 result/trace record named passes; user confirms silence and correct exit. Native audio result TXT was not included.",
+        "PR #106 supplies the 0.24.1 focused round with fresh arithmetic-app launch/Minus repetition, compiled-draw restart, optional HOME observation and source-bound returned logs. Actual launcher/stability/recovery evidence remains pending."
       ],
       "acceptance_remaining": [
         "Verify documented SD publication recovery and repeat launch/Home/APT lifecycle acceptance",
@@ -57,7 +58,10 @@
           "waiting_labels": [
             "needs-console"
           ],
-          "state": "awaiting_evidence"
+          "state": "awaiting_evidence",
+          "evidence": [
+            "PR #106 supplies the 0.24.1 focused round with fresh arithmetic-app launch/Minus repetition, compiled-draw restart, optional HOME observation and source-bound returned logs. Actual launcher/stability/recovery evidence remains pending."
+          ]
         },
         {
           "id": "m1-controls-audio",
@@ -120,7 +124,8 @@
       "summary": "Checked ARM/Thumb/VFP, portable generated ABI and observable fallback foundations exist. Broader exercised correctness, real Espresso costs and useful performance remain open.",
       "verified_foundations": [
         "Original interpreter/AOT/reference suites and checked little-endian memory across host and emulated big-endian PowerPC",
-        "Eight single-core CPU/TLS/VFP contexts, scoped instruction/fault/synchronization semantics and external generated-code integration"
+        "Eight single-core CPU/TLS/VFP contexts, scoped instruction/fault/synchronization semantics and external generated-code integration",
+        "Scoped #87/PR #106 separates host execution/decode/scaling/wait/presentation/storage wall times and uses bounded cooperative live-time guest slices; the old 57.33-second draw is the dated baseline. Hardware comparison is pending; no game-FPS or full Espresso acceptance is inferred."
       ],
       "acceptance_remaining": [
         "Complete exercised instruction/exception/exclusive/VFP and generated-code ABI correctness",
@@ -183,7 +188,10 @@
           "waiting_labels": [
             "needs-console"
           ],
-          "state": "planned"
+          "state": "planned",
+          "evidence": [
+            "Scoped #87/PR #106 separates host execution/decode/scaling/wait/presentation/storage wall times and uses bounded cooperative live-time guest slices; the old 57.33-second draw is the dated baseline. Hardware comparison is pending; no game-FPS or full Espresso acceptance is inferred."
+          ]
         },
         {
           "id": "m2-cpu-acceptance",
@@ -324,7 +332,9 @@
         "Standard guest GSP integrates bounded owned-resource PICA draws transactionally; the compiled original draws four exact triangles into both targets and displays them with zero fallback.",
         "October 13 Guest Draws 0.23.0 has matching two-step PASS result/trace, four triangles, 97,200 fragments and user-confirmed pictures/exit. Aggregate frame timing and premature visual-prompt timing are recorded; full graphics costs remain unmeasured.",
         "Merged scoped #97/PR #98 expands vertex code storage to 512 words with original entry/upload/rollback probes and native storage/stack measurements. Required hosted platform checks and native/Project reconciliation 38608010840 pass; #28/M4 acceptance remains open.",
-        "Scoped #76/PR #105 adds exact component-wise ADD/MUL using integer dyadic arithmetic, independent rational numeric/encoding/pixel references and late shader/target/queue rollback. Rounding, underflow/overflow and unsupported state reject explicitly; required host/native/Windows/docs checks gate delivery through PR #105. No hardware or full task acceptance."
+        "Scoped #76/PR #105 adds exact component-wise ADD/MUL using integer dyadic arithmetic, independent rational numeric/encoding/pixel references and late shader/target/queue rollback. Rounding, underflow/overflow and unsupported state reject explicitly; required host/native/Windows/docs checks gate delivery through PR #105. No hardware or full task acceptance.",
+        "The 0.24.1 native Scene Check executes exact ADD/MUL in both index formats with on-console analytic pixel checks and submitted-frame-gated user observations. Its source-matched package is awaiting physical Wii U results; compiler/host checks are not a console pass.",
+        "PR #106 prepares a two-app 0.24.1 hardware round with accurate drawn-picture confirmation, bounded draw execution and per-phase/per-session metrics. Source-bound 8 KiB results and partial traces can be returned in one allowlisted ZIP; picture, speed, fresh-launch and launcher observations remain pending."
       ],
       "acceptance_remaining": [
         "Implement real PICA command/state, vertex/shader, texture/sampler/TEV and raster behavior",
@@ -369,7 +379,8 @@
             "v0.21.0 implements original checked unsigned 8-bit/16-bit indexed array gathering with 364,123 original assertions; PICA loader/fixed state, uniforms, shaders and actual draws remain open.",
             "v0.22.0 implements original exact-value MOV/NOP/END shaders, loader/fixed/uniform state, output maps and opaque triangles; focused Scene Check builds and exposes automatic pixels/timings plus separate human confirmation. No general shader, guest GSP draw or full task acceptance.",
             "Merged #97/PR #98 checks all 512 vertex code slots/entries, exhausted upload cursors and late state/pixel/guest queue rollback. Scene storage adds 1280 bytes; native shader/scene/adapter stack frames are unchanged. Required hosted platform checks pass; full task acceptance remains open.",
-            "Scoped #76/PR #105 adds exact component-wise ADD/MUL using integer dyadic arithmetic, independent rational numeric/encoding/pixel references and late shader/target/queue rollback. Rounding, underflow/overflow and unsupported state reject explicitly; required host/native/Windows/docs checks gate delivery through PR #105. No hardware or full task acceptance."
+            "Scoped #76/PR #105 adds exact component-wise ADD/MUL using integer dyadic arithmetic, independent rational numeric/encoding/pixel references and late shader/target/queue rollback. Rounding, underflow/overflow and unsupported state reject explicitly; required host/native/Windows/docs checks gate delivery through PR #105. No hardware or full task acceptance.",
+            "The 0.24.1 native Scene Check executes exact ADD/MUL in both index formats with on-console analytic pixel checks and submitted-frame-gated user observations. Its source-matched package is awaiting physical Wii U results; compiler/host checks are not a console pass."
           ]
         },
         {
@@ -417,7 +428,10 @@
           "waiting_labels": [
             "needs-console"
           ],
-          "state": "blocked"
+          "state": "blocked",
+          "evidence": [
+            "PR #106 prepares a two-app 0.24.1 hardware round with accurate drawn-picture confirmation, bounded draw execution and per-phase/per-session metrics. Source-bound 8 KiB results and partial traces can be returned in one allowlisted ZIP; picture, speed, fresh-launch and launcher observations remain pending."
+          ]
         }
       ]
     },

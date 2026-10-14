@@ -6,6 +6,10 @@
 
 First visit? [Take the repository tour](docs/repository-guide.md).
 
+Testing on Wii U? The [focused 0.24.1 hardware round](docs/console-retest.md)
+contains two guided apps and a Windows collector for returning one log ZIP.
+It is a tested PR snapshot; physical results and merge review remain separate.
+
 Contributors can [develop and manage tracking without hosted Actions](docs/direct-development.md)
 using secure API access and recorded local validation.
 

@@ -85,6 +85,11 @@ and label/dashboard refresh also verify; console/full gate criteria remain open.
 
 ## Next renderer features
 
+The focused hardware round is scoped #87 under #20/M2, with draft PR #106 and
+references to #13/#28/#31/#81 for fresh launch, arithmetic and picture/timing
+evidence. It is evaluated from its exact tested commit before merge; physical
+results and the repository's normal review requirement remain pending.
+
 | Feature | Parent task | Acceptance focus |
 | --- | --- | --- |
 | Compiled original guest draws | #27 | Standard GSP queue, exact targets, rollback and retained state |

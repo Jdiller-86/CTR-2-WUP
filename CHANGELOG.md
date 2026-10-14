@@ -3,6 +3,21 @@
 All releases are development increments. RPX/WUHB diagnostics and desktop passes
 do not establish commercial-game compatibility or installable WUP acceptance.
 
+## 0.24.1 — hardware evaluation, premerge
+
+- Gate visual confirmation on a decoded and submitted drawn frame with exact
+  original counters; a startup framebuffer cannot establish the picture.
+- Bound Guest Draws by instructions/calls and cooperative real wall time,
+  returning on a frame, wait, yield, stop or lack of progress. Log separate host
+  execution/decode/scaling/wait/presentation/storage metrics and per-run latency.
+- Run exact ADD/MUL analytic pixels on the native Scene Check; guide fresh
+  launch/exit plus compiled-draw restart without repeating completed long guides.
+- Save source identity, named outcomes and counters in closed/read-back-verified
+  8 KiB results; preserve per-launch traces and visible storage failures.
+- Stage a source/SDK/binary/checksum-checked two-app kit and a Windows collector
+  that includes partial evidence while excluding saves, keys and unrelated files.
+- Actual hardware speed, picture and launcher observations are pending.
+
 ## 0.24.0 — unreleased
 
 - Add original checked component-wise PICA ADD/MUL execution with independent

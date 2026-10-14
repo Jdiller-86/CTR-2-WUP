@@ -5,6 +5,7 @@
 #include "test_guide.h"
 #include "test_lifecycle.h"
 #include "image_scale.h"
+#include "guest_slice.h"
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
@@ -53,6 +54,48 @@ static void storage_tests(void) {
 }
 
 static char guide_log_text[32768];
+typedef struct { uint64_t now,cost;unsigned calls,mode; } slice_fixture;
+static uint64_t fake_clock(void *context) { return ((slice_fixture *)context)->now; }
+static ctr_slice_step fake_execute(void *context,unsigned limit) {
+    slice_fixture *f=context;++f->calls;
+    f->now=f->mode==6?f->now-1:f->now+f->cost;
+    ctr_slice_step s={limit,CTR_SLICE_RUN,false};
+    if(f->mode==1 && f->calls==2)s.frame=true;
+    if(f->mode==2) { s.instructions=0;s.state=CTR_SLICE_WAIT; }
+    if(f->mode==3) { s.instructions=0;s.state=CTR_SLICE_YIELD; }
+    if(f->mode==4)s.state=CTR_SLICE_STOP;
+    if(f->mode==5)s.instructions=0;
+    if(f->mode==7)s.instructions=limit+1u;
+    if(f->mode==8)s.state=(ctr_slice_state)-1;
+    return s;
+}
+static void slice_tests(void) {
+    ctr_slice_policy p={10,50,500,8000};slice_fixture f={100,2000,0,0};
+    ctr_slice_report r=ctr_guest_slice(&p,fake_clock,fake_execute,&f);
+    CHECK(r.reason==CTR_SLICE_TIME && r.calls==4 && r.instructions==40 && r.elapsed_us==8000);
+    p.max_instructions=25;p.max_us=100000;f=(slice_fixture){100,1,0,0};
+    r=ctr_guest_slice(&p,fake_clock,fake_execute,&f);
+    CHECK(r.reason==CTR_SLICE_INSTRUCTIONS && r.calls==3 && r.instructions==25);
+    p.max_instructions=500;p.max_calls=2;f=(slice_fixture){100,1,0,0};
+    r=ctr_guest_slice(&p,fake_clock,fake_execute,&f);CHECK(r.reason==CTR_SLICE_CALLS && r.calls==2);
+    const ctr_slice_reason expected[]={CTR_SLICE_FRAME,CTR_SLICE_WAITING,CTR_SLICE_YIELDED,
+        CTR_SLICE_STOPPED,CTR_SLICE_NO_PROGRESS,CTR_SLICE_CLOCK,CTR_SLICE_CONTRACT,CTR_SLICE_CONTRACT};
+    for(unsigned mode=1;mode<=8;++mode) {
+        f=(slice_fixture){100,1,0,mode};r=ctr_guest_slice(&p,fake_clock,fake_execute,&f);
+        CHECK(r.reason==expected[mode-1] && r.calls==(mode==1?2u:1u));
+    }
+    p.max_calls=50;p.max_us=1;f=(slice_fixture){100,20000,0,0};
+    r=ctr_guest_slice(&p,fake_clock,fake_execute,&f);CHECK(r.reason==CTR_SLICE_TIME && r.calls==1 && r.elapsed_us==20000);
+    CHECK(ctr_guest_slice(NULL,fake_clock,fake_execute,&f).reason==CTR_SLICE_ARGUMENT);
+    p.quantum=0;CHECK(ctr_guest_slice(&p,fake_clock,fake_execute,&f).reason==CTR_SLICE_ARGUMENT);
+    CHECK(!ctr_draw_observation_ready(true,1,4,4,97200,36));
+    CHECK(!ctr_draw_observation_ready(false,2,4,4,97200,36));
+    CHECK(!ctr_draw_observation_ready(true,2,3,4,97200,36));
+    CHECK(!ctr_draw_observation_ready(true,2,4,3,97200,36));
+    CHECK(!ctr_draw_observation_ready(true,2,4,4,97199,36));
+    CHECK(!ctr_draw_observation_ready(true,2,4,4,97200,35));
+    CHECK(ctr_draw_observation_ready(true,2,4,4,97200,36));
+}
 static void capture(void *context,const char *message) {
     (void)context;
     size_t used=strlen(guide_log_text),n=strlen(message);
@@ -150,10 +193,11 @@ static void guide_tests(void) {
     guide_log_text[0]=0;memset(&in,0,sizeof(in));
     ctr_test_guide_init(&g,CTR_GUIDE_SCENE,capture,NULL);
     ctr_test_guide_update(&g,&in);CHECK(!g.done && !g.passed);
-    in.pressed=CTR_GUIDE_R;ctr_test_guide_update(&g,&in);CHECK(g.step==1 && g.passed==1);
+    in.pressed=CTR_GUIDE_R;ctr_test_guide_update(&g,&in);CHECK(!g.step);
+    in.guest_frame_available=true;ctr_test_guide_update(&g,&in);CHECK(g.step==1 && g.passed==1);
     ctr_test_guide_update(&g,&in);CHECK(g.done && g.passed==2);
     CHECK(ctr_test_guide_results(&g,results,sizeof(results)));
-    CHECK(strstr(results,"Triangle picture: PASS") && strstr(results,"Shared diagonal: PASS"));
+    CHECK(strstr(results,"Arithmetic triangle picture: PASS") && strstr(results,"Shared diagonal: PASS"));
     ctr_test_guide_init(&g,CTR_GUIDE_SCENE,capture,NULL);in.guest_fault=true;
     ctr_test_guide_update(&g,&in);CHECK(g.failed==1 && !g.passed);
     ctr_test_guide_update(&g,&in);CHECK(g.done && g.failed==2);
@@ -163,9 +207,15 @@ static void guide_tests(void) {
     guide_log_text[0]=0;memset(&in,0,sizeof(in));
     ctr_test_guide_init(&g,CTR_GUIDE_PICA,capture,NULL);
     in.pressed=CTR_GUIDE_R;ctr_test_guide_update(&g,&in);CHECK(g.step==0);
-    in.guest_frame_available=true;ctr_test_guide_update(&g,&in);CHECK(g.step==1 && g.passed==1);
+    in.guest_frame_available=true;in.guest_frame_serial=1;ctr_test_guide_update(&g,&in);CHECK(g.step==0);
+    ctr_test_guide_view(&g,0,view);CHECK(strstr(view[4],"startup image")!=NULL);
+    in.guest_drawn_frame_available=true;in.guest_frame_serial=2;ctr_test_guide_update(&g,&in);CHECK(g.step==1 && g.passed==1);
     in.pressed=0;ctr_test_guide_update(&g,&in);CHECK(!g.done);
-    in.guest_exited=true;in.guest_pass=true;ctr_test_guide_update(&g,&in);CHECK(g.done && g.passed==2);
+    in.guest_exited=true;in.guest_pass=true;ctr_test_guide_update(&g,&in);CHECK(!g.done && g.passed==2);
+    in.guest_sessions=1;in.pressed=CTR_GUIDE_PLUS;ctr_test_guide_update(&g,&in);CHECK(ctr_test_guide_take_restart(&g));
+    in.pressed=0;ctr_test_guide_update(&g,&in);CHECK(!g.done);
+    in.guest_sessions=2;in.guest_drawn_frame_available=false;ctr_test_guide_update(&g,&in);CHECK(!g.done);
+    in.guest_drawn_frame_available=true;ctr_test_guide_update(&g,&in);CHECK(g.done && g.passed==3);
     CHECK(ctr_test_guide_results(&g,results,sizeof(results)));
     CHECK(strstr(results,"Guest triangle pictures: PASS") && strstr(results,"Guest draws / readback / exit: PASS"));
 
@@ -480,7 +530,7 @@ static void exit_order_tests(void) {
 int main(int argc,char **argv) {
     if(argc==4 && !strcmp(argv[1],"--ctr-test-child"))return interrupted_report(argv[2],argv[3]);
     storage_tests();
-    guide_tests();
+    slice_tests();guide_tests();
     lifecycle_tests();
     exit_order_tests();
     scale_tests();

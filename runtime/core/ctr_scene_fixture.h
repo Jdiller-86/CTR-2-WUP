@@ -19,5 +19,8 @@ void ctr_scene_fixture_make_arithmetic(ctr_scene_fixture *fixture,bool short_ind
 void ctr_scene_fixture_background(void *rgba,size_t size);
 ctr_scene_result ctr_scene_fixture_render(bool short_indices,void *rgba,size_t capacity,
                                          ctr_scene_report *report);
+ctr_scene_result ctr_scene_fixture_render_arithmetic(bool short_indices,void *rgba,size_t capacity,
+                                                    ctr_scene_report *report);
 int ctr_scene_selftest(void);
+int ctr_scene_arithmetic_selftest(void);
 #endif

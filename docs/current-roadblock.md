@@ -1,4 +1,4 @@
-# Remaining acceptance gates (0.24.0 source, unreleased)
+# Remaining acceptance gates (0.24.1 hardware evaluation)
 
 The product remains a Windows GUI that converts owned 3DS games into individual
 Wii U WUP titles. Approximately 20% implementation and 0/7 full gates accepted
@@ -12,9 +12,11 @@ reviewed results. No blanket repeat is requested. See [evidence](console-evidenc
 Current requirements:
 
 1. **Draw progress and accurate evidence:** the rendered second presentation
-   takes 57.33 seconds in the trace; the visual guide accepted an answer before
-   that scene. Gate confirmation on the drawn frame, measure individual phases
-   and investigate the fixed guest-instruction-per-refresh budget. Aggregate
+   took 57.33 seconds in the old trace; its visual guide accepted an answer before
+   that scene. PR #106 supplies a correctly gated, cooperative bounded draw run,
+   phase/progress metrics and a two-app [hardware round](console-retest.md).
+   Compare that exact build on Wii U; measure the new arithmetic Scene Check,
+   repeated launch/exit and the draw run's in-app restart. Aggregate
    host refresh time is not a GPU/CPU breakdown or a game-performance result.
 2. **Mario observed runtime requirements:** the executable, preparation/inventory
    reports and all seven requested sample payloads are verified and available.

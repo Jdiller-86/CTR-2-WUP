@@ -1,8 +1,13 @@
 # Physical Wii U test checklist
 
-**Current evidence:** October 13 audio/GX/draw results are reviewed in
+**Current round:** use the [0.24.1 two-app hardware package](console-retest.md)
+for exact arithmetic scenes, corrected draw confirmation, phase/startup metrics
+and repeat launch/exit. Its collector returns one bounded ZIP with partial and
+failure evidence. New physical results remain pending.
+
+**Earlier evidence:** October 13 audio/GX/draw results are reviewed in
 [console-evidence.md](console-evidence.md). There is no request to repeat the
-completed Save/RomFS/audio routes. The next draw follow-up addresses measured
+completed Save/RomFS/audio routes. The focused draw follow-up addresses measured
 startup delay, phase timing and accurate visual confirmation. See
 [console-retest.md](console-retest.md). The versioned manual checks below are
 historical reference for deeper acceptance, not a new blanket test request.

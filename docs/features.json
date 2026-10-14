@@ -556,8 +556,10 @@
       "title": "Bound compiled guest execution and measure diagnostic draw startup",
       "milestone": 2,
       "parent_issue": 20,
-      "state": "planned",
-      "pull_requests": [],
+      "state": "active",
+      "pull_requests": [
+        106
+      ],
       "scope": [
         "Decouple bounded guest execution from the fixed 50,000 instructions per expensive host refresh while retaining real guest time, input and lifecycle responsiveness.",
         "Gate the visual answer on a drawn presentation rather than startup output; record execution, scaling, GPU waits/presentation and storage phases."
@@ -568,7 +570,9 @@
       ],
       "evidence": [
         "October 13 v0.23.0 trace: drawn presentation 57,330 ms; mean host refresh 153,189 us; visual answer accepted at 10,221 ms before the scene.",
-        "Planned focused follow-up; aggregate timing does not establish a renderer bottleneck or useful game performance."
+        "PR #106 prepares the 0.24.1 premerge hardware round: cooperative 8 ms/500000-instruction/50-call slices, submitted-draw confirmation, per-phase/per-run metrics and source-bound 8 KiB results.",
+        "Original policy and guide tests cover caps, waits/yields/stops, zero progress, bad clock/callbacks, startup-frame rejection and new-session restart. Arithmetic pixel self-checks and bounded package/collector/analyzer fixtures pass focused checks; full required checks gate publication.",
+        "The two-app SD-ready kit preserves earlier Save/RomFS/audio/GX evidence, includes a Windows allowlisted log collector and remains pending physical picture, speed and launcher-return observations. No full gate is accepted."
       ]
     },
     {

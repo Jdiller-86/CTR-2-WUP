@@ -1,5 +1,13 @@
 # CTR2WUP status
 
+**Focused hardware evaluation:** [PR #106](https://github.com/Jdiller-86/CTR-2-WUP/pull/106)
+under #87/#20/M2 prepares source **0.24.1** for a two-app hardware round:
+native exact ADD/MUL scenes and correctly gated compiled guest draws with
+cooperative execution slices, phase/progress metrics and a Windows return-log
+collector. [The package guide](docs/console-retest.md) names the required physical
+observations. This is a premerge test snapshot; new picture, speed and launcher
+evidence is pending the user's run. Earlier scoped passes are preserved.
+
 **Exact shader arithmetic:** [PR #105](https://github.com/Jdiller-86/CTR-2-WUP/pull/105)
 implements scoped #76 under #28/M4: component-wise ADD/MUL, independent operand
 descriptors and checked integer dyadic evaluation. All 167,730 original rational
@@ -54,7 +62,7 @@ live Project review replace the resolved input blocker. Actual runtime use,
 broader modules and all full
 milestones remain open. [Evidence review](docs/console-evidence.md).
 
-Updated **October 14, 2026 (America/New_York)** · **v0.24.0 source, unreleased**.
+Updated **October 14, 2026 (America/New_York)** · **v0.24.1 hardware evaluation**.
 The target remains an UWUVCI-style Windows GUI: select an owned 3DS game, configure
 title/artwork, click Inject, install its individual WUP and play from Wii U Menu.
 [Requirements](docs/project-brief.md), [product plan](docs/development-plan.md),
@@ -109,7 +117,8 @@ PR #98 merged at `926cf8cf23d17a091bea69ad1e2ee850b1374045` with owner approval
 after passing hosted Required CI and Documentation. Its original probes do not
 establish commercial shader semantics or physical renderer acceptance.
 
-The source version is **0.24.0 (unreleased)**. [Development releases](https://github.com/Jdiller-86/CTR-2-WUP/releases)
+This test snapshot is **0.24.1**; main's earlier arithmetic checkpoint is 0.24.0.
+The latest tagged diagnostic release remains 0.23.0. [Development releases](https://github.com/Jdiller-86/CTR-2-WUP/releases)
 identify immutable source commits and matching original diagnostic kits, developer
 wheel and offline documentation. The release workflow verifies source/version,
 pinned SDK, original frames, binaries, source/wheel equality, ZIP CRCs and checksums.
@@ -118,8 +127,8 @@ publication identity. Older tags/assets and their console evidence are preserved
 
 ## Remaining acceptance
 
-- Correct the drawn-frame confirmation gate and measure execution/rendering/
-  transfer/wait phases; do not repeat unchanged passed guides.
+- Run the focused 0.24.1 arithmetic/draw-performance package and return its
+  versioned logs; new visual, speed and launcher evidence remains pending.
 - Extend shader rounding/remaining arithmetic/control, TEV/sampling, coherency, modules, guest audio
   and retail saves using original references and actual observed requirements.
 - Record full platform stability/recovery and original WUP installation/Menu launch.

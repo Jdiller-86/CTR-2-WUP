@@ -42,12 +42,13 @@ static const step audio_steps[]={
     {AUDIO,"Native test tone","Press A: a short tone should play on both screens.","R: heard on BOTH   L: missing or wrong sound"}
 };
 static const step scene_steps[]={
-    {VIEW_NATIVE,"Triangle picture","Both: RED lower-left / GREEN upper-right square.","R: correct on BOTH   L: wrong or missing picture"},
-    {VIEW_NATIVE,"Shared diagonal","Does the square have NO gap along its diagonal?","R: solid square   L: gap, flicker or other problem"}
+    {VIEW_GUEST,"Arithmetic triangle picture","Both: RED lower-left / GREEN upper-right square.","R: correct on BOTH   L: wrong or missing picture"},
+    {VIEW_GUEST,"Shared diagonal","GamePad: check the full square's diagonal.","R: solid square   L: gap, flicker or other problem"}
 };
 static const step pica_steps[]={
     {VIEW_GUEST,"Guest triangle pictures","BOTH: RED lower-left / GREEN upper-right rectangle.","R: solid diagonal on BOTH   L: wrong or missing"},
-    {GUEST_EXIT,"Guest draws / readback / exit","Waiting for the compiled guest's pixel checks.","Its own PICA draw PASS and exit are checked."}
+    {GUEST_EXIT,"Guest draws / readback / exit","Waiting for the compiled guest's pixel checks.","Its own PICA draw PASS and exit are checked."},
+    {GUEST_RESTART,"Repeat draw run","Press PLUS to run the draw test again.","Wait for the new guest's automatic PASS and exit."}
 };
 static const step gx_steps[]={
     {VIEW_GUEST,"GX transfer picture","TV: GREEN / RED / GREEN. GamePad: BLUE.","R: observed correctly   L: wrong/missing picture"},
@@ -145,11 +146,17 @@ void ctr_test_guide_update(ctr_test_guide *g,const ctr_guide_input *in) {
         if(!g->restart_waiting && (in->pressed&CTR_GUIDE_PLUS)) {
             g->restart_requested=true;g->restart_waiting=true;g->expected_session=in->guest_sessions+1;
             log_line(g,"GUIDE restart requested; waiting for guest session %u",g->expected_session);
-        } else if(g->restart_waiting && in->guest_sessions>=g->expected_session && in->guest_exited) {
+        } else if(g->restart_waiting && in->guest_sessions>=g->expected_session && in->guest_exited &&
+                  (g->kind!=CTR_GUIDE_PICA || in->guest_drawn_frame_available)) {
             finish_step(g,in->guest_pass?"PASS":"FAIL",in->guest_pass?"New guest session PASS and exited state observed":"New guest exited without PASS");
         }
     } else {
-        if(type==VIEW_GUEST && in->guest_frame_available)g->observed=1;
+        bool frame_ready=g->kind==CTR_GUIDE_PICA?in->guest_drawn_frame_available:in->guest_frame_available;
+        if(type==VIEW_GUEST && frame_ready && !g->observed) {
+            g->observed=1;
+            log_line(g,"GUIDE visual frame ready: kind=%u serial=%llu elapsed_ms=%llu; fresh R press required",
+                (unsigned)g->kind,(unsigned long long)in->guest_frame_serial,(unsigned long long)in->milliseconds);
+        }
         if((type==COLOR_A || type==AUDIO) && ((in->pressed|in->held)&CTR_GUIDE_A) && !(g->observed&1)) {
             g->observed=1;g->input_frame_serial=in->input_frame_serial;g->button_started=in->milliseconds;
             if(type==COLOR_A)log_line(g,"GUIDE A input recorded: frame_before=%llu; waiting for a new green guest frame",
@@ -164,7 +171,7 @@ void ctr_test_guide_update(ctr_test_guide *g,const ctr_guide_input *in) {
         }
         if(in->pressed&CTR_GUIDE_L)finish_step(g,"FAIL","User reported a picture/touch/sound/stability problem");
         else if(type==COLOR_A && !(g->observed&2))return;
-        else if((in->pressed&CTR_GUIDE_R) && (type!=VIEW_GUEST || in->guest_frame_available))
+        else if((in->pressed&CTR_GUIDE_R) && (type!=VIEW_GUEST || frame_ready))
             finish_step(g,"PASS","User confirmed the displayed observation prompt");
     }
 }
@@ -227,7 +234,8 @@ void ctr_test_guide_view(const ctr_test_guide *g,uint64_t milliseconds,char rows
     } else if(list[g->step].type==GUEST_RESTART || list[g->step].type==SAVE_RELOAD) {
         snprintf(rows[4],72,g->restart_waiting?"Restart recorded. Waiting for new guest PASS.":"Waiting for your PLUS press.");
     } else if(list[g->step].type==VIEW_GUEST) {
-        snprintf(rows[4],72,g->observed?"Guest frame ready. Confirm with R or L.":"Waiting for the first guest frame.");
+        snprintf(rows[4],72,g->observed?"Drawn picture ready. Confirm with R or L.":
+            g->kind==CTR_GUIDE_PICA?"WAIT: startup image is NOT the drawn scene.":"Waiting for the first displayed scene.");
     } else snprintf(rows[4],72,"Your result will be written to the TXT report.");
     snprintf(rows[5],72,"ZL: skip this step   ZR: report a problem");
     snprintf(rows[6],72,"MINUS: finish early and preserve the report");

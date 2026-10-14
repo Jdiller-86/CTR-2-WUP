@@ -1,5 +1,10 @@
 # Guided Wii U tests and TXT results (0.14.6)
 
+For the current **0.24.1** test snapshot, use [the focused hardware guide](console-retest.md).
+Its two apps write source-bound 8 KiB results and retain separate traces; the
+included Windows collector returns only that round's logs. The older fixed-size
+and controls contract below remains a historical reference.
+
 This page preserves the original 0.14.6 controls and reporting contract.
 The current physical results and focused follow-up are in
 [console-evidence.md](console-evidence.md) and [console-retest.md](console-retest.md).

@@ -18,6 +18,7 @@ typedef struct {
     uint32_t pressed,held;
     float left_x,left_y,right_x,right_y;
     bool touch_inside,touch_border,guest_exited,guest_fault,guest_pass,guest_frame_available,fresh_save_reload,guest_green_frame;
+    bool guest_drawn_frame_available;
     uint64_t guest_frame_serial,input_frame_serial;
     uint16_t touch_x,touch_y;
     unsigned guest_sessions;

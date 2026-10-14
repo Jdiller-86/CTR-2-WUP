@@ -12,6 +12,9 @@ The focused native check below remains a separate original diagnostic.
 ## Focused Wii U check
 
 Build with `python -m host build --target scene-check --output artifacts/my-scene-check`.
+The 0.24.1 evaluation runs the exact ADD/MUL transform and console-side analytic
+pixel checks in this app. Use [the focused hardware guide](console-retest.md) for
+the current two-app package, repeat launch and the Windows log collector.
 The matching CI run also supplies `wiiu-scene-check-<source commit>`, containing
 RPX/WUHB, build receipt, checksums, source identity and notices. Use its WUHB
 from `sd:/wiiu/apps/` with the supported homebrew launcher, or its RPX with

@@ -72,24 +72,30 @@ void ctr_scene_fixture_background(void *rgba,size_t size) {
     static const uint8_t background[]={16,32,48,255};
     for(size_t i=0;i<size;++i)bytes[i]=background[i&3u];
 }
-ctr_scene_result ctr_scene_fixture_render(bool short_indices,void *rgba,size_t capacity,
-                                         ctr_scene_report *report) {
+static ctr_scene_result render(bool short_indices,bool arithmetic,void *rgba,size_t capacity,
+                               ctr_scene_report *report) {
     if(!rgba || capacity<CTR_SCENE_FIXTURE_BYTES)return CTR_SCENE_ARGUMENT;
     ctr_scene_fixture *f=malloc(sizeof(*f));ctr_scene_state *state=malloc(sizeof(*state));
     if(!f || !state) { free(f);free(state);return CTR_SCENE_NO_MEMORY; }
-    ctr_scene_fixture_make(f,short_indices);ctr_scene_init(state);
+    make(f,short_indices,arithmetic);ctr_scene_init(state);
     ctr_scene_resources resources={UINT32_C(0x18000000),f->resources,f->resource_bytes};
     ctr_scene_surface surface={rgba,CTR_SCENE_FIXTURE_BYTES,64,64,256};
     ctr_scene_result result=ctr_scene_execute(state,f->commands,f->command_bytes,&resources,&surface,report);
     free(f);free(state);return result;
 }
-int ctr_scene_selftest(void) {
+ctr_scene_result ctr_scene_fixture_render(bool shorts,void *rgba,size_t capacity,ctr_scene_report *report) {
+    return render(shorts,false,rgba,capacity,report);
+}
+ctr_scene_result ctr_scene_fixture_render_arithmetic(bool shorts,void *rgba,size_t capacity,ctr_scene_report *report) {
+    return render(shorts,true,rgba,capacity,report);
+}
+static int selftest(bool arithmetic) {
     uint8_t *pixels=malloc(CTR_SCENE_FIXTURE_BYTES);if(!pixels)return 1;
     int result=0;
     for(unsigned short_indices=0;short_indices<2 && !result;++short_indices) {
         ctr_scene_fixture_background(pixels,CTR_SCENE_FIXTURE_BYTES);ctr_scene_report report={0};
-        if(ctr_scene_fixture_render(short_indices!=0,pixels,CTR_SCENE_FIXTURE_BYTES,&report)!=CTR_SCENE_OK ||
-           report.draws!=2u || report.triangles!=2u || report.fragments!=2304u || report.shader_instructions!=18u)
+        if(render(short_indices!=0,arithmetic,pixels,CTR_SCENE_FIXTURE_BYTES,&report)!=CTR_SCENE_OK ||
+           report.draws!=2u || report.triangles!=2u || report.fragments!=2304u || report.shader_instructions!=(arithmetic?30u:18u))
             result=2;
         for(unsigned y=0;y<64 && !result;++y)for(unsigned x=0;x<64;++x) {
             uint8_t expected[4]={16,32,48,255};
@@ -101,3 +107,5 @@ int ctr_scene_selftest(void) {
     }
     free(pixels);return result;
 }
+int ctr_scene_selftest(void) { return selftest(false); }
+int ctr_scene_arithmetic_selftest(void) { return selftest(true); }

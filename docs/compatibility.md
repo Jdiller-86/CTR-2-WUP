@@ -1,5 +1,10 @@
 # Compatibility
 
+The 0.24.1 hardware snapshot in PR #106 packages exact arithmetic scenes and a
+correctly gated, measured original guest draw route. Its cooperative execution
+policy and source-bound logs need physical comparison; no new hardware or game
+compatibility is implied. See [the focused test round](console-retest.md).
+
 | Input/workflow | Current state | Evidence and limit |
 |---|---|---|
 | Original native diagnostic | Partial console evidence; Minus exit confirmed | v0.14.1 native report records all ten guided checks/nine embedded self-tests and cleanup; v0.14.3 Minus exit now user-confirmed; full installation/compiled stability remains open |
