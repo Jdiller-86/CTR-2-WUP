@@ -1,5 +1,10 @@
 # Current console follow-up
 
+The next focused hardware round is being prepared under scoped #87/M2. It will
+provide an arithmetic Scene Check and bounded/profiling Guest Draws, accurate
+drawn-frame confirmation, per-phase metrics and a Windows return-log collector.
+This is a development plan, not a published kit or physical acceptance.
+
 The Save, embedded RomFS, SD Asset Files and GX checks have reviewed physical
 results. The additional Save 0.14.6 trace confirms persistence across closing and
 reopening the app. Correct screens and normal Minus return have the user’s
