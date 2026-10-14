@@ -98,6 +98,28 @@ def mutate(client, name, kind, value, selection):
     return client.graphql(f"mutation($input:{kind}!) {{ {name}(input:$input) {{ {selection} }} }}", {"input": value})[name]
 
 
+MEMBER_SELECTION = '''nodes { id isArchived content { __typename
+  ... on Issue { id number } ... on PullRequest { id number }
+} status:fieldValueByName(name:"Status") {
+  ... on ProjectV2ItemFieldSingleSelectValue { name }
+} } pageInfo { hasNextPage endCursor }'''
+
+
+def membership_report(expected, observed):
+    """Expose only repository-public references, never Project notes or identities."""
+    members = {row['content']['id'] for row in observed if row.get('content') and row['content'].get('id')}
+    references = {(row['content'].get('__typename'), row['content'].get('number'))
+                  for row in observed if row.get('content')}
+    missing = [{**reference, 'same_reference_with_different_identity':
+                ('PullRequest' if reference['kind'] == 'pull_request' else 'Issue', reference['number']) in references}
+               for node, reference in expected.items() if node not in members]
+    return {'expected_total': len(expected), 'observed_total': len(observed),
+            'matched_total': len(set(expected) & members),
+            'missing': sorted(missing, key=lambda row: (row['kind'], row['number'])),
+            'archived_managed_total': sum(bool(row.get('isArchived')) for row in observed
+                if (row.get('content') or {}).get('id') in expected)}
+
+
 def reconcile(client, data, apply, report):
     report["stage"] = "preflight"
     report["changes_possible"] = False
@@ -173,6 +195,14 @@ def reconcile(client, data, apply, report):
         if detail["parent"] and detail["parent"]["id"] != parent["node_id"]:
             raise tracking.TrackingError("Existing native issue parent differs; preserve and review.")
     report["planned"] = {"features": len(rows), "pull_requests": len(prs), "task_parents": 35}
+    expected_members = {i['node_id']: {'kind': 'issue', 'number': i['number']} for i in by_number.values()
+                        if i['number'] in (*range(1, 8), *range(12, 47))}
+    expected_members.update({features[row['id']]['node_id']: {'kind': 'issue', 'number': features[row['id']]['number']}
+                             for row in rows if row['id'] in features})
+    expected_members.update({pr['node_id']: {'kind': 'pull_request', 'number': number} for number, pr in prs.items()})
+    if hasattr(client, 'connection'):
+        report['membership_preflight'] = membership_report(expected_members,
+            client.connection(project['id'], 'items', MEMBER_SELECTION))
     if not apply:
         return
     report["changes_possible"] = True
@@ -220,9 +250,7 @@ def reconcile(client, data, apply, report):
             report["operations"].append({"set_parent": child["number"], "parent": parent["number"]})
     project = client.project()
     # Include PR content explicitly: the public aggregate reader deliberately omits it.
-    selection = '''nodes { id content { ... on Issue { id } ... on PullRequest { id } }
-      status:fieldValueByName(name:"Status") { ... on ProjectV2ItemFieldSingleSelectValue { name } }
-    } pageInfo { hasNextPage endCursor }'''
+    selection = MEMBER_SELECTION
     items = {i["content"]["id"]: i for i in client.connection(project["id"], "items", selection) if i.get("content") and i["content"].get("id")}
     desired = []
     if review_commands:
@@ -296,6 +324,9 @@ def reconcile(client, data, apply, report):
     members = {i["content"]["id"] for i in fresh if i.get("content") and i["content"].get("id")}
     expected = {i["node_id"] for i in by_number.values() if i["number"] in (*range(1, 8), *range(12, 47))}
     expected |= {features[row["id"]]["node_id"] for row in rows} | {p["node_id"] for p in prs.values()}
+    expected_members.update({features[row['id']]['node_id']: {'kind': 'issue', 'number': features[row['id']]['number']}
+                             for row in rows})
+    report['membership_readback'] = membership_report(expected_members, fresh)
     if not expected <= members:
         raise tracking.TrackingError("Project membership did not verify for every managed issue and PR.")
     for row in rows:

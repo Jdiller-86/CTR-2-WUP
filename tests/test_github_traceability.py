@@ -113,6 +113,22 @@ class TraceabilityTests(unittest.TestCase):
         self.assertEqual(client.writes, [])
         self.assertEqual(report["planned"]["task_parents"], 35)
 
+    def test_membership_receipt_names_missing_public_references_beyond_first_page(self):
+        expected = {f'issue-{n}': {'kind': 'issue', 'number': n} for n in range(1, 104)}
+        observed = [{'id': f'private-item-{n}', 'content': {'id': f'issue-{n}', 'number': n,
+                     '__typename': 'Issue', 'body': 'PRIVATE OWNER NOTE'}, 'isArchived': n == 5}
+                    for n in range(1, 103)]
+        report = trace.membership_report(expected, observed)
+        self.assertEqual(report['expected_total'], 103)
+        self.assertEqual(report['matched_total'], 102)
+        self.assertEqual(report['missing'], [{'kind': 'issue', 'number': 103,
+                                             'same_reference_with_different_identity': False}])
+        self.assertEqual(report['archived_managed_total'], 1)
+        self.assertNotIn('PRIVATE', json.dumps(report))
+        self.assertNotIn('private-item', json.dumps(report))
+        observed.append({'content': {'id': 'changed-node', '__typename': 'Issue', 'number': 103}})
+        self.assertTrue(trace.membership_report(expected, observed)['missing'][0]['same_reference_with_different_identity'])
+
     def test_untracked_repository_pr_fails_before_writes(self):
         client = ReadOnlyInventory()
         original = client.api
