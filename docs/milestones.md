@@ -488,8 +488,9 @@ See [first-title findings](first-title.md).
 **State: In progress. Full acceptance: open.**
 
 Live Project #2/dashboard still await the explicit `mario-input-received-v023`
-review: hosted jobs cannot start and direct personal Project access returns 403.
-[Direct management](direct-development.md) tracks this update under #95/#5.
+review. Hosted Actions now runs and its management identity can read the Project.
+[Reviewed management](direct-development.md) tracks consolidation and live
+read-back under #99/PR #100; no source edit alone changes the board.
 
 **Entry:** The user supplies a privately prepared executable and required assets for an owned exact Old 3DS revision. The uploaded USA Mario executable/revision is verified; local asset provenance reports are now matched, and seven selected payloads now have independent private checks. Original full-container integrity is still reported local evidence.
 
@@ -786,10 +787,9 @@ New 3DS exclusives, stereoscopic TV, online services, cameras, microphone,
 DLC/update merging, save import/export and broad arbitrary-ROM compatibility
 remain deferred. Titles that require them need separate implementation/evidence.
 
-Public documentation delivery is separate from gameplay acceptance. The private
-source repository remains private: private Pages is unavailable on the user’s
-free plan, while the generated offline HTML and public docs-only export support
-free publication. The user declines private-repository branch protection;
-topic branches, reviewable PRs and passing CI remain the development convention.
-No paid subscription or administrative setting is assumed enabled. See
-[GitHub development](github-development.md) for actual access limits.
+Public documentation delivery is separate from gameplay acceptance. The owner
+made the source public on October 14; source, documentation and the dashboard
+share the source repository's Pages deployment. Commercial inputs, private
+traces/notes and credentials remain excluded. Existing topic-branch, required-CI
+and no-protection preferences continue. See [GitHub development](github-development.md)
+for actual deployment and access evidence.

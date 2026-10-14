@@ -80,8 +80,8 @@ The structure adapts [Odysseus's coordination milestone](https://github.com/odys
 [review template](https://github.com/odysseus-dev/odysseus/blob/dev/.github/pull_request_template.md):
 focused tasks, explicit blockers/evidence, triage priority and reproducible review.
 CTR2WUP's acceptance criteria remain specific to Wii U execution and the planned
-injector; unavailable console/game tests stay pending. The user's GitHub Free,
-private-source and no-branch-protection choices remain in force.
+injector; unavailable console/game tests stay pending. The owner's public-source decision and existing no-branch-protection preference
+remain in force; hosted public Actions is available.
 
 ## Development continuity
 
@@ -130,13 +130,15 @@ Aroma/RPX launch and report delivery.
 
 The **Publish development diagnostics** workflow is dispatched explicitly from
 main with the version in `pyproject.toml`. It runs required checks, verifies SDK/
-lifter/libctru pins, executes the original GX application with sanitizers, builds
+lifter/libctru pins, executes original GX and Guest Draws with sanitizers and
+independent exact frame checks, builds
 RPX/WUHB and smoke-tests the wheel. The packager checks reported binaries/frames,
 source and wheel module equality, ZIP CRCs and SHA-256 sums. A separate job with
 `contents: write` publishes the matching prerelease with GitHub's native token;
 a failed upload leaves a draft. Published versions cannot be replaced by different
 artifacts. This route also avoids the cloud connection's rejected upload-host
-authentication. It does not close console or commercial acceptance gates.
+authentication. It does not close console or commercial acceptance gates. The current source is
+0.23.0; older published versions remain immutable and identified by their tags.
 
 ## Agent support
 
@@ -161,12 +163,14 @@ opens directly in a browser**, with navigation, search and a print layout. The
 HTML guide requires no account, server or internet connection to read its content.
 Download it from a matching development release or Documentation run artifact.
 
-The public [CTR2WUP documentation site](https://jdiller-86.github.io/CTR-2-WUP-docs/)
-is deployed on free GitHub Pages while application source stays private. The
-export contains rendered guides, notices, provenance and a pinned Pages workflow;
-application code, ROMs, keys and private test data are excluded. Publication and
-Pages Actions succeeded, and HTTP checks verify the site, dashboard, JSON and
-chart. Private-source Pages is not used. The offline reader remains available.
+The canonical [CTR2WUP documentation site](https://jdiller-86.github.io/CTR-2-WUP/)
+and live dashboard are built and deployed from this public source repository.
+The **Publish project site** workflow stages the checked export, reads Project
+#2 with the Actions management secret, adds only privacy-checked aggregates and
+deploys through native GitHub Pages. The site never includes commercial inputs,
+credentials or raw Project notes. The former docs repository is a migration
+source/redirect target, not a second maintained article tree. Migration and live
+HTTP verification are recorded in [current status](../STATUS.md).
 
 ```sh
 python3 -m venv artifacts/docs-build-venv
@@ -178,20 +182,20 @@ artifacts/docs-build-venv/bin/python tools/package-docs-site.py
 The strict build validates rendered links, anchors, search and assets. The site is
 in `artifacts/docs-site/site/`; the HTML guide and public-repository bundle are
 in `artifacts/docs-publication/`. Their JSON receipts and checksums identify the
-source commit. Source links stay commit-specific and require repository access.
+source commit. Source links stay commit-specific and are publicly readable.
 The site and HTML guide preserve the product goal, progress and acceptance limits.
 
 ## Maintenance on GitHub Free
 
-The private source repository uses topic branches and reviewable pull requests.
+The public source repository uses topic branches and reviewable pull requests.
 Check the latest **Required CI** and **Documentation build** on the PR before
 merging; keep source and evidence together. Preserve history and use a new
 version for changed published artifacts. Dependencies/actions are pinned,
 CODEOWNERS identifies the maintainer, and contributor/security/result guides
 provide the review context.
 
-The user explicitly declined branch protection because the repository is private
-on GitHub Free. No protection rule or administration setup tool is incorporated.
+The user previously declined branch protection; making the repository public does
+not change that preference. No protection or paid feature is enabled by this migration.
 These maintenance practices are team conventions; GitHub does not enforce them.
 
 ## Board setup
@@ -242,8 +246,8 @@ write. It can explicitly create only `Jdiller-86/CTR-2-WUP-docs` as public, conf
 free workflow-based Pages and publish its generated site. Application visibility
 never changes. Both publishers preserve existing tree contents and update main
 without force. Progress lives in `site/progress/`, inside the Pages upload root.
-[The documentation site](https://jdiller-86.github.io/CTR-2-WUP-docs/) and
-[interactive dashboard](https://jdiller-86.github.io/CTR-2-WUP-docs/progress/) are
+[The documentation site](https://jdiller-86.github.io/CTR-2-WUP/) and
+[interactive dashboard](https://jdiller-86.github.io/CTR-2-WUP/progress/) are
 live. Their HTML, aggregate JSON and chart return HTTP 200; publication and Pages
 Actions succeeded. The README embeds the generated chart.
 

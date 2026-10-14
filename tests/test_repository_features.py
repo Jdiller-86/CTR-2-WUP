@@ -12,7 +12,7 @@ spec.loader.exec_module(features)
 
 class FeatureGitHub:
     def __init__(self):
-        self.repository = {'full_name': features.REPOSITORY, 'private': True}
+        self.repository = {'full_name': features.REPOSITORY, 'private': False}
         self.writes = []
 
     def api(self, path, method='GET', payload=None):
@@ -39,7 +39,7 @@ class RepositoryFeatureTests(unittest.TestCase):
     def test_only_requested_features_change_and_visibility_is_preserved(self):
         result = features.configure(self.api, self.settings, True)
         self.assertTrue(result['live_settings_verified'])
-        self.assertTrue(self.api.repository['private'])
+        self.assertFalse(self.api.repository['private'])
         self.assertEqual(len(self.api.writes), 3)
         values = self.api.writes[0][2]
         self.assertEqual(set(values), {'description', 'homepage', 'has_discussions', 'delete_branch_on_merge'})
@@ -51,8 +51,8 @@ class RepositoryFeatureTests(unittest.TestCase):
             features.configure(self.api, self.settings, True)
         self.assertEqual(self.api.writes, [])
 
-    def test_public_source_is_never_changed(self):
-        self.api.repository['private'] = False
+    def test_unexpected_private_source_is_preserved(self):
+        self.api.repository['private'] = True
         with self.assertRaises(features.publisher.PublishError):
             features.configure(self.api, self.settings, True)
         self.assertEqual(self.api.writes, [])

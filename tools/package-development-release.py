@@ -30,7 +30,7 @@ SOURCE_DIRS = {".github", ".githooks", "docs", "host", "translator", "runtime", 
 SOURCE_FILES = {".gitignore", "AGENTS.md", "CHANGELOG.md", "CONTRIBUTING.md", "LICENSE", "Makefile", "README.md", "SECURITY.md", "STATUS.md", "THIRD_PARTY_NOTICES", "pyproject.toml", "mkdocs.yml", "docs-requirements.txt"}
 FORBIDDEN = {".3ds", ".cxi", ".cci", ".cia", ".3dsx", ".rom", ".sav", ".key", ".keys", ".cert", ".app", ".h3", ".tik", ".tmd", ".pyc", ".log", ".elf", ".o", ".rpx", ".wuhb", ".zip", ".exe", ".dll", ".so", ".pyd", ".whl", ".tar", ".gz", ".7z", ".wup", ".snapshot", ".trace"}
 REQUIRED_CHECKS = {"make-check", "make-prototype", "native-build", "transfer-validation", "wheel-build", "wheel-smoke", "pica-validation"}
-CHECK_NAMES = REQUIRED_CHECKS | {"sdk-install", "arm-fixtures-install", "translator-install", "docs-build", "docs-package"}
+CHECK_NAMES = REQUIRED_CHECKS | {"sdk-install", "arm-fixtures-install", "translator-install", "docs-build", "docs-package", "draw-validation"}
 NATIVE_NAMES = ("ctr2wup-prototype.rpx", "ctr2wup-prototype.wuhb")
 TRANSFER_NAMES = ("ctr2wup-libctru-transfer.rpx", "ctr2wup-libctru-transfer.wuhb")
 FRAME_NAMES = {f"frame-{i}-{screen}.ppm" for i in range(3) for screen in ("top", "bottom")}
@@ -275,7 +275,7 @@ def package(options: argparse.Namespace) -> dict:
         notes = f"# CTR2WUP {version} development diagnostics\n\nSource commit: `{commit}`.\n\nOriginal Native and GX Transfer WUHB/RPX diagnostics, exact reference frames,\nsource and a pure-Python developer wheel. Required host/C/sanitizer checks,\nWUT builds and original transfer execution passed for this source commit.\nZIP CRCs and SHA-256 checksums were verified before publication.\n\nCopy the diagnostic ZIP's `sd-card/` contents to the SD root and launch in Aroma.\nSee `docs/gx-transfers.md` inside the ZIP; preserve older SD reports and saves.\nThe wheel is a developer CLI, not the planned Windows injector GUI.\n\nPhysical-console acceptance, playable commercial games, PICA draw rendering,\nguest audio, installed WUP output and the Windows GUI remain pending.\nNo game dump, personal key, commercial asset or external reference implementation\nis included. SDK/runtime/CRT notices and corresponding startup source accompany\nthe original diagnostic.\n\n| Asset | SHA-256 |\n|---|---|\n"
         notes += "".join(f"| `{row['name']}` | `{row['sha256']}` |\n" for row in rows)
         if documentation is not None:
-            notes += f"\nDownload `CTR2WUP-Documentation-{version}.html` and open it directly in a browser for offline navigation, search and printing. The public docs-only ZIP can be hosted with free GitHub Pages while application source stays private.\n"
+            notes += f"\nDownload `CTR2WUP-Documentation-{version}.html` and open it directly in a browser for offline navigation, search and printing. The checked export also supports offline review; the public source repository hosts the canonical Pages site.\n"
         (stage / "release-notes.md").write_text(notes, encoding="utf-8")
         rows.append({"name": "release-notes.md", "sha256": sha256(stage / "release-notes.md")})
         (stage / "SHA256SUMS.txt").write_text("".join(f"{row['sha256']}  {row['name']}\n" for row in rows), encoding="utf-8")

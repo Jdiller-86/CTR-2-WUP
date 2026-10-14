@@ -34,14 +34,12 @@ Current requirements:
 5. **Conversion/GUI:** prove the full native Windows conversion and WUP
    install/rebuild/save continuity, then complete GUI acceptance.
 
-GitHub-hosted Actions currently refuses jobs because of failed payments or a
-spending limit; independent development needs no billing change. The
-[direct API/local-validation route](direct-development.md) is prepared under
-issue #95. Its secure credential needs personal Project #2 access; the current
-binding returns 403. M5 source evidence is In progress, while live
-Project/dashboard values remain unchanged until the explicit review applies.
-Full Project statuses and gate acceptance remain authoritative; the scoped
-physical passes do not close parent tasks or full milestones automatically.
+The source repository is now public and hosted Actions is running again. The
+Actions management identity has successfully read Project #2. The public-hosting
+migration (#99/PR #100) supplies one canonical Pages/dashboard deployment and the
+explicit reviewed management route. Live reconciliation/publication remain
+pending until their receipts are verified; direct environment Project access is
+not assumed. Platform, commercial and Windows conversion gates above remain open.
 
 ## Historical handoffs
 

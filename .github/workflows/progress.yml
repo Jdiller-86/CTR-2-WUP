@@ -88,13 +88,13 @@ jobs:
         run: |
           set -uo pipefail
           if [[ -z "${GH_TOKEN:-}" ]]; then
-            echo '::warning::Configure the CTR2WUP_GITHUB_MANAGEMENT_TOKEN Actions secret with Project read, private repository Issues write and public docs Contents write access. Cloud-environment secrets are separate.'
+            echo '::warning::Configure the CTR2WUP_GITHUB_MANAGEMENT_TOKEN Actions secret with Project read/write, source Issues write and Actions dispatch access. Cloud-environment secrets are separate.'
           fi
           python tools/export-github-project.py --apply --output "$RUNNER_TEMP/project-progress" --report "$RUNNER_TEMP/project-receipt.json"
           RESULT=$?
           printf 'result=%s\n' "$RESULT" >> "$GITHUB_OUTPUT"
           exit 0
-      - name: Publish allowlisted progress to public docs
+      - name: Refresh the canonical project Pages site
         if: steps.project.outputs.result == '0'
         env:
           GH_TOKEN: ${{ secrets.CTR2WUP_GITHUB_MANAGEMENT_TOKEN }}

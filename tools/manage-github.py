@@ -22,7 +22,7 @@ SPEC = importlib.util.spec_from_file_location('management_tracking', ROOT / 'too
 tracking = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(tracking)
 SECRET = 'CTR2WUP_GITHUB_MANAGEMENT_TOKEN'
-DOCS = 'Jdiller-86/CTR-2-WUP-docs'
+DOCS = tracking.REPOSITORY
 
 
 def credential_environment(environ):
@@ -40,9 +40,9 @@ def preflight(client, source, report, operation='preflight'):
                   docs_write_permission_verified=False)
     repository = client.api('repos/' + tracking.REPOSITORY)
     if (not isinstance(repository, dict) or repository.get('full_name') != tracking.REPOSITORY
-            or repository.get('private') is not True or repository.get('default_branch') != 'main'
+            or repository.get('private') is not False or repository.get('default_branch') != 'main'
             or repository.get('permissions', {}).get('push') is not True):
-        raise tracking.TrackingError('Private source identity and repository write access could not be verified.')
+        raise tracking.TrackingError('Public source identity and repository write access could not be verified.')
     if operation in ('preflight', 'traceability', 'review', 'progress'):
         report['stage'] = 'project'
         project = client.project()
@@ -97,6 +97,8 @@ def commands(args, output, sha):
         if args.input is None:
             raise tracking.TrackingError('Select the checked docs-only publication --input directory.')
         result.append(('docs', 'publish-docs-site.py', ['--input', str(args.input), '--source-commit', sha, '--output', str(output / 'docs.json'), *apply]))
+    elif args.operation == 'legacy-docs':
+        result.append(('legacy', 'migrate-legacy-docs.py', ['--output', str(output / 'legacy.json'), *apply]))
     return result
 
 
@@ -110,7 +112,7 @@ def output_directory(path):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('operation', choices=('preflight', 'traceability', 'evidence', 'review', 'progress', 'docs'))
+    parser.add_argument('operation', choices=('preflight', 'traceability', 'evidence', 'review', 'progress', 'docs', 'legacy-docs'))
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--review')
     parser.add_argument('--input', type=Path)

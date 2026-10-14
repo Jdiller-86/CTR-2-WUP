@@ -49,11 +49,13 @@ installed-WUP acceptance, commercial conversion and final GUI are still pending.
 
 ## Development continuity
 
-Hosted Actions cannot start. [Direct management](direct-development.md), scoped
-issue #95 under M5/#5, supplies a secure API route and exact-head local evidence.
-Personal Project access is still 403; live M5 review/catalog/dashboard updates
-remain queued. Independent renderer/runtime work can proceed on focused branches.
-No spending or full-gate acceptance change is implied.
+The owner made source public on October 14. Hosted Required CI and Documentation
+now pass for the shader-capacity PR, and the Actions management identity can read
+Project #2. [Reviewed management](direct-development.md) uses immutable trusted
+main and the existing Actions secret. Scoped #99/PR #100 consolidates canonical
+Pages, live tracking and current artifacts; deployment/reconciliation evidence
+remains pending until verified. The environment binding is a separate fallback.
+No spending, protection or full-gate acceptance change is implied.
 
 ## Now, next and later
 

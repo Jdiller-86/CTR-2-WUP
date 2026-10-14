@@ -13,7 +13,7 @@ instructions together. CI builds are available from each successful
 [Actions run](https://github.com/Jdiller-86/CTR-2-WUP/actions), with the source
 commit in their artifact names. Hosted builds are structural/test evidence.
 
-The focused 0.20.0 kit contains **Audio Check** and **GX Transfers** original diagnostics.
+The older focused 0.20.0 kit contains **Audio Check** and **GX Transfers** original diagnostics.
 See [the short launch-music check](launch-audio.md) for its purpose and prompts.
 Earlier 0.14.6 contains the Save/RomFS follow-up kit; 0.16.0 adds Asset Files.
 Use the kit requested by the relevant testing guide. Do not replace/delete save

@@ -55,7 +55,7 @@ class Client:
                 return self.recorded[-1]
             return copy.deepcopy(self.recorded)
         if path == 'repos/' + manage.tracking.REPOSITORY:
-            return {'full_name': manage.tracking.REPOSITORY, 'private': True,
+            return {'full_name': manage.tracking.REPOSITORY, 'private': False,
                     'default_branch': 'main', 'permissions': {'push': True}}
         if path == 'repos/' + manage.DOCS:
             return {'full_name': manage.DOCS, 'private': False,

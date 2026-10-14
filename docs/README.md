@@ -8,7 +8,7 @@ GUI are not supported yet.**
 The single HTML guide in development releases can be downloaded and opened
 directly in a browser, with offline search, navigation and printing. The source
 guides below also remain readable in GitHub. See [documentation hosting](github-development.md#documentation-and-free-hosting)
-for the free docs-only site and build receipts.
+for the canonical project site, live dashboard and build receipts.
 
 ## Start here
 

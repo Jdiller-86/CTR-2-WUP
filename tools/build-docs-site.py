@@ -68,13 +68,13 @@ def source_url(repository: str, commit: str, relative: str, directory: bool = Fa
 
 def rewrite_markdown(text: str, source: Path, destination: Path, mapping: dict[str, str],
                      root: Path, repository: str, commit: str) -> str:
-    # A private repository's external badge may be unavailable to anonymous
-    # Pages visitors. Keep its CI destination as a text link in the staged site.
+    # Keep an ordinary CI link in the offline-capable staged documentation;
+    # reading the guide must not depend on a network badge image.
     badge = re.compile(r"\[!\[([^]]+)\]\(" + re.escape(repository) + r"/actions/workflows/[^)]+/badge\.svg\)\]\(([^)]+)\)")
     text = badge.sub(lambda match: "[" + match.group(1) + " results](" + match.group(2) + ")", text)
-    # The separately published live chart is an external link in the offline
+    # The live chart is an ordinary link in the offline
     # documentation build. Never embed invented/static Project counts here.
-    chart = '[![Project progress](https://jdiller-86.github.io/CTR-2-WUP-docs/progress/gates.svg)](https://jdiller-86.github.io/CTR-2-WUP-docs/progress/)'
+    chart = '[![Project progress](https://jdiller-86.github.io/CTR-2-WUP/progress/gates.svg)](https://jdiller-86.github.io/CTR-2-WUP/progress/)'
     text = text.replace(chart, '[Live Project progress](https://github.com/users/Jdiller-86/projects/2)')
     def rewrite(target: str) -> str:
         wrapped = target.startswith("<") and target.endswith(">")
@@ -161,7 +161,7 @@ def verify_site(site: Path, site_url: str) -> dict:
     def verify(source: Path, target: str) -> None:
         nonlocal checked, external
         parsed = urlsplit(target)
-        if target == 'https://jdiller-86.github.io/CTR-2-WUP-docs/progress/':
+        if target == 'https://jdiller-86.github.io/CTR-2-WUP/progress/':
             # A separate Project workflow publishes this live endpoint. It is
             # HTTP-verified during hosting, outside the static docs artifact.
             external += 1

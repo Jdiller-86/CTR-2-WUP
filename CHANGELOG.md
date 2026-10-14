@@ -3,6 +3,19 @@
 All releases are development increments. RPX/WUHB diagnostics and desktop passes
 do not establish commercial-game compatibility or installable WUP acceptance.
 
+## Public repository consolidation — 2026-10-14
+
+- Follow the owner's public-source decision and restored hosted Actions access.
+- Stage checked documentation and live aggregate progress into the source
+  repository's canonical Pages deployment; remove cross-repository generated writes.
+- Add fixed dry-run/apply Actions management on immutable main with the existing
+  management secret. Preserve Project notes, review markers and full gate limits.
+- Prepare old-site redirects and current versioned diagnostic/documentation
+  artifacts; deployment and live reconciliation need their actual receipts.
+- Add a source-matched Guest Draws release kit with exact original frame,
+  binary, SDK, source/notice and checksum checks. Preserve earlier scoped
+  console evidence without asking for unchanged passed tests again.
+
 ## Development continuity — 2026-10-14
 
 - Add named-credential direct API preflight and clean-current-main management commands without hosted runners.

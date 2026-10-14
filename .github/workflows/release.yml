@@ -7,7 +7,7 @@ on:
         description: Version in pyproject.toml; publishes original diagnostics as a prerelease
         required: true
         type: string
-        default: '0.20.0'
+        default: '0.23.0'
 
 permissions:
   contents: read
@@ -101,6 +101,12 @@ jobs:
           set -euo pipefail
           python tools/validate-pica.py --sanitize --output "$RELEASE_WORK/pica-reference" \
             2>&1 | tee "$RELEASE_WORK/logs/pica-validation.log"
+      - name: Execute and cross-build original Guest Draws with exact frame checks
+        run: |
+          set -euo pipefail
+          python tools/validate-libctru.py --application draw --wiiu --sanitize \
+            --devkitarm "$DEVKITPRO/devkitARM" --output "$RELEASE_WORK/draw" \
+            2>&1 | tee "$RELEASE_WORK/logs/draw-validation.log"
       - name: Build and smoke-test the pure-Python developer wheel
         run: |
           set -euo pipefail
@@ -130,7 +136,7 @@ jobs:
           import json, os, pathlib, subprocess
           checks = ['make-check', 'make-prototype', 'native-build', 'transfer-validation',
                     'wheel-build', 'wheel-smoke', 'sdk-install', 'arm-fixtures-install', 'translator-install',
-                    'docs-build', 'docs-package', 'pica-validation']
+                    'docs-build', 'docs-package', 'pica-validation', 'draw-validation']
           work = pathlib.Path(os.environ['RELEASE_WORK'])
           assert all((work / 'logs' / f'{name}.log').is_file() for name in checks)
           evidence = {'ok': True, 'version': os.environ['RELEASE_VERSION'],
@@ -151,6 +157,10 @@ jobs:
             --transfer-report "$RELEASE_WORK/transfer/report.json" \
             --transfer-dir "$RELEASE_WORK/transfer/transfer/wiiu" \
             2>&1 | tee "$RELEASE_WORK/logs/audio-kit-package.log"
+          python tools/package-guest-draws.py --release-dir "$RELEASE_WORK/publish" \
+            --draw-report "$RELEASE_WORK/draw/report.json" --application-dir "$RELEASE_WORK/draw/draw" \
+            --sdk-receipt "$DEVKITPRO/ctr2wup-image-digest.txt" \
+            2>&1 | tee "$RELEASE_WORK/logs/draw-kit-package.log"
           (cd "$RELEASE_WORK/publish" && sha256sum --check SHA256SUMS.txt)
       - name: Upload verified release assets
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -258,7 +268,7 @@ jobs:
           cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
           ### Development diagnostic prerelease
 
-          Only the original Native, Audio Check and GX Transfer applications, source, developer wheel,
+          Only the original Native, Audio Check, GX Transfer and Guest Draws applications, source, developer wheel,
           exact reference frames, notices and verification receipts are eligible. The build
           identifies its source commit and verifies checksums/ZIP CRCs before publication.
           A draft stays unpublished if upload fails. Published versions are protected from

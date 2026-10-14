@@ -747,7 +747,10 @@
       ],
       "evidence": [
         "Owner made CTR-2-WUP public and authorized Actions-secret management and consolidation on October 14, 2026.",
-        "Scoped issue #99 has verified native parent #5 and repository milestone M5."
+        "Scoped issue #99 has verified native parent #5 and repository milestone M5.",
+        "Hosted Actions now passes the shader-capacity exact head, including Windows, both Python versions, GCC/Clang sanitizers, native Wii U and Documentation.",
+        "Actions-secret Development traceability dry-run 38595435099 successfully read Project #2 and planned 33 features, 25 PRs and 35 task parents without writes.",
+        "Canonical staging, fixed-main dispatch and original Guest Draws artifact provenance have focused positive/tamper/identity tests; live publication/migration and required hosted review remain pending."
       ]
     }
   ],

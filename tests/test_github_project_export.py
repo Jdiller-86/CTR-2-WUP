@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -107,6 +108,8 @@ class FakeGitHub(export.GitHub):
         target = 'repos/' + publisher.TARGET
         if path == target:
             return {'full_name': publisher.TARGET, 'private': not self.repo_public, 'default_branch': 'main'}
+        if path == target + '/actions/workflows/publish-docs.yml/dispatches':
+            return None
         if path == target + '/git/ref/heads/main':
             return {'object': {'sha': 'a' * 40}}
         if path == target + '/git/commits/' + 'a' * 40:
@@ -408,18 +411,31 @@ class ProjectExportTests(unittest.TestCase):
                 export.write_site(directory, self.aggregate())
             publisher.validate_public(json.loads((directory / 'progress.json').read_text()))
 
-    def test_publication_atomically_updates_only_reviewed_paths_without_force(self):
+    def test_publication_dispatches_canonical_main_without_writing_generated_source(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary) / 'progress'
             export.write_site(directory, self.aggregate())
             client = FakeGitHub(self.project)
             result = publisher.publish(directory, client, True)
-            self.assertTrue(result['applied'])
-            self.assertEqual(len(client.writes), 3)
-            tree = client.writes[0][2]
-            self.assertEqual(tree['base_tree'], 'b' * 40)
-            self.assertEqual([entry['path'] for entry in tree['tree']], ['site/progress/index.html', 'site/progress/progress.json', 'site/progress/gates.svg'])
-            self.assertEqual(client.writes[-1][2], {'sha': 'd' * 40, 'force': False})
+            self.assertTrue(result['applied'] and result['workflow_dispatched'])
+            self.assertEqual(client.writes, [('repos/' + export.REPOSITORY + '/actions/workflows/publish-docs.yml/dispatches', 'POST', {'ref': 'main'})])
+
+    def test_stage_is_fresh_ignored_and_contains_only_validated_aggregates(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            directory = root / 'input'
+            export.write_site(directory, self.aggregate())
+            (root / 'docs').mkdir()
+            (root / 'docs/milestone-status.json').write_bytes((ROOT / 'docs/milestone-status.json').read_bytes())
+            with patch.object(publisher.EXPORT, 'ROOT', root):
+                output = root / 'artifacts/site/progress'
+                result = publisher.stage(directory, output)
+                self.assertTrue(result['ok'])
+                self.assertEqual(sorted(p.name for p in output.iterdir()), sorted(publisher.FILES))
+                with self.assertRaises(publisher.EXPORT.TrackingError):
+                    publisher.stage(directory, output)
+                with self.assertRaises(publisher.EXPORT.TrackingError):
+                    publisher.stage(directory, root / 'source')
 
     def test_publication_refuses_private_docs_repository(self):
         with tempfile.TemporaryDirectory() as temporary:

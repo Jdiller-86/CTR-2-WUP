@@ -1,8 +1,26 @@
-# Development without hosted Actions
+# GitHub management and development continuity
 
-The owner authorizes direct GitHub API management and scoped local merge evidence
-when hosted jobs cannot start. Existing workflows remain available. This route
-does not change billing, spending limits, source visibility or branch protection.
+The source repository is public by the owner's October 14 decision. Hosted
+Actions now runs, including Windows, GCC/Clang sanitizers, Wii U and documentation
+checks. Prefer **Reviewed GitHub management**, **Development traceability** and
+**Project tracking** on immutable `main`, using the existing Actions management
+secret. The Actions credential has successfully read personal Project #2.
+
+The direct environment binding remains a fallback whose actual Project access
+must be verified. A configured/ready binding alone is not proof of permission.
+No credential is retrieved from Actions or copied into source, logs or artifacts.
+The earlier maintenance-only local merge exception remains available for a future
+hosted outage; it does not waive runtime/platform evidence.
+
+## Reviewed Actions operations
+
+Dispatch **Reviewed GitHub management** from `main` with a fixed operation and
+`apply=false`. Inspect its receipt, then dispatch the same operation with
+`apply=true`. For the bounded Mario transition choose operation `review` and
+review `mario-input-received-v023`. Traceability, evidence and progress are
+separate operations. All privileged runs resolve and check out immutable trusted
+main; no arbitrary PR code runs with the secret. Public receipts contain managed
+identities/counts/operations, never raw Project resource notes or credentials.
 
 ## Secure credential setup
 
@@ -10,8 +28,8 @@ In the cloud environment's secure secret settings, bind
 `CTR2WUP_GITHUB_MANAGEMENT_TOKEN` for `api.github.com`. Use the same management
 identity as Actions, independently supplied by the owner. If its token value is
 unavailable, create a classic personal access token for **Jdiller-86** with
-**repo** and **project** scopes. These cover the private source, personal Project
-#2 and authorized public docs repository. Actions secrets cannot be read back.
+**repo** and **project** scopes. These cover the source repository, personal Project
+#2 and the source Actions dispatch path. Actions secrets cannot be read back.
 Never paste a token in chat, arguments, logs, source or receipts, or retrieve it
 from Actions. The direct tool never silently selects another credential.
 
@@ -23,8 +41,9 @@ The full preflight checks fixed repository identities/write permission and all 4
 managed Project items/fields. Each operation checks only the access it needs:
 evidence/docs can proceed while Project access is missing. Project read access alone does
 not prove mutation access: supply read/write Project scope. A ready binding or
-successful issue write is insufficient. Current Project requests return 403;
-the ignored private access receipt identifies the failing stage without secrets.
+successful issue write is insufficient. The environment binding previously returned
+an integration access error while the Actions identity works. Retain the actual
+ignored access receipt when diagnosing either route.
 
 ## Review and apply
 
@@ -44,7 +63,7 @@ python3 tools/manage-github.py progress --apply
 ```
 
 Traceability verifies native parents, milestones, Project membership and PR
-links. Evidence refresh changes managed descriptions only. The private
+links. Evidence refresh changes managed descriptions only. The reviewed
 `docs/project-reviews.json` review activates only M5/intake/requirements and
 removes the resolved exact owned-input resource from six M5 items. Console waits
 and manual notes survive. Done, Closed and Accepted cannot be set by this tool.
@@ -58,8 +77,10 @@ live fields before retrying. Progress mirrors labels and publishes only
 allowlisted live aggregates; source states never substitute for Project values.
 Public snapshots become stale after two hours. Refresh after meaningful changes.
 
-Documentation publication is separate and uses the existing free public Pages
-deployment, without private-source Actions minutes:
+Documentation and the aggregate dashboard share the public source repository
+and canonical Pages deployment. Direct publication validates the checked bundle
+and dispatches the fixed trusted-main workflow; it never writes a generated tree
+into source:
 
 ```sh
 python3 tools/build-docs-site.py --output artifacts/docs-NEW
@@ -69,8 +90,9 @@ python3 tools/manage-github.py docs --input artifacts/docs-publication-NEW
 python3 tools/manage-github.py docs --input artifacts/docs-publication-NEW --apply
 ```
 
-Only the checked docs-only bundle is uploaded. Verify publication and the actual
-site separately; retry concurrent writes from fresh state without force-pushing.
+The workflow stages only checked documentation and allowlisted aggregates into a
+Pages artifact. Verify its deployment and actual HTTP content separately. There
+are no cross-repository generated commits or force pushes.
 
 ## Exact-commit local validation
 

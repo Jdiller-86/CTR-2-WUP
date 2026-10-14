@@ -1,28 +1,27 @@
-name: Publish public documentation
+name: Publish project site
 
 on:
   workflow_dispatch:
-    inputs:
-      create_repository:
-        description: Create the authorized public docs-only repository if missing
-        type: boolean
-        default: false
   push:
     branches: [main]
     paths:
+      - 'AGENTS.md'
+      - 'CHANGELOG.md'
       - 'README.md'
       - 'STATUS.md'
       - 'docs/**'
       - 'mkdocs.yml'
       - 'docs-requirements.txt'
       - 'tools/*docs*.py'
+      - 'tools/*progress*.py'
+      - 'tools/project-progress-dashboard.html'
       - '.github/workflows/publish-docs.yml'
 
 permissions:
   contents: read
 
 concurrency:
-  group: public-documentation-${{ github.repository }}
+  group: project-tracking-${{ github.repository }}
   cancel-in-progress: false
 
 jobs:
@@ -30,6 +29,13 @@ jobs:
     if: github.repository == 'Jdiller-86/CTR-2-WUP' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Resolve immutable trusted main
         id: trusted
@@ -37,9 +43,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TRUSTED_SHA="$(gh api repos/Jdiller-86/CTR-2-WUP/commits/main --jq .sha)"
-          [[ "$TRUSTED_SHA" =~ ^[0-9a-f]{40}$ ]]
-          printf 'sha=%s\n' "$TRUSTED_SHA" >> "$GITHUB_OUTPUT"
+          CTR_TRUSTED_SHA="$(gh api repos/Jdiller-86/CTR-2-WUP/commits/main --jq .sha)"
+          [[ "$CTR_TRUSTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          printf 'sha=%s\n' "$CTR_TRUSTED_SHA" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ steps.trusted.outputs.sha }}
@@ -47,33 +53,50 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
-      - name: Build and validate the public docs-only export
+      - name: Build, package and stage checked documentation
+        env:
+          CTR_SOURCE_COMMIT: ${{ steps.trusted.outputs.sha }}
         run: |
           set -euo pipefail
           python -m pip install --requirement docs-requirements.txt
           python -m pip check
           python tools/build-docs-site.py
           python tools/package-docs-site.py
-      - name: Publish reviewed documentation and configure free Pages
+          python tools/publish-docs-site.py --input artifacts/docs-publication \
+            --source-commit "$CTR_SOURCE_COMMIT" --stage artifacts/pages-site
+      - name: Read live Project into a privacy-checked aggregate
+        id: project
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.CTR2WUP_GITHUB_MANAGEMENT_TOKEN }}
-          SOURCE_COMMIT: ${{ steps.trusted.outputs.sha }}
-          CREATE_REPOSITORY: ${{ github.event_name == 'workflow_dispatch' && inputs.create_repository }}
         run: |
-          set -euo pipefail
-          ARGS=()
-          if [[ "$CREATE_REPOSITORY" == 'true' ]]; then ARGS+=(--create); fi
-          python tools/publish-docs-site.py --input artifacts/docs-publication \
-            --source-commit "$SOURCE_COMMIT" --apply "${ARGS[@]}" \
-            --output artifacts/docs-publication/hosting-receipt.json
-      - name: Retain publication receipt and verified export
+          python tools/export-github-project.py --output artifacts/site-progress \
+            --report artifacts/site-project-receipt.json
+      - name: Stage the live dashboard or explicit unavailable state
+        run: |
+          python tools/publish-project-progress.py --input artifacts/site-progress \
+            --output artifacts/pages-site/progress
+      - name: Report unavailable Project data
+        if: steps.project.outcome != 'success'
+        run: echo '::warning::Project access failed; the site will show unavailable data, never source-seeded or stale counts.'
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+        with:
+          enablement: false
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: artifacts/pages-site
+      - name: Deploy canonical project site
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+      - name: Retain public-safe build and Project receipts
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: docs-hosting-${{ github.run_id }}-${{ github.run_attempt }}
+          name: project-site-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             artifacts/docs-publication/
             artifacts/docs-site/build-report.json
-            artifacts/docs-site/build.log
+            artifacts/site-project-receipt.json
+            artifacts/site-progress/
           retention-days: 14
           if-no-files-found: warn
