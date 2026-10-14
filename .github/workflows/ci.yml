@@ -95,6 +95,22 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
+      - name: Stage standalone private sample helper
+        if: matrix.python == '3.12'
+        run: |
+          mkdir -p artifacts/ci/asset-sample-tool
+          cp tools/export-asset-samples.py artifacts/ci/asset-sample-tool/
+          cp docs/private-asset-samples.md artifacts/ci/asset-sample-tool/README.md
+          cp LICENSE artifacts/ci/asset-sample-tool/
+      - name: Upload standalone private sample helper
+        if: matrix.python == '3.12'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: private-asset-sample-tool-${{ github.sha }}
+          path: artifacts/ci/asset-sample-tool/
+          retention-days: 14
+          if-no-files-found: error
+
   native:
     name: C ${{ matrix.cc }} and sanitizers
     runs-on: ubuntu-24.04

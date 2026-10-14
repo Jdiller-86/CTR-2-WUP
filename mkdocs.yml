@@ -88,6 +88,7 @@ nav:
       - GX Transfers: docs/gx-transfers.md
       - Save and result follow-up: docs/console-retest.md
       - RomFS assets: docs/romfs-assets.md
+      - Private asset samples: docs/private-asset-samples.md
       - Local encrypted inputs: docs/encrypted-input.md
       - CIA intake: docs/cia-intake.md
       - Packaging: docs/packaging.md
