@@ -146,6 +146,18 @@ class FakeGitHub:
 
 
 class GithubProjectTests(unittest.TestCase):
+    def test_api_error_receipts_exclude_private_diagnostics(self):
+        client = setup.GitHub()
+        completed = setup.subprocess.CompletedProcess([], 1, stdout='', stderr='PRIVATE OWNER NOTE fixture')
+        with patch.object(setup.subprocess, 'run', return_value=completed):
+            with self.assertRaises(setup.SetupError) as raised:
+                client.rest('repos/owner/repo')
+        self.assertNotIn('PRIVATE', str(raised.exception))
+        with patch.object(client, '_call', return_value={'errors': [{'message': 'PRIVATE OWNER NOTE fixture'}]}):
+            with self.assertRaises(setup.SetupError) as raised:
+                client.graphql('query', {})
+        self.assertNotIn('PRIVATE', str(raised.exception))
+
     def test_confirmed_addition_retries_only_reads_until_visible(self):
         snapshot = copy.deepcopy(self.api.remote_project)
         missing = copy.deepcopy(snapshot)

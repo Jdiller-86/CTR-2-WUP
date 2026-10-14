@@ -98,7 +98,7 @@ class GitHub:
         except (OSError, subprocess.TimeoutExpired) as error:
             raise SetupError('GitHub API could not complete: ' + type(error).__name__) from error
         if result.returncode:
-            raise SetupError('GitHub API access/request failed: ' + result.stderr.strip())
+            raise SetupError('GitHub API access/request failed; review configured repository/Project permissions.')
         try:
             response = json.loads(result.stdout)
         except ValueError as error:
@@ -111,8 +111,7 @@ class GitHub:
     def graphql(self, query, variables):
         response = self._call(['graphql', '--input', '-'], {'query': query, 'variables': variables})
         if response.get('errors'):
-            errors = '; '.join(error.get('message', 'Unknown GraphQL error') for error in response['errors'])
-            raise SetupError('GitHub Projects access/request failed: ' + errors)
+            raise SetupError('GitHub Projects access/request failed; private response diagnostics are not published.')
         if not isinstance(response.get('data'), dict):
             raise SetupError('GitHub Projects returned no data')
         return response['data']
