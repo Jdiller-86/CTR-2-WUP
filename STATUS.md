@@ -61,8 +61,9 @@ use and broader nested module requirements remain unverified. The
 new local asset/preparation reports agree on source, revision and IVFC evidence;
 1,756 outer files are inventoried. Seven selected payloads now match every expected
 hash, size and receipt binding: Yaz0/NARC, DVLB/CGFX/BYML and CSAR/CSTM structures
-are identified. Three embedded shader regions exceed the current 256-word code
-capacity; both sampled streams declare stereo DSP ADPCM at 32 kHz. The
+are identified. Three embedded shader regions exceed the former 256-word code
+capacity; the unreleased 512-word increment addresses storage bounds while shader
+semantics remain open. Both sampled streams declare stereo DSP ADPCM at 32 kHz. The
 standalone Python helper checks matching existing reports, the full local blob
 and selected file hashes without reinstalling the 0.20.0 wheel. Scoped issue
 [#92](https://github.com/Jdiller-86/CTR-2-WUP/issues/92) and
