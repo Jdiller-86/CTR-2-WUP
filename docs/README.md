@@ -41,6 +41,8 @@ for the free docs-only site and build receipts.
 - [First software scenes](software-scenes.md): checked loader/MOV shader/raster
   boundary, independent exact images and focused Scene Check console guide.
 - [Filesystem/saves](filesystem.md), [RomFS assets](romfs-assets.md) and [application lifecycle](compiled-homebrew.md).
+- [Private asset samples](private-asset-samples.md): standalone checked ZIP export
+  from existing local reports, without a host wheel update.
 - [Local encrypted input](encrypted-input.md), [decryptor investigation](batch-decryptor-audit.md),
   [CIA intake](cia-intake.md) and [title staging/packaging](packaging.md).
 

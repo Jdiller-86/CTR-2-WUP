@@ -429,7 +429,8 @@
       "verified_foundations": [
         "Candidate and proposed private analysis/gameplay route documented",
         "October 13 derived NCCH passes independent stored hashes, decompression and executable-revision checks; metadata establishes USA Mario. Pinned static lifter analysis succeeds. Exact hashes and commercial bytes remain private.",
-        "October 13 local preparation and asset reports match the independently inspected executable/revision and identical reported IVFC evidence: 1,756 outer files, 19 directories, 298,080,796-byte RomFS blob. Raw asset bytes remain local."
+        "October 13 local preparation and asset reports match the independently inspected executable/revision and identical reported IVFC evidence: 1,756 outer files, 19 directories, 298,080,796-byte RomFS blob. Raw asset bytes remain local.",
+        "Standalone bounded private sample exporter (issue #92 / PR #93): matching local report/revision bindings, complete blob and selected-file hashes, safe bounded ZIP; selected actual bytes/runtime requirements still pending."
       ],
       "acceptance_remaining": [
         "Inspect selected private archive/shader/audio bytes and possible nested modules; complete the exact-revision runtime/test-route matrix",
@@ -455,7 +456,7 @@
         {
           "id": "m5-requirements",
           "title": "Create the exact-revision feature and test-route matrix",
-          "summary": "Use the verified executable and matched local inventory to inspect selected shader/system/audio bytes and confirm actual module/service requirements; declared access and archive filenames are not runtime proof.",
+          "summary": "The standalone checked sample helper is implemented for the verified executable/matched local inventory. Inspect selected shader/system/audio bytes and confirm actual module/service use before completing the runtime matrix; declared access and filenames are not runtime proof.",
           "acceptance_criteria": [
             "A private analysis records code/module layout, actual unsupported CPU/IPC/GPU/audio/save behavior and the distinction between declared services and observed use.",
             "A hash-matched profile and short repeatable boot/menu/course/save route are documented with explicit support gaps; upstream desktop claims do not activate the profile."

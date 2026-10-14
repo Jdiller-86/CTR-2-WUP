@@ -83,6 +83,11 @@ NCCH's checked superblock must cover the complete master table. This establishes
 hash consistency, not authentic signatures or commercial compatibility.
 Output publication is atomic and refuses replacement; sources remain unchanged.
 
+When the blob exceeds the transfer limit, use the
+[standalone private sample helper](private-asset-samples.md) to share only explicit
+hash-checked guest files and a small receipt. It works with existing schema-1
+reports, including 0.20.0, without reinstalling the host wheel.
+
 ## File-backed provider and optional Wii U test
 
 `ctr_romfs_file` opens an explicitly configured immutable blob, streams its

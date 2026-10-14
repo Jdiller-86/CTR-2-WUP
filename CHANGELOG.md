@@ -3,6 +3,17 @@
 All releases are development increments. RPX/WUHB diagnostics and desktop passes
 do not establish commercial-game compatibility or installable WUP acceptance.
 
+## Private sample exporter — 2026-10-13
+
+- Provide a standalone Python 3.12+ helper for explicit local RomFS samples,
+  matching report provenance, full-blob/selected-file hashes and bounded ZIPs.
+- Reject ambiguous paths, invalid extents, changed inputs and output replacement;
+  retain a private receipt with explicit integrity/compatibility evidence limits.
+- Compare path/handle metadata against their respective stable snapshots so
+  Windows timestamp precision differences do not reject unchanged sources.
+- Publish a small script/guide/license CI artifact with original boundary tests;
+  existing schema-1/0.20.0 reports work without reinstalling the host wheel.
+
 ## Asset inventory review — 2026-10-13
 
 - Match private preparation/output, asset-source and executable revision reports.
