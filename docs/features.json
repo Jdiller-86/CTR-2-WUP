@@ -667,8 +667,10 @@
       "title": "Continue development with direct GitHub management and reviewed Project transitions",
       "milestone": 5,
       "parent_issue": 5,
-      "state": "planned",
-      "pull_requests": [],
+      "state": "active",
+      "pull_requests": [
+        96
+      ],
       "scope": [
         "Provide secure direct API preflight and trusted-current-main management without hosted Actions; retain the Actions management identity and existing workflows.",
         "Apply the user-requested M5/intake/requirements In progress review and remove resolved owned-input waits; preserve unrelated fields, notes and subsequent owner edits.",
@@ -682,7 +684,8 @@
       "evidence": [
         "18 original mocked Project/API/local-validation cases cover conflicts, partial failure/retry, identities, raw-note preservation, read-back, immutable completion/replay and source/access guards.",
         "Source state edits currently cannot overwrite existing Project fields; the received owned inputs and explicit user request justify this reviewed transition.",
-        "Scoped issue #95 is assigned M5 and has verified native parent #5; live Project membership and M5 review still await authorized access."
+        "Scoped issue #95 is assigned M5 and has verified native parent #5; live Project membership and M5 review still await authorized access.",
+        "Implementation PR: https://github.com/Jdiller-86/CTR-2-WUP/pull/96; 433 full Python cases pass. Exact-head local documentation evidence is retained before merge."
       ]
     },
     {
