@@ -17,6 +17,7 @@ acceptance and the final GUI remain open.
 | Continue as a coding agent | [AGENTS.md](../AGENTS.md) |
 | Supply console results | [Guided testing](guided-testing.md) and [evidence checklist](console-testing.md) |
 | Work with owned game input | [Private input guide](encrypted-input.md) and [first title](first-title.md) |
+| Share a few local asset files | [Standalone private sample helper](private-asset-samples.md) |
 
 ## Source map
 

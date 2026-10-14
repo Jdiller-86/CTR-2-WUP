@@ -13,19 +13,20 @@
 | Original shared-GSP/VBlank graphics fixture | Desktop verified; awaiting Wii U | Relay registration/shared framebuffer queues, exclusive retry, IRQ ring and cleanup match three backends; original AOT runs in standard diagnostic mode; GX/PICA absent |
 | Original ARM/Thumb nested stack-call fixture | Desktop verified; awaiting Wii U | 47 instructions/one SVC, restored registers/stack, three-backend state/memory match, independent ARM1176 trace, partial-fault parity; embedded diagnostic |
 | Original three-thread fixture | Desktop verified; awaiting Wii U | Three-backend CPU/TLS/ownership/wait/quantum parity; embedded 345-instruction/eight-switch self-test; single emulated CPU, no priority inheritance |
-| Original compiled libctru applications | Seven original applications verified; interactive/guarded v0.14.5 completion user-reported | Supplied text logs are older; new independent TXT results await hardware evidence. Normal CRT/newlib, threads/TLS/HID/GSP/FS/APT and Level-3 RomFS reads pass; retail saves/GX/PICA/audio absent |
-| Original compiled savedata program | Desktop save/reload verified; console first-write evidence, later failure reported | Uploaded snapshot has two valid visit-1 records; its private desktop copy reloads to visits 2 and 3. v0.14.6 backup/publication/rollback fixes a tested rename assumption; console update/reload acceptance pending |
-| Original compiled RomFS program | Desktop/sanitized/emulated PPC verified; console pending | Original Level-3 image, root/nested/Unicode reads, seek/EOF, directory listing and write denial; canonical NCCH/IVFC preparation and file-provider checks added in v0.16; no signature authentication or commercial asset integration |
+| Original compiled libctru applications | Nine original applications verified; scoped console results reviewed | Normal CRT/newlib, threads/TLS/HID/GSP/FS/APT, saves/assets, GX and bounded draws; complete lifecycle/stability, general PICA, retail saves and guest audio remain open |
+| Original compiled savedata program | Desktop and scoped fresh-launch console reload verified | Reviewed 0.14.6 TXT/trace confirms original save write and fresh-process reload; earlier 0.14.5 failures remain recorded; retail saves and broader recovery remain open |
+| Original compiled RomFS program | Desktop/sanitized/emulated PPC and scoped console reads verified | Reviewed embedded and SD-provider original nested/Unicode read, seek/list and write-denial results; no signature authentication or commercial asset integration |
 | Decrypted base-application CIA | Intake supported | Checked index-0 NCCH, metadata/bitmap/content hashes and loader offsets; small executable export supported |
 | Decrypted NCCH v2 `.cxi` | Inspection supported | Bounds, sections/ExeFS hashes, code decompression and metadata tested with original fixtures |
 | Decrypted NCSD `.3ds` | Inspection supported | Cartridge partition bounds and all present NCCH partitions checked; no NAND loader |
 | Supported encrypted CIA/NCSD/NCCH | Local preparation implemented; original fixtures verified | prepare-rom validates recovered main CXI using local key/seed files; standard/1/0a/0b NCCH, scoped CIA wrapping; no actual user-key/Windows acceptance or commercial conversion |
 | 3DS key/seed exports | Scoped local import implemented | Plaintext AES key DB retail NCCH KeyX, seeddb and declared decrypted title-key DB; no console extraction, boot9 import or encrypted key DB support |
-| Main RomFS assets | Canonical full IVFC/metadata preparation implemented | Private blob/manifest; bounded names/chains/extents and streamed hashes; file-backed original guest proof; actual game assets/console SD remain unverified |
+| Main RomFS assets | Canonical full IVFC/metadata preparation and bounded sample export implemented | Private blob/manifest and explicit-file ZIP; matching reported provenance, full-blob/selected-file hashes and safe publication; original SD-provider results reviewed; actual selected game bytes/formats still need inspection |
 | PICA base textures | All 14 format decoders implemented | Original C/Python/reference vectors; no texture sampling, GX2 scene rendering or commercial support |
 | Resolved vertex arrays and indices | Bounded portable decoding implemented | Explicit streams/input permutation, unsigned 8-bit/16-bit indexed gather, transactional range/float/alias checks; no PICA loaders, fixed attributes, shaders or draws |
 | Original owned software scenes | Exact desktop scenes verified; focused Wii U cross-build available | PICA-format loader/index/fixed/uniform/MOV shader and bounded opaque triangles; atomic rollback; bounded standard guest GSP integration; no sampling/general TEV/depth or GPU shader translation; hardware evidence pending |
-| Original compiled GX transfer program | Sanitized desktop/reference checked; console pending | 16 standard operations, exact frames; scoped DMA/fill/transfer/copy/cache; PICA draw command faults |
+| Original compiled GX transfer program | Sanitized desktop/reference and scoped console results reviewed | 0.20.0 guest PASS/exit and exact transfer pictures; 17 GX operations, scoped DMA/fill/transfer/copy/cache and no-draw configuration; full renderer acceptance remains open |
+| Original compiled guest PICA draws | Exact desktop frames and scoped 0.23.0 console results reviewed | Four triangles, 97,200 fragments, zero fallback/fault and normal exit; 57.33-second drawn presentation and early visual prompt require progress/timing follow-up; general shaders/TEV/GX2 remain open |
 | `.3dsx`, update/DLC merges | Unsupported | No corresponding loader/pipeline; renamed input is not accepted as NCCH |
 | Any commercial revision | Unsupported/unverified | USA Mario executable/revision now privately verified; local outer asset inventory is matched, but selected archive bytes/nested modules remain uninspected; required HLE/GPU/audio/save implementation and Wii U gameplay evidence remain absent |
 | WUP installation | Unverified/unavailable | Original encrypted writer and independent verification pass synthetic-input checks; installer acceptance and actual installable output remain pending |
@@ -43,8 +44,10 @@ desktop compatibility reports never set CTR2WUP's console-verified status.
 
 The October 11 native report provides scoped physical evidence for its embedded
 CPU/services/heap/objects/HID/GSP/relay/stack/thread self-tests. It does not
-establish full live guest graphics, save update/reload, full lifecycle acceptance or commercial
-compatibility. Full console acceptance remains open; see `console-retest.md`.
+establish full lifecycle acceptance or commercial compatibility. Later original
+save/assets/GX/draw and launch-audio results are reviewed in
+[console evidence](console-evidence.md); [remaining gates](current-roadblock.md)
+records the specific pending acceptance instead of requesting blanket repeats.
 
 Deferred: New 3DS exclusives, stereo output, online services, cameras, microphone,
 DLC/update merging, save import/export, arbitrary-ROM compatibility and Windows

@@ -31,7 +31,8 @@ for the supported subsets and current limits.
 ## Current capabilities
 
 - Bounded 3DS/CXI/CIA inspection, optional local decryption with supplied keys,
-  RomFS integrity checks and private asset preparation.
+  RomFS integrity checks and private asset preparation, with a
+  [standalone checked sample exporter](docs/private-asset-samples.md).
 - ARM/Thumb/VFP translation foundations, checked memory, guest threads and
   scoped 3DS services.
 - Original compiled homebrew with two-screen framebuffer output, input,

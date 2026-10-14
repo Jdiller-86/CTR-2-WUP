@@ -18,7 +18,9 @@ Current requirements:
    host refresh time is not a GPU/CPU breakdown or a game-performance result.
 2. **Mario sample bytes and runtime requirements:** local preparation/asset
    reports now agree with the verified USA executable and describe 1,756 files.
-   Raw CCI/RomFS bytes remain on the PC. Export a bounded selected sample ZIP to
+   Raw CCI/RomFS bytes remain on the PC. The
+   [standalone sample helper](private-asset-samples.md) works with the existing
+   reports without a wheel update. Export a bounded selected sample ZIP to
    inspect shader/system/audio containers and possible nested modules; do not
    infer formats or runtime use from filenames or declared services alone.
    [First-title findings](first-title.md) preserve these evidence boundaries.

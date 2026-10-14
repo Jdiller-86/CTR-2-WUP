@@ -7,8 +7,10 @@ seconds; aggregate diagnostic timing is not game performance. Its visual prompt
 accepted an answer before that scene, so accurate presentation gating and phase
 profiling are the next follow-up. The full CCI exceeds the transfer
 limit, but the [small private intake](docs/cia-intake.md) now verifies the USA
-Mario executable and exact revision identity. Local RomFS inventory reports now match the verified executable; selected asset
-bytes and nested module formats remain uninspected here. All full
+Mario executable and exact revision identity. Local RomFS inventory reports now
+match the verified executable; a [standalone sample exporter](docs/private-asset-samples.md)
+provides the small private byte handoff. Selected asset bytes and nested module
+formats remain uninspected here. All full
 milestones remain open. [Evidence review](docs/console-evidence.md).
 
 Updated **October 13, 2026 (America/New_York)** · **v0.23.0**.
@@ -39,7 +41,12 @@ checks; pinned static analysis succeeds. Exact hashes and commercial bytes stay
 private. Its declared service list includes DSP and module loading, but runtime
 use, raw archive contents and nested module requirements remain unverified. The
 new local asset/preparation reports agree on source, revision and IVFC evidence;
-1,756 outer files are inventoried, with selected bytes still needed here. The inspector now accepts
+1,756 outer files are inventoried, with selected bytes still needed here. The
+standalone Python helper checks matching existing reports, the full local blob
+and selected file hashes without reinstalling the 0.20.0 wheel. Scoped issue
+[#92](https://github.com/Jdiller-86/CTR-2-WUP/issues/92) and
+[PR #93](https://github.com/Jdiller-86/CTR-2-WUP/pull/93) track that route under
+#33/M5. The inspector now accepts
 strict decrypted v0 CFA data partitions with original negative/compatibility
 coverage, without accepting prototype or v0 executable layouts. See
 [first-title findings](docs/first-title.md). No commercial profile is enabled.
@@ -56,7 +63,7 @@ and **97,200 covered fragments**. Independent displayed-image checks cover all
 Guest physical ownership, permission splits, resource/command/relay aliases,
 retained uploads, late failure and queue completion have **83,108 assertions**.
 The raw VFP push/pop guard now preserves exact bits under CRT FPSCR controls;
-unsupported arithmetic still fails. Required coverage is **392 Python tests and
+unsupported arithmetic still fails. Required coverage is **414 Python tests and
 22 normal/ASan/UBSan C suites**; the report guide has 636 assertions. Native,
 Scene Check and compiled Guest Draws RPX/WUHB builds and exact reports are retained
 with source/SDK provenance; the October 13 physical follow-up is reviewed above.

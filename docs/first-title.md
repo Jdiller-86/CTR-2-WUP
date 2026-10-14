@@ -25,11 +25,19 @@ blob: 1,666 `.szs` archives, 88 `.bcstm` streams, one `.bcsar` archive and one
 entry is listed; nested archive contents remain unknown. This does not prove
 absence of dynamic modules or identify archive formats from extensions alone.
 
-Next: export explicit bounded shader/system/audio samples with matching hashes,
+Next: use the [standalone private sample helper](private-asset-samples.md),
+delivered under [issue #92](https://github.com/Jdiller-86/CTR-2-WUP/issues/92) and
+[PR #93](https://github.com/Jdiller-86/CTR-2-WUP/pull/93), to export explicit bounded
+shader/system/audio samples with matching hashes,
 inspect actual container/instruction/sample formats privately, then refine the
 required shared runtime matrix and original probes. Declared `ldr:ro`/DSP access
 is separate from observed use. No commercial profile is enabled, and the scoped
 original draw/audio passes do not establish commercial compatibility.
+
+The helper accepts the supplied schema-1/0.20.0 reports and needs only Python
+3.12+. It checks the complete blob and selected file hashes, while preserving
+sources and existing outputs. Selected asset bytes still need private inspection;
+implementing the transfer route does not complete M5 #32/#33.
 
 ## Historical intake notes
 
