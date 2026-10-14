@@ -637,6 +637,89 @@
         "Standalone script/guide/license artifact and contract: docs/private-asset-samples.md; source review: https://github.com/Jdiller-86/CTR-2-WUP/pull/93",
         "Supplied schema-1/0.20.0 report metadata validates; actual selected bytes and archive/shader/audio/module requirements remain uninspected."
       ]
+    },
+    {
+      "id": "mario-private-sample-review",
+      "title": "Verify selected private Mario bytes and refine the shared runtime matrix",
+      "milestone": 5,
+      "parent_issue": 33,
+      "state": "implemented",
+      "pull_requests": [
+        94
+      ],
+      "scope": [
+        "Independently bind seven selected sample payloads to the received manifests, preparation report and verified executable revision.",
+        "Privately inspect selected compression/archive/shader/system/audio structures and publish only reviewed aggregate requirements; refine all affected milestone evidence and agent handoff guidance."
+      ],
+      "acceptance": [
+        "Selected file sizes/hashes and receipt source/report bindings agree with earlier reviewed private evidence.",
+        "The current matrix identifies concrete static shader/code-capacity/audio/container gaps while keeping observed runtime behavior, full source integrity and all full gates unverified."
+      ],
+      "evidence": [
+        "Private bytes: 15,304,637 selected bytes, exact seven-file selection and bounded receipt; independent payload/provenance checks pass.",
+        "Three Yaz0/NARC samples expose direct DVLB, CGFX and BYML structures; CSAR/CSTM block bounds are checked; two streams declare stereo DSP ADPCM at 32 kHz.",
+        "M5 source plan/intake/matrix move to In progress; explicit live Project review is planned separately. No commercial payload or digest is published.",
+        "Reviewed aggregate findings and handoff: https://github.com/Jdiller-86/CTR-2-WUP/pull/94"
+      ]
+    },
+    {
+      "id": "reviewed-project-transitions",
+      "title": "Apply reviewed milestone status and resolved-resource transitions once",
+      "milestone": 5,
+      "parent_issue": 5,
+      "state": "planned",
+      "pull_requests": [],
+      "scope": [
+        "Add a bounded trusted-main workflow for explicit reviewed Project #2 Status/Waiting resource changes when evidence resolves a blocker.",
+        "Apply the user-requested M5/intake/requirements In progress review and remove resolved owned-input waits; preserve unrelated fields, notes and subsequent owner edits."
+      ],
+      "acceptance": [
+        "Dry-run preflights all targets and refuses unknown identities, archived/moved items, conflicting current values and automatic Done/Closed/Accepted gate changes.",
+        "Apply verifies actual fields before recording an idempotent review marker; replay preserves later manual edits. Refresh issue labels and public tracker from Project authority."
+      ],
+      "evidence": [
+        "Original mocked Project/API cases must cover conflicts, partial failure, native identity, preservation, read-back and idempotence.",
+        "Source state edits currently cannot overwrite existing Project fields; the received owned inputs and explicit user request justify this reviewed transition."
+      ]
+    },
+    {
+      "id": "shader-resource-capacity",
+      "title": "Expand checked shader resource capacity with upload and execution bounds",
+      "milestone": 4,
+      "parent_issue": 28,
+      "state": "planned",
+      "pull_requests": [],
+      "scope": [
+        "Support the documented hardware shader code capacity through checked program storage, uploads, entry bounds and transactional retained state.",
+        "Measure native storage/stack effects and preserve explicit unsupported instructions and the independent software reference."
+      ],
+      "acceptance": [
+        "Original boundary probes cover current/new capacity, entry/end, late upload failures and state/pixel preservation.",
+        "GCC/Clang sanitizers, portable/Windows and native build checks prove capacity safety without enabling unsupported arithmetic/control/geometry or claiming title execution."
+      ],
+      "evidence": [
+        "Three bounded private CGFX shader regions declare 472, 428 and 264 code words, beyond the current 256-word limit.",
+        "Actual runtime entry selection remains untraced; commercial code is never used as a redistributable fixture."
+      ]
+    },
+    {
+      "id": "dsp-adpcm-reference",
+      "title": "Implement an original checked DSP ADPCM decoding reference",
+      "milestone": 3,
+      "parent_issue": 25,
+      "state": "planned",
+      "pull_requests": [],
+      "scope": [
+        "Implement bounded DSP ADPCM frames with explicit coefficients/history, clipping, sample/block/seek boundaries and owned output.",
+        "Use original fixtures and independent reference comparisons; keep codec decoding separate from guest DSP IPC/mixing and native audio acceptance."
+      ],
+      "acceptance": [
+        "Original numeric/byte fixtures cover predictor selection, signed nibbles, saturation, histories, partial blocks, seek continuation and late-error output preservation.",
+        "Desktop/Windows and sanitizer/reference checks establish the stated codec subset; no commercial waveform, coefficients or decoded audio is published."
+      ],
+      "evidence": [
+        "Both received CSTM samples declare non-looping stereo DSP ADPCM at 32 kHz; block/history/seek semantics and actual game playback are not yet accepted."
+      ]
     }
   ],
   "reviewed_statuses": {
@@ -644,7 +727,7 @@
     "2": "In progress",
     "3": "In progress",
     "4": "In progress",
-    "5": "Blocked",
+    "5": "In progress",
     "6": "In progress",
     "7": "Planned",
     "13": "Awaiting evidence",
@@ -666,8 +749,8 @@
     "29": "In progress",
     "30": "In progress",
     "31": "Awaiting evidence",
-    "32": "Blocked",
-    "33": "Blocked",
+    "32": "In progress",
+    "33": "In progress",
     "34": "Blocked",
     "35": "Blocked",
     "36": "Blocked",

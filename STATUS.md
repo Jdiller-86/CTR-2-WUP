@@ -8,9 +8,11 @@ accepted an answer before that scene, so accurate presentation gating and phase
 profiling are the next follow-up. The full CCI exceeds the transfer
 limit, but the [small private intake](docs/cia-intake.md) now verifies the USA
 Mario executable and exact revision identity. Local RomFS inventory reports now
-match the verified executable; a [standalone sample exporter](docs/private-asset-samples.md)
-provides the small private byte handoff. Selected asset bytes and nested module
-formats remain uninspected here. All full
+match the verified executable. All seven selected asset payloads now pass
+independent hash/provenance checks, and their shader/container/audio structures
+are privately reviewed. M5 analysis can proceed; source evidence and the explicit
+live Project review replace the resolved input blocker. Actual runtime use,
+broader modules and all full
 milestones remain open. [Evidence review](docs/console-evidence.md).
 
 Updated **October 13, 2026 (America/New_York)** · **v0.23.0**.
@@ -28,9 +30,9 @@ is enabled. Current binaries are original homebrew diagnostics.
 
 | Area | Verified foundation | Main remaining work |
 |---|---|---|
-| Input/preparation | Bounded CIA/NCSD/NCCH inspection, optional local key/seed imports/decryption, canonical full RomFS IVFC/metadata verification and private asset blobs | Inspect selected archive/shader/audio bytes and nested module formats; broader forms and Windows acceptance |
+| Input/preparation | Bounded CIA/NCSD/NCCH inspection/decryption, full local RomFS verification and independently checked selected bytes with identified formats | Reusable bounded format readers, broader module/runtime observation and Windows conversion acceptance |
 | CPU/runtime | Checked ARM/Thumb/VFP/AOT subsets, owned memory, eight single-core contexts and scoped services | Complete exercised CPU/HLE coverage, modules, guest audio and retail saves |
-| Homebrew | Nine normal-CRT/libctru applications: boot, threads, graphics, input, interactive, filesystem, RomFS, GX transfer and PICA draws | Launch-audio regression, broader services and game integration |
+| Homebrew | Nine normal-CRT/libctru applications: boot, threads, graphics, input, interactive, filesystem, RomFS, GX transfer and PICA draws | Broader guest services/audio and game integration |
 | Graphics | Direct/shared framebuffer presentation, five display formats, 14 base textures, scoped GX transfers and compiled original guest PICA/MOV/software draws | broader shaders/TEV/sampling, GPU resources/coherency and measured console performance |
 | Packaging/GUI | Original synthetic packing/decryption verification and conversion foundations; GUI workflow specified | Commercial conversion, actual WUP install/Menu gameplay, clean Windows and final GUI |
 
@@ -39,9 +41,12 @@ is enabled. Current binaries are original homebrew diagnostics.
 The derived USA Mario NCCH passes independent hashes, decompression and revision
 checks; pinned static analysis succeeds. Exact hashes and commercial bytes stay
 private. Its declared service list includes DSP and module loading, but runtime
-use, raw archive contents and nested module requirements remain unverified. The
+use and broader nested module requirements remain unverified. The
 new local asset/preparation reports agree on source, revision and IVFC evidence;
-1,756 outer files are inventoried, with selected bytes still needed here. The
+1,756 outer files are inventoried. Seven selected payloads now match every expected
+hash, size and receipt binding: Yaz0/NARC, DVLB/CGFX/BYML and CSAR/CSTM structures
+are identified. Three embedded shader regions exceed the current 256-word code
+capacity; both sampled streams declare stereo DSP ADPCM at 32 kHz. The
 standalone Python helper checks matching existing reports, the full local blob
 and selected file hashes without reinstalling the 0.20.0 wheel. Scoped issue
 [#92](https://github.com/Jdiller-86/CTR-2-WUP/issues/92) and

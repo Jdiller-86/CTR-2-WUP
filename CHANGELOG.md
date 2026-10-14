@@ -3,6 +3,17 @@
 All releases are development increments. RPX/WUHB diagnostics and desktop passes
 do not establish commercial-game compatibility or installable WUP acceptance.
 
+## Selected asset requirements — 2026-10-13
+
+- Independently verify the seven received private payloads against every prior
+  manifest size/hash and report/revision/source binding.
+- Inspect bounded Yaz0/NARC, DVLB/CGFX/BYML and CSAR/CSTM structures; record
+  shader arithmetic/control/capacity and stereo 32 kHz DSP ADPCM requirements.
+- Move M5 source analysis/intake/matrix to In progress and remove resolved input
+  waits; plan the explicit live Project transition without accepting a full gate.
+- Add AGENTS.md's complete post-change update checklist and the explicit Windows
+  Python launcher command proven by the received export.
+
 ## Private sample exporter — 2026-10-13
 
 - Provide a standalone Python 3.12+ helper for explicit local RomFS samples,

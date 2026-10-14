@@ -422,41 +422,39 @@
       "title": "M5: Super Mario 3D Land revision",
       "area": "area:runtime",
       "waiting_labels": [
-        "needs-console",
-        "needs-input"
+        "needs-console"
       ],
-      "summary": "USA Mario executable and local asset/preparation reports share verified revision bindings. Selected archive/shader/audio bytes, nested modules, runtime use and gameplay/audio/save/performance remain unverified.",
+      "summary": "Verified USA executable, matched local inventory and seven independently checked sample payloads enable active title analysis. Static shader/container/audio requirements are identified; runtime integration and full gameplay/audio/save/performance acceptance remain open.",
       "verified_foundations": [
         "Candidate and proposed private analysis/gameplay route documented",
         "October 13 derived NCCH passes independent stored hashes, decompression and executable-revision checks; metadata establishes USA Mario. Pinned static lifter analysis succeeds. Exact hashes and commercial bytes remain private.",
         "October 13 local preparation and asset reports match the independently inspected executable/revision and identical reported IVFC evidence: 1,756 outer files, 19 directories, 298,080,796-byte RomFS blob. Raw asset bytes remain local.",
-        "Standalone bounded private sample exporter (issue #92 / PR #93): matching local report/revision bindings, complete blob and selected-file hashes, safe bounded ZIP; selected actual bytes/runtime requirements still pending."
+        "Standalone bounded private sample exporter (issue #92 / PR #93): matching local report/revision bindings, complete blob and selected-file hashes, safe bounded ZIP; selected actual bytes/runtime requirements still pending.",
+        "October 13 selected-byte review: seven files match manifest/report/revision hashes. Three Yaz0/NARC archives contain DVLB, CGFX and BYML structures; direct/embedded shader tables fit their containers. CSAR/CSTM blocks are checked; two streams declare stereo DSP ADPCM at 32 kHz. Commercial bytes/hashes stay private."
       ],
       "acceptance_remaining": [
-        "Inspect selected private archive/shader/audio bytes and possible nested modules; complete the exact-revision runtime/test-route matrix",
+        "Complete the exact-revision observed runtime/test-route matrix and any specifically required additional module/asset inspection; static resource contents are not observed execution.",
         "Implement the observed title CPU/services/modules/renderer/audio/retail-save requirements",
         "Prove boot/menu/gameplay/input/audio/save/reload/stability and useful Wii U performance"
       ],
-      "state": "blocked",
+      "state": "in_progress",
       "work_items": [
         {
           "id": "m5-intake",
           "title": "Identify the owned Super Mario 3D Land executable and assets",
-          "summary": "Executable and local preparation/asset report bindings match. Outer inventory is available; selected raw samples and full-source integrity are not independently inspected here. No commercial profile is enabled.",
+          "summary": "The executable, local preparation/inventory reports and seven selected asset payloads have matching checked provenance. Active analysis can proceed; full source integrity and broader nested modules remain unverified here. No profile is enabled.",
           "acceptance_criteria": [
             "The actual NCCH/container metadata and input/executable hashes establish the exact title, region and revision; filename claims are not treated as verified identity.",
             "Required RomFS/modules/assets are available through the documented private workflow; keys stay local and no commercial payload is placed in issues, source or public artifacts."
           ],
           "depends_on": [],
-          "waiting_labels": [
-            "needs-input"
-          ],
-          "state": "blocked"
+          "waiting_labels": [],
+          "state": "in_progress"
         },
         {
           "id": "m5-requirements",
           "title": "Create the exact-revision feature and test-route matrix",
-          "summary": "The standalone checked sample helper is implemented for the verified executable/matched local inventory. Inspect selected shader/system/audio bytes and confirm actual module/service use before completing the runtime matrix; declared access and filenames are not runtime proof.",
+          "summary": "The selected bytes identify shader arithmetic/control/capacity gaps, Yaz0/NARC/CGFX/BYML structures and stereo 32 kHz DSP ADPCM streams. Refine the shared feature/test-route matrix with observed runtime use; static contents and declared services do not establish gameplay.",
           "acceptance_criteria": [
             "A private analysis records code/module layout, actual unsupported CPU/IPC/GPU/audio/save behavior and the distinction between declared services and observed use.",
             "A hash-matched profile and short repeatable boot/menu/course/save route are documented with explicit support gaps; upstream desktop claims do not activate the profile."
@@ -464,10 +462,8 @@
           "depends_on": [
             "m5-intake"
           ],
-          "waiting_labels": [
-            "needs-input"
-          ],
-          "state": "blocked"
+          "waiting_labels": [],
+          "state": "in_progress"
         },
         {
           "id": "m5-runtime-integration",
@@ -486,9 +482,7 @@
             "m4-fragment-pipeline",
             "m4-coherency-cache"
           ],
-          "waiting_labels": [
-            "needs-input"
-          ],
+          "waiting_labels": [],
           "state": "blocked"
         },
         {
@@ -505,7 +499,6 @@
             "m6-original-wup"
           ],
           "waiting_labels": [
-            "needs-input",
             "needs-console"
           ],
           "state": "blocked"
@@ -523,7 +516,6 @@
             "m2-espresso-benchmarks"
           ],
           "waiting_labels": [
-            "needs-input",
             "needs-console"
           ],
           "state": "blocked"

@@ -28,7 +28,7 @@
 | Original compiled GX transfer program | Sanitized desktop/reference and scoped console results reviewed | 0.20.0 guest PASS/exit and exact transfer pictures; 17 GX operations, scoped DMA/fill/transfer/copy/cache and no-draw configuration; full renderer acceptance remains open |
 | Original compiled guest PICA draws | Exact desktop frames and scoped 0.23.0 console results reviewed | Four triangles, 97,200 fragments, zero fallback/fault and normal exit; 57.33-second drawn presentation and early visual prompt require progress/timing follow-up; general shaders/TEV/GX2 remain open |
 | `.3dsx`, update/DLC merges | Unsupported | No corresponding loader/pipeline; renamed input is not accepted as NCCH |
-| Any commercial revision | Unsupported/unverified | USA Mario executable/revision now privately verified; local outer asset inventory is matched, but selected archive bytes/nested modules remain uninspected; required HLE/GPU/audio/save implementation and Wii U gameplay evidence remain absent |
+| Any commercial revision | Unsupported; active M5 analysis | USA Mario executable and seven selected payloads have verified provenance; selected container/shader/audio structures are identified, with code-capacity and DSP ADPCM gaps recorded; broader modules, actual HLE/GPU/audio/save use and Wii U gameplay remain unverified |
 | WUP installation | Unverified/unavailable | Original encrypted writer and independent verification pass synthetic-input checks; installer acceptance and actual installable output remain pending |
 
 Stable inspection identity uses the 3DS program ID for save identity. Executable
