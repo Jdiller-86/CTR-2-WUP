@@ -42,7 +42,10 @@ def verify(commit, get=fetch, legacy=False, now=None):
     allowed |= {'full_gates', 'work_items', 'milestones'} if data.get('state') == 'available' else {'message'}
     if set(data) != allowed or data.get('state') not in ('available', 'unavailable'):
         raise ValueError('Published Project fields exceed the privacy allowlist')
-    progress.validate_public(data)
+    try:
+        progress.validate_public(data)
+    except progress.EXPORT.TrackingError:
+        raise ValueError('Published Project data does not match the reviewed schema') from None
     if data.get('project_url') != progress.EXPORT.PROJECT_URL:
         raise ValueError('Published Project identity differs')
     checked_at = now or datetime.now(timezone.utc)

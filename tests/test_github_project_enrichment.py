@@ -88,6 +88,20 @@ class ProjectEnrichmentTests(unittest.TestCase):
         self.assertEqual(self.api.extra_values[('item-m1', 'Priority')]['optionId'], 'owner-critical')
         self.assertFalse(any(payload.get('itemId') == 'manual-item' for _, payload in self.api.writes))
         self.assertFalse(any(name == 'createProjectV2' for name, _ in self.api.writes))
+        self.assertTrue(self.report['managed_overview_verified'])
+
+    def test_changed_overview_is_not_reported_as_verified(self):
+        original = self.api.snapshot
+        def changed(identifier):
+            result = original(identifier)
+            # Simulate an independent write after this tool's overview mutation.
+            if any(name == 'updateProjectV2' for name, _ in self.api.writes):
+                result['readme'] = 'Original concurrent owner edit'
+            return result
+        self.api.snapshot = changed
+        with self.assertRaisesRegex(flesh.setup.SetupError, 'did not verify'):
+            flesh.enrich(self.api, self.context, self.report, self.content, True)
+        self.assertNotIn('managed_overview_verified', self.report)
 
     def test_existing_extra_options_are_preserved_including_ids(self):
         field = {'options': [{'id': 'manual', 'name': 'Owner priority', 'color': 'PINK', 'description': 'Owner text'}]}

@@ -100,10 +100,13 @@ report. These observations are distinct from picture/launcher confirmations.
   expected masked viewport word. Its green/red/green pictures still come from
   CPU-backed fills/transfers, not PICA draws.
 
-Native/GX RPX and WUHB cross-builds are available. Physical completion/report/exit
-behavior remains pending. The optional short GX guide is still the same picture
-test; no completed long input guide must be repeated for this increment.
+Native/GX RPX and WUHB cross-builds are available. The October 13 GX 0.20.0
+configuration/picture/exit results have reviewed scoped evidence. No unchanged
+passed guide repeat is requested. Current v0.23 [compiled guest draws](guest-pica-draws.md)
+add the bounded owned-resource/MOV/software-scene route; they preserve this
+configuration-only API separately.
 
-Actual draw inputs/resources, vertex/shader execution, TEV/raster behavior, GX2
-submission and reference scene/performance evidence remain open. Task
-`m4-pica-commands` is **in progress**, and M4 is not accepted.
+Merged PR #48/#57 establish the scoped command-task criteria. Broader shader and
+fragment behavior, GX2 submission, resource coherency and full renderer/reference
+performance acceptance remain open. Project #2 owns the task's live reviewed
+status; completing it does not accept M4.

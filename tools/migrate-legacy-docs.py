@@ -134,13 +134,49 @@ def migrate(client, apply=False):
     return report
 
 
+def retire(client, apply=False, verify=None):
+    """Archive only deployed redirects; restore write access if Pages verification fails."""
+    if verify is None:
+        spec = importlib.util.spec_from_file_location('legacy_site_verification', ROOT / 'tools/verify-project-site.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        verify = module.verify
+    repository = client.api('repos/' + LEGACY)
+    if (repository.get('full_name') != LEGACY or repository.get('private') is not False
+            or repository.get('default_branch') != 'main' or type(repository.get('archived')) is not bool):
+        raise publisher.PublishError('Preserve unexpected legacy repository settings before archival.')
+    base = client.api('repos/' + LEGACY + '/git/ref/heads/main')['object']['sha']
+    commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+    verify(commit, legacy=True)
+    if client.api('repos/' + LEGACY + '/git/ref/heads/main')['object']['sha'] != base:
+        raise publisher.PublishError('Legacy source changed during verification; preserve it for review.')
+    report = {'ok': True, 'applied': apply, 'source_commit': commit, 'legacy_repository': LEGACY,
+              'legacy_commit': base, 'history_preserved': True,
+              'legacy_archived': repository['archived'], 'redirect_deployment_verified': True}
+    if apply and not repository['archived']:
+        client.api('repos/' + LEGACY, 'PATCH', {'archived': True})
+        try:
+            if client.api('repos/' + LEGACY).get('archived') is not True:
+                raise ValueError('Archive read-back failed')
+            verify(commit, legacy=True)
+        except (publisher.PublishError, OSError, ValueError, KeyError, TypeError):
+            client.api('repos/' + LEGACY, 'PATCH', {'archived': False})
+            if client.api('repos/' + LEGACY).get('archived') is not False:
+                raise publisher.PublishError('Legacy archive rollback could not be verified; inspect repository state.') from None
+            raise publisher.PublishError('Legacy archive did not retain verified Pages; archive was rolled back.') from None
+        report['legacy_archived'] = True
+    return report
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--apply', action='store_true')
+    parser.add_argument('--archive', action='store_true', help='Retire only verified deployed redirects, preserving history')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     try:
-        report = migrate(publisher.GitHub(), args.apply)
+        operation = retire if args.archive else migrate
+        report = operation(publisher.GitHub(), args.apply)
     except (publisher.PublishError, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
         report = {'ok': False, 'error': str(error) if isinstance(error, publisher.PublishError) else
                   'Legacy migration could not be verified; preserve existing files and review the operation.'}
