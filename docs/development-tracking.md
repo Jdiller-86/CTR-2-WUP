@@ -69,11 +69,19 @@ no full gate becomes Accepted through this workflow. When hosted execution is av
 tracking** workflow publishes safe aggregates separately and does not expose
 private issue titles, bodies or feature identifiers in the public dashboard.
 
-## Next renderer featuresThe source is public and hosted validation is available. Scoped #99/PR #100
+The source is public and hosted validation is available. Scoped #99/PR #100
 consolidates publication and uses the existing Actions management secret for
 reviewed tracking operations. Project access is verified through Actions; live
 catalog reconciliation and Mario transitions are recorded only after apply and
 read-back. The environment binding's earlier failure does not block Actions.
+
+Scoped shader-capacity issue #97 has verified native parent #28 and M4 assignment;
+merged PR #98 also has M4 and passing hosted Required CI and Documentation.
+Its 512-word implementation and original probes do not accept #28/M4. Project
+membership/catalog reconciliation and the reviewed Mario transitions remain
+queued for the verified Actions management identity.
+
+## Next renderer features
 
 | Feature | Parent task | Acceptance focus |
 | --- | --- | --- |

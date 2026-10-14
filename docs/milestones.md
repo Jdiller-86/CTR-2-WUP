@@ -405,6 +405,12 @@ through the recorded Actions review; broader rendering and full M4 remain open.
 
 #### m4-vertex-shaders: Implement vertex formats, shader execution and GX2 translation
 
+Merged scoped #97/PR #98 expands vertex code capacity to 512 checked words
+with original entry/upload/rollback probes and native storage/stack measurements.
+Required hosted platform checks pass; Project reconciliation remains pending; arithmetic,
+control flow, GX2 translation and full task acceptance remain open. See
+[the capacity contract](software-scenes.md#vertex-code-capacity).
+
 Choose a license-cleared Latte shader route and validate exercised vertex attributes, uniforms and shader instructions.
 
 State: **In progress** · Needs: none for original-fixture development.

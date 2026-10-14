@@ -28,8 +28,8 @@ human display observations remain separate. An automatic failure cannot pass
 the picture guide.
 
 This check uses the existing native audio initialization and report/exit
-lifecycle. It does not replace the pending Audio Check/GX Transfers 0.20.0
-launch-music regression or repeat the completed Save/RomFS guides.
+lifecycle. The reviewed October 13 Audio Check/GX Transfers 0.20.0 and
+Save/RomFS results remain valid for their builds; no unchanged guide repeat is requested.
 
 ## Execution boundary
 
@@ -55,7 +55,7 @@ The bounded path supports:
   Each triangle has a constant opaque endpoint color: RGBA lanes are 0 or 1,
   alpha 1. Fragments replace the target with depth and blend disabled.
 
-Limits are 256 vertices per draw, 32 draws per list, 256 shader instructions,
+Limits are 256 vertices per draw, 32 draws per list, 512 vertex shader code words,
 128 descriptors, 96 float uniforms, 12 attributes/loaders, a 4 MiB resource span
 and a 1 MiB target with dimensions at most 512×512. No primitive is carried
 across lists. Unknown pipeline/framebuffer/texture/TEV/depth registers,
@@ -68,6 +68,38 @@ representable as PICA float24, plus signed zero. NaN/infinity, denormals,
 out-of-range exponents and values requiring rounding fail. There is no float24
 arithmetic or rounding approximation. MOV captures source lanes before writing
 in-place swizzles and rejects undefined lanes or missing code/END.
+
+### Vertex code capacity
+
+The merged capacity increment in [PR #98](https://github.com/Jdiller-86/CTR-2-WUP/pull/98)
+expands code storage from 256 to **512 words**. Entries 0–511 are valid;
+execution must encounter an actual END before leaving word 511. The upload
+cursor may retain the exhausted value 512, but another code word fails without
+wrapping or committing any part of that list. All eight upload ports, repeated
+parameters and consecutive-register batches share this checked cursor.
+The 128 descriptors and MOV/NOP/END semantics remain bounded separately.
+
+The vertex-specific limit follows the pinned
+[vertex upload reference](https://github.com/azahar-emu/azahar/blob/d409087405bc299b88ff35dd5b96b6e2698d5929/src/video_core/pica/pica_core.cpp#L738).
+Its larger shared shader container also accommodates geometry storage; it does
+not establish vertex capacity or enable geometry here. Only interface facts
+were reviewed; no reference implementation is copied or linked.
+
+Original tests execute every entry, upload every slot, compare relocated high
+entry scenes against the same analytic pixels, and force overflow after staged
+draws. They verify whole-list state/pixel preservation, retained guest storage,
+memory generations, exclusive state and pending queue/IRQ behavior.
+Run `make -C tests/scenes check sanitize` and
+`make -C tests/guest-draws check sanitize` to reproduce them.
+
+With devkitPPC GCC 16.1.0, `-O2 -mcpu=750 -meabi -mhard-float`, the program
+object grows from 3,556 to 4,836 bytes and scene state from 8,952 to 10,232 bytes.
+Each retained/staged scene therefore adds 1,280 heap bytes. Compiler
+`-fstack-usage` reports unchanged static frames: shader execution 640 bytes,
+scene execution 928 bytes, guest adapter 272 bytes. These are cross-compiler
+measurements, not physical memory/performance observations. Required Windows,
+Python, sanitizer, Wii U and documentation hosted checks pass. No commercial
+shader is executed by these original probes.
 
 The native Scene Check runs this CPU path, flips its owned image rows for display,
 then uses the established GX2 surface-copy presentation. It does not submit a

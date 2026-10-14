@@ -9,10 +9,16 @@ foundation boundaries at their named versions.
 
 The reviewed private title samples now identify shader arithmetic/control and
 code-capacity work: three bounded embedded shader regions declare 472, 428 and
-264 code words, exceeding the current 256-word limit; selected resources also
+264 code words, exceeding the former 256-word limit; selected resources also
 include a geometry entry. These are static resource findings, not traced active
 game shaders. [The title matrix](first-title.md#current-feature-and-test-route-matrix)
 connects them to shared scoped work; no commercial shader bytes are published.
+
+Merged PR #98 expands vertex code capacity to 512 words with original high-entry,
+upload and late rollback probes plus native storage/stack measurements. Required
+platform checks pass; Project reconciliation remains pending. See
+[the capacity boundary](software-scenes.md#vertex-code-capacity); arithmetic,
+control flow, geometry and commercial execution still need separate evidence.
 
 v0.22.0 executes the [first original software scenes](software-scenes.md)
 through checked PICA-format loader/index state, fixed attributes and uniforms,

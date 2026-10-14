@@ -15,6 +15,14 @@ traceability and dashboard refresh. Canonical deployment, old-site redirects,
 live reconciliation and refreshed release verification are pending until their
 actual receipts are recorded. No full gate is accepted.
 
+**Merged shader capacity:** [PR #98](https://github.com/Jdiller-86/CTR-2-WUP/pull/98)
+under [#97](https://github.com/Jdiller-86/CTR-2-WUP/issues/97), native parent #28/M4,
+expands checked vertex code storage to 512 words with original high-entry,
+upload/END and transactional guest rollback probes. Each scene state grows by
+1,280 bytes; native compiler stack frames are unchanged. Required hosted checks
+pass, including Windows. Project reconciliation remains pending; MOV-only semantics and commercial
+compatibility limits hold. See [the capacity contract](docs/software-scenes.md#vertex-code-capacity).
+
 **October 13 physical follow-up:** Audio Check and GX Transfers 0.20.0, plus
 Guest Draws 0.23.0, have reviewed scoped passes and user-confirmed silence and
 normal exit. The draw trace reaches the rendered second presentation at 57.33
@@ -60,8 +68,9 @@ use and broader nested module requirements remain unverified. The
 new local asset/preparation reports agree on source, revision and IVFC evidence;
 1,756 outer files are inventoried. Seven selected payloads now match every expected
 hash, size and receipt binding: Yaz0/NARC, DVLB/CGFX/BYML and CSAR/CSTM structures
-are identified. Three embedded shader regions exceed the current 256-word code
-capacity; both sampled streams declare stereo DSP ADPCM at 32 kHz. The
+are identified. Three embedded shader regions exceed the former 256-word code
+capacity; the merged 512-word increment addresses storage bounds while shader
+semantics remain open. Both sampled streams declare stereo DSP ADPCM at 32 kHz. The
 standalone Python helper checks matching existing reports, the full local blob
 and selected file hashes without reinstalling the 0.20.0 wheel. Scoped issue
 [#92](https://github.com/Jdiller-86/CTR-2-WUP/issues/92) and
@@ -80,10 +89,9 @@ permissions, aliases, retained uploads and late-failure transactions have scoped
 host/sanitizer evidence. The October 13 console observations above remain bound
 to their actual earlier builds; a new cross-build is not new console evidence.
 
-[PR #98](https://github.com/Jdiller-86/CTR-2-WUP/pull/98) adds checked 512-word
-vertex storage and original entry/upload/rollback probes. Its exact head has
-passing hosted Required CI and Documentation. Merge authorization and subsequent
-tracking reconciliation remain separate from those test results.
+PR #98 merged at `926cf8cf23d17a091bea69ad1e2ee850b1374045` with owner approval
+after passing hosted Required CI and Documentation. Its original probes do not
+establish commercial shader semantics or physical renderer acceptance.
 
 The source version is **0.23.0**; the latest published prerelease before this
 migration is **0.20.0**. A fresh versioned build/release must pass its own source,

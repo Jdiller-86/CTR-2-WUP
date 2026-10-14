@@ -57,6 +57,12 @@ Pages, live tracking and current artifacts; deployment/reconciliation evidence
 remains pending until verified. The environment binding is a separate fallback.
 No spending, protection or full-gate acceptance change is implied.
 
+Merged PR #98 implements the scoped #97/#28/M4 vertex code capacity increment:
+512 checked words with original upload/entry/rollback probes and native storage/
+stack measurements. Required hosted platform checks pass; Project reconciliation
+remains pending. Arithmetic/control and broader renderer work follow this capacity
+boundary; it does not establish commercial shader execution.
+
 ## Now, next and later
 
 | Priority | Concrete deliverable | Tracking and acceptance |

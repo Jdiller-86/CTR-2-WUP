@@ -3,7 +3,8 @@
 #include "ctr_vertex.h"
 #include <stdbool.h>
 
-#define CTR_SHADER_MAX_CODE 256u
+/* Vertex code has 512 words. Geometry storage/entry semantics are unsupported. */
+#define CTR_SHADER_MAX_CODE 512u
 #define CTR_SHADER_MAX_DESCRIPTORS 128u
 #define CTR_SHADER_UNIFORMS 96u
 typedef enum {
@@ -34,7 +35,8 @@ bool ctr_shader_f24_exact(uint32_t float32_bits, uint32_t *raw);
  * float-uniform sources, swizzles, source negation and destination masks.
  * Relative addressing, arithmetic, branches and geometry instructions fail.
  * Read-before-write fails for temporary/uniform/input lanes; an actual END is
- * required. Input values used must have exact finite normal float24/zero
+ * required within code words 0..511; execution never wraps past word 511.
+ * Input values used must have exact finite normal float24/zero
  * representation. Full output is published only after successful termination.
  * Caller-owned typed objects must be aligned and stable during the call. */
 ctr_shader_result ctr_shader_execute(const ctr_shader_program *program,

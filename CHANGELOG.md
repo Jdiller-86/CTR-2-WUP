@@ -15,6 +15,16 @@ do not establish commercial-game compatibility or installable WUP acceptance.
 - Add a source-matched Guest Draws release kit with exact original frame,
   binary, SDK, source/notice and checksum checks. Preserve earlier scoped
   console evidence without asking for unchanged passed tests again.
+## Merged shader capacity — 2026-10-14
+
+- Expand checked vertex code storage to 512 words while retaining MOV/NOP/END
+  semantics, explicit undefined/unsupported failures and bounded execution.
+- Probe every slot/entry, upload ports/batches, final END, exhausted cursors and
+  late failure after staged draws; preserve guest state, pixels and queue completion.
+- Measure 1,280 added bytes per retained/staged scene and unchanged native stack
+  frames. Scoped issue #97/PR #98 advances #28/M4 after required hosted Windows,
+  Python, sanitizer, Wii U and documentation checks. Project reconciliation is
+  tracked separately; no full gate or commercial shader execution is accepted.
 
 ## Development continuity — 2026-10-14
 
