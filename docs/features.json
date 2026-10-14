@@ -733,7 +733,9 @@
       "milestone": 5,
       "parent_issue": 5,
       "state": "active",
-      "pull_requests": [],
+      "pull_requests": [
+        100
+      ],
       "scope": [
         "Use the owner-authorized public source repository as the canonical documentation/Pages and live-dashboard location.",
         "Use the Actions management secret on immutable trusted main; reconcile reviewed Project transitions without exposing private notes.",
