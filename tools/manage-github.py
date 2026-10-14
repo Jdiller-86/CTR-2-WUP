@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run fixed GitHub management operations without a hosted Actions runner.
+"""Run fixed GitHub management operations on trusted Actions or a secure environment.
 
 Uses only the securely configured CTR2WUP_GITHUB_MANAGEMENT_TOKEN binding.
 Dry-run is the default. Apply requires a clean checkout of current remote main.
@@ -99,6 +99,8 @@ def commands(args, output, sha):
         result.append(('docs', 'publish-docs-site.py', ['--input', str(args.input), '--source-commit', sha, '--output', str(output / 'docs.json'), *apply]))
     elif args.operation == 'legacy-docs':
         result.append(('legacy', 'migrate-legacy-docs.py', ['--output', str(output / 'legacy.json'), *apply]))
+    elif args.operation == 'verify-sites':
+        result.append(('sites', 'verify-project-site.py', ['--legacy', '--output', str(output / 'sites.json')]))
     return result
 
 
@@ -112,7 +114,7 @@ def output_directory(path):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('operation', choices=('preflight', 'traceability', 'evidence', 'review', 'progress', 'docs', 'legacy-docs'))
+    parser.add_argument('operation', choices=('preflight', 'traceability', 'evidence', 'review', 'progress', 'docs', 'legacy-docs', 'verify-sites'))
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--review')
     parser.add_argument('--input', type=Path)

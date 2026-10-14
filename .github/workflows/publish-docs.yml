@@ -88,6 +88,8 @@ jobs:
       - name: Deploy canonical project site
         id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+      - name: Verify deployed source identity and Project freshness over HTTP
+        run: python tools/verify-project-site.py --output artifacts/pages-verification.json
       - name: Retain public-safe build and Project receipts
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -98,5 +100,6 @@ jobs:
             artifacts/docs-site/build-report.json
             artifacts/site-project-receipt.json
             artifacts/site-progress/
+            artifacts/pages-verification.json
           retention-days: 14
           if-no-files-found: warn

@@ -14,8 +14,15 @@ class FeatureGitHub:
     def __init__(self):
         self.repository = {'full_name': features.REPOSITORY, 'private': False}
         self.writes = []
+        self.pages = None
 
-    def api(self, path, method='GET', payload=None):
+    def api(self, path, method='GET', payload=None, missing=False):
+        if path.endswith('/pages'):
+            if method == 'POST':
+                self.writes.append((path, method, payload))
+                self.pages = {'build_type': payload['build_type'], 'cname': None,
+                              'html_url': 'https://jdiller-86.github.io/CTR-2-WUP/'}
+            return self.pages
         if method != 'GET':
             self.writes.append((path, method, payload))
             if method == 'PATCH':
@@ -40,7 +47,9 @@ class RepositoryFeatureTests(unittest.TestCase):
         result = features.configure(self.api, self.settings, True)
         self.assertTrue(result['live_settings_verified'])
         self.assertFalse(self.api.repository['private'])
-        self.assertEqual(len(self.api.writes), 3)
+        self.assertEqual(len(self.api.writes), 4)
+        self.assertTrue(result['pages_configuration_verified'])
+        self.assertFalse(result['pages_deployment_verified'])
         values = self.api.writes[0][2]
         self.assertEqual(set(values), {'description', 'homepage', 'has_discussions', 'delete_branch_on_merge'})
         self.assertFalse(any('security-and-analysis' in path or 'protection' in path for path, _, _ in self.api.writes))
@@ -53,6 +62,17 @@ class RepositoryFeatureTests(unittest.TestCase):
 
     def test_unexpected_private_source_is_preserved(self):
         self.api.repository['private'] = True
+        with self.assertRaises(features.publisher.PublishError):
+            features.configure(self.api, self.settings, True)
+        self.assertEqual(self.api.writes, [])
+
+    def test_existing_workflow_pages_are_preserved_and_custom_settings_refuse(self):
+        self.api.pages = {'build_type': 'workflow', 'cname': None,
+                          'html_url': 'https://jdiller-86.github.io/CTR-2-WUP/'}
+        features.configure(self.api, self.settings, True)
+        self.assertFalse(any(path.endswith('/pages') for path, _, _ in self.api.writes))
+        self.api.writes.clear()
+        self.api.pages['cname'] = 'owner.example'
         with self.assertRaises(features.publisher.PublishError):
             features.configure(self.api, self.settings, True)
         self.assertEqual(self.api.writes, [])

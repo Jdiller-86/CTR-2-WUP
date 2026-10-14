@@ -18,7 +18,9 @@ Dispatch **Reviewed GitHub management** from `main` with a fixed operation and
 `apply=false`. Inspect its receipt, then dispatch the same operation with
 `apply=true`. For the bounded Mario transition choose operation `review` and
 review `mario-input-received-v023`. Traceability, evidence and progress are
-separate operations. All privileged runs resolve and check out immutable trusted
+separate operations. After canonical publication, `legacy-docs` plans/applies
+reviewed redirects and `verify-sites` checks both sites over HTTP without writes.
+All privileged runs resolve and check out immutable trusted
 main; no arbitrary PR code runs with the secret. Public receipts contain managed
 identities/counts/operations, never raw Project resource notes or credentials.
 

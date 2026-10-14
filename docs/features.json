@@ -693,7 +693,7 @@
       "title": "Expand checked shader resource capacity with upload and execution bounds",
       "milestone": 4,
       "parent_issue": 28,
-      "state": "delivered",
+      "state": "implemented",
       "pull_requests": [
         98
       ],
