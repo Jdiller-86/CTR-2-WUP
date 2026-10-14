@@ -61,4 +61,6 @@ Current engineering commands can [prepare supported inputs locally](encrypted-in
 and [export a small private executable intake](cia-intake.md). Their success does
 not enable game execution. Do not attach keys, full ROMs, saves or commercial
 asset blobs to GitHub issues. The first selected game is Super Mario 3D Land;
-its actual revision and requirements still await private analysis.
+its USA executable and seven selected asset payloads are privately verified.
+Observed runtime requirements and commercial execution remain open; see
+[the current matrix](first-title.md).

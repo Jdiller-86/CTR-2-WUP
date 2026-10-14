@@ -219,10 +219,10 @@ python3 tools/flesh-github-project.py --apply --output artifacts/github-project-
 ```
 
 `applied`, `live_project_verified`, completed operations and partial-change flags
-state what actually happened. A denied read cannot establish a live board. As of
-this source increment the personal secret requirement is saved, but the environment
-reports `has_saved_binding:false`; its Project read still uses the limited
-integration and returns **Resource not accessible by integration**.
+state what actually happened. A denied read cannot establish a live board.
+The Actions management identity reads Project #2 successfully. The environment
+binding is configured separately and still returns an integration access error;
+use the verified Actions route for the reviewed reconciliation.
 
 ## Project-backed progress
 
@@ -240,16 +240,13 @@ accept a full gate. Chart timestamps are visible; the dashboard marks snapshots
 older than two hours stale and preserves the previous update time on read errors.
 GitHub can cache README images; open the dashboard for current freshness.
 
-The public docs publisher runs reviewed immutable main source, requires a strict
-searchable documentation build and verifies the docs-only archive before any
-write. It can explicitly create only `Jdiller-86/CTR-2-WUP-docs` as public, configure
-free workflow-based Pages and publish its generated site. Application visibility
-never changes. Both publishers preserve existing tree contents and update main
-without force. Progress lives in `site/progress/`, inside the Pages upload root.
-[The documentation site](https://jdiller-86.github.io/CTR-2-WUP/) and
-[interactive dashboard](https://jdiller-86.github.io/CTR-2-WUP/progress/) are
-live. Their HTML, aggregate JSON and chart return HTTP 200; publication and Pages
-Actions succeeded. The README embeds the generated chart.
+The canonical publisher checks out immutable main, validates the searchable
+documentation export and stages it together with freshly read Project aggregates.
+It deploys one Pages artifact from `CTR-2-WUP`; it never creates another repository
+or commits generated article trees. The dashboard lives at `progress/` under the
+same deployment. Legacy articles become guarded redirects only after canonical
+source identity and available Project data verify. [Current status](../STATUS.md)
+records deployment, migration and live reconciliation receipts.
 
 Only seven documented milestone names, aggregate counts, accepted-gate counts,
 fixed waiting-resource categories, freshness and the Project link enter the public
@@ -260,8 +257,8 @@ Configure `CTR2WUP_GITHUB_MANAGEMENT_TOKEN` in repository Actions secrets with
 Project and the required repository/Pages permissions. Cloud-environment secrets
 are separate; the Actions route is verified, while cloud Project calls still use
 a limited integration. Tokens are never requested in chat or copied into reports.
-Use trusted-main **Project tracking** for setup/export and **Publish public
-documentation** for docs-only publication. Neither runs untrusted PR code with
+Use trusted-main **Project tracking** for setup/export, **Reviewed GitHub
+management** for bounded operations and **Publish project site** for deployment. Neither runs untrusted PR code with
 the management token. Dry-run tools are available for reviewing mutations.
 
 ## Repository settings and authentication
@@ -270,19 +267,20 @@ Normal Git, issues, milestones, PRs and Actions use the connected integration.
 Its direct cloud Project/administration calls remain limited. Trusted-main
 management workflows use the separate repository Actions secret
 `CTR2WUP_GITHUB_MANAGEMENT_TOKEN`; this route has populated Project #2 and
-published the docs-only Pages site. No further token entry is needed for those
-verified operations.
+published the historical docs site. Canonical deployment is verified separately;
+no further token entry is needed for the working Actions identity.
 
 **Repository features** applies the requested About/documentation URL, topics,
-Discussions, merged-branch cleanup and free Dependabot alerts, then verifies the
-result through the API. **Project tracking** owns board setup, explicit reviewed
-task transitions and public aggregates. **Publish public documentation** verifies
-the docs-only export before publication. Each preserves operation receipts.
+Discussions, merged-branch cleanup, free Dependabot alerts and canonical workflow
+Pages configuration, then verifies the result through the API. **Project tracking** owns board setup, explicit reviewed
+task transitions and public aggregates. **Publish project site** verifies
+the docs-only export and deployed HTTP identity. Each preserves operation receipts.
 The [desired settings](../.github/repository-settings.json) specify mutation scope;
 actual API receipts establish which operations succeeded.
 
 Only trusted immutable main code executes with the management token. Values are
 consumed normally by the GitHub CLI and never copied into reports, source or
 chat. Existing owner board values remain authoritative; source synchronization
-cannot overwrite them. No branch protection or paid feature is enabled, and
-application repository visibility remains private.
+cannot overwrite them. Existing branch protections are preserved. The source
+repository is public by owner decision; these tools never change visibility or
+enable paid features.
