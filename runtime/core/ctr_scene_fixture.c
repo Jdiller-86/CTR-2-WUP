@@ -17,7 +17,7 @@ static void color(ctr_scene_fixture *f,bool green) {
     command(f,0x234u,green?UINT32_C(0x00003f00):0u);
     command(f,0x235u,green?0u:UINT32_C(0x003f0000));
 }
-void ctr_scene_fixture_make(ctr_scene_fixture *f,bool short_indices) {
+static void make(ctr_scene_fixture *f,bool short_indices,bool arithmetic) {
     if(!f)return;
     memset(f,0,sizeof(*f));
     static const uint32_t positions[4][4]={
@@ -25,8 +25,13 @@ void ctr_scene_fixture_make(ctr_scene_fixture *f,bool short_indices) {
         {UINT32_C(0x3f400000),UINT32_C(0xbf400000),UINT32_C(0xbf000000),UINT32_C(0x3f800000)},
         {UINT32_C(0xbf400000),UINT32_C(0x3f400000),UINT32_C(0xbf000000),UINT32_C(0x3f800000)},
         {UINT32_C(0x3f400000),UINT32_C(0x3f400000),UINT32_C(0xbf000000),UINT32_C(0x3f800000)}};
+    static const uint32_t transformed[4][4]={
+        {UINT32_C(0xbf000000),UINT32_C(0xbe800000),UINT32_C(0xbe800000),UINT32_C(0x3f000000)},
+        {UINT32_C(0x3e800000),UINT32_C(0xbe800000),UINT32_C(0xbe800000),UINT32_C(0x3f000000)},
+        {UINT32_C(0xbf000000),UINT32_C(0x3f000000),UINT32_C(0xbe800000),UINT32_C(0x3f000000)},
+        {UINT32_C(0x3e800000),UINT32_C(0x3f000000),UINT32_C(0xbe800000),UINT32_C(0x3f000000)}};
     for(unsigned vertex=0;vertex<4;++vertex)for(unsigned lane=0;lane<4;++lane)
-        put32(f->resources+vertex*16u+lane*4u,positions[vertex][lane]);
+        put32(f->resources+vertex*16u+lane*4u,arithmetic?transformed[vertex][lane]:positions[vertex][lane]);
     const uint8_t order[]={0,1,2,1,3,2};unsigned width=short_indices?2u:1u;
     for(unsigned i=0;i<6;++i)f->resources[64u+i*width]=order[i];
     f->resource_bytes=64u+6u*width;
@@ -38,15 +43,30 @@ void ctr_scene_fixture_make(ctr_scene_fixture *f,bool short_indices) {
     command(f,0x228u,3u);command(f,0x229u,0u);command(f,0x22au,123u); /* Indexed draws ignore it. */
     command(f,0x25eu,0u);command(f,0x2b9u,UINT32_C(0xa0000001));command(f,0x2bau,0u);
     command(f,0x2bbu,UINT32_C(0x76543210));command(f,0x2bcu,UINT32_C(0xfedcba98));command(f,0x2bdu,3u);
-    command(f,0x2cbu,0u);command(f,0x2ccu,UINT32_C(0x4c000000));
+    command(f,0x2cbu,0u);
+    if(arithmetic) {
+        /* r0=c0; r1=v0*r0; o0=c1+r1. Inputs encode (position-offset)/2. */
+        command(f,0x2ccu,UINT32_C(0x4c000000)|(16u<<21)|(32u<<12));
+        command(f,0x2ccu,(8u<<26)|(17u<<21)|(16u<<7)|1u);
+        command(f,0x2ccu,(33u<<12)|(17u<<7)|1u);
+    } else command(f,0x2ccu,UINT32_C(0x4c000000));
     command(f,0x2ccu,UINT32_C(0x4c201000));command(f,0x2ccu,UINT32_C(0x88000000));command(f,0x2bfu,1u);
     command(f,0x2d5u,0u);command(f,0x2d6u,UINT32_C(0x0000036f));
+    if(arithmetic) {
+        command(f,0x2d6u,UINT32_C(0x0006c36f));
+        command(f,0x2c0u,UINT32_C(0x80000000));
+        for(unsigned lane=0;lane<4;++lane)command(f,0x2c1u,UINT32_C(0x40000000));
+        command(f,0x2c1u,0);command(f,0x2c1u,0);
+        command(f,0x2c1u,UINT32_C(0xbe800000));command(f,0x2c1u,UINT32_C(0x3e800000));
+    }
     color(f,false);command(f,0x227u,(short_indices?UINT32_C(0x80000000):0u)|64u);
     command(f,0x22fu,1u);
     color(f,true);command(f,0x227u,(short_indices?UINT32_C(0x80000000):0u)|(64u+3u*width));
     command(f,0x22fu,1u);command(f,CTR_PICA_FINALIZE,CTR_PICA_FINALIZE_VALUE);
     if(f->command_bytes&15u)command(f,CTR_PICA_FINALIZE,CTR_PICA_FINALIZE_VALUE);
 }
+void ctr_scene_fixture_make(ctr_scene_fixture *f,bool short_indices) { make(f,short_indices,false); }
+void ctr_scene_fixture_make_arithmetic(ctr_scene_fixture *f,bool short_indices) { make(f,short_indices,true); }
 void ctr_scene_fixture_background(void *rgba,size_t size) {
     uint8_t *bytes=rgba;if(!bytes)return;
     static const uint8_t background[]={16,32,48,255};

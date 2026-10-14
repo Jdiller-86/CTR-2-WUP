@@ -13,6 +13,9 @@ typedef struct {
  * and six byte/short indices. Produces a 48x48 two-triangle square inside 64x64.
  * These are original owned-resource fixtures, never a commercial game. */
 void ctr_scene_fixture_make(ctr_scene_fixture *fixture,bool short_indices);
+/* Nonidentity MUL/ADD transform via uniforms/temporaries; same analytic pixels.
+ * This original host/reference fixture is separate from existing console guides. */
+void ctr_scene_fixture_make_arithmetic(ctr_scene_fixture *fixture,bool short_indices);
 void ctr_scene_fixture_background(void *rgba,size_t size);
 ctr_scene_result ctr_scene_fixture_render(bool short_indices,void *rgba,size_t capacity,
                                          ctr_scene_report *report);

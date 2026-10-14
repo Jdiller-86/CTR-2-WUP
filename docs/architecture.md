@@ -22,12 +22,15 @@ attributes, float24/shader arithmetic, primitive assembly or GX2 submission.
 
 The separate original [scene boundary](software-scenes.md) now adapts bounded
 PICA loader/index/fixed/uniform/output state to that decoder and an original
-MOV/NOP/END shader executor. It stages owned registers/resources and a complete
+MOV/ADD/MUL/NOP/END shader executor. ADD/MUL evaluate exact normal float24/signed
+zero through checked integer arithmetic; inexact results fail before publication.
+It stages owned registers/resources and a complete
 linear target, then rasterizes complete triangles with exact supported numeric
 values and constant opaque colors. A late error rolls back all state and pixels.
 The focused native Scene Check presents these CPU-produced scenes with existing
-GX2 surface copies. Guest GSP draws and general GPU shader translation remain
-unsupported; explicit resource binding is not guest physical-address resolution.
+GX2 surface copies. The standard guest adapter resolves owned physical resources
+and canonical tiled targets around this boundary. General GPU shader translation
+remains unsupported; the scene boundary itself never follows guest addresses.
 
 The CIA intake path uses bounded signature-layout/TMD/bitmap/content checks and
 selects index-0 application NCCH with checked absolute file offsets. Its derived

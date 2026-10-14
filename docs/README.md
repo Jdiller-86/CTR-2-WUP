@@ -39,7 +39,7 @@ for the canonical project site, live dashboard and build receipts.
   [framebuffer display](gsp-display.md), [shared GSP/VBlank](gsp-queues.md) and [input](hid-input.md).
 - [Compiled guest draws](guest-pica-draws.md): standard GSP queue, exact two-screen
   captures, owned resources and transactional completion.
-- [First software scenes](software-scenes.md): checked loader/MOV shader/raster
+- [First software scenes](software-scenes.md): checked loader/MOV/ADD/MUL shader/raster
   boundary, independent exact images and focused Scene Check console guide.
 - [Filesystem/saves](filesystem.md), [RomFS assets](romfs-assets.md) and [application lifecycle](compiled-homebrew.md).
 - [Private asset samples](private-asset-samples.md): standalone checked ZIP export

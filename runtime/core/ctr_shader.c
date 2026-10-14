@@ -25,6 +25,62 @@ bool ctr_shader_f24_exact(uint32_t bits,uint32_t *raw) {
     if(exponent<65u || exponent>190u || (fraction&127u))return false;
     *raw=sign|((exponent-64u)<<16)|(fraction>>7);return true;
 }
+/* magnitude * 2^scale, with no rounding, flush or overflow approximation. */
+static bool pack_exact(uint64_t magnitude,int scale,uint32_t sign,uint32_t *bits) {
+    if(!magnitude) { *bits=sign;return true; }
+    while(magnitude>UINT64_C(0x1ffff)) {
+        if(magnitude&1u)return false;
+        magnitude>>=1;++scale;
+    }
+    while(magnitude<UINT64_C(0x10000)) { magnitude<<=1;--scale; }
+    int exponent=scale+79;
+    if(exponent<1 || exponent>126)return false;
+    return ctr_shader_f24_decode((sign>>8)|((uint32_t)exponent<<16)|
+                                 ((uint32_t)magnitude&65535u),bits);
+}
+static bool arithmetic(unsigned op,uint32_t a,uint32_t b,uint32_t *bits) {
+    uint32_t ar,br;
+    if(!ctr_shader_f24_exact(a,&ar) || !ctr_shader_f24_exact(b,&br))return false;
+    uint32_t sign=(a^b)&UINT32_C(0x80000000);
+    bool az=(ar&UINT32_C(0x7fffff))==0,bz=(br&UINT32_C(0x7fffff))==0;
+    unsigned ae=(ar>>16)&127u,be=(br>>16)&127u;
+    uint64_t am=UINT64_C(0x10000)|(ar&65535u),bm=UINT64_C(0x10000)|(br&65535u);
+    if(op==0x08u) {
+        if(az || bz) { *bits=sign;return true; }
+        return pack_exact(am*bm,(int)ae+(int)be-158,sign,bits);
+    }
+    if(az && bz) { *bits=a&b&UINT32_C(0x80000000);return true; }
+    if(az) { *bits=b;return true; }
+    if(bz) { *bits=a;return true; }
+    unsigned low=ae<be?ae:be,high=ae>be?ae:be;
+    /* Beyond 17 exponent steps a nonzero smaller operand necessarily leaves
+     * more than 17 significant bits, even after opposite-sign cancellation.
+     * Reject before shifting; neither a wide integer nor host FP may erase it. */
+    if(high-low>17u)return false;
+    am<<=ae-low;bm<<=be-low;
+    if(!sign)return pack_exact(am+bm,(int)low-79,a&UINT32_C(0x80000000),bits);
+    if(am==bm) { *bits=0;return true; }
+    return pack_exact(am>bm?am-bm:bm-am,(int)low-79,
+                      (am>bm?a:b)&UINT32_C(0x80000000),bits);
+}
+static ctr_shader_result read_lane(const ctr_shader_program *program,const ctr_vertex *input,
+                                  uint32_t temporary[16][4],const uint8_t *defined,
+                                  unsigned source,unsigned lane,bool negate,uint32_t *value) {
+    if(source<16u) {
+        if(!(input->enabled&(1u<<source)))return CTR_SHADER_UNDEFINED;
+        memcpy(value,&input->input[source][lane],sizeof(*value));
+    } else if(source<32u) {
+        if(!(defined[source-16u]&(1u<<lane)))return CTR_SHADER_UNDEFINED;
+        *value=temporary[source-16u][lane];
+    } else {
+        if(!(program->uniform_defined[source-32u]&(1u<<lane)))return CTR_SHADER_UNDEFINED;
+        *value=program->uniforms[source-32u][lane];
+    }
+    uint32_t raw;
+    if(!ctr_shader_f24_exact(*value,&raw))return CTR_SHADER_NUMERIC;
+    if(negate)*value^=UINT32_C(0x80000000);
+    return CTR_SHADER_OK;
+}
 ctr_shader_result ctr_shader_execute(const ctr_shader_program *program,
                                      const ctr_vertex *input,
                                      ctr_shader_output *output) {
@@ -50,7 +106,7 @@ ctr_shader_result ctr_shader_execute(const ctr_shader_program *program,
             if(op==0x22u) { *output=result;return CTR_SHADER_OK; }
             continue;
         }
-        if(op!=0x13u || ((word>>19)&3u))return CTR_SHADER_UNSUPPORTED;
+        if((op!=0x13u && op!=0x00u && op!=0x08u) || ((word>>19)&3u))return CTR_SHADER_UNSUPPORTED;
         unsigned descriptor=word&127u,source=(word>>12)&127u,dest=(word>>21)&31u;
         if(!program->descriptor_defined[descriptor])return CTR_SHADER_UNDEFINED;
         uint32_t pattern=program->descriptors[descriptor];
@@ -58,22 +114,20 @@ ctr_shader_result ctr_shader_execute(const ctr_shader_program *program,
         uint32_t moved[4]={0};unsigned mask=pattern&15u;
         for(unsigned lane=0;lane<4;++lane)if(mask&(8u>>lane)) {
             unsigned selected=(pattern>>(11u-lane*2u))&3u;
-            uint32_t value=0;
-            if(source<16u) {
-                if(!(input->enabled&(1u<<source)))return CTR_SHADER_UNDEFINED;
-                memcpy(&value,&input->input[source][selected],sizeof(value));
-            } else if(source<32u) {
-                if(!(defined[source-16u]&(1u<<selected)))return CTR_SHADER_UNDEFINED;
-                value=temporary[source-16u][selected];
-            } else {
-                if(!(program->uniform_defined[source-32u]&(1u<<selected)))return CTR_SHADER_UNDEFINED;
-                value=program->uniforms[source-32u][selected];
+            uint32_t a,b;
+            ctr_shader_result status=read_lane(program,input,temporary,defined,
+                                               source,selected,(pattern&16u)!=0,&a);
+            if(status!=CTR_SHADER_OK)return status;
+            if(op==0x13u)moved[lane]=a;
+            else {
+                selected=(pattern>>(20u-lane*2u))&3u;
+                status=read_lane(program,input,temporary,defined,
+                                 (word>>7)&31u,selected,(pattern&(1u<<13))!=0,&b);
+                if(status!=CTR_SHADER_OK)return status;
+                if(!arithmetic(op,a,b,&moved[lane]))return CTR_SHADER_NUMERIC;
             }
-            uint32_t raw;
-            if(!ctr_shader_f24_exact(value,&raw))return CTR_SHADER_NUMERIC;
-            moved[lane]=value^((pattern&16u)?UINT32_C(0x80000000):0);
         }
-        /* All source lanes are captured before in-place temporary swizzling. */
+        /* Both sources are captured before any in-place temporary write. */
         for(unsigned lane=0;lane<4;++lane)if(mask&(8u>>lane)) {
             if(dest<16u) {
                 memcpy(&result.values[dest][lane],&moved[lane],sizeof(moved[lane]));

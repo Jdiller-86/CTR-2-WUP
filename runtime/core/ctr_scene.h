@@ -47,7 +47,7 @@ void ctr_scene_init(ctr_scene_state *state);
  * Draw complete triangle lists (<=256 vertices each), W=1, inside clip volume,
  * exact 1/16-pixel positions and constant opaque binary primary color per
  * triangle. Fragment policy is untextured replacement with depth/blend disabled.
- * Unknown/texture/TEV/depth/framebuffer registers, arithmetic and geometry fail.
+ * Unknown/texture/TEV/depth/framebuffer registers, unsupported arithmetic and geometry fail.
  * Every list stages state and the complete target before any commit, so late
  * errors preserve previous state/pixels. Inputs must be owned/aligned/stable.
  * Reports may change on failure unless aliased. No guest address is followed,

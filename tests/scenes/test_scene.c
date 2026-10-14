@@ -13,6 +13,111 @@ static uint32_t get32(const uint8_t *p) { return (uint32_t)p[0]|(uint32_t)p[1]<<
 static uint32_t mov(unsigned source,unsigned dest,unsigned descriptor) {
     return UINT32_C(0x4c000000)|(source<<12)|(dest<<21)|descriptor;
 }
+static uint32_t binary(unsigned op,unsigned a,unsigned b,unsigned dest,unsigned descriptor) {
+    return (op<<26)|(a<<12)|(b<<7)|(dest<<21)|descriptor;
+}
+static void shader_arithmetic(void) {
+    ctr_shader_program p={0};ctr_vertex input={0};ctr_shader_output out,previous;
+    p.code_defined[0]=p.code_defined[1]=p.descriptor_defined[0]=1;
+    p.code[1]=UINT32_C(0x88000000);input.enabled=3;
+    for(unsigned lane=0;lane<4;++lane) {
+        input.input[0][lane]=(float)(1u<<lane);
+        input.input[1][lane]=(float)(16u<<lane);
+    }
+    /* Each operand's complete swizzle/negation/mask space, while the other
+     * operand has a different fixed swizzle. Expected values are small integers. */
+    for(unsigned op=0;op<=8;op+=8)for(unsigned operand=0;operand<2;++operand)
+        for(unsigned selectors=0;selectors<256;++selectors)for(unsigned signs=0;signs<4;++signs)
+            for(unsigned mask=0;mask<16;++mask) {
+                unsigned s1=operand?27u:selectors,s2=operand?selectors:228u;
+                p.descriptors[0]=mask|((signs&1u)<<4)|(s1<<5)|((signs>>1)<<13)|(s2<<14);
+                p.code[0]=binary(op,0,1,7,0);
+                CHECK(ctr_shader_execute(&p,&input,&out)==CTR_SHADER_OK && out.instructions==2);
+                CHECK(out.written[7]==((mask&8u)>>3|(mask&4u)>>1|(mask&2u)<<1|(mask&1u)<<3));
+                for(unsigned lane=0;lane<4;++lane)if(mask&(8u>>lane)) {
+                    float a=input.input[0][(s1>>(6u-lane*2u))&3u]*(signs&1u?-1.0f:1.0f);
+                    float b=input.input[1][(s2>>(6u-lane*2u))&3u]*(signs&2u?-1.0f:1.0f);
+                    CHECK(out.values[7][lane]==(op?a*b:a+b));
+                }
+            }
+    /* Both sources can alias the destination temporary: all reads precede writes. */
+    p.code[0]=mov(0,16,0);p.code[1]=binary(0,16,16,16,1);p.code[2]=mov(16,0,0);
+    p.code[3]=UINT32_C(0x88000000);p.code_defined[2]=p.code_defined[3]=p.descriptor_defined[1]=1;
+    p.descriptors[0]=UINT32_C(0x36f);p.descriptors[1]=UINT32_C(0x36f)|(228u<<14);
+    CHECK(ctr_shader_execute(&p,&input,&out)==CTR_SHADER_OK);
+    for(unsigned lane=0;lane<4;++lane)CHECK(out.values[0][lane]==input.input[0][lane]+input.input[0][3u-lane]);
+    /* Every register of both encodings, with initialized temporary inputs. */
+    input.enabled=65535u;
+    for(unsigned reg=0;reg<16;++reg) {
+        p.code[reg]=mov(reg,16u+reg,0);p.code_defined[reg]=1;
+        for(unsigned lane=0;lane<4;++lane)input.input[reg][lane]=(float)((reg+1u)*(lane+1u));
+    }
+    for(unsigned reg=0;reg<96;++reg) {
+        p.uniform_defined[reg]=15;
+        for(unsigned lane=0;lane<4;++lane)p.uniforms[reg][lane]=bits((float)((reg+1u)*(lane+1u)));
+    }
+    p.code_defined[16]=p.code_defined[17]=1;p.code[17]=UINT32_C(0x88000000);
+    p.descriptors[1]=UINT32_C(0x36f)|(27u<<14);
+    for(unsigned op=0;op<=8;op+=8)for(unsigned a=0;a<128;++a)for(unsigned b=0;b<32;++b) {
+        p.code[16]=binary(op,a,b,15,1);
+        CHECK(ctr_shader_execute(&p,&input,&out)==CTR_SHADER_OK);
+        for(unsigned lane=0;lane<4;++lane) {
+            float av=a<32u?input.input[a&15u][lane]:value(p.uniforms[a-32u][lane]);
+            float bv=input.input[b&15u][lane];
+            CHECK(out.values[15][lane]==(op?av*bv:av+bv));
+        }
+    }
+    /* Late failure must discard earlier output. Undefined/numeric errors on
+     * source 2 are observed only in the lanes selected by the destination. */
+    memset(&out,0xa5,sizeof(out));previous=out;p.code[0]=mov(0,0,0);
+    p.code[1]=binary(8,0,31,1,1);p.code[2]=UINT32_C(0x88000000);
+#define FAIL(expected) do { CHECK(ctr_shader_execute(&p,&input,&out)==expected);CHECK(!memcmp(&out,&previous,sizeof(out))); } while(0)
+    FAIL(CTR_SHADER_UNDEFINED);
+    p.code[1]=binary(0,0,1,1,1);input.enabled&=~2u;FAIL(CTR_SHADER_UNDEFINED);input.enabled|=2u;
+    input.input[1][3]=value(UINT32_C(0x7fc00000));FAIL(CTR_SHADER_NUMERIC);
+    p.descriptors[1]=UINT32_C(0x36e)|(27u<<14);
+    CHECK(ctr_shader_execute(&p,&input,&out)==CTR_SHADER_OK);out=previous;
+    p.code[1]|=1u<<19;FAIL(CTR_SHADER_UNSUPPORTED);p.code[1]&=~(1u<<19);
+    p.descriptors[1]=0;input.enabled=0;p.code[0]=UINT32_C(0x84000000);
+    CHECK(ctr_shader_execute(&p,&input,&out)==CTR_SHADER_OK && !out.written[1]);
+#undef FAIL
+}
+static void arithmetic_boundaries(void) {
+    static const struct { unsigned op;uint32_t a,b,result;bool ok; } cases[]={
+        {0,0x3f800000,0x37800000,0x3f800080,true}, /* 1 + 2^-16 */
+        {0,0x3f800000,0x37000000,0,false},         /* needs an 18th bit */
+        {0,0x3f800000,0xb7000000,0x3f7fff80,true}, /* exact cancellation edge */
+        {0,0x3f800000,0xb6800000,0,false},
+        {0,0x3f800000,0x20800000,0,false},         /* tiny term must not vanish */
+        {0,0x3f800000,0xbf800000,0,true},
+        {0,0x20800080,0xa0800000,0,false},        /* nonzero subnormal result */
+        {0,0x5f7fff80,0x5f7fff80,0,false},
+        {0,0x80000000,0x80000000,0x80000000,true},
+        {0,0x80000000,0,0,true},
+        {0,0,0xbf800000,0xbf800000,true},
+        {8,0x3f800080,0x3f800080,0,false},
+        {8,0x20800000,0x3f000000,0,false},
+        {8,0x5f7fff80,0x40000000,0,false},
+        {8,0x20800000,0x5f000000,0x40000000,true},
+        {8,0x80000000,0x3f800000,0x80000000,true},
+        {8,0x80000000,0xbf800000,0,true},
+        {8,0,0xbf800000,0x80000000,true},
+        {8,0,0x7f800000,0,false},
+        {8,0,1,0,false},
+        {0,0x3f800001,0,0,false}
+    };
+    ctr_shader_program p={0};ctr_vertex input={0};ctr_shader_output out,previous;
+    p.code[1]=UINT32_C(0x88000000);p.code_defined[0]=p.code_defined[1]=1;
+    p.descriptor_defined[0]=1;p.descriptors[0]=8;input.enabled=3;
+    for(unsigned i=0;i<sizeof(cases)/sizeof(*cases);++i) {
+        p.code[0]=binary(cases[i].op,0,1,0,0);
+        memcpy(&input.input[0][0],&cases[i].a,4);memcpy(&input.input[1][0],&cases[i].b,4);
+        memset(&out,0xa5,sizeof(out));previous=out;
+        CHECK(ctr_shader_execute(&p,&input,&out)==(cases[i].ok?CTR_SHADER_OK:CTR_SHADER_NUMERIC));
+        if(cases[i].ok)CHECK(bits(out.values[0][0])==cases[i].result && out.written[0]==1);
+        else CHECK(!memcmp(&out,&previous,sizeof(out)));
+    }
+}
 static void floats24(void) {
     const unsigned exponents[]={1,63,126};
     /* Independent mathematical value, not another bit-field conversion. */
@@ -100,7 +205,7 @@ static void shader_errors(void) {
     p.code[0]=mov(0,0,0);p.uniforms[0][1]=UINT32_C(0x7fc00000); /* Unused uniform is not read. */
     CHECK(ctr_shader_execute(&p,&input,&out)==CTR_SHADER_OK);out=previous;
     input.input[0][3]=value(UINT32_C(0x3f800001));FAIL(CTR_SHADER_NUMERIC);input.input[0][3]=1.0f;
-    p.code[0]=0;FAIL(CTR_SHADER_UNSUPPORTED);
+    p.code[0]=UINT32_C(0x04000000);FAIL(CTR_SHADER_UNSUPPORTED);
     p.code[0]=mov(0,0,0)|(1u<<19);FAIL(CTR_SHADER_UNSUPPORTED);
     p.code[0]=mov(0,0,0);p.descriptors[0]|=UINT32_C(0x80000000);FAIL(CTR_SHADER_UNSUPPORTED);
     p.descriptors[0]=UINT32_C(0x36f);p.descriptor_defined[0]=0;FAIL(CTR_SHADER_UNDEFINED);p.descriptor_defined[0]=1;
@@ -145,7 +250,7 @@ static void shader_capacity(void) {
 #define FAIL(expected) do { CHECK(ctr_shader_execute(&p,&input,&out)==expected);CHECK(!memcmp(&out,&previous,sizeof(out))); } while(0)
     p.code[511]=mov(0,15,127);FAIL(CTR_SHADER_NO_END);
     p.entry=256;p.code_defined[511]=0;FAIL(CTR_SHADER_UNDEFINED);p.code_defined[511]=1;
-    p.code[511]=0;FAIL(CTR_SHADER_UNSUPPORTED);
+    p.code[511]=UINT32_C(0x04000000);FAIL(CTR_SHADER_UNSUPPORTED);
     p.code[511]=mov(0,15,127)|(1u<<19);FAIL(CTR_SHADER_UNSUPPORTED);
     p.code[511]=UINT32_C(0x88000001);FAIL(CTR_SHADER_UNSUPPORTED);
     p.code[511]=UINT32_C(0x88000000);p.code_defined[0]=0;
@@ -272,6 +377,31 @@ static void scenes(void) {
     put32(f.commands+find(&f,0x227,0),96u);put32(f.commands+find(&f,0x227,1),99u);
     CHECK(execute(&f,&state,pixels,&report)==CTR_SCENE_OK);golden(pixels,true,false);
 }
+static void arithmetic_scenes(void) {
+    ctr_scene_fixture f;ctr_scene_state state,previous;ctr_scene_report report;
+    uint8_t pixels[CTR_SCENE_FIXTURE_BYTES],before[CTR_SCENE_FIXTURE_BYTES];
+    for(unsigned shorts=0;shorts<2;++shorts) {
+        ctr_scene_fixture_make_arithmetic(&f,shorts!=0);ctr_scene_init(&state);
+        ctr_scene_fixture_background(pixels,sizeof(pixels));
+        CHECK(execute(&f,&state,pixels,&report)==CTR_SCENE_OK && report.shader_instructions==30);
+        golden(pixels,false,false);
+    }
+    previous=state;memcpy(before,pixels,sizeof(before));
+    for(unsigned kind=0;kind<4;++kind) {
+        ctr_scene_fixture_make_arithmetic(&f,false);f.command_bytes=find(&f,0x22f,1);
+        if(kind==2) {
+            append(&f,0x2c0,UINT32_C(0x80000001));append(&f,0x2c1,0);append(&f,0x2c1,0);
+            append(&f,0x2c1,UINT32_C(0xbe800000));append(&f,0x2c1,UINT32_C(0x20800000));
+        } else {
+            append(&f,0x2cb,2);
+            append(&f,0x2cc,kind==0?UINT32_C(0x04000000):binary(0,33,kind==1?31u:17u,0,1)|(kind==3?1u<<19:0));
+        }
+        append(&f,0x22f,1);
+        CHECK(execute(&f,&state,pixels,&report)==CTR_SCENE_SHADER && report.draws==1);
+        CHECK(report.shader_result==(kind==2?CTR_SHADER_NUMERIC:kind==1?CTR_SHADER_UNDEFINED:CTR_SHADER_UNSUPPORTED));
+        CHECK(!memcmp(&previous,&state,sizeof(state)) && !memcmp(before,pixels,sizeof(before)));
+    }
+}
 static void scene_capacity(void) {
     ctr_scene_fixture f;ctr_scene_state state,previous;ctr_scene_report report;
     uint8_t pixels[CTR_SCENE_FIXTURE_BYTES],old_pixels[CTR_SCENE_FIXTURE_BYTES];
@@ -342,7 +472,7 @@ static void scene_errors(void) {
     RESET();set(&f,0x041,UINT32_C(0x7f0000));FAIL(CTR_SCENE_NUMERIC);
     RESET();put32(f.resources,UINT32_C(0x3f800001));FAIL(CTR_SCENE_SHADER);CHECK(report.shader_result==CTR_SHADER_NUMERIC);
     RESET();put32(f.resources+12,bits(2.0f));FAIL(CTR_SCENE_UNSUPPORTED);
-    RESET();put32(f.commands+find(&f,0x2cc,1),0);FAIL(CTR_SCENE_SHADER);
+    RESET();put32(f.commands+find(&f,0x2cc,1),UINT32_C(0x04000000));FAIL(CTR_SCENE_SHADER);
     RESET();set(&f,0x2ba,512);FAIL(CTR_SCENE_SHADER);CHECK(report.shader_result==CTR_SHADER_RANGE);
     RESET();set(&f,0x2cb,CTR_SHADER_MAX_CODE);FAIL(CTR_SCENE_LIMIT);
     RESET();set(&f,0x2d5,CTR_SHADER_MAX_DESCRIPTORS);FAIL(CTR_SCENE_LIMIT);
@@ -381,6 +511,7 @@ static void scene_errors(void) {
 #undef FAIL
 }
 int main(void) {
-    floats24();shader_patterns();shader_errors();shader_capacity();scenes();scene_capacity();scene_errors();
+    floats24();shader_patterns();shader_arithmetic();arithmetic_boundaries();shader_errors();shader_capacity();
+    scenes();arithmetic_scenes();scene_capacity();scene_errors();
     printf("original shader/scene tests: %u assertions passed\n",assertions);return 0;
 }

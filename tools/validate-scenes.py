@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Execute original MOV-shader scenes, compare analytic pixels and save evidence.
+"""Execute original MOV/ADD/MUL scenes, compare analytic pixels and save evidence.
 
 Optional pinned nihstro comparison checks wire encoding only. It is not a GPU
 or float24 arithmetic reference. No external code enters the runtime.
@@ -49,6 +49,10 @@ def reference(directory, output, cxx):
                 for src in range(128) for dest in range(32)]
     expected.extend(selectors << 5 | negate << 4 | mask
                     for selectors in range(256) for negate in range(2) for mask in range(16))
+    expected.extend(op << 26 | dest << 21 | a << 12 | b << 7 | ((a+b+dest) & 127)
+                    for op in (0, 8) for a in range(128) for b in range(32) for dest in range(32))
+    expected.extend(selectors << 14 | negate << 13 | mask
+                    for selectors in range(256) for negate in range(2) for mask in range(16))
     expected.extend((0x84000000, 0x88000000))
     if actual != struct.pack('<'+'I'*len(expected), *expected):
         raise ValueError('Pinned independent shader encoding comparison differs')
@@ -70,7 +74,8 @@ def main():
               'source_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
               'source_dirty': bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT, text=True)),
               'console_verified': False, 'gx2_execution': False, 'guest_gsp_draws': False,
-              'float24_arithmetic': False, 'pixel_tolerance': 0, 'scenes': []}
+              'float24_arithmetic': 'exact ADD/MUL only; hardware rounding unverified',
+              'pixel_tolerance': 0, 'scenes': []}
     try:
         binary = output/'emit-scene'
         sources = [ROOT/'tests/scenes/emit_scene.c'] + [ROOT/'runtime/core'/name
@@ -80,20 +85,28 @@ def main():
             flags += ['-O1', '-fno-omit-frame-pointer', '-fsanitize=address,undefined']
         subprocess.run(shlex.split(args.cc)+flags+list(map(str, sources))+['-lm', '-o', str(binary)], check=True)
         expected = golden()
-        for index in range(2):
-            name = 'u16' if index else 'u8'
+        for index in range(4):
+            name = ('arithmetic-' if index >= 2 else '')+('u16' if index & 1 else 'u8')
             files = [output/(name+suffix) for suffix in ('.rgba', '.commands', '.resources')]
             result = json.loads(subprocess.check_output([str(binary), str(index), *map(str, files)], text=True))
-            counters = {'result':'ok', 'draws':2, 'triangles':2, 'fragments':2304, 'shader_instructions':18}
+            counters = {'result':'ok', 'draws':2, 'triangles':2, 'fragments':2304,
+                        'shader_instructions':30 if index >= 2 else 18}
             if any(result.get(key) != value for key, value in counters.items()):
                 raise ValueError('Scene execution counters differ')
             rgba = files[0].read_bytes()
             if rgba != expected:
                 raise ValueError('Scene differs from independent exact analytic pixels')
             preview = output/(name+'.png');preview.write_bytes(png(rgba));files.append(preview)
-            report['scenes'].append({'index_bytes': index+1, **result, 'red_pixels':1128, 'green_pixels':1176,
+            report['scenes'].append({'index_bytes': (index & 1)+1, 'arithmetic': index >= 2,
+                **result, 'red_pixels':1128, 'green_pixels':1176,
                 'files':[{'name': p.name, 'size':p.stat().st_size, 'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in files]})
         report['nihstro_reference'] = reference(args.nihstro_dir.resolve(), output, args.cxx) if args.nihstro_dir else None
+        command = [sys.executable, str(ROOT/'tools/validate-shader-arithmetic.py'),
+                   '--output', str(output/'arithmetic'), '--cc', args.cc]
+        if args.sanitize:
+            command.append('--sanitize')
+        subprocess.run(command, check=True, stdout=subprocess.DEVNULL)
+        report['arithmetic_reference'] = json.loads((output/'arithmetic/report.json').read_text())
         report['ok'] = True
     finally:
         (output/'report.json').write_text(json.dumps(report, indent=2)+'\n')

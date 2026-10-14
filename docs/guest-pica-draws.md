@@ -67,7 +67,10 @@ diagnostics; it is not a game WUP or a physical-console result.
   queue entries remain committed; the failing entry stays pending without its IRQ.
 
 The [scene contract](software-scenes.md) defines the bounded loader, fixed
-attribute, uniform and MOV/NOP/END shader subset. Arithmetic shaders, sampling,
+attribute, uniform and MOV/ADD/MUL/NOP/END shader subset. Source 0.24.0's ADD/MUL
+accept only exact normal float24/signed-zero results with integer evaluation and
+transactional numeric rejection; [original arithmetic checks](software-scenes.md#exact-add-and-mul)
+do not alter the earlier compiled MOV fixture or its console guide. Broader arithmetic, sampling,
 general TEV, clipping, depth/blend/stencil and native GPU translation require
 separate scoped features. A raw VFP push/pop guard fix supports exact bit transfers
 under CRT FPSCR controls; it does not enable unsupported arithmetic modes.

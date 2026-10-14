@@ -1,5 +1,14 @@
 # CTR2WUP status
 
+**Exact shader arithmetic development:** [PR #105](https://github.com/Jdiller-86/CTR-2-WUP/pull/105)
+implements scoped #76 under #28/M4: component-wise ADD/MUL, independent operand
+descriptors and checked integer dyadic evaluation. All 167,730 original rational
+cases, four analytic pixel scenes and 282,626 pinned encodings agree. Late errors
+preserve shader/target/guest queue state. Required full/platform checks are pending.
+The source version is **0.24.0 (unreleased)**; the latest published diagnostic
+release remains **0.23.0**. Hardware rounding, broader arithmetic/control, native
+GX2 and commercial execution remain open. [Contract](docs/software-scenes.md#exact-add-and-mul).
+
 **October 14 unified public hosting:** maintained documentation and the live
 dashboard deploy from this public source repository at
 [the canonical project site](https://jdiller-86.github.io/CTR-2-WUP/).
@@ -27,7 +36,7 @@ under [#97](https://github.com/Jdiller-86/CTR-2-WUP/issues/97), native parent #2
 expands checked vertex code storage to 512 words with original high-entry,
 upload/END and transactional guest rollback probes. Each scene state grows by
 1,280 bytes; native compiler stack frames are unchanged. Required hosted checks
-pass, including Windows. Project membership and native links verify; MOV-only semantics and commercial
+pass, including Windows. Project membership and native links verify; its original MOV-only scope and commercial
 compatibility limits hold. See [the capacity contract](docs/software-scenes.md#vertex-code-capacity).
 
 **October 13 physical follow-up:** Audio Check and GX Transfers 0.20.0, plus
@@ -45,7 +54,7 @@ live Project review replace the resolved input blocker. Actual runtime use,
 broader modules and all full
 milestones remain open. [Evidence review](docs/console-evidence.md).
 
-Updated **October 14, 2026 (America/New_York)** · **v0.23.0**.
+Updated **October 14, 2026 (America/New_York)** · **v0.24.0 source, unreleased**.
 The target remains an UWUVCI-style Windows GUI: select an owned 3DS game, configure
 title/artwork, click Inject, install its individual WUP and play from Wii U Menu.
 [Requirements](docs/project-brief.md), [product plan](docs/development-plan.md),
@@ -63,7 +72,7 @@ is enabled. Current binaries are original homebrew diagnostics.
 | Input/preparation | Bounded CIA/NCSD/NCCH inspection/decryption, full local RomFS verification and independently checked selected bytes with identified formats | Reusable bounded format readers, broader module/runtime observation and Windows conversion acceptance |
 | CPU/runtime | Checked ARM/Thumb/VFP/AOT subsets, owned memory, eight single-core contexts and scoped services | Complete exercised CPU/HLE coverage, modules, guest audio and retail saves |
 | Homebrew | Nine normal-CRT/libctru applications: boot, threads, graphics, input, interactive, filesystem, RomFS, GX transfer and PICA draws | Broader guest services/audio and game integration |
-| Graphics | Direct/shared framebuffer presentation, five display formats, 14 base textures, scoped GX transfers and compiled original guest PICA/MOV/software draws | broader shaders/TEV/sampling, GPU resources/coherency and measured console performance |
+| Graphics | Direct/shared framebuffer presentation, five display formats, 14 base textures, scoped GX transfers and original guest/software draws with exact MOV/ADD/MUL | rounding/control, broader shaders/TEV/sampling, GPU resources/coherency and measured console performance |
 | Packaging/GUI | Original synthetic packing/decryption verification and conversion foundations; GUI workflow specified | Commercial conversion, actual WUP install/Menu gameplay, clean Windows and final GUI |
 
 ## Executable intake follow-up
@@ -100,7 +109,7 @@ PR #98 merged at `926cf8cf23d17a091bea69ad1e2ee850b1374045` with owner approval
 after passing hosted Required CI and Documentation. Its original probes do not
 establish commercial shader semantics or physical renderer acceptance.
 
-The source version is **0.23.0**. [Development releases](https://github.com/Jdiller-86/CTR-2-WUP/releases)
+The source version is **0.24.0 (unreleased)**. [Development releases](https://github.com/Jdiller-86/CTR-2-WUP/releases)
 identify immutable source commits and matching original diagnostic kits, developer
 wheel and offline documentation. The release workflow verifies source/version,
 pinned SDK, original frames, binaries, source/wheel equality, ZIP CRCs and checksums.
@@ -111,7 +120,7 @@ publication identity. Older tags/assets and their console evidence are preserved
 
 - Correct the drawn-frame confirmation gate and measure execution/rendering/
   transfer/wait phases; do not repeat unchanged passed guides.
-- Extend shader arithmetic/control, TEV/sampling, coherency, modules, guest audio
+- Extend shader rounding/remaining arithmetic/control, TEV/sampling, coherency, modules, guest audio
   and retail saves using original references and actual observed requirements.
 - Record full platform stability/recovery and original WUP installation/Menu launch.
 - Demonstrate the selected game's gameplay/audio/save/performance and full clean
