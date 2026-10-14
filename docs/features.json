@@ -726,6 +726,27 @@
       "evidence": [
         "Both received CSTM samples declare non-looping stereo DSP ADPCM at 32 kHz; block/history/seek semantics and actual game playback are not yet accepted."
       ]
+    },
+    {
+      "id": "unified-public-hosting",
+      "title": "Unify public documentation, Pages, tracking and artifact provenance",
+      "milestone": 5,
+      "parent_issue": 5,
+      "state": "active",
+      "pull_requests": [],
+      "scope": [
+        "Use the owner-authorized public source repository as the canonical documentation/Pages and live-dashboard location.",
+        "Use the Actions management secret on immutable trusted main; reconcile reviewed Project transitions without exposing private notes.",
+        "Preserve prior releases/history, redirect the former docs site, and align current contracts/status/download evidence."
+      ],
+      "acceptance": [
+        "Required CI, workflow lint and strict documentation/export checks pass; public artifacts exclude commercial/private payloads and credentials.",
+        "Canonical Pages deployment, legacy redirects, native tracking, Project fields/labels and current original build/release provenance are verified."
+      ],
+      "evidence": [
+        "Owner made CTR-2-WUP public and authorized Actions-secret management and consolidation on October 14, 2026.",
+        "Scoped issue #99 has verified native parent #5 and repository milestone M5."
+      ]
     }
   ],
   "reviewed_statuses": {
