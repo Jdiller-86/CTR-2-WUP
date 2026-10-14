@@ -407,7 +407,7 @@ through the recorded Actions review; broader rendering and full M4 remain open.
 
 Merged scoped #97/PR #98 expands vertex code capacity to 512 checked words
 with original entry/upload/rollback probes and native storage/stack measurements.
-Required hosted platform checks pass; Project reconciliation remains pending; arithmetic,
+Required hosted platform checks pass; Project membership and native links verify; arithmetic,
 control flow, GX2 translation and full task acceptance remain open. See
 [the capacity contract](software-scenes.md#vertex-code-capacity).
 
@@ -493,10 +493,12 @@ See [first-title findings](first-title.md).
 
 **State: In progress. Full acceptance: open.**
 
-Live Project #2/dashboard still await the explicit `mario-input-received-v023`
-review. Hosted Actions now runs and its management identity can read the Project.
-[Reviewed management](direct-development.md) tracks consolidation and live
-read-back under #99/PR #100; no source edit alone changes the board.
+The explicit `mario-input-received-v023` review applied and read back successfully
+in [run 38605081338](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38605081338).
+M5/intake/requirements are In progress; the resolved owned-input wait was removed
+from six targets while console waits and owner notes were preserved. Mirrored
+labels and the [canonical live dashboard](https://jdiller-86.github.io/CTR-2-WUP/progress/)
+agree. No source edit alone changes the board, and no full gate is accepted.
 
 **Entry:** The user supplies a privately prepared executable and required assets for an owned exact Old 3DS revision. The uploaded USA Mario executable/revision is verified; local asset provenance reports are now matched, and seven selected payloads now have independent private checks. Original full-container integrity is still reported local evidence.
 

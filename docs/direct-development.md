@@ -23,6 +23,8 @@ reviewed redirects and `verify-sites` checks both sites over HTTP without writes
 `overview` refreshes only the managed Project description while preserving owner
 notes and existing fields/views. `archive-legacy` retires the legacy repository
 only after redirect verification; it restores write access if Pages no longer verifies.
+The legacy repository is now archived with live redirects. Migration operations
+remain for reviewed recovery; routine publication uses canonical source only.
 All privileged runs resolve and check out immutable trusted
 main; no arbitrary PR code runs with the secret. Public receipts contain managed
 identities/counts/operations, never raw Project resource notes or credentials.

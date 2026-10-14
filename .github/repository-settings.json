@@ -64,12 +64,14 @@
     "require_successful_strict_build": true,
     "preserve_repository_visibility": true,
     "legacy_repository": "Jdiller-86/CTR-2-WUP-docs",
-    "legacy_role": "redirect/archive after canonical publication verification"
+    "legacy_role": "archived redirects/history; all maintained articles and aggregates deploy from canonical source"
   },
   "paid_features_enabled": false,
   "visibility_change_requested": false,
-  "project_live_verified": false,
-  "pages_live_verified": false,
-  "operations_receipts": "Trusted-main repository features, Project tracking and public documentation Actions retain live operation receipts; desired source settings are not a substitute for API verification.",
-  "expected_visibility": "public"
+  "project_live_verified": true,
+  "pages_live_verified": true,
+  "operations_receipts": "Canonical Pages 38601781297, repository features 38601840961, Mario review 38605081338, label/dashboard refresh 38605491773, legacy HTTP verification 38606446452 and native/Project reconciliation 38608010840 have verified Actions receipts. Later immutable source/release receipts remain authoritative. Legacy checksum deployment 38608934605 and archival 38609420311 preserve history and verify redirects after retirement.",
+  "expected_visibility": "public",
+  "legacy_redirects_live_verified": true,
+  "legacy_archived_verified": true
 }

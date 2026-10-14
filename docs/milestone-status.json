@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "version": "0.23.0",
-  "updated": "2026-10-13",
+  "updated": "2026-10-14",
   "approximate_implementation_percent": 20,
   "full_milestones_accepted": 0,
   "milestones": [
@@ -323,7 +323,7 @@
         "v0.22.0 original owned-resource loader/MOV shader/software triangles: 1,393,972 original assertions, exact analytic pixels for both index formats and 12,290 pinned independent encoding checks; focused native Scene Check cross-build, hardware evidence pending",
         "Standard guest GSP integrates bounded owned-resource PICA draws transactionally; the compiled original draws four exact triangles into both targets and displays them with zero fallback.",
         "October 13 Guest Draws 0.23.0 has matching two-step PASS result/trace, four triangles, 97,200 fragments and user-confirmed pictures/exit. Aggregate frame timing and premature visual-prompt timing are recorded; full graphics costs remain unmeasured.",
-        "Merged scoped #97/PR #98 expands vertex code storage to 512 words with original entry/upload/rollback probes and native storage/stack measurements. Required hosted platform checks pass; Project reconciliation remains pending; #28/M4 acceptance remains open."
+        "Merged scoped #97/PR #98 expands vertex code storage to 512 words with original entry/upload/rollback probes and native storage/stack measurements. Required hosted platform checks and native/Project reconciliation 38608010840 pass; #28/M4 acceptance remains open."
       ],
       "acceptance_remaining": [
         "Implement real PICA command/state, vertex/shader, texture/sampler/TEV and raster behavior",
@@ -431,10 +431,11 @@
         "Candidate and proposed private analysis/gameplay route documented",
         "October 13 derived NCCH passes independent stored hashes, decompression and executable-revision checks; metadata establishes USA Mario. Pinned static lifter analysis succeeds. Exact hashes and commercial bytes remain private.",
         "October 13 local preparation and asset reports match the independently inspected executable/revision and identical reported IVFC evidence: 1,756 outer files, 19 directories, 298,080,796-byte RomFS blob. Raw asset bytes remain local.",
-        "Standalone bounded private sample exporter (issue #92 / PR #93): matching local report/revision bindings, complete blob and selected-file hashes, safe bounded ZIP; selected actual bytes/runtime requirements still pending.",
+        "Standalone bounded private sample exporter (issue #92 / PR #93): matching local report/revision bindings, complete blob and selected-file hashes, safe bounded ZIP; subsequent PR #94 independently verifies the selected payloads; observed runtime use remains pending.",
         "October 13 selected-byte review: seven files match manifest/report/revision hashes. Three Yaz0/NARC archives contain DVLB, CGFX and BYML structures; direct/embedded shader tables fit their containers. CSAR/CSTM blocks are checked; two streams declare stereo DSP ADPCM at 32 kHz. Commercial bytes/hashes stay private.",
-        "October 14 development continuity under scoped issue #95: secure direct management preflight and original review/local-validation contracts are implemented; personal Project access is 403, so live M5 transitions and publication remain pending. No full-gate acceptance.",
-        "October 14 owner-made public source restores hosted Actions; Actions-secret traceability dry-run reads Project #2. Scoped #99/PR #100 consolidates canonical Pages, reviewed management and original artifact provenance. Live apply/deployment remain pending until their receipts verify."
+        "At the PR #96 checkpoint, the environment binding could not read Project #2. October 14 Actions-secret review 38605081338 subsequently verifies read/write access, M5/intake/requirements In progress and removal of the resolved input wait from six targets; console waits and owner notes remain preserved. No full gate is accepted.",
+        "October 14 public source restores required hosted CI and hosts the canonical docs/dashboard. PR #100/#101 supply reviewed management, guarded legacy redirects and exact original artifact provenance; canonical/legacy HTTP checks and live label/dashboard refresh pass. Final receipts are linked in STATUS.md.",
+        "Actions-secret traceability apply 38608010840 verifies 69 native parent links, 28 PR links, M1-M7 assignments and all 104 Project members; no untracked PRs or missing/archived managed members. Full milestone acceptance remains 0/7."
       ],
       "acceptance_remaining": [
         "Complete the exact-revision observed runtime/test-route matrix and any specifically required additional module/asset inspection; static resource contents are not observed execution.",

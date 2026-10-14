@@ -78,5 +78,5 @@ Source, maintained articles and aggregate tracking share
 
 
 Native feature/task/PR relationships and their live verification are documented
-in [development tracking](development-tracking.md). The initial reviewed status
+in [development tracking](https://jdiller-86.github.io/CTR-2-WUP/docs/development-tracking/). The initial reviewed status
 migration only replaces old empty/Todo values; later owner edits are preserved.

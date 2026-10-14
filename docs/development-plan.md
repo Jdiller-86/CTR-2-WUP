@@ -1,6 +1,6 @@
 # CTR2WUP product development plan
 
-Updated **October 13, 2026** for **v0.23.0**. The requirements remain
+Updated **October 14, 2026** for **v0.23.0**. The requirements remain
 [the original brief](project-brief.md), the reviewed [GUI workflow](gui-workflow.md)
 and the user amendment allowing [optional local encrypted-input preparation](encrypted-input.md).
 Upstream feasibility scores and compatibility percentages are research context,
@@ -52,22 +52,23 @@ installed-WUP acceptance, commercial conversion and final GUI are still pending.
 The owner made source public on October 14. Hosted Required CI and Documentation
 now pass for the shader-capacity PR, and the Actions management identity can read
 Project #2. [Reviewed management](direct-development.md) uses immutable trusted
-main and the existing Actions secret. Scoped #99/PR #100 consolidates canonical
-Pages, live tracking and current artifacts; deployment/reconciliation evidence
-remains pending until verified. The environment binding is a separate fallback.
+main and the existing Actions secret. PR #100/#101 consolidate canonical Pages,
+reviewed management and current artifacts. Canonical/legacy HTTP checks and the
+Mario transitions/label refresh verify successfully; [current status](../STATUS.md)
+records the final native tracking and delivery receipts. The environment binding
+is a separate fallback whose access must be independently verified.
 No spending, protection or full-gate acceptance change is implied.
 
 Merged PR #98 implements the scoped #97/#28/M4 vertex code capacity increment:
 512 checked words with original upload/entry/rollback probes and native storage/
-stack measurements. Required hosted platform checks pass; Project reconciliation
-remains pending. Arithmetic/control and broader renderer work follow this capacity
+stack measurements. Required hosted platform checks and native/Project reconciliation verify. Arithmetic/control and broader renderer work follow this capacity
 boundary; it does not establish commercial shader execution.
 
 ## Now, next and later
 
 | Priority | Concrete deliverable | Tracking and acceptance |
 | --- | --- | --- |
-| Current checkpoint | Finish the compiled original guest draw route, transactional targets/completion, exact frames and native artifact provenance | M4 #27, with #28/#30 and M2 #18; scoped feature `guest-pica-draws`, PR #57 |
+| Delivered checkpoint | Bounded compiled guest draws, transactional targets/completion, exact frames and checked 512-word shader storage | Scoped M4 command and capacity increments in PR #48/#57/#98; broader #28/#30 and full M4 acceptance remain open |
 | Next independent renderer work | Add checked shader arithmetic, then bounded TEV and texture sampling using original reference scenes | M4 #28/#29; separate scoped features with numeric/pixel and rollback criteria |
 | Resource/native renderer work | Version resource caches, prove invalidation/readback, define native shader ABI and translate the proven subset into GX2 | M4 #28/#30; retain software reference and explicit shader/cache misses |
 | Physical evidence and performance | Retain reviewed audio/GX/draw results; correct drawn-frame gating, measure diagnostic phases and execution budget, then collect repeat launch/exit and full Espresso/rendering costs | M1 #13–#16, M2 #20/#21, M3 #22/#26 and M4 #31; only physical observations accept these gates |

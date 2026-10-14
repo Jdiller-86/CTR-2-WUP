@@ -71,15 +71,17 @@ private issue titles, bodies or feature identifiers in the public dashboard.
 
 The source is public and hosted validation is available. Scoped #99/PR #100
 consolidates publication and uses the existing Actions management secret for
-reviewed tracking operations. Project access is verified through Actions; live
-catalog reconciliation and Mario transitions are recorded only after apply and
-read-back. The environment binding's earlier failure does not block Actions.
+reviewed tracking operations. Project read/write access, the bounded Mario
+transition and label/dashboard refresh have verified Actions receipts. Native
+reconciliation receipts are linked in [current status](../STATUS.md). The
+environment binding's earlier failure does not block Actions.
 
 Scoped shader-capacity issue #97 has verified native parent #28 and M4 assignment;
 merged PR #98 also has M4 and passing hosted Required CI and Documentation.
-Its 512-word implementation and original probes do not accept #28/M4. Project
-membership/catalog reconciliation and the reviewed Mario transitions remain
-queued for the verified Actions management identity.
+Its 512-word implementation and original probes do not accept #28/M4. Native
+parents/PR links, milestones and Project membership verify in
+[reconciliation run 38608010840](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38608010840). The reviewed Mario transitions
+and label/dashboard refresh also verify; console/full gate criteria remain open.
 
 ## Next renderer features
 

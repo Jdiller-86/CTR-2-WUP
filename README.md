@@ -75,7 +75,9 @@ milestone → task → feature → PR relationships and the contributor workflow
 ## Getting started
 
 Download a matching [development release](https://github.com/Jdiller-86/CTR-2-WUP/releases)
-and check its `SHA256SUMS.txt`. For Wii U diagnostics, copy the kit's `sd-card/`
+and check its `SHA256SUMS.txt` and source manifest. Separate Native/GX,
+Audio Check/GX and Guest Draws kits accompany source, the developer wheel and
+offline documentation. For Wii U diagnostics, copy the kit's `sd-card/`
 contents to your SD root and launch the WUHB in Aroma. Follow its prompts;
 plain-text results are saved to `sd:/ctr2wup/`. Original diagnostics need no ROM
 or key. See [getting started](docs/getting-started.md) and [console testing](docs/console-testing.md).

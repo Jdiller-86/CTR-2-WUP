@@ -1,26 +1,33 @@
 # CTR2WUP status
 
-**October 14 public-repository consolidation:** the owner made source public.
-Hosted Actions is running again; the shader-capacity PR's exact head passes
-Required CI (Windows, Python 3.12/3.14, GCC/Clang sanitizers and Wii U) and
-Documentation. The Actions management identity successfully reads personal
-Project #2; the environment binding remains a separate access path.
-
-Scoped [#99](https://github.com/Jdiller-86/CTR-2-WUP/issues/99) and
-[PR #100](https://github.com/Jdiller-86/CTR-2-WUP/pull/100) consolidate maintained
-documentation and the live dashboard at
+**October 14 unified public hosting:** maintained documentation and the live
+dashboard deploy from this public source repository at
 [the canonical project site](https://jdiller-86.github.io/CTR-2-WUP/).
-The trusted-main management workflow supports reviewed Mario transitions,
-traceability and dashboard refresh. Canonical deployment, old-site redirects,
-live reconciliation and refreshed release verification are pending until their
-actual receipts are recorded. No full gate is accepted.
+Merged PR #100/#101 pass required hosted platform/documentation checks.
+[Canonical deployment](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38601781297),
+[repository settings](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38601840961)
+and [legacy redirect HTTP checks](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38606446452)
+verify successfully. Existing history, releases, visibility and protections are preserved.
+
+The [reviewed Mario update](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38605081338)
+activates M5/intake/requirements and removes the resolved owned-input wait from
+six targets while retaining console waits and owner notes. The
+[label/dashboard refresh](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38605491773)
+and live HTTP read-back show M5 **In progress** and **0/7** accepted gates.
+[Native/Project reconciliation](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38608010840) verifies
+69 parent links, 28 PR links and all 104 members, with no untracked PRs.
+[Legacy retirement](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38609420311) verifies
+all redirects after archival, preserves history and retains the original manifest;
+131 current checksums independently match. [#99](https://github.com/Jdiller-86/CTR-2-WUP/issues/99)
+records delivery verification. The Actions management
+secret works; the environment binding remains a separate access path.
 
 **Merged shader capacity:** [PR #98](https://github.com/Jdiller-86/CTR-2-WUP/pull/98)
 under [#97](https://github.com/Jdiller-86/CTR-2-WUP/issues/97), native parent #28/M4,
 expands checked vertex code storage to 512 words with original high-entry,
 upload/END and transactional guest rollback probes. Each scene state grows by
 1,280 bytes; native compiler stack frames are unchanged. Required hosted checks
-pass, including Windows. Project reconciliation remains pending; MOV-only semantics and commercial
+pass, including Windows. Project membership and native links verify; MOV-only semantics and commercial
 compatibility limits hold. See [the capacity contract](docs/software-scenes.md#vertex-code-capacity).
 
 **October 13 physical follow-up:** Audio Check and GX Transfers 0.20.0, plus
@@ -93,10 +100,12 @@ PR #98 merged at `926cf8cf23d17a091bea69ad1e2ee850b1374045` with owner approval
 after passing hosted Required CI and Documentation. Its original probes do not
 establish commercial shader semantics or physical renderer acceptance.
 
-The source version is **0.23.0**; the latest published prerelease before this
-migration is **0.20.0**. A fresh versioned build/release must pass its own source,
-SDK, original-frame, wheel, documentation, ZIP and checksum checks before being
-claimed current. Older tags and assets are preserved.
+The source version is **0.23.0**. [Development releases](https://github.com/Jdiller-86/CTR-2-WUP/releases)
+identify immutable source commits and matching original diagnostic kits, developer
+wheel and offline documentation. The release workflow verifies source/version,
+pinned SDK, original frames, binaries, source/wheel equality, ZIP CRCs and checksums.
+Use each release's manifest and successful workflow receipt for its actual
+publication identity. Older tags/assets and their console evidence are preserved.
 
 ## Remaining acceptance
 
@@ -107,8 +116,6 @@ claimed current. Older tags and assets are preserved.
 - Record full platform stability/recovery and original WUP installation/Menu launch.
 - Demonstrate the selected game's gameplay/audio/save/performance and full clean
   Windows conversion, then implement and accept the final GUI.
-- Finish the reviewed live Project reconciliation, canonical site/legacy redirects
-  and artifact verification recorded in the consolidation issue.
 
 The tester reports Windows 11, Python 3.12+, an SD reader and mainstream Aroma/Wii U
 firmware; exact console versions remain unrecorded. Source/API/host/cross-build

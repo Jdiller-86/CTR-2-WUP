@@ -979,3 +979,25 @@ The complete [pre-migration status snapshot](https://github.com/Jdiller-86/CTR-2
 is preserved in Git. Its source-visibility, billing, Project and publication
 statements describe that earlier checkpoint. [Current status](../STATUS.md)
 supersedes those conditions without changing physical/commercial acceptance.
+
+
+### October 14 — unified public hosting and verified live tracking
+
+The owner made source public. PR #98 merged the scoped 512-word storage change
+with required Windows/Python/GCC/Clang/sanitizer/Wii U and documentation evidence.
+PR #100/#101 replace separate generated article publication with canonical source
+Pages, reviewed Actions management and source-matched original Guest Draws delivery.
+The initial Project read-back failure is retained in its receipt; the later
+38608010840 apply verifies 69 native parent links, 28 PR links and 104 members.
+Mario review 38605081338 activates M5/intake/requirements and removes the resolved
+input wait from six targets while preserving owner notes and console waits.
+Labels and the live dashboard read back M5 In progress and 0/7 Accepted gates.
+
+Legacy checksum deployment 38608934605 and retirement 38609420311 preserve Git
+history, the original export manifest and 131 independently checked current
+hashes. Deep-link query/fragments and the moved progress endpoint verify after
+archival. Source, maintained articles and aggregates now share CTR-2-WUP and its
+canonical Pages site. Original diagnostic release manifests identify the actual
+version/source/SDK/frame/wheel/documentation/checksum evidence; new builds do not
+inherit earlier physical-console acceptance. Full commercial, platform, Windows
+conversion and GUI gates remain open.

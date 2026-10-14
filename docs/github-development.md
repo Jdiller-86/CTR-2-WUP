@@ -168,8 +168,8 @@ and live dashboard are built and deployed from this public source repository.
 The **Publish project site** workflow stages the checked export, reads Project
 #2 with the Actions management secret, adds only privacy-checked aggregates and
 deploys through native GitHub Pages. The site never includes commercial inputs,
-credentials or raw Project notes. The former docs repository is a migration
-source/redirect target, not a second maintained article tree. Migration and live
+credentials or raw Project notes. The former docs repository is archived with
+verified redirects and history; all maintained articles share canonical source. Migration and live
 HTTP verification are recorded in [current status](../STATUS.md).
 
 ```sh
@@ -221,8 +221,8 @@ python3 tools/flesh-github-project.py --apply --output artifacts/github-project-
 `applied`, `live_project_verified`, completed operations and partial-change flags
 state what actually happened. A denied read cannot establish a live board.
 The Actions management identity reads Project #2 successfully. The environment
-binding is configured separately and still returns an integration access error;
-use the verified Actions route for the reviewed reconciliation.
+binding is configured separately and previously returned an integration access
+error; use the verified Actions route unless a new direct preflight succeeds.
 
 ## Project-backed progress
 
@@ -255,8 +255,8 @@ is exported. Unknown custom status/resource values remain in fixed Other buckets
 
 Configure `CTR2WUP_GITHUB_MANAGEMENT_TOKEN` in repository Actions secrets with
 Project and the required repository/Pages permissions. Cloud-environment secrets
-are separate; the Actions route is verified, while cloud Project calls still use
-a limited integration. Tokens are never requested in chat or copied into reports.
+are separate; their actual access needs an independent preflight. The Actions
+route has verified read/write management and live publication receipts. Tokens are never requested in chat or copied into reports.
 Use trusted-main **Project tracking** for setup/export, **Reviewed GitHub
 management** for bounded operations and **Publish project site** for deployment. Neither runs untrusted PR code with
 the management token. Dry-run tools are available for reviewing mutations.
