@@ -101,6 +101,24 @@ measurements, not physical memory/performance observations. Required Windows,
 Python, sanitizer, Wii U and documentation hosted checks pass. No commercial
 shader is executed by these original probes.
 
+### Arithmetic development contract
+
+Scoped [#76](https://github.com/Jdiller-86/CTR-2-WUP/issues/76), under #28/M4,
+will add component-wise ADD and MUL to the bounded software path. Both operands
+use independent descriptor swizzles/negation and initialized input/temporary
+lanes; the first operand may also select a float uniform. Destination masks
+select the lanes actually read and written, and in-place temporary execution
+captures all operands before publishing any lane.
+
+Only exact finite normal float24 results and signed zero are in scope. Integer
+dyadic arithmetic will reject results needing rounding, underflow/overflow and
+non-finite/denormal inputs instead of using a desktop float approximation.
+Opposite-sign exact cancellation yields positive zero; multiplication preserves
+the XOR of operand signs. Independent rational references, original transformed
+scenes and late shader/target/queue rollback checks are required before delivery.
+Relative addressing, dot products, branches, hardware rounding and native GPU
+translation remain separate work. This contract is planned, not acceptance.
+
 The native Scene Check runs this CPU path, flips its owned image rows for display,
 then uses the established GX2 surface-copy presentation. It does not submit a
 PICA shader as a Latte shader. The v0.22 standard guest GSP queue continues to use the
