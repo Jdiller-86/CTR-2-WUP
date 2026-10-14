@@ -20,8 +20,8 @@ here. The original CCI and RomFS payload bytes remain on the user's PC; their
 full hashes and integrity are reported local evidence, not recomputed here.
 
 The manifest lists 1,756 files in 19 directories and a 298,080,796-byte Level-3
-blob: 1,666 `.szs` archives, 88 `.bcstm` streams, one `.bcsar` archive and one
-`.bsm` file. Two shader-named archives total about 20 KiB. No outer `.cro`/`.crs`
+blob: 1,666 `.szs` entries, 88 `.bcstm` entries, one `.bcsar` entry and one
+`.bsm` entry. Two shader-named `.szs` files total about 20 KiB. No outer `.cro`/`.crs`
 entry is listed; nested archive contents remain unknown. This does not prove
 absence of dynamic modules or identify archive formats from extensions alone.
 
