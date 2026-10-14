@@ -16,7 +16,7 @@ connects them to shared scoped work; no commercial shader bytes are published.
 
 Merged PR #98 expands vertex code capacity to 512 words with original high-entry,
 upload and late rollback probes plus native storage/stack measurements. Required
-platform checks pass; Project reconciliation remains pending. See
+platform checks and native/Project reconciliation pass. See
 [the capacity boundary](software-scenes.md#vertex-code-capacity); arithmetic,
 control flow, geometry and commercial execution still need separate evidence.
 

@@ -6,18 +6,22 @@ do not establish commercial-game compatibility or installable WUP acceptance.
 ## Public repository consolidation — 2026-10-14
 
 - Canonical Pages, legacy deep-link redirects, reviewed Mario transitions and
-  mirrored status labels now have successful live receipts; full Project
-  membership and final artifact/retirement verification are tracked separately.
+  mirrored status labels have successful live receipts. Native reconciliation
+  verifies 69 parent links, 28 PR links and all 104 Project members.
 - Follow the owner's public-source decision and restored hosted Actions access.
 - Stage checked documentation and live aggregate progress into the source
   repository's canonical Pages deployment; remove cross-repository generated writes.
 - Add fixed dry-run/apply Actions management on immutable main with the existing
   management secret. Preserve Project notes, review markers and full gate limits.
-- Prepare old-site redirects and current versioned diagnostic/documentation
-  artifacts; deployment and live reconciliation need their actual receipts.
+- Archive the old docs repository after deep-link/fragment and moved-JSON HTTP
+  verification, preserving history and the original export manifest. All 131
+  current checksums match; post-archive redirects remain live.
+- Keep versioned release assets tied to immutable source, SDK, original frame,
+  source/wheel, documentation, ZIP and checksum verification.
 - Add a source-matched Guest Draws release kit with exact original frame,
   binary, SDK, source/notice and checksum checks. Preserve earlier scoped
   console evidence without asking for unchanged passed tests again.
+
 ## Merged shader capacity — 2026-10-14
 
 - Expand checked vertex code storage to 512 words while retaining MOV/NOP/END
@@ -26,8 +30,8 @@ do not establish commercial-game compatibility or installable WUP acceptance.
   late failure after staged draws; preserve guest state, pixels and queue completion.
 - Measure 1,280 added bytes per retained/staged scene and unchanged native stack
   frames. Scoped issue #97/PR #98 advances #28/M4 after required hosted Windows,
-  Python, sanitizer, Wii U and documentation checks. Project reconciliation is
-  tracked separately; no full gate or commercial shader execution is accepted.
+  Python, sanitizer, Wii U and documentation checks and verified native/Project
+  reconciliation; no full gate or commercial shader execution is accepted.
 
 ## Development continuity — 2026-10-14
 

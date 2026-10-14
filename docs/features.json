@@ -635,7 +635,7 @@
         "23 original focused Python cases: actual original preparation/assets integration, isolated CLI, source/revision/hash/path/range boundaries, source mutation, path/handle timestamp precision and atomic output preservation.",
         "Required full coverage: 415 Python cases; no commercial input is included in source or CI artifacts.",
         "Standalone script/guide/license artifact and contract: docs/private-asset-samples.md; source review: https://github.com/Jdiller-86/CTR-2-WUP/pull/93",
-        "Supplied schema-1/0.20.0 report metadata validates; actual selected bytes and archive/shader/audio/module requirements remain uninspected."
+        "At the PR #93 exporter checkpoint, supplied schema-1/0.20.0 metadata validated without actual-byte inspection. Subsequent PR #94 verifies all seven selected payloads and scoped archive/shader/audio structures; broader modules and observed runtime use remain open."
       ]
     },
     {
@@ -667,7 +667,7 @@
       "title": "Continue development with direct GitHub management and reviewed Project transitions",
       "milestone": 5,
       "parent_issue": 5,
-      "state": "active",
+      "state": "implemented",
       "pull_requests": [
         96
       ],
@@ -684,7 +684,7 @@
       "evidence": [
         "19 original mocked Project/API/local-validation cases cover conflicts, partial failure/retry, identities, raw-note preservation, read-back, immutable completion/replay and source/access guards.",
         "Source state edits currently cannot overwrite existing Project fields; the received owned inputs and explicit user request justify this reviewed transition.",
-        "Scoped issue #95 is assigned M5 and has verified native parent #5; live Project membership and M5 review still await authorized access.",
+        "Scoped issue #95 has M5 and verified native parent #5. October 14 Actions-secret review 38605081338 verifies read/write Project access and bounded Mario transitions, superseding the earlier direct-binding access blocker.",
         "Implementation PR: https://github.com/Jdiller-86/CTR-2-WUP/pull/96; 434 full Python cases pass. Exact-head local documentation evidence is retained before merge."
       ]
     },
@@ -708,7 +708,7 @@
       "evidence": [
         "Three bounded private CGFX shader regions declare 472, 428 and 264 code words, beyond the former 256-word limit.",
         "Actual runtime entry selection remains untraced; commercial code is never used as a redistributable fixture.",
-        "Scoped issue #97 has verified native parent #28 and M4 assignment; merged PR #98 shares M4. Actions-secret Project/catalog reconciliation is pending under #99.",
+        "Scoped issue #97 has verified native parent #28 and M4 assignment; merged PR #98 shares M4. Actions-secret traceability apply 38608010840 verifies native parent/PR links, milestones and Project membership, including the scoped capacity feature.",
         "Original probes execute every entry and upload every code slot, compare high-entry scenes against analytic pixels, and preserve retained guest state, pixels and queue completion on late overflow.",
         "devkitPPC GCC 16.1.0 measures shader/scene objects at 4836/10232 bytes (1280 bytes added each); shader/scene/guest-adapter stack frames remain 640/928/272 bytes. Required hosted CI 38585992024 attempt 2 and Documentation 38585991579 attempt 2 pass for exact head 821baaf3051a5bab4aac6729b52f460fc5eff0ba. Owner-approved merge: 926cf8cf23d17a091bea69ad1e2ee850b1374045."
       ]
@@ -737,7 +737,7 @@
       "title": "Unify public documentation, Pages, tracking and artifact provenance",
       "milestone": 5,
       "parent_issue": 5,
-      "state": "active",
+      "state": "implemented",
       "pull_requests": [
         100,
         101,
@@ -753,11 +753,14 @@
         "Canonical Pages deployment, legacy redirects, native tracking, Project fields/labels and current original build/release provenance are verified."
       ],
       "evidence": [
-        "Owner made CTR-2-WUP public and authorized Actions-secret management and consolidation on October 14, 2026.",
-        "Scoped issue #99 has verified native parent #5 and repository milestone M5.",
-        "Hosted Actions now passes the shader-capacity exact head, including Windows, both Python versions, GCC/Clang sanitizers, native Wii U and Documentation.",
-        "Actions-secret Development traceability dry-run 38595435099 successfully read Project #2 and planned 33 features, 25 PRs and 35 task parents without writes.",
-        "Canonical staging, fixed-main dispatch and original Guest Draws artifact provenance have focused positive/tamper/identity tests; live publication/migration and required hosted review remain pending."
+        "Owner made CTR-2-WUP public and authorized Actions-secret management and consolidation on October 14, 2026; source, existing protections and private Project visibility are preserved.",
+        "Scoped issue #99 has native parent #5/M5; PR #100/#101 implement canonical staging, fixed-main dispatch, reviewed management and guarded legacy retirement. PR #104 records final verification.",
+        "Required hosted CI and Documentation pass the exact PR #100/#101 heads, including Windows, Python 3.12/3.14, GCC/Clang sanitizers, pinned actionlint and Wii U guest-draw builds. Current full Python suite passes 454 original cases.",
+        "Canonical deployment 38601781297 and repository configuration 38601840961 verify; legacy redirect deployment 38606119835 and HTTP verification 38606446452 preserve deep-link query/fragments and replace stale JSON with an explicit moved state.",
+        "Mario review 38605081338 applies/read-backs three In progress statuses and resolved input-wait removal from six targets while preserving console waits, owner notes and immutable review markers. Progress apply 38605491773 mirrors six issues with 12 label operations; the live dashboard shows M5 In progress and 0/7 Accepted gates.",
+        "Traceability apply 38608010840 verifies 69 native parent links, 28 PR links and all 104 Project members, with no untracked PRs, missing members or archived managed entries. The earlier incomplete read-back is retained as historical partial-operation evidence rather than reported as success.",
+        "Positive and failure fixtures cover archive traversal/tampering, edited legacy articles, exact source/SDK/binary/frame identity, Project privacy/freshness, bounded membership connection reads, missing existing members, archival rollback and managed overview concurrent edits. Release manifests bind current original artifacts to their actual immutable source/version and checksums; new builds do not inherit October 13 console acceptance.",
+        "Legacy checksum deployment 38608934605 and retirement 38609420311 preserve history, independently verified 131 current checksums and the original export manifest, and verify live redirects after archival. Maintained documentation and aggregates deploy only from the canonical source repository."
       ]
     }
   ],

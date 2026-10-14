@@ -36,12 +36,13 @@ Current requirements:
 5. **Conversion/GUI:** prove the full native Windows conversion and WUP
    install/rebuild/save continuity, then complete GUI acceptance.
 
-The source repository is now public and hosted Actions is running again. The
-Actions management identity has successfully read Project #2. The public-hosting
-migration (#99/PR #100) supplies one canonical Pages/dashboard deployment and the
-explicit reviewed management route. Live reconciliation/publication remain
-pending until their receipts are verified; direct environment Project access is
-not assumed. Platform, commercial and Windows conversion gates above remain open.
+The public source repository hosts maintained documentation and the live Project
+aggregate dashboard together. Canonical and legacy redirect HTTP checks pass.
+The Actions management identity applied/read back the reviewed Mario transition
+and mirrored labels while preserving console waits and owner notes. See
+[current status](../STATUS.md) for final native membership, managed overview and
+artifact delivery receipts. Platform, commercial and Windows conversion gates
+above remain open; management access is no longer their blanket blocker.
 
 ## Historical handoffs
 

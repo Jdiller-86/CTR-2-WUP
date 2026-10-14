@@ -13,11 +13,16 @@ instructions together. CI builds are available from each successful
 [Actions run](https://github.com/Jdiller-86/CTR-2-WUP/actions), with the source
 commit in their artifact names. Hosted builds are structural/test evidence.
 
-The older focused 0.20.0 kit contains **Audio Check** and **GX Transfers** original diagnostics.
-See [the short launch-music check](launch-audio.md) for its purpose and prompts.
-Earlier 0.14.6 contains the Save/RomFS follow-up kit; 0.16.0 adds Asset Files.
-Use the kit requested by the relevant testing guide. Do not replace/delete save
-snapshots or old reports while investigating a failure.
+Release manifests identify separate **Native/GX**, **Audio Check/GX** and
+**Guest Draws** kits, together with matching source, a developer wheel, offline
+documentation and checksums. Keep each kit's guide and exact source/version
+identity with its binaries. The wheel supplies the CLI; it does not supply the
+finished Windows injector GUI.
+
+The October 13 Audio Check/GX 0.20.0 and Guest Draws 0.23.0 scoped results are
+reviewed; unchanged passed guides need no repeat. Earlier 0.14.6 Save/RomFS and
+0.16.0 Asset Files evidence is retained. Use a focused guide only for a changed
+path or a specific remaining acceptance check. Preserve save snapshots and old reports.
 
 ## Wii U prerequisites
 
