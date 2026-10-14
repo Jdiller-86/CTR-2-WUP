@@ -41,6 +41,15 @@ task, console route or full milestone was accepted. Full gates need their entire
 documented checklist and reviewed evidence. Physical testing remains pending
 when only host checks or RPX/WUHB builds exist.
 
+## Development without hosted Actions
+
+Use the owner-authorized [direct management and local validation route](direct-development.md)
+when hosted jobs cannot start. It uses the independently supplied management
+identity, preflights fixed targets and requires clean current main for apply.
+Prepare reviewed status/resource transitions in `docs/project-reviews.json`;
+completed review markers preserve later owner edits. Record pending live updates
+when access is missing instead of claiming source edits updated the board.
+
 ## Reviewed management and audit
 
 Run **Development traceability** on `main` with `apply=false` for a read-only
@@ -56,7 +65,7 @@ and any partial operation failure; a failed run must be reviewed before retrying
 
 The initial status migration only replaces old empty/Todo values. Later manual
 Project status edits remain authoritative. Merged scoped features become Done;
-no full gate becomes Accepted through this workflow. The hourly **Project
+no full gate becomes Accepted through this workflow. When hosted execution is available, the hourly **Project
 tracking** workflow publishes safe aggregates separately and does not expose
 private issue titles, bodies or feature identifiers in the public dashboard.
 

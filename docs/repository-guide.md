@@ -7,6 +7,9 @@ acceptance and the final GUI remain open.
 
 ## Choose a starting point
 
+If hosted Actions cannot start, use [direct development](direct-development.md)
+for secure tracking updates and exact-commit local validation.
+
 | You want to… | Start here |
 | --- | --- |
 | Understand what actually works | [Current status](../STATUS.md) and [compatibility](compatibility.md) |

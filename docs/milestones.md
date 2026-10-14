@@ -55,7 +55,7 @@ passes establish their stated boundaries, not physical-console execution.
 | [M2: CPU translation and performance](#m2) | In progress | Exercised CPU/ABI/fallback coverage and actual Espresso timing |
 | [M3: Homebrew execution runtime](#m3) | In progress | Stable physical compiled guest plus broader services/modules/audio |
 | [M4: PICA to GX2 rendering](#m4) | In progress | Real PICA/GX2 draws/shaders/TEV/coherency and measured scenes |
-| [M5: Super Mario 3D Land revision](#m5) | Blocked | Selected asset formats/nested modules, observed runtime requirements and Mario gameplay/audio/save/performance |
+| [M5: Super Mario 3D Land revision](#m5) | In progress | Broader required resources, observed runtime requirements and Mario gameplay/audio/save/performance |
 | [M6: Automated ROM to WUP conversion](#m6) | In progress | Full Windows conversion, installer acceptance and rebuild/save continuity |
 | [M7: Windows GUI injector](#m7) | Planned | Responsive packaged Windows GUI Inject-to-playable-WUP workflow |
 
@@ -486,6 +486,10 @@ not independently verified here. No commercial profile or full gate is accepted.
 See [first-title findings](first-title.md).
 
 **State: In progress. Full acceptance: open.**
+
+Live Project #2/dashboard still await the explicit `mario-input-received-v023`
+review: hosted jobs cannot start and direct personal Project access returns 403.
+[Direct management](direct-development.md) tracks this update under #95/#5.
 
 **Entry:** The user supplies a privately prepared executable and required assets for an owned exact Old 3DS revision. The uploaded USA Mario executable/revision is verified; local asset provenance reports are now matched, and seven selected payloads now have independent private checks. Original full-container integrity is still reported local evidence.
 

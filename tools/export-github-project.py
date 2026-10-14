@@ -63,13 +63,17 @@ class TrackingError(RuntimeError):
 
 
 class GitHub:
+    def __init__(self, env=None):
+        self.env = env
+
     def api(self, path, method='GET', payload=None):
         args = ['gh', 'api', path, '--method', method]
         if payload is not None:
             args += ['--input', '-']
         try:
             result = subprocess.run(args, input=json.dumps(payload) if payload is not None else None,
-                                    capture_output=True, text=True, encoding='utf-8', timeout=60)
+                                    capture_output=True, text=True, encoding='utf-8', timeout=60,
+                                    env=getattr(self, 'env', None))
         except (OSError, subprocess.TimeoutExpired) as error:
             raise TrackingError('GitHub request could not complete; review workflow access.') from error
         if result.returncode:

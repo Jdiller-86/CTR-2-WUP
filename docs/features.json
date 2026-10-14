@@ -664,22 +664,28 @@
     },
     {
       "id": "reviewed-project-transitions",
-      "title": "Apply reviewed milestone status and resolved-resource transitions once",
+      "title": "Continue development with direct GitHub management and reviewed Project transitions",
       "milestone": 5,
       "parent_issue": 5,
-      "state": "planned",
-      "pull_requests": [],
+      "state": "active",
+      "pull_requests": [
+        96
+      ],
       "scope": [
-        "Add a bounded trusted-main workflow for explicit reviewed Project #2 Status/Waiting resource changes when evidence resolves a blocker.",
-        "Apply the user-requested M5/intake/requirements In progress review and remove resolved owned-input waits; preserve unrelated fields, notes and subsequent owner edits."
+        "Provide secure direct API preflight and trusted-current-main management without hosted Actions; retain the Actions management identity and existing workflows.",
+        "Apply the user-requested M5/intake/requirements In progress review and remove resolved owned-input waits; preserve unrelated fields, notes and subsequent owner edits.",
+        "Record exact-commit local validation and document the owner-authorized maintenance merge exception; retain missing platform evidence and full milestone boundaries."
       ],
       "acceptance": [
         "Dry-run preflights all targets and refuses unknown identities, archived/moved items, conflicting current values and automatic Done/Closed/Accepted gate changes.",
-        "Apply verifies actual fields before recording an idempotent review marker; replay preserves later manual edits. Refresh issue labels and public tracker from Project authority."
+        "Apply verifies actual fields before recording an idempotent review marker; replay preserves later manual edits. Refresh issue labels and public tracker from Project authority.",
+        "Direct access failure prevents management writes; local receipts name exact source, actual checks and unavailable platform coverage without fabricated hosted results."
       ],
       "evidence": [
-        "Original mocked Project/API cases must cover conflicts, partial failure, native identity, preservation, read-back and idempotence.",
-        "Source state edits currently cannot overwrite existing Project fields; the received owned inputs and explicit user request justify this reviewed transition."
+        "19 original mocked Project/API/local-validation cases cover conflicts, partial failure/retry, identities, raw-note preservation, read-back, immutable completion/replay and source/access guards.",
+        "Source state edits currently cannot overwrite existing Project fields; the received owned inputs and explicit user request justify this reviewed transition.",
+        "Scoped issue #95 is assigned M5 and has verified native parent #5; live Project membership and M5 review still await authorized access.",
+        "Implementation PR: https://github.com/Jdiller-86/CTR-2-WUP/pull/96; 434 full Python cases pass. Exact-head local documentation evidence is retained before merge."
       ]
     },
     {

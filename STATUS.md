@@ -1,5 +1,13 @@
 # CTR2WUP status
 
+**October 14 development continuity:** hosted Actions refuses jobs before
+starting. Issue [#95](https://github.com/Jdiller-86/CTR-2-WUP/issues/95) adds
+[secure direct API management and exact-commit local validation](docs/direct-development.md).
+Code, commits, pushes and scoped maintenance merges can continue. The named
+credential still returns 403 for personal Project #2; live M5 status/resource
+review, native catalog reconciliation and public tracker refresh remain pending.
+Source milestone/table evidence is In progress. No full gate is accepted.
+
 **October 13 physical follow-up:** Audio Check and GX Transfers 0.20.0, plus
 Guest Draws 0.23.0, have reviewed scoped passes and user-confirmed silence and
 normal exit. The draw trace reaches the rendered second presentation at 57.33
@@ -79,7 +87,8 @@ Scoped feature issues connect native parents, milestones, Project items and PRs;
 command task #27 meets both documented criteria and has a recorded Done review;
 full M4 remains open. AGENTS.md, the
 repository tour, shared runtime manifest and current product plan now provide a
-clear route for incoming contributors. The Actions credential remains in Actions.
+clear route for incoming contributors. The Actions credential remains in Actions; the owner can independently supply
+the same identity through the secure direct environment binding.
 Completed remote/local branches are removed after merge.
 
 CPU software rendering supports the documented canonical target/fragment and

@@ -251,7 +251,7 @@ def build(options: argparse.Namespace) -> dict:
     files = subprocess.check_output(["git", "-C", str(root), "ls-files", "-z", "docs"], text=True).split("\0")
     # The private development ledger contains issue/PR relationships. Publish
     # the policy page and safe aggregate dashboard, not this management input.
-    files = [name for name in files if name and name != "docs/features.json"]
+    files = [name for name in files if name and name not in {"docs/features.json", "docs/project-reviews.json"}]
     if (root / "docs/stylesheets/extra.css").is_file() and "docs/stylesheets/extra.css" not in files:
         files.append("docs/stylesheets/extra.css")
     mapping = dict(ROOT_PAGES)

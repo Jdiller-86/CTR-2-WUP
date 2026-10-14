@@ -38,14 +38,15 @@ Before pushing a checkpoint, review every affected surface:
    Assess the parent milestone and related tasks, not just the feature. Received
    input can make a gate In progress without completing or accepting it.
 4. **Native issue/PR tracking:** update `docs/features.json`, the scoped issue's
-   acceptance/evidence and PR references. Run trusted-main **Development
-   traceability** dry-run/apply and inspect its verified hierarchy, milestone,
+   acceptance/evidence and PR references. Run **Development traceability** or
+   `tools/manage-github.py traceability` dry-run/apply and inspect the verified hierarchy, milestone,
    Project membership and native PR links. Broad unfinished tasks stay open.
 5. **Live Project and documentation tracker:** Project #2 owns Status and Waiting
    resource. Source JSON edits and merges alone do not update existing board
    values. When evidence resolves a blocker, explicitly review the affected
-   transitions, preserve unrelated/later owner edits, then refresh **Project
-   tracking**. Verify live fields, mirrored issue labels and the public dashboard;
+   transitions through `docs/project-reviews.json`, preserve unrelated/later owner
+   edits, then refresh **Project tracking** or `tools/manage-github.py progress`.
+   Verify live fields, mirrored issue labels and the public dashboard;
    verify public docs publication separately. Record failed/queued updates rather
    than claiming they are live. Use the Actions credential for these operations.
 
@@ -77,7 +78,13 @@ never accepts a full gate without its complete reviewed exit criteria.
 
 Run focused checks during implementation, then required `make check` (Python and
 all normal/ASan/UBSan C suites) and `make prototype` (RPX/WUHB) before merge.
-Automatic **Required CI** and **Documentation build** must also pass.
+Automatic **Required CI** and **Documentation build** normally must pass.
+When hosted jobs are refused before starting, the owner-authorized maintenance
+exception in `docs/direct-development.md` permits an exact-head local receipt
+for Python management tools/tests and documentation. Run `tools/validate-local.py`
+on a clean committed branch, attach actual evidence to its PR and state missing
+platform coverage. Runtime/dependency/workflow changes retain required checks;
+never fabricate hosted success or disable sanitizers.
 
 Toolchain setup is `bash tools/install-wiiu-sdk.sh`; the optional pinned host
 lifter is `bash tools/install-translator.sh`. Host fixtures do not require the
@@ -99,10 +106,14 @@ docs with `python3 tools/build-docs-site.py` using `docs-requirements.txt`.
   `python3 tools/codex-attribution.py install`, then use `git codex-commit`.
   Preserve existing hooks and human attribution; do not rewrite old history
   solely for attribution. See `CONTRIBUTING.md`.
-- Use the **Actions management credential** through immutable trusted-main
-  workflows for GitHub management. Keep its value in Actions. The connected
+- Prefer the **Actions management identity** for GitHub management. Immutable
+  trusted-main workflows remain available. When hosted Actions are unavailable,
+  use `tools/manage-github.py` with the independently supplied secure environment
+  binding of that identity; see `docs/direct-development.md`. Its preflight must
+  succeed before applying from clean current remote main. The connected
   integration supplies source transport, PR lifecycle and workflow dispatch/read.
-  Never run arbitrary PR code with the management secret or copy it locally.
+  Never run arbitrary PR code with the management secret, retrieve it from
+  Actions, store it in the checkout or print it. No automatic credential fallback.
 - Run the **Development traceability** workflow dry-run first, inspect its
   receipt, apply the reviewed catalog, then verify native parent/PR relationships,
   milestone assignment and Project membership. Preserve conflicting owner data.

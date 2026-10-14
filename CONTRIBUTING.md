@@ -54,6 +54,13 @@ Linux SDK cannot run natively on Windows. Consult [Windows build notes](docs/bui
 for requirements specific to your change. SDK installation must preserve
 checksum, signature and TLS verification.
 
+When hosted Actions refuses jobs before starting, the owner-authorized
+[direct development route](docs/direct-development.md) supplies secure API
+management and an exact-commit validation receipt. Only Python maintenance and
+documentation changes have the scoped local merge exception; required platform
+checks and physical acceptance remain distinct. Record actual PR validation
+and delete both completed topic branches after merging.
+
 ## Console evidence and diagnostic releases
 
 Use the versioned original diagnostic build and instructions for the requested

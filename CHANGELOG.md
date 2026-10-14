@@ -3,6 +3,13 @@
 All releases are development increments. RPX/WUHB diagnostics and desktop passes
 do not establish commercial-game compatibility or installable WUP acceptance.
 
+## Development continuity — 2026-10-14
+
+- Add named-credential direct API preflight and clean-current-main management commands without hosted runners.
+- Review M5 resolved-input status/resources with batch preflight, raw-note preservation, partial-write receipts and immutable completion markers.
+- Record exact-commit local validation; document the owner-authorized maintenance merge exception and missing platform evidence.
+- Align the M5 summary table with its active source assessment; live Project/dashboard synchronization awaits Project-authorized access.
+
 ## Selected asset requirements — 2026-10-13
 
 - Independently verify the seven received private payloads against every prior

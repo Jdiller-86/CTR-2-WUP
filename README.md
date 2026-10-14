@@ -6,6 +6,9 @@
 
 First visit? [Take the repository tour](docs/repository-guide.md).
 
+Contributors can [develop and manage tracking without hosted Actions](docs/direct-development.md)
+using secure API access and recorded local validation.
+
 CTR2WUP is an experimental 3DS-to-Wii U converter. Its goal is a Windows GUI
 that translates a 3DS game into an individual WUP title, with the top screen
 on the TV and the bottom screen, touch and controls on the GamePad.

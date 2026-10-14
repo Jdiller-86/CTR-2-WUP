@@ -430,7 +430,8 @@
         "October 13 derived NCCH passes independent stored hashes, decompression and executable-revision checks; metadata establishes USA Mario. Pinned static lifter analysis succeeds. Exact hashes and commercial bytes remain private.",
         "October 13 local preparation and asset reports match the independently inspected executable/revision and identical reported IVFC evidence: 1,756 outer files, 19 directories, 298,080,796-byte RomFS blob. Raw asset bytes remain local.",
         "Standalone bounded private sample exporter (issue #92 / PR #93): matching local report/revision bindings, complete blob and selected-file hashes, safe bounded ZIP; selected actual bytes/runtime requirements still pending.",
-        "October 13 selected-byte review: seven files match manifest/report/revision hashes. Three Yaz0/NARC archives contain DVLB, CGFX and BYML structures; direct/embedded shader tables fit their containers. CSAR/CSTM blocks are checked; two streams declare stereo DSP ADPCM at 32 kHz. Commercial bytes/hashes stay private."
+        "October 13 selected-byte review: seven files match manifest/report/revision hashes. Three Yaz0/NARC archives contain DVLB, CGFX and BYML structures; direct/embedded shader tables fit their containers. CSAR/CSTM blocks are checked; two streams declare stereo DSP ADPCM at 32 kHz. Commercial bytes/hashes stay private.",
+        "October 14 development continuity under scoped issue #95: secure direct management preflight and original review/local-validation contracts are implemented; personal Project access is 403, so live M5 transitions and publication remain pending. No full-gate acceptance."
       ],
       "acceptance_remaining": [
         "Complete the exact-revision observed runtime/test-route matrix and any specifically required additional module/asset inspection; static resource contents are not observed execution.",
