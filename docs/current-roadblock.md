@@ -16,14 +16,14 @@ Current requirements:
    that scene. Gate confirmation on the drawn frame, measure individual phases
    and investigate the fixed guest-instruction-per-refresh budget. Aggregate
    host refresh time is not a GPU/CPU breakdown or a game-performance result.
-2. **Mario sample bytes and runtime requirements:** local preparation/asset
-   reports now agree with the verified USA executable and describe 1,756 files.
-   Raw CCI/RomFS bytes remain on the PC. The
-   [standalone sample helper](private-asset-samples.md) works with the existing
-   reports without a wheel update. Export a bounded selected sample ZIP to
-   inspect shader/system/audio containers and possible nested modules; do not
-   infer formats or runtime use from filenames or declared services alone.
-   [First-title findings](first-title.md) preserve these evidence boundaries.
+2. **Mario observed runtime requirements:** the executable, preparation/inventory
+   reports and all seven requested sample payloads are verified and available.
+   M5/intake/matrix analysis can proceed; missing input is no longer its blocker.
+   Selected Yaz0/NARC/DVLB/CGFX/BYML/CSAR/CSTM structures identify shader
+   capacity/arithmetic/control and DSP ADPCM work. Validate any specifically
+   required additional nested resources and actual runtime use; static code,
+   filenames and declared services are not gameplay proof. No repeat upload of
+   the received samples is requested. [First-title findings](first-title.md).
 3. **Platform acceptance:** complete documented repeat launch, Home/APT,
    stability, SD recovery and original WUP install/Menu-launch checks with exact
    environment/build identity. The three successful sessions do not complete

@@ -23,7 +23,7 @@ Keep the existing `romfs.bin`, `asset-manifest.json` and matching
 containing the helper and adjust these **original example paths**:
 
 ```powershell
-py .\export-asset-samples.py `
+py -3 .\export-asset-samples.py `
   --manifest ".\Original-assets\asset-manifest.json" `
   --preparation-report ".\Original-prepared\preparation-report.json" `
   --romfs ".\Original-assets\romfs.bin" `
@@ -35,6 +35,11 @@ Guest paths start with `/`, use forward slashes and must match the manifest
 exactly, including case. They are not PC filenames. Select the requested files;
 there is no directory, wildcard or automatic discovery export. Use `python3`
 instead of `py` on Linux/macOS.
+
+On Windows, `py -3` selects the installed Python explicitly. A plain `py`
+invocation can follow the script's `python3` launch line to the Microsoft Store
+alias even when `py -m host` works. If Python is still not found, check
+`py -3 --version` and `py --list-paths`; select an installed Python 3.12+.
 
 On success, JSON reports `"ok": true`, the selected file count and ZIP size.
 Share only the new sample ZIP through the agreed private channel. It contains

@@ -477,15 +477,17 @@ Acceptance:
 **Current private intake:** a derived USA v2 executable has independent stored
 hash/decompression/revision verification and successful pinned static analysis.
 The newly received local preparation/asset reports match the executable and
-report 1,756 outer files with identical IVFC evidence. Payload bytes remain local;
-selected archive/shader/audio formats and nested modules need inspection. Declared
+report 1,756 outer files with identical IVFC evidence. Seven selected payloads
+now match all manifest/receipt hashes and are independently inspected here.
+Yaz0/NARC/DVLB/CGFX/BYML and CSAR/CSTM structures inform active shared shader and
+audio work; broader nested resources and observed use remain open. Declared
 service access is not traced use. The original full container hash is reported,
 not independently verified here. No commercial profile or full gate is accepted.
 See [first-title findings](first-title.md).
 
-**State: Blocked. Full acceptance: open.**
+**State: In progress. Full acceptance: open.**
 
-**Entry:** The user supplies a privately prepared executable and required assets for an owned exact Old 3DS revision. The uploaded USA Mario executable/revision is verified; local asset provenance reports are now matched, while selected payload bytes and original full-container integrity remain uninspected here.
+**Entry:** The user supplies a privately prepared executable and required assets for an owned exact Old 3DS revision. The uploaded USA Mario executable/revision is verified; local asset provenance reports are now matched, and seven selected payloads now have independent private checks. Original full-container integrity is still reported local evidence.
 
 **Deliverables:** An exact-hash revision profile, observed feature/test-route matrix, required shared runtime/renderer/audio/retail-save integration and a measured supported-title console acceptance report.
 
@@ -493,7 +495,7 @@ See [first-title findings](first-title.md).
 
 **Historical intake evidence:** The original CIA attachment exceeds the workspace attachment transfer limit. The received small intake reports encrypted executable content and contains no executable; it supplies no observed game behavior. Local preparation and original-fixture proofs establish tooling only. Upstream source observations are leads, not reproduced CTR2WUP compatibility.
 
-**Still needs external evidence/input:** The executable is available for private analysis; full acceptance remains blocked on selected asset-format/nested-module inspection, observed runtime requirements and later console gameplay. Keys remain local; no commercial code, assets or traces are posted in GitHub issues or public artifacts. Actual Wii U gameplay evidence follows implementation.
+**Still needs external evidence/input:** The executable is available for private analysis; analysis can continue with the received assets. Full acceptance still requires observed runtime requirements, any specifically required additional resources and later console gameplay. Keys remain local; no commercial code, assets or traces are posted in GitHub issues or public artifacts. Actual Wii U gameplay evidence follows implementation.
 
 References: [First-title intake](first-title.md) · [CIA helper](cia-intake.md) · [Local encrypted input](encrypted-input.md) · [Compatibility](compatibility.md).
 
@@ -503,9 +505,9 @@ References: [First-title intake](first-title.md) · [CIA helper](cia-intake.md) 
 
 #### m5-intake: Identify the owned Super Mario 3D Land executable and assets
 
-Retain the verified private USA executable and matched local preparation/asset reports; inspect selected payload formats, possible nested modules and full original-container integrity for the first candidate.
+Retain the verified private USA executable, matched local reports and seven independently checked sample payloads; validate required broader resources and preserve the full-container integrity boundary.
 
-State: **Blocked** · Needs: `needs-input`.
+State: **In progress** · Needs: none for current private analysis.
 
 Depends on: none.
 
@@ -518,9 +520,9 @@ Acceptance:
 
 #### m5-requirements: Create the exact-revision feature and test-route matrix
 
-Analyze declared capabilities and observed execution separately to prioritize the selected title requirements.
+Refine the matrix from verified sample structures, then trace actual required execution. Shader capacity/arithmetic/control and stereo DSP ADPCM have concrete static evidence; declared access and static resources stay separate from observed use.
 
-State: **Blocked** · Needs: `needs-input`.
+State: **In progress** · Needs: none for current private analysis.
 
 Depends on: [m5-intake](#m5-intake).
 
@@ -535,7 +537,7 @@ Acceptance:
 
 Connect the private title to the shared CPU/runtime/renderer and implement only its evidenced missing behaviors.
 
-State: **Blocked** · Needs: `needs-input`.
+State: **Blocked** · Needs: implementation dependencies, rather than missing owned input.
 
 Depends on: [m5-requirements](#m5-requirements), [m2-instruction-coverage](#m2-instruction-coverage), [m3-service-contracts](#m3-service-contracts), [m3-module-loading](#m3-module-loading), [m3-guest-audio](#m3-guest-audio), [m4-fragment-pipeline](#m4-fragment-pipeline), [m4-coherency-cache](#m4-coherency-cache).
 
@@ -550,7 +552,7 @@ Acceptance:
 
 Execute the agreed short route on a manually staged per-game build before automating the finished injection.
 
-State: **Blocked** · Needs: `needs-input`, `needs-console`.
+State: **Blocked** · Needs: `needs-console` (after implementation dependencies).
 
 Depends on: [m5-runtime-integration](#m5-runtime-integration), [m4-console-scenes](#m4-console-scenes), [m6-original-wup](#m6-original-wup).
 
@@ -565,7 +567,7 @@ Acceptance:
 
 Enable a verified commercial profile only after review of the exact-revision console route and its measured limits.
 
-State: **Blocked** · Needs: `needs-input`, `needs-console`.
+State: **Blocked** · Needs: `needs-console` (after implementation dependencies).
 
 Depends on: [m5-gameplay-route](#m5-gameplay-route), [m2-espresso-benchmarks](#m2-espresso-benchmarks).
 

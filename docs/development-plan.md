@@ -22,8 +22,10 @@ user-managed local keys. No key or commercial asset is bundled or uploaded.
 
 The first MVP supports **one exact commercial revision**. Super Mario 3D Land is
 the selected candidate; its uploaded USA executable/revision is privately verified.
-The local RomFS reports match that revision; selected byte formats, nested modules
-and observed runtime requirements remain open. No profile is enabled. Completion requires clean-Windows GUI conversion, physical
+The local RomFS reports and seven independently checked samples match that
+revision. Selected shader/container/audio structures now inform active M5
+analysis; broader modules and observed runtime use remain open. No profile is
+enabled. Completion requires clean-Windows GUI conversion, physical
 WUP installation/Menu launch, repeatable gameplay, TV/GamePad mapping, required
 input/touch, audio, save/reload, rebuild/save continuity and useful measured
 performance. Record the revision, environment and remaining limits. The CLI is
@@ -53,7 +55,8 @@ installed-WUP acceptance, commercial conversion and final GUI are still pending.
 | Next independent renderer work | Add checked shader arithmetic, then bounded TEV and texture sampling using original reference scenes | M4 #28/#29; separate scoped features with numeric/pixel and rollback criteria |
 | Resource/native renderer work | Version resource caches, prove invalidation/readback, define native shader ABI and translate the proven subset into GX2 | M4 #28/#30; retain software reference and explicit shader/cache misses |
 | Physical evidence and performance | Retain reviewed audio/GX/draw results; correct drawn-frame gating, measure diagnostic phases and execution budget, then collect repeat launch/exit and full Espresso/rendering costs | M1 #13–#16, M2 #20/#21, M3 #22/#26 and M4 #31; only physical observations accept these gates |
-| Title intake | Export bounded checked samples with the standalone helper, inspect shader/system/audio bytes and nested modules, then build the observed feature/test-route matrix | M5 #32/#33, scoped issue #92 / PR #93; actual executable identity is verified, selected bytes and runtime use remain pending |
+| Title intake and analysis | Retain verified executable/report/sample provenance; validate required nested resources and refine the observed runtime/test-route matrix | M5 #32/#33 are active analysis; selected Yaz0/NARC/DVLB/CGFX/BYML/CSAR/CSTM structures are inspected; actual runtime selection/use remains pending |
+| Asset-informed shared work | Extend shader code capacity/arithmetic/control safely and add original DSP ADPCM/container probes | M4 #28 and M3 #25; static sampled resources justify scoped implementation, while runtime/console use needs separate evidence |
 | Required game runtime | Implement observed CPU, services, dynamic modules, DSP/audio, saves and rendering requirements | M2/M3/M4 and M5 #34–#36; original probes support shared interfaces, then real title evidence |
 | Conversion engine | Connect proven stages on clean Windows with cancellation, traces, revision caches, stable identities, rebuild and safe diagnostics | M6 #37–#41; structural package checks stay separate from installation/launch |
 | Final GUI | Implement the responsive WPF Inject page, private setup help, saved projects and packaged prerequisites over the proven engine | M7 #42–#46; GUI-to-playable-WUP acceptance completes the MVP |

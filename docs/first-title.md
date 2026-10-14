@@ -1,5 +1,11 @@
 # First supported-title candidate: Super Mario 3D Land
 
+**Current M5 work: In progress, full acceptance open.** The executable,
+preparation/inventory reports and seven selected asset payloads are available
+for private analysis. Input absence no longer blocks this work. Static resource
+findings guide shared implementation; observed boot/gameplay and useful Wii U
+performance remain unverified. Project #2 owns the live status.
+
 **October 13 verified executable intake:** the smaller private export contains
 an independently inspected v2 NCCH executable. Stored hashes, decompression and
 exact executable-revision identity match its receipt. Product `CTR-P-AREE`,
@@ -22,22 +28,54 @@ full hashes and integrity are reported local evidence, not recomputed here.
 The manifest lists 1,756 files in 19 directories and a 298,080,796-byte Level-3
 blob: 1,666 `.szs` entries, 88 `.bcstm` entries, one `.bcsar` entry and one
 `.bsm` entry. Two shader-named `.szs` files total about 20 KiB. No outer `.cro`/`.crs`
-entry is listed; nested archive contents remain unknown. This does not prove
+entry is listed. Selected nested structures are reviewed below; the remaining
+inventory is uninspected here. This does not prove
 absence of dynamic modules or identify archive formats from extensions alone.
 
-Next: use the [standalone private sample helper](private-asset-samples.md),
-delivered under [issue #92](https://github.com/Jdiller-86/CTR-2-WUP/issues/92) and
-[PR #93](https://github.com/Jdiller-86/CTR-2-WUP/pull/93), to export explicit bounded
-shader/system/audio samples with matching hashes,
-inspect actual container/instruction/sample formats privately, then refine the
-required shared runtime matrix and original probes. Declared `ldr:ro`/DSP access
-is separate from observed use. No commercial profile is enabled, and the scoped
-original draw/audio passes do not establish commercial compatibility.
+## October 13 selected asset bytes verified
+
+The received ZIP contains exactly seven requested files, totaling 15,304,637
+bytes, plus a bounded receipt. Every file size/hash matches the earlier manifest;
+receipt hashes match the unchanged preparation/asset reports, executable revision
+and prepared-main identity. Selected bytes are independently checked here. The
+full original CCI/RomFS hash and IVFC verification remain reported local evidence.
+
+| Selected content | Checked structure | Shared work it informs |
+| --- | --- | --- |
+| Three compressed archives | Yaz0 decompression yields bounded NARC allocation tables; four DVLB members, one CGFX member and one BYML member | Reusable bounded decompression/container readers; never turn guest names into arbitrary host paths |
+| Four layout shader members and the primitive shader binary | Five DVLB code/descriptor/DVLE table sets fit their files; five vertex entries and one geometry entry | Arithmetic, comparisons/addressing, bounded control flow and possible geometry support; actual entry selection is untraced |
+| CGFX shader resource | Its DATA block fits the file; three embedded DVLB regions have valid bounded code/tables and twelve vertex entries | CGFX dictionary/resource binding remains to be validated; code sizes 472, 428 and 264 exceed the current 256-word runtime limit |
+| System class table | Little-endian BYML version 1 header and table/root offsets fit the member | Validate typed nodes and bounds when consumed; class names do not establish service use |
+| Sound archive | CSAR version 2 STRG/INFO/FILE blocks fit the supplied file | Resolve archive references/banks/sequences/waves; nested signature candidates are not a validated complete inventory |
+| Two short streams | CSTM version 2 INFO/SEEK/DATA blocks; both declare non-looping, stereo DSP ADPCM at 32 kHz | Original codec/block/history/seek probes and guest DSP/audio integration; no decoded-audio or playback acceptance yet |
+
+The raw shader code includes ADD, DP3/DP4, MUL, floor/max/reciprocal, address moves,
+comparisons, conditional/loop/jump control, multiply-add and geometry emit families.
+Opcode-family facts were checked against the pinned nihstro encoding reference
+`f4d8659decbfe5d234f04134b5002b82dc515a44`; no reference implementation is bundled.
+This is a static code inventory, including potentially unreachable words, rather
+than proof that every instruction executes on the proposed gameplay route.
+
+## Current feature and test-route matrix
+
+| Area | Present evidence | Next acceptance |
+| --- | --- | --- |
+| Exact revision/input | Independently verified executable and selected bytes; complete local inventory reports | Retain private provenance; broader modules/assets and original full-container integrity remain bounded by available bytes |
+| Shader runtime | Actual resources exceed MOV-only semantics and include code beyond 256 words | Original numeric/control/capacity probes, safe upload/rollback and selected-entry traces before claiming support |
+| Fragment/rendering | Original canonical software draws pass their scoped routes | Capture actual required TEV/texture/depth/blend/coherency state; implement shared features and native GX2 translation |
+| Guest audio | Two sampled streams declare DSP ADPCM; archive structure exists | Verify codec/history/seek behavior with originals, required DSP protocol/mixing and later physical game audio |
+| Services/modules/saves | Declared DSP/loader capabilities and static executable analysis | Trace actual IPC/module/save demands; do not implement all declarations as silent successful stubs |
+| Gameplay/conversion | Proposed private route and Windows product contract | Boot/menu/course/input/audio/save/reload, useful Wii U costs and complete WUP/GUI acceptance |
+
+No additional copy of these seven samples is needed. Continue the reusable shader,
+container, audio and execution-budget work, then refine the matrix from observed
+execution. Additional private files are requested only for a specific missing
+structure. No commercial profile is enabled.
 
 The helper accepts the supplied schema-1/0.20.0 reports and needs only Python
 3.12+. It checks the complete blob and selected file hashes, while preserving
-sources and existing outputs. Selected asset bytes still need private inspection;
-implementing the transfer route does not complete M5 #32/#33.
+sources and existing outputs. The selected upload is now reviewed above;
+implementing the transfer route and static inspection do not complete M5 #32/#33.
 
 ## Historical intake notes
 

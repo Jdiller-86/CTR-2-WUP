@@ -22,6 +22,37 @@ At the start of a session:
 Use `docs/repository-guide.md` for the source map and reader routes. Prefer the
 specific runtime contract over old development history when implementing behavior.
 
+## Update after each meaningful change
+
+Before pushing a checkpoint, review every affected surface:
+
+1. **Implementation and evidence:** update the relevant runtime/tool contract,
+   tests, compatibility limits and versioned metadata. Keep private inputs and
+   derived analysis ignored; publish only reviewed aggregate findings.
+2. **Current reader handoff:** update `STATUS.md`, `CHANGELOG.md` and affected
+   README/download instructions. Keep `docs/development-plan.md`,
+   `docs/current-roadblock.md` and `docs/compatibility.md` aligned; update
+   `docs/first-title.md` when title evidence changes. Remove resolved requests.
+3. **All affected gates:** update evidence, remaining acceptance, state and
+   waiting resources in `docs/milestone-status.json` and `docs/milestones.md`.
+   Assess the parent milestone and related tasks, not just the feature. Received
+   input can make a gate In progress without completing or accepting it.
+4. **Native issue/PR tracking:** update `docs/features.json`, the scoped issue's
+   acceptance/evidence and PR references. Run trusted-main **Development
+   traceability** dry-run/apply and inspect its verified hierarchy, milestone,
+   Project membership and native PR links. Broad unfinished tasks stay open.
+5. **Live Project and documentation tracker:** Project #2 owns Status and Waiting
+   resource. Source JSON edits and merges alone do not update existing board
+   values. When evidence resolves a blocker, explicitly review the affected
+   transitions, preserve unrelated/later owner edits, then refresh **Project
+   tracking**. Verify live fields, mirrored issue labels and the public dashboard;
+   verify public docs publication separately. Record failed/queued updates rather
+   than claiming they are live. Use the Actions credential for these operations.
+
+Before merge, complete the required checks below. After merge, verify the
+published handoff and delete/verify both completed topic branches. A scoped pass
+never accepts a full gate without its complete reviewed exit criteria.
+
 ## Scope and evidence
 
 - Choose a concrete feature under an existing task. Give it a native parent,
