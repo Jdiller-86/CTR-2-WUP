@@ -1,6 +1,6 @@
 # Milestones and remaining work
 
-Updated **October 13, 2026** for **v0.23.0**. The product is an UWUVCI-style
+Updated **October 14, 2026** for **v0.24.0 source (unreleased)**. The product is an UWUVCI-style
 Windows GUI: **Select owned 3DS ROM → configure title/artwork → Inject →
 install its WUP → play from the Wii U Menu**. The CLI is the shared engine.
 The USA Super Mario 3D Land executable/revision is privately verified; reported local asset inventory is matched; selected byte formats,
@@ -407,9 +407,14 @@ through the recorded Actions review; broader rendering and full M4 remain open.
 
 Merged scoped #97/PR #98 expands vertex code capacity to 512 checked words
 with original entry/upload/rollback probes and native storage/stack measurements.
-Required hosted platform checks pass; Project membership and native links verify; arithmetic,
+Required hosted platform checks pass; Project membership and native links verify; broader arithmetic,
 control flow, GX2 translation and full task acceptance remain open. See
 [the capacity contract](software-scenes.md#vertex-code-capacity).
+
+Scoped #76/PR #105 adds [exact ADD/MUL](software-scenes.md#exact-add-and-mul),
+independent rational/encoding/pixel checks and late guest state/queue rollback.
+Required full/platform checks gate PR #105; rounding, control flow, native GX2,
+physical measured costs and full task acceptance remain open.
 
 Choose a license-cleared Latte shader route and validate exercised vertex attributes, uniforms and shader instructions.
 

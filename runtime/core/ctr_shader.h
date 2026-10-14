@@ -31,9 +31,13 @@ typedef struct {
 bool ctr_shader_f24_decode(uint32_t raw, uint32_t *float32_bits);
 bool ctr_shader_f24_exact(uint32_t float32_bits, uint32_t *raw);
 
-/* Original bounded PICA MOV/NOP/END execution. MOV supports input/temporary/
- * float-uniform sources, swizzles, source negation and destination masks.
- * Relative addressing, arithmetic, branches and geometry instructions fail.
+/* Original bounded PICA MOV/ADD/MUL/NOP/END execution. The first source selects
+ * inputs/temporaries/float uniforms; ADD/MUL's second selects inputs/temporaries.
+ * Both use independent swizzles/negation and destination masks. All operands
+ * are captured before temporary writes. ADD/MUL require exact normal float24 or
+ * signed-zero results; rounding, underflow/overflow and special values fail.
+ * Exact cancellation is +0, -0 + -0 is -0, and MUL uses the XOR of signs.
+ * Relative addressing, other arithmetic, branches and geometry fail.
  * Read-before-write fails for temporary/uniform/input lanes; an actual END is
  * required within code words 0..511; execution never wraps past word 511.
  * Input values used must have exact finite normal float24/zero

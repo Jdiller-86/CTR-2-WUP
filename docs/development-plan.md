@@ -1,6 +1,6 @@
 # CTR2WUP product development plan
 
-Updated **October 14, 2026** for **v0.23.0**. The requirements remain
+Updated **October 14, 2026** for **v0.24.0 source (unreleased)**. The requirements remain
 [the original brief](project-brief.md), the reviewed [GUI workflow](gui-workflow.md)
 and the user amendment allowing [optional local encrypted-input preparation](encrypted-input.md).
 Upstream feasibility scores and compatibility percentages are research context,
@@ -64,12 +64,17 @@ Merged PR #98 implements the scoped #97/#28/M4 vertex code capacity increment:
 stack measurements. Required hosted platform checks and native/Project reconciliation verify. Arithmetic/control and broader renderer work follow this capacity
 boundary; it does not establish commercial shader execution.
 
+Scoped #76/PR #105 now implements exact ADD/MUL with independent operand
+descriptors and integer dyadic evaluation. Original rational, encoding, scene and
+transaction probes pass; required full/platform checks gate delivery through PR #105. This advances
+#28/M4 without establishing float24 rounding, control flow, native GX2 or a full gate.
+
 ## Now, next and later
 
 | Priority | Concrete deliverable | Tracking and acceptance |
 | --- | --- | --- |
 | Delivered checkpoint | Bounded compiled guest draws, transactional targets/completion, exact frames and checked 512-word shader storage | Scoped M4 command and capacity increments in PR #48/#57/#98; broader #28/#30 and full M4 acceptance remain open |
-| Next independent renderer work | Add checked shader arithmetic, then bounded TEV and texture sampling using original reference scenes | M4 #28/#29; separate scoped features with numeric/pixel and rollback criteria |
+| Next independent renderer work | Extend shader/control or bounded TEV and texture sampling using original references | M4 #28/#29; separate scoped features with numeric/pixel and rollback criteria |
 | Resource/native renderer work | Version resource caches, prove invalidation/readback, define native shader ABI and translate the proven subset into GX2 | M4 #28/#30; retain software reference and explicit shader/cache misses |
 | Physical evidence and performance | Retain reviewed audio/GX/draw results; correct drawn-frame gating, measure diagnostic phases and execution budget, then collect repeat launch/exit and full Espresso/rendering costs | M1 #13–#16, M2 #20/#21, M3 #22/#26 and M4 #31; only physical observations accept these gates |
 | Title intake and analysis | Retain verified executable/report/sample provenance; validate required nested resources and refine the observed runtime/test-route matrix | M5 #32/#33 are active analysis; selected Yaz0/NARC/DVLB/CGFX/BYML/CSAR/CSTM structures are inspected; actual runtime selection/use remains pending |

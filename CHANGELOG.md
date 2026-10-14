@@ -3,6 +3,19 @@
 All releases are development increments. RPX/WUHB diagnostics and desktop passes
 do not establish commercial-game compatibility or installable WUP acceptance.
 
+## 0.24.0 — unreleased
+
+- Add original checked component-wise PICA ADD/MUL execution with independent
+  operand swizzles, signs, masks and initialized register/temporary/uniform lanes.
+- Evaluate dyadic values with integer arithmetic; reject inexact results,
+  underflow/overflow and special values without erasing small nonzero terms.
+- Compare 167,730 cases with independent arbitrary-precision rational results,
+  four original scenes with exact analytic pixels and 282,626 encodings with
+  pinned nihstro headers. Check late shader/target/guest queue rollback.
+- Keep hardware rounding/control flow, native GX2, physical acceptance and all
+  seven full gates open. Existing diagnostic guides and reviewed passes retain
+  their exact build identities; no unchanged console repeat is requested.
+
 ## Public repository consolidation — 2026-10-14
 
 - Canonical Pages, legacy deep-link redirects, reviewed Mario transitions and

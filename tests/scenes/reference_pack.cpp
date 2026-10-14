@@ -22,6 +22,21 @@ int main() {
             pattern.src1_selector=selectors;pattern.negate_src1=negate;pattern.dest_mask=mask;
             if(!emit(pattern.hex))return 2;
         }
+    for(auto op:{nihstro::OpCode::Id::ADD,nihstro::OpCode::Id::MUL})
+        for(unsigned a=0;a<128;++a)for(unsigned b=0;b<32;++b)for(unsigned dest=0;dest<32;++dest) {
+            nihstro::Instruction instruction;instruction.hex=0;instruction.opcode=op;
+            instruction.common.src1=nihstro::SourceRegister(a);
+            instruction.common.src2=nihstro::SourceRegister(b);
+            instruction.common.dest=nihstro::DestRegister(dest);
+            instruction.common.operand_desc_id=(a+b+dest)&127;
+            if(!emit(instruction.hex))return 4;
+        }
+    for(unsigned selectors=0;selectors<256;++selectors)for(unsigned negate=0;negate<2;++negate)
+        for(unsigned mask=0;mask<16;++mask) {
+            nihstro::SwizzlePattern pattern;pattern.hex=0;
+            pattern.src2_selector=selectors;pattern.negate_src2=negate;pattern.dest_mask=mask;
+            if(!emit(pattern.hex))return 5;
+        }
     for(auto op:{nihstro::OpCode::Id::NOP,nihstro::OpCode::Id::END}) {
         nihstro::Instruction instruction;instruction.hex=0;instruction.opcode=op;
         if(!emit(instruction.hex))return 3;

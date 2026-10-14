@@ -1,4 +1,4 @@
-# Remaining acceptance gates (0.23.0)
+# Remaining acceptance gates (0.24.0 source, unreleased)
 
 The product remains a Windows GUI that converts owned 3DS games into individual
 Wii U WUP titles. Approximately 20% implementation and 0/7 full gates accepted
@@ -30,9 +30,11 @@ Current requirements:
    those full criteria.
 4. **Renderer/runtime implementation:** broader shaders, TEV/sampling, native
    GX2 translation, coherency, dynamic modules, guest audio and retail saves
-   remain open. Draft PR #98 supplies original 512-word shader storage/upload/
-   entry/rollback probes and passing required hosted platform checks. Independent
-   arithmetic/control and DSP reference development can continue.
+   remain open. Merged PR #98 supplies original 512-word shader storage/upload/
+   entry/rollback probes and passing required hosted platform checks. PR #105
+   adds exact ADD/MUL original rational/scene/rollback probes; required host/native/Windows/docs checks gate delivery;
+   receipts are linked from PR #105. Hardware rounding, remaining arithmetic/control and DSP reference
+   development can continue independently of console evidence.
 5. **Conversion/GUI:** prove the full native Windows conversion and WUP
    install/rebuild/save continuity, then complete GUI acceptance.
 

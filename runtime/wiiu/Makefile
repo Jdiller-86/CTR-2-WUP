@@ -19,7 +19,7 @@ AUDIO_ONLY ?= 0
 SCENE_ONLY ?= 0
 UDP_LOG ?= 0
 CALL_LIMIT ?= 64
-APP_VERSION := 0.23.0
+APP_VERSION := 0.24.0
 UPSTREAM_DIR ?= ../../artifacts/generated-upstream-guest
 ifeq ($(GUEST_DEFAULT),1)
 APP_NAME := CTR2WUP ARM Guest $(APP_VERSION)

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "0.23.0",
+  "version": "0.24.0",
   "updated": "2026-10-14",
   "approximate_implementation_percent": 20,
   "full_milestones_accepted": 0,
@@ -313,7 +313,7 @@
       "waiting_labels": [
         "needs-console"
       ],
-      "summary": "Compiled guest GSP/MOV draws produce exact CPU software scenes through owned tiled targets. Broader shader/TEV/sampling, native GX2 translation/coherency and physical Wii U acceptance remain open.",
+      "summary": "Compiled guest GSP draws and exact MOV/ADD/MUL CPU software scenes use owned tiled targets and transactional state/completion. Broader shader/TEV/sampling, native GX2 translation/coherency and physical Wii U acceptance remain open.",
       "verified_foundations": [
         "Direct/shared framebuffer presentation and all 14 base texture formats with original/reference checks",
         "Bounded GSP DMA/fill/display-transfer/raw-texture-copy/cache queue operations and completion interrupts",
@@ -323,7 +323,8 @@
         "v0.22.0 original owned-resource loader/MOV shader/software triangles: 1,393,972 original assertions, exact analytic pixels for both index formats and 12,290 pinned independent encoding checks; focused native Scene Check cross-build, hardware evidence pending",
         "Standard guest GSP integrates bounded owned-resource PICA draws transactionally; the compiled original draws four exact triangles into both targets and displays them with zero fallback.",
         "October 13 Guest Draws 0.23.0 has matching two-step PASS result/trace, four triangles, 97,200 fragments and user-confirmed pictures/exit. Aggregate frame timing and premature visual-prompt timing are recorded; full graphics costs remain unmeasured.",
-        "Merged scoped #97/PR #98 expands vertex code storage to 512 words with original entry/upload/rollback probes and native storage/stack measurements. Required hosted platform checks and native/Project reconciliation 38608010840 pass; #28/M4 acceptance remains open."
+        "Merged scoped #97/PR #98 expands vertex code storage to 512 words with original entry/upload/rollback probes and native storage/stack measurements. Required hosted platform checks and native/Project reconciliation 38608010840 pass; #28/M4 acceptance remains open.",
+        "Scoped #76/PR #105 adds exact component-wise ADD/MUL using integer dyadic arithmetic, independent rational numeric/encoding/pixel references and late shader/target/queue rollback. Rounding, underflow/overflow and unsupported state reject explicitly; required host/native/Windows/docs checks gate delivery through PR #105. No hardware or full task acceptance."
       ],
       "acceptance_remaining": [
         "Implement real PICA command/state, vertex/shader, texture/sampler/TEV and raster behavior",
@@ -353,7 +354,7 @@
         {
           "id": "m4-vertex-shaders",
           "title": "Implement vertex formats, shader execution and GX2 translation",
-          "summary": "First bounded MOV shader and original software scenes pass exact independent pixel/encoding checks. Broader shader coverage, a license-cleared GX2 shader route and measured physical console costs remain open.",
+          "summary": "Bounded MOV/ADD/MUL software shaders pass original exact rational, analytic pixel and independent encoding checks. Rounding/control coverage, a license-cleared GX2 route and measured physical console costs remain open.",
           "acceptance_criteria": [
             "Original vertex/shader scenes compare independently checked outputs across the reference and chosen GX2/software correctness path using stated tolerances.",
             "Shader tooling licenses, generated-code ownership, supported instructions and miss behavior are documented; a software correctness path has measured costs rather than an assumed final speed."
@@ -367,7 +368,8 @@
             "v0.19.0 adds the original bounded runtime/core/ctr_vertex byte-stream decoder and exhaustive original tests; resolving PICA loaders, fixed/index attributes, shader execution and actual draws remain required.",
             "v0.21.0 implements original checked unsigned 8-bit/16-bit indexed array gathering with 364,123 original assertions; PICA loader/fixed state, uniforms, shaders and actual draws remain open.",
             "v0.22.0 implements original exact-value MOV/NOP/END shaders, loader/fixed/uniform state, output maps and opaque triangles; focused Scene Check builds and exposes automatic pixels/timings plus separate human confirmation. No general shader, guest GSP draw or full task acceptance.",
-            "Merged #97/PR #98 checks all 512 vertex code slots/entries, exhausted upload cursors and late state/pixel/guest queue rollback. Scene storage adds 1280 bytes; native shader/scene/adapter stack frames are unchanged. Required hosted platform checks pass; full task acceptance remains open."
+            "Merged #97/PR #98 checks all 512 vertex code slots/entries, exhausted upload cursors and late state/pixel/guest queue rollback. Scene storage adds 1280 bytes; native shader/scene/adapter stack frames are unchanged. Required hosted platform checks pass; full task acceptance remains open.",
+            "Scoped #76/PR #105 adds exact component-wise ADD/MUL using integer dyadic arithmetic, independent rational numeric/encoding/pixel references and late shader/target/queue rollback. Rounding, underflow/overflow and unsupported state reject explicitly; required host/native/Windows/docs checks gate delivery through PR #105. No hardware or full task acceptance."
           ]
         },
         {
@@ -435,7 +437,8 @@
         "October 13 selected-byte review: seven files match manifest/report/revision hashes. Three Yaz0/NARC archives contain DVLB, CGFX and BYML structures; direct/embedded shader tables fit their containers. CSAR/CSTM blocks are checked; two streams declare stereo DSP ADPCM at 32 kHz. Commercial bytes/hashes stay private.",
         "At the PR #96 checkpoint, the environment binding could not read Project #2. October 14 Actions-secret review 38605081338 subsequently verifies read/write access, M5/intake/requirements In progress and removal of the resolved input wait from six targets; console waits and owner notes remain preserved. No full gate is accepted.",
         "October 14 public source restores required hosted CI and hosts the canonical docs/dashboard. PR #100/#101 supply reviewed management, guarded legacy redirects and exact original artifact provenance; canonical/legacy HTTP checks and live label/dashboard refresh pass. Final receipts are linked in STATUS.md.",
-        "Actions-secret traceability apply 38608010840 verifies 69 native parent links, 28 PR links, M1-M7 assignments and all 104 Project members; no untracked PRs or missing/archived managed members. Full milestone acceptance remains 0/7."
+        "Actions-secret traceability apply 38608010840 verifies 69 native parent links, 28 PR links, M1-M7 assignments and all 104 Project members; no untracked PRs or missing/archived managed members. Full milestone acceptance remains 0/7.",
+        "Shared exact ADD/MUL probes in #76/PR #105 advance a static shader requirement using original data only. Remaining arithmetic/control/rounding and actual selected-entry runtime use remain unverified; no commercial shader is executed."
       ],
       "acceptance_remaining": [
         "Complete the exact-revision observed runtime/test-route matrix and any specifically required additional module/asset inspection; static resource contents are not observed execution.",

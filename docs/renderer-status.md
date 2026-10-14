@@ -1,5 +1,12 @@
 # Renderer foundation
 
+Source 0.24.0 adds [exact component-wise ADD/MUL](software-scenes.md#exact-add-and-mul)
+with integer dyadic evaluation, independent rational/encoding/pixel references and
+late guest queue/state rollback. Required full/platform checks gate delivery through
+PR #105. Rounding, underflow/overflow and unsupported opcodes reject explicitly;
+hardware rounding/control, native GX2 and physical M4 acceptance remain open.
+The latest released diagnostic kits remain 0.23.0.
+
 Version 0.23 adds [compiled original guest draws](guest-pica-draws.md) through
 standard GSP, tracked owned resources and canonical tiled targets. The CPU
 software MOV subset retains shader/state and commits target bytes/completion
@@ -17,8 +24,9 @@ connects them to shared scoped work; no commercial shader bytes are published.
 Merged PR #98 expands vertex code capacity to 512 words with original high-entry,
 upload and late rollback probes plus native storage/stack measurements. Required
 platform checks and native/Project reconciliation pass. See
-[the capacity boundary](software-scenes.md#vertex-code-capacity); arithmetic,
-control flow, geometry and commercial execution still need separate evidence.
+[the capacity boundary](software-scenes.md#vertex-code-capacity). Exact ADD/MUL
+has the original evidence above; broader arithmetic, control flow, geometry and
+commercial execution still need separate evidence.
 
 v0.22.0 executes the [first original software scenes](software-scenes.md)
 through checked PICA-format loader/index state, fixed attributes and uniforms,

@@ -47,8 +47,9 @@ The bounded path supports:
   permutations; fixed attributes; indexed and nonindexed complete triangle lists.
 - Shader code/descriptor uploads, complete packed float24 or float32 uniform
   uploads, entry point, input mapping and compact output masks/semantic maps.
-  MOV supports swizzle, negation, write masks, initialized temporary registers
-  and uniforms; canonical NOP and END terminate a bounded linear program.
+  MOV/ADD/MUL support independent source swizzles, negation, write masks,
+  initialized temporary registers and uniforms. ADD/MUL accept only exact
+  normal float24/signed-zero results; canonical NOP and END terminate a linear program.
 - Position XYZW and color RGBA outputs; W exactly 1, clip XYZ in the accepted
   volume, exact 1/16-pixel coordinates, viewport origin/extent, winding cull,
   include/exclude scissor, degenerate triangles and integer edge evaluation.
@@ -59,14 +60,14 @@ Limits are 256 vertices per draw, 32 draws per list, 512 vertex shader code word
 128 descriptors, 96 float uniforms, 12 attributes/loaders, a 4 MiB resource span
 and a 1 MiB target with dimensions at most 512×512. No primitive is carried
 across lists. Unknown pipeline/framebuffer/texture/TEV/depth registers,
-arithmetic, relative addressing, geometry, clipping, perspective, varying color,
+inexact arithmetic, other arithmetic opcodes, relative addressing, geometry, clipping, perspective, varying color,
 interpolation, sampling and blending fail visibly. This is not a general PICA
 renderer or a GPU shader translator.
 
 `runtime/core/ctr_shader.c` accepts only finite normal values exactly
 representable as PICA float24, plus signed zero. NaN/infinity, denormals,
 out-of-range exponents and values requiring rounding fail. There is no float24
-arithmetic or rounding approximation. MOV captures source lanes before writing
+rounding approximation. MOV/ADD/MUL capture source lanes before writing
 in-place swizzles and rejects undefined lanes or missing code/END.
 
 ### Vertex code capacity
@@ -101,6 +102,59 @@ measurements, not physical memory/performance observations. Required Windows,
 Python, sanitizer, Wii U and documentation hosted checks pass. No commercial
 shader is executed by these original probes.
 
+### Exact ADD and MUL
+
+Scoped [#76](https://github.com/Jdiller-86/CTR-2-WUP/issues/76), under #28/M4,
+adds component-wise ADD and MUL to the bounded software path in source 0.24.0.
+The published 0.23.0 kits retain their original MOV-only execution. Both operands
+use independent descriptor swizzles/negation and initialized input/temporary
+lanes; the first operand may also select a float uniform. Destination masks
+select the lanes actually read and written, and in-place temporary execution
+captures all operands before publishing any lane.
+
+Only exact finite normal float24 results and signed zero are in scope. Integer
+dyadic arithmetic rejects results needing rounding, underflow/overflow and
+non-finite/denormal inputs instead of using a desktop float approximation.
+Opposite-sign exact cancellation yields positive zero; multiplication preserves
+the XOR of operand signs; adding two negative zeros preserves negative zero.
+Zero does not bypass validation of the other operand. A masked-off lane reads
+neither operand. Source 2 has the published five-bit input/temporary encoding;
+source 1 has seven bits and can address all 96 float uniforms. The unused third
+operand fields are ignored, while reserved descriptor bit 31 and relative
+addressing remain unsupported.
+
+Independent arbitrary-precision Python `Fraction` arithmetic agrees on all
+**167,730** original numeric cases: 64,262 exact accepted results and 103,468
+explicit numeric rejections. Coverage includes every normal exponent pair/sign,
+special values, exact/inexact cancellation and a fixed original significand corpus.
+In particular, `1 + 2^-62` fails rather than rounding to 1; `1 - 2^-17` is exact,
+while `1 + 2^-17` is rejected. Multiplication rejects inexact low product bits.
+The reference validates this deliberately exact subset, not hardware rounding.
+
+Two additional scenes encode inverse-transformed original vertices and execute
+`r0=c0; r1=v0*r0; o0=c1+r1`, using scale 2 and a nonzero XY offset. Both index
+formats reproduce the analytic square exactly, executing 30 instructions per
+two-draw scene. MOV scenes still execute 18. Late numeric, undefined-source and
+unsupported-state failures preserve retained shaders, pixels and counters;
+guest checks also preserve memory generations, exclusive state and pending IRQ/
+queue completion after an earlier staged draw. Required host/sanitizer/native/
+Windows/docs checks gate delivery through PR #105. No new physical guide or console pass is implied.
+
+Run the independent numeric check directly with:
+
+```sh
+python tools/validate-shader-arithmetic.py --output artifacts/arithmetic-reference-NEW
+```
+
+The normal scene validator also runs it, including under sanitizers in CI.
+With devkitPPC GCC 16.1.0 and the native `-O2 -mcpu=750 -meabi -mhard-float`
+flags, the shader execution function has a 704-byte static frame (640 before
+arithmetic); its operand-reader helper has a 40-byte frame. These are individual
+compiler frame measurements, not a physical peak-stack or performance result.
+Program/scene storage capacity is unchanged by this increment.
+Relative addressing, dot products, branches, hardware rounding and native GPU
+translation remain separate work. #28 and M4 remain open.
+
 The native Scene Check runs this CPU path, flips its owned image rows for display,
 then uses the established GX2 surface-copy presentation. It does not submit a
 PICA shader as a Latte shader. The v0.22 standard guest GSP queue continues to use the
@@ -115,22 +169,22 @@ python tools/validate-scenes.py --output artifacts/scene-evidence \
   --nihstro-dir /path/to/clean/pinned/nihstro
 ```
 
-The evidence tool executes both index formats and independently calculates the
+The evidence tool executes MOV and arithmetic scenes in both index formats and independently calculates the
 expected square regions. Exact comparison, with zero tolerance, checks every
 RGBA byte. Each image has 1,128 red and 1,176 green pixels; two draws execute
-18 shader instructions. The validator saves command/resource bytes, raw RGBA,
+18 MOV or 30 arithmetic shader instructions. The validator saves command/resource bytes, raw RGBA,
 PNG previews and hashed JSON receipts. No commercial input is used.
 The receipt also records one desktop process CPU-time sample per render,
 including renderer allocation/validation/commit. These tiny scenes and sanitizer
 costs do not predict game frame rate or physical Espresso performance.
 
 Original C tests cover exact float24 conversion against mathematical values,
-all MOV swizzles/negations/write masks, inputs/temporaries/uniforms, packed uploads,
+MOV/ADD/MUL swizzles/negations/write masks, inputs/temporaries/uniforms, packed uploads,
 loader padding, output maps, cull/scissor, both index sizes, nonindexed winding,
 aliases, bounds and whole-list rollback. Normal and ASan/UBSan checks are part
 of GCC/Clang CI; portable checks also run on Windows.
 
-The optional test adapter checks 12,290 encodings against unmodified **nihstro**
+The optional test adapter checks 282,626 encodings against unmodified **nihstro**
 headers at `f4d8659decbfe5d234f04134b5002b82dc515a44` (BSD-3-Clause,
 Tony Wasserka). It validates instruction/operand encoding only. Azahar's pinned
 PICA register/output/loader descriptions provide semantic review; its current

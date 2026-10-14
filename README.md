@@ -9,8 +9,8 @@ First visit? [Take the repository tour](docs/repository-guide.md).
 Contributors can [develop and manage tracking without hosted Actions](docs/direct-development.md)
 using secure API access and recorded local validation.
 
-Source is public. Documentation and the live aggregate dashboard are being
-consolidated into this repository's Pages site; [current status](STATUS.md)
+Source is public. Documentation and the live aggregate dashboard share
+this repository's Pages site; [current status](STATUS.md)
 records verified deployment, tracking and artifact evidence.
 
 CTR2WUP is an experimental 3DS-to-Wii U converter. Its goal is a Windows GUI
@@ -53,6 +53,9 @@ for the supported subsets and current limits.
 - Merged [512-word vertex code capacity](docs/software-scenes.md#vertex-code-capacity)
   has original upload/entry/rollback probes and passing required hosted platform
   checks in PR #98; broader shader semantics remain open.
+- Exact component-wise ADD/MUL software shaders use checked integer arithmetic,
+  independent rational references and transactional rejection of rounding or
+  unsupported state. See [the arithmetic boundary](docs/software-scenes.md#exact-add-and-mul).
 - Reproducible RPX/WUHB diagnostics and original packaging fixtures. Actual
   WUP installation and full Windows conversion still require acceptance.
 
