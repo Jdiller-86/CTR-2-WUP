@@ -98,8 +98,8 @@ and label/dashboard refresh also verify; console/full gate criteria remain open.
 These are independently reviewable features. Completing a software draw path
 does not establish general PICA compatibility or native GPU translation.
 
-Scoped #76 now has draft PR #105 for exact ADD/MUL. Original numeric/scene/queue
-checks pass; required full/platform checks are pending. Trusted-main reconciliation
+Scoped #76 has PR #105 for exact ADD/MUL. Original numeric/scene/queue
+checks pass; required full/platform checks gate delivery through that PR. Trusted-main reconciliation
 [38625450461](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38625450461)
 verifies 69 native parents, 29 PR links and all 105 Project members. #28/M4 stay open.
 

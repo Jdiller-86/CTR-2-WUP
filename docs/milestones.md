@@ -413,7 +413,7 @@ control flow, GX2 translation and full task acceptance remain open. See
 
 Scoped #76/PR #105 adds [exact ADD/MUL](software-scenes.md#exact-add-and-mul),
 independent rational/encoding/pixel checks and late guest state/queue rollback.
-Required full/platform checks are pending; rounding, control flow, native GX2,
+Required full/platform checks gate PR #105; rounding, control flow, native GX2,
 physical measured costs and full task acceptance remain open.
 
 Choose a license-cleared Latte shader route and validate exercised vertex attributes, uniforms and shader instructions.

@@ -324,7 +324,7 @@
         "Standard guest GSP integrates bounded owned-resource PICA draws transactionally; the compiled original draws four exact triangles into both targets and displays them with zero fallback.",
         "October 13 Guest Draws 0.23.0 has matching two-step PASS result/trace, four triangles, 97,200 fragments and user-confirmed pictures/exit. Aggregate frame timing and premature visual-prompt timing are recorded; full graphics costs remain unmeasured.",
         "Merged scoped #97/PR #98 expands vertex code storage to 512 words with original entry/upload/rollback probes and native storage/stack measurements. Required hosted platform checks and native/Project reconciliation 38608010840 pass; #28/M4 acceptance remains open.",
-        "Scoped #76/PR #105 adds exact component-wise ADD/MUL using integer dyadic arithmetic, independent rational numeric/encoding/pixel references and late shader/target/queue rollback. Rounding, underflow/overflow and unsupported state reject explicitly; required full/platform checks are pending. No hardware or full task acceptance."
+        "Scoped #76/PR #105 adds exact component-wise ADD/MUL using integer dyadic arithmetic, independent rational numeric/encoding/pixel references and late shader/target/queue rollback. Rounding, underflow/overflow and unsupported state reject explicitly; required host/native/Windows/docs checks gate delivery through PR #105. No hardware or full task acceptance."
       ],
       "acceptance_remaining": [
         "Implement real PICA command/state, vertex/shader, texture/sampler/TEV and raster behavior",
@@ -369,7 +369,7 @@
             "v0.21.0 implements original checked unsigned 8-bit/16-bit indexed array gathering with 364,123 original assertions; PICA loader/fixed state, uniforms, shaders and actual draws remain open.",
             "v0.22.0 implements original exact-value MOV/NOP/END shaders, loader/fixed/uniform state, output maps and opaque triangles; focused Scene Check builds and exposes automatic pixels/timings plus separate human confirmation. No general shader, guest GSP draw or full task acceptance.",
             "Merged #97/PR #98 checks all 512 vertex code slots/entries, exhausted upload cursors and late state/pixel/guest queue rollback. Scene storage adds 1280 bytes; native shader/scene/adapter stack frames are unchanged. Required hosted platform checks pass; full task acceptance remains open.",
-            "Scoped #76/PR #105 adds exact component-wise ADD/MUL using integer dyadic arithmetic, independent rational numeric/encoding/pixel references and late shader/target/queue rollback. Rounding, underflow/overflow and unsupported state reject explicitly; required full/platform checks are pending. No hardware or full task acceptance."
+            "Scoped #76/PR #105 adds exact component-wise ADD/MUL using integer dyadic arithmetic, independent rational numeric/encoding/pixel references and late shader/target/queue rollback. Rounding, underflow/overflow and unsupported state reject explicitly; required host/native/Windows/docs checks gate delivery through PR #105. No hardware or full task acceptance."
           ]
         },
         {

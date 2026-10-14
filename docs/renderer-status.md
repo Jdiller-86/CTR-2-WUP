@@ -2,7 +2,7 @@
 
 Source 0.24.0 adds [exact component-wise ADD/MUL](software-scenes.md#exact-add-and-mul)
 with integer dyadic evaluation, independent rational/encoding/pixel references and
-late guest queue/state rollback. Required full/platform checks are pending on
+late guest queue/state rollback. Required full/platform checks gate delivery through
 PR #105. Rounding, underflow/overflow and unsupported opcodes reject explicitly;
 hardware rounding/control, native GX2 and physical M4 acceptance remain open.
 The latest released diagnostic kits remain 0.23.0.

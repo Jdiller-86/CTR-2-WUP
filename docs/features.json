@@ -358,7 +358,7 @@
       "title": "Expand checked PICA vertex shader arithmetic",
       "milestone": 4,
       "parent_issue": 28,
-      "state": "active",
+      "state": "implemented",
       "pull_requests": [
         105
       ],
@@ -373,7 +373,7 @@
       "evidence": [
         "167,730 original independent rational cases agree: 64,262 exact accepted results and 103,468 explicit numeric rejections, including every normal exponent pair/sign.",
         "Four original MOV/ADD/MUL scenes match every analytic pixel with zero tolerance; 282,626 wire encodings agree with pinned nihstro headers.",
-        "Portable shader/scene and guest tests cover both operand/register/descriptor spaces, in-place temporaries, late state/target/generation rollback and pending queue/IRQ preservation. Required full/platform checks are pending.",
+        "Portable shader/scene and guest tests cover both operand/register/descriptor spaces, in-place temporaries, late state/target/generation rollback and pending queue/IRQ preservation. Required host/sanitizer/native/Windows/docs checks gate delivery through PR #105.",
         "Hardware rounding, dot products/control flow, native GX2 translation, commercial use and #28/M4 acceptance remain open."
       ]
     },

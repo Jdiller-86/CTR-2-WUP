@@ -137,8 +137,8 @@ formats reproduce the analytic square exactly, executing 30 instructions per
 two-draw scene. MOV scenes still execute 18. Late numeric, undefined-source and
 unsupported-state failures preserve retained shaders, pixels and counters;
 guest checks also preserve memory generations, exclusive state and pending IRQ/
-queue completion after an earlier staged draw. Required full/platform checks
-are pending on PR #105. No new physical guide or console pass is implied.
+queue completion after an earlier staged draw. Required host/sanitizer/native/
+Windows/docs checks gate delivery through PR #105. No new physical guide or console pass is implied.
 
 Run the independent numeric check directly with:
 
@@ -147,6 +147,11 @@ python tools/validate-shader-arithmetic.py --output artifacts/arithmetic-referen
 ```
 
 The normal scene validator also runs it, including under sanitizers in CI.
+With devkitPPC GCC 16.1.0 and the native `-O2 -mcpu=750 -meabi -mhard-float`
+flags, the shader execution function has a 704-byte static frame (640 before
+arithmetic); its operand-reader helper has a 40-byte frame. These are individual
+compiler frame measurements, not a physical peak-stack or performance result.
+Program/scene storage capacity is unchanged by this increment.
 Relative addressing, dot products, branches, hardware rounding and native GPU
 translation remain separate work. #28 and M4 remain open.
 

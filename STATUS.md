@@ -1,10 +1,10 @@
 # CTR2WUP status
 
-**Exact shader arithmetic development:** [PR #105](https://github.com/Jdiller-86/CTR-2-WUP/pull/105)
+**Exact shader arithmetic:** [PR #105](https://github.com/Jdiller-86/CTR-2-WUP/pull/105)
 implements scoped #76 under #28/M4: component-wise ADD/MUL, independent operand
 descriptors and checked integer dyadic evaluation. All 167,730 original rational
 cases, four analytic pixel scenes and 282,626 pinned encodings agree. Late errors
-preserve shader/target/guest queue state. Required full/platform checks are pending.
+preserve shader/target/guest queue state. Required host/sanitizer/native/Windows and documentation checks gate merge; receipts are linked from PR #105.
 The source version is **0.24.0 (unreleased)**; the latest published diagnostic
 release remains **0.23.0**. Hardware rounding, broader arithmetic/control, native
 GX2 and commercial execution remain open. [Contract](docs/software-scenes.md#exact-add-and-mul).

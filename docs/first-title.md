@@ -61,7 +61,7 @@ than proof that every instruction executes on the proposed gameplay route.
 | Area | Present evidence | Next acceptance |
 | --- | --- | --- |
 | Exact revision/input | Independently verified executable and selected bytes; complete local inventory reports | Retain private provenance; broader modules/assets and original full-container integrity remain bounded by available bytes |
-| Shader runtime | Merged 512-word storage covers the static size gap; #76/PR #105 adds original exact ADD/MUL numeric/scene/rollback probes | Required arithmetic platform checks, rounding/remaining arithmetic/control and selected-entry traces before claiming support; no commercial shader has executed and no profile is enabled |
+| Shader runtime | Merged 512-word storage covers the static size gap; #76/PR #105 adds original exact ADD/MUL numeric/scene/rollback probes | Required arithmetic platform receipts in PR #105, rounding/remaining arithmetic/control and selected-entry traces before claiming support; no commercial shader has executed and no profile is enabled |
 | Fragment/rendering | Original canonical software draws pass their scoped routes | Capture actual required TEV/texture/depth/blend/coherency state; implement shared features and native GX2 translation |
 | Guest audio | Two sampled streams declare DSP ADPCM; archive structure exists | Verify codec/history/seek behavior with originals, required DSP protocol/mixing and later physical game audio |
 | Services/modules/saves | Declared DSP/loader capabilities and static executable analysis | Trace actual IPC/module/save demands; do not implement all declarations as silent successful stubs |
