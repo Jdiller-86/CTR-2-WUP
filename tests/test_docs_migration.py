@@ -1,6 +1,7 @@
 """Legacy redirects preserve reviewed scope, owner edits, history and deep links."""
 import hashlib
 import importlib.util
+import json
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -51,6 +52,27 @@ class LegacyMigrationTests(unittest.TestCase):
         with self.assertRaises(migration.publisher.PublishError):
             migration.redirect('https://example.org/elsewhere')
         self.assertIn(b'rel="canonical"', migration.redirect(migration.CANONICAL))
+
+    def test_redirect_checksums_match_current_bytes_and_preserve_original_manifest(self):
+        files = self.files()
+        original = files['SHA256SUMS.txt']
+        changes = migration.plan(files, 'a' * 40, 'b' * 40)
+        merged = {**files, **changes}
+        self.assertEqual(merged['historical-documentation-SHA256SUMS.txt'], original)
+        for line in merged['SHA256SUMS.txt'].decode().splitlines():
+            digest, name = line.split('  ', 1)
+            self.assertEqual(hashlib.sha256(merged[name]).hexdigest(), digest)
+        provenance = json.loads(merged['migration-provenance.json'])
+        self.assertEqual(provenance['source_commit'], 'a' * 40)
+        self.assertFalse(provenance['redirect_deployment_verified'])
+        replay = migration.plan(merged, 'c' * 40, 'd' * 40)
+        self.assertNotIn('historical-documentation-SHA256SUMS.txt', replay)
+
+    def test_unknown_historical_checksum_file_is_never_overwritten(self):
+        files = self.files()
+        files['historical-documentation-SHA256SUMS.txt'] = b'Original owner file'
+        with self.assertRaisesRegex(migration.publisher.PublishError, 'unexpected historical'):
+            migration.plan(files, 'a' * 40, 'b' * 40)
 
     def test_archive_requires_verified_redirects_and_preserves_history(self):
         class Client:

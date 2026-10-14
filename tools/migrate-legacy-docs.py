@@ -38,7 +38,7 @@ def redirect(target):
             '<script>' + script + '</script></html>').encode()
 
 
-def plan(files):
+def plan(files, source_commit=None, legacy_base=None):
     manifest = files.get('SHA256SUMS.txt', b'').decode()
     expected = {}
     for line in manifest.splitlines():
@@ -82,6 +82,29 @@ def plan(files):
             '[the canonical site](' + CANONICAL + ').\n\n'
             'This repository retains migration redirects and historical generated files.\n'
             'The text below is an archived earlier export; do not maintain it independently.\n\n---\n\n' + readme).encode()
+    if source_commit is not None or legacy_base is not None:
+        if not all(isinstance(value, str) and re.fullmatch('[0-9a-f]{40}', value)
+                   for value in (source_commit, legacy_base)):
+            raise publisher.PublishError('Migration provenance requires exact source and legacy commits.')
+        backup = 'historical-documentation-SHA256SUMS.txt'
+        previous = json.loads(files.get('migration-provenance.json', b'{}'))
+        if backup in files and previous.get('migration_id') != MARKER:
+            raise publisher.PublishError('Preserve an unexpected historical checksum file for review.')
+        original = files.get(backup, files['SHA256SUMS.txt'])
+        if backup not in files:
+            changes[backup] = original
+        changes['migration-provenance.json'] = (json.dumps({
+            'migration_id': MARKER, 'source_commit': source_commit, 'legacy_base': legacy_base,
+            'canonical_url': CANONICAL, 'history_preserved': True,
+            'historical_manifest': backup, 'historical_manifest_sha256': hashlib.sha256(original).hexdigest(),
+            'redirect_deployment_verified': False,
+        }, indent=2) + '\n').encode()
+        current = {**files, **changes}
+        names = (set(expected) | set(changes)) - {'SHA256SUMS.txt'}
+        if not names <= set(current):
+            raise publisher.PublishError('A legacy checksummed file is missing; preserve the repository for review.')
+        changes['SHA256SUMS.txt'] = ''.join(hashlib.sha256(current[name]).hexdigest() + '  ' + name + '\n'
+                                            for name in sorted(names)).encode()
     return changes
 
 
@@ -119,7 +142,7 @@ def migrate(client, apply=False):
                 if total > 64 * 1024 * 1024:
                     raise publisher.PublishError('Legacy files exceed the bounded migration budget.')
                 files[path.relative_to(checkout).as_posix()] = path.read_bytes()
-        changes = plan(files)
+        changes = plan(files, commit, base)
     report = {'ok': True, 'applied': apply, 'source_commit': commit, 'legacy_repository': LEGACY,
               'canonical_url': CANONICAL, 'legacy_base': base, 'changed_paths': sorted(changes),
               'history_preserved': True, 'legacy_archived': False, 'redirect_deployment_verified': False}
