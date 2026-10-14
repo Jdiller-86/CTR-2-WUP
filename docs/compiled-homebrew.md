@@ -81,7 +81,8 @@ state, ownership, persistence and limits. No NCCH/IVFC authentication or retail 
 general PICA commands/physical mappings or commercial compatibility is claimed;
 the bounded GX/draw profiles are documented separately.
 Native diagnostic tone remains platform audio; v0.14.5 interactive/guarded completion is user-reported. Reviewed named results, fresh-launch saves and RomFS evidence are retained;
-new draw/launch-audio physical results and full Windows conversion remain pending. Do not enable a commercial profile from these homebrew passes.
+October 13 draw/launch-audio scoped results are reviewed. Full platform stability,
+performance and Windows conversion acceptance remain pending. Do not enable a commercial profile from these homebrew passes.
 
 The original source is under `tests/homebrew`. Optional locally generated guest
 images link external libctru/newlib/compiler support. The library's full license

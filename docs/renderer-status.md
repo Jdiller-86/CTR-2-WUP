@@ -14,9 +14,9 @@ include a geometry entry. These are static resource findings, not traced active
 game shaders. [The title matrix](first-title.md#current-feature-and-test-route-matrix)
 connects them to shared scoped work; no commercial shader bytes are published.
 
-Draft PR #98 expands vertex code capacity to 512 words with original high-entry,
+Merged PR #98 expands vertex code capacity to 512 words with original high-entry,
 upload and late rollback probes plus native storage/stack measurements. Required
-platform checks and Project membership remain pending. See
+platform checks pass; Project reconciliation remains pending. See
 [the capacity boundary](software-scenes.md#vertex-code-capacity); arithmetic,
 control flow, geometry and commercial execution still need separate evidence.
 

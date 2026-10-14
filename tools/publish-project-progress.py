@@ -1,24 +1,26 @@
 #!/usr/bin/env python3
-"""Atomically publish only three allowlisted progress files to the public docs repo.
+"""Validate/stage safe Project aggregates or refresh the canonical Pages deployment.
 
-The docs repository and its main branch must already exist. This never creates
+The public source repository and its main branch must already exist. This never creates
 repositories, changes visibility, configures Pages, or publishes application code.
 Uses gh's normal environment authentication; credentials never enter reports.
 """
 import argparse
 import importlib.util
 import json
+import os
+import tempfile
 from pathlib import Path
 import re
 
 SPEC = importlib.util.spec_from_file_location('project_export', Path(__file__).with_name('export-github-project.py'))
 EXPORT = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(EXPORT)
-TARGET = 'Jdiller-86/CTR-2-WUP-docs'
+TARGET = EXPORT.REPOSITORY
 FILES = ('index.html', 'progress.json', 'gates.svg')
 
 
-def publish(directory, client, apply=False):
+def validated_files(directory):
     if not directory.is_dir() or sorted(p.name for p in directory.iterdir()) != sorted(FILES):
         raise EXPORT.TrackingError('Only the three allowlisted public progress files may be published.')
     contents = {}
@@ -43,28 +45,38 @@ def publish(directory, client, apply=False):
     validate_public(data)
     if contents['gates.svg'] != EXPORT.gate_svg(data):
         raise EXPORT.TrackingError('Gate SVG differs from the fixed public aggregate rendering.')
+    return contents
+
+
+def stage(directory, output):
+    contents = validated_files(directory)
+    output = output.resolve()
+    artifacts = (EXPORT.ROOT / 'artifacts').resolve()
+    if not output.is_relative_to(artifacts) or output == artifacts or output.exists():
+        raise EXPORT.TrackingError('Stage progress into a fresh directory under ignored artifacts/.')
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='.progress-', dir=output.parent) as temporary:
+        folder = Path(temporary) / 'progress'
+        folder.mkdir()
+        for name, content in contents.items():
+            (folder / name).write_text(content, encoding='utf-8')
+        os.replace(folder, output)
+    return {'ok': True, 'stage': str(output), 'files': list(FILES)}
+
+
+def publish(directory, client, apply=False):
+    validated_files(directory)
     repository = client.api('repos/' + TARGET)
-    if not isinstance(repository, dict) or repository.get('full_name') != TARGET or repository.get('private') is not False or repository.get('default_branch') != 'main':
-        raise EXPORT.TrackingError('The authorized docs-only repository must exist, be public, and use main.')
-    base = client.api('repos/' + TARGET + '/git/ref/heads/main')
-    sha = base.get('object', {}).get('sha') if isinstance(base, dict) else None
-    if not isinstance(sha, str) or not re.fullmatch('[a-f0-9]{40}', sha):
-        raise EXPORT.TrackingError('The docs main branch identity cannot be verified.')
-    commit = client.api('repos/' + TARGET + '/git/commits/' + sha)
-    tree = commit.get('tree', {}).get('sha') if isinstance(commit, dict) else None
-    if not isinstance(tree, str) or not re.fullmatch('[a-f0-9]{40}', tree):
-        raise EXPORT.TrackingError('The docs tree identity cannot be verified.')
+    if (not isinstance(repository, dict) or repository.get('full_name') != TARGET
+            or repository.get('private') is not False or repository.get('default_branch') != 'main'):
+        raise EXPORT.TrackingError('The authorized public source must exist and use main.')
     result = {'ok': True, 'applied': apply, 'repository': TARGET,
-              'paths': ['site/progress/' + name for name in FILES], 'application_source_published': False}
+              'paths': ['progress/' + name for name in FILES],
+              'application_source_published': False, 'workflow_dispatched': False}
     if apply:
-        built = client.api('repos/' + TARGET + '/git/trees', 'POST', {'base_tree': tree, 'tree': [
-            {'path': 'site/progress/' + name, 'mode': '100644', 'type': 'blob', 'content': contents[name]} for name in FILES]})
-        created = client.api('repos/' + TARGET + '/git/commits', 'POST', {
-            'message': 'Refresh public aggregate from private Project #2', 'tree': built['sha'], 'parents': [sha]})
-        # Never force-update; concurrent documentation publishing causes a safe
-        # rejection and requires a fresh run, preserving the other commit.
-        client.api('repos/' + TARGET + '/git/refs/heads/main', 'PATCH', {'sha': created['sha'], 'force': False})
-        result['commit'] = created['sha']
+        client.api('repos/' + TARGET + '/actions/workflows/publish-docs.yml/dispatches',
+                   'POST', {'ref': 'main'})
+        result['workflow_dispatched'] = True
     return result
 
 
@@ -108,9 +120,15 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--input', type=Path, required=True)
     parser.add_argument('--apply', action='store_true')
+    parser.add_argument('--output', type=Path, help='Stage locally into a fresh ignored directory')
     args = parser.parse_args(argv)
     try:
-        result = publish(args.input, EXPORT.GitHub(), args.apply)
+        if args.output is not None:
+            if args.apply:
+                raise EXPORT.TrackingError('Local staging cannot be combined with API apply.')
+            result = stage(args.input, args.output)
+        else:
+            result = publish(args.input, EXPORT.GitHub(), args.apply)
     except (EXPORT.TrackingError, OSError, ValueError, KeyError) as error:
         result = {'ok': False, 'applied': False, 'error': str(error) if isinstance(error, EXPORT.TrackingError) else 'Public publication inputs could not be validated.'}
     print(json.dumps(result))

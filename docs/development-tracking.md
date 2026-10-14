@@ -60,7 +60,7 @@ No arbitrary branch, issue body or workflow input is executed with that credenti
 The tool backfills native parents for the 35 established tasks, creates bounded
 feature issues, links PRs, assigns milestones and ensures Project membership.
 It fails before writes on conflicting native parents or a historical feature
-whose PR has not merged. Its private artifact records verified live relationships
+whose PR has not merged. Its public-safe artifact records verified live relationships
 and any partial operation failure; a failed run must be reviewed before retrying.
 
 The initial status migration only replaces old empty/Todo values. Later manual
@@ -69,14 +69,19 @@ no full gate becomes Accepted through this workflow. When hosted execution is av
 tracking** workflow publishes safe aggregates separately and does not expose
 private issue titles, bodies or feature identifiers in the public dashboard.
 
-## Next renderer features
+The source is public and hosted validation is available. Scoped #99/PR #100
+consolidates publication and uses the existing Actions management secret for
+reviewed tracking operations. Project access is verified through Actions; live
+catalog reconciliation and Mario transitions are recorded only after apply and
+read-back. The environment binding's earlier failure does not block Actions.
 
 Scoped shader-capacity issue #97 has verified native parent #28 and M4 assignment;
-draft PR #98 also has M4. Its 512-word implementation and original probes do not
-accept #28/M4. Project membership/catalog reconciliation remains pending because
-the new environment's named credential still returns `Resource not accessible
-by integration` for personal Project #2. No live status or dashboard update is
-claimed; the reviewed Mario transitions remain queued.
+merged PR #98 also has M4 and passing hosted Required CI and Documentation.
+Its 512-word implementation and original probes do not accept #28/M4. Project
+membership/catalog reconciliation and the reviewed Mario transitions remain
+queued for the verified Actions management identity.
+
+## Next renderer features
 
 | Feature | Parent task | Acceptance focus |
 | --- | --- | --- |

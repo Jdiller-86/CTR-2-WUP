@@ -3,15 +3,28 @@
 All releases are development increments. RPX/WUHB diagnostics and desktop passes
 do not establish commercial-game compatibility or installable WUP acceptance.
 
-## Unreleased shader capacity — 2026-10-14
+## Public repository consolidation — 2026-10-14
+
+- Follow the owner's public-source decision and restored hosted Actions access.
+- Stage checked documentation and live aggregate progress into the source
+  repository's canonical Pages deployment; remove cross-repository generated writes.
+- Add fixed dry-run/apply Actions management on immutable main with the existing
+  management secret. Preserve Project notes, review markers and full gate limits.
+- Prepare old-site redirects and current versioned diagnostic/documentation
+  artifacts; deployment and live reconciliation need their actual receipts.
+- Add a source-matched Guest Draws release kit with exact original frame,
+  binary, SDK, source/notice and checksum checks. Preserve earlier scoped
+  console evidence without asking for unchanged passed tests again.
+## Merged shader capacity — 2026-10-14
 
 - Expand checked vertex code storage to 512 words while retaining MOV/NOP/END
   semantics, explicit undefined/unsupported failures and bounded execution.
 - Probe every slot/entry, upload ports/batches, final END, exhausted cursors and
   late failure after staged draws; preserve guest state, pixels and queue completion.
 - Measure 1,280 added bytes per retained/staged scene and unchanged native stack
-  frames. Scoped issue #97/PR #98 advances #28/M4; required platform validation
-  and Project membership remain pending, so no merge or full gate is accepted.
+  frames. Scoped issue #97/PR #98 advances #28/M4 after required hosted Windows,
+  Python, sanitizer, Wii U and documentation checks. Project reconciliation is
+  tracked separately; no full gate or commercial shader execution is accepted.
 
 ## Development continuity — 2026-10-14
 

@@ -14,10 +14,11 @@ REPOSITORY = 'Jdiller-86/CTR-2-WUP'
 
 
 def configure(client, settings, apply=False):
-    if (settings.get('repository') != REPOSITORY or settings.get('paid_features_enabled') is not False
+    if (settings.get('repository') != REPOSITORY or settings.get('expected_visibility') != 'public'
+            or settings.get('paid_features_enabled') is not False
             or settings.get('visibility_change_requested') is not False
             or settings.get('development_policy', {}).get('branch_protection_requested') is not False):
-        raise publisher.PublishError('Preserve the private/free/no-protection repository policy.')
+        raise publisher.PublishError('Preserve the public/free/no-protection repository policy.')
     description = settings.get('description')
     topics = settings.get('topics')
     if (not isinstance(description, str) or not 1 <= len(description) <= 350
@@ -26,24 +27,35 @@ def configure(client, settings, apply=False):
             or len(set(topics)) != len(topics)):
         raise publisher.PublishError('Review the description/topics before applying settings.')
     repository = client.api('repos/' + REPOSITORY)
-    if repository.get('full_name') != REPOSITORY or repository.get('private') is not True:
-        raise publisher.PublishError('The authorized application repository must remain private.')
-    values = {'description': description, 'homepage': 'https://jdiller-86.github.io/CTR-2-WUP-docs/',
+    if repository.get('full_name') != REPOSITORY or repository.get('private') is not False:
+        raise publisher.PublishError('The authorized application repository must remain public.')
+    pages = client.api('repos/' + REPOSITORY + '/pages', missing=True)
+    if pages is not None and (pages.get('build_type') != 'workflow' or pages.get('cname')):
+        raise publisher.PublishError('Preserve an unexpected existing Pages configuration for review.')
+    values = {'description': description, 'homepage': 'https://jdiller-86.github.io/CTR-2-WUP/',
               'has_discussions': True, 'delete_branch_on_merge': True}
     result = {'ok': True, 'applied': apply, 'repository': REPOSITORY,
-              'private': True, 'paid_features_enabled': False, 'branch_protection_changed': False,
-              'requested_features': ['About/documentation URL', 'topics', 'Discussions', 'merged-branch cleanup', 'Dependabot alerts']}
+              'private': False, 'paid_features_enabled': False, 'branch_protection_changed': False,
+              'requested_features': ['About/documentation URL', 'topics', 'Discussions', 'merged-branch cleanup', 'Dependabot alerts', 'canonical workflow Pages']}
     if not apply:
         return result
     client.api('repos/' + REPOSITORY, 'PATCH', values)
     client.api('repos/' + REPOSITORY + '/topics', 'PUT', {'names': topics})
     client.api('repos/' + REPOSITORY + '/vulnerability-alerts', 'PUT')
+    if pages is None:
+        client.api('repos/' + REPOSITORY + '/pages', 'POST', {'build_type': 'workflow'})
     verified = client.api('repos/' + REPOSITORY)
-    if (verified.get('private') is not True or any(verified.get(key) != value for key, value in values.items())
+    if (verified.get('private') is not False or any(verified.get(key) != value for key, value in values.items())
             or set(verified.get('topics', [])) != set(topics)):
         raise publisher.PublishError('Repository feature verification did not match the reviewed settings.')
     # This endpoint succeeds only when alerts are enabled (204), otherwise 404.
     client.api('repos/' + REPOSITORY + '/vulnerability-alerts')
+    pages = client.api('repos/' + REPOSITORY + '/pages')
+    if (pages.get('build_type') != 'workflow' or pages.get('cname')
+            or pages.get('html_url') != values['homepage']):
+        raise publisher.PublishError('Canonical workflow Pages configuration did not verify.')
+    result['pages_configuration_verified'] = True
+    result['pages_deployment_verified'] = False
     result['live_settings_verified'] = True
     return result
 

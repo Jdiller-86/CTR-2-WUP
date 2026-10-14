@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Publish the verified docs-only export to the authorized public Pages repo.
+"""Stage checked documentation or dispatch Pages for the canonical public source.
 
 Dry-run by default. Run only from trusted main with normal gh authentication.
-Never copy the application checkout, alter its visibility or force a branch.
+Only validated site files are staged. Never write generated files into source.
 """
 import argparse
-import base64
+import os
+import tempfile
 import hashlib
 import importlib.util
 import json
@@ -16,7 +17,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = 'Jdiller-86/CTR-2-WUP'
-TARGET = 'Jdiller-86/CTR-2-WUP-docs'
+TARGET = SOURCE
 spec = importlib.util.spec_from_file_location('docs_package', ROOT / 'tools/package-docs-site.py')
 docs = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(docs)
@@ -77,7 +78,7 @@ def bundle(folder, commit):
                     or '\\' in row.filename or row.filename in entries or row.is_dir()
                     or (row.external_attr >> 16) & 0o170000 == 0o120000):
                 raise PublishError('Documentation archive contains unsafe or duplicate paths.')
-            if row.filename not in ('README.md', 'SHA256SUMS.txt', 'documentation-provenance.json', '.github/workflows/pages.yml'):
+            if row.filename not in ('README.md', 'SHA256SUMS.txt', 'documentation-provenance.json'):
                 relative = path.relative_to('site') if path.parts[0] == 'site' else None
                 if (relative is None or len(path.parts) < 2
                         or any(part.lower() in {'private', '.git', '.github', '.env', 'artifacts', 'build', 'obj', 'bin'} for part in relative.parts)
@@ -88,8 +89,6 @@ def bundle(folder, commit):
             if data.startswith((b'\x7fELF', b'MZ', b'WUHB')):
                 raise PublishError('Executable payload cannot be published as documentation.')
             entries[row.filename] = data
-    if entries.get('.github/workflows/pages.yml') != docs.PAGES_WORKFLOW.encode():
-        raise PublishError('The public Pages workflow differs from its reviewed template.')
     if json.loads(entries.get('documentation-provenance.json', b'{}')).get('source_commit') != commit:
         raise PublishError('Embedded documentation provenance differs from the reviewed source.')
     if 'site/index.html' not in entries or 'site/search/search_index.json' not in entries:
@@ -101,65 +100,45 @@ def bundle(folder, commit):
     return report, entries
 
 
+def stage(folder, commit, output):
+    report, entries = bundle(folder, commit)
+    output = output.resolve()
+    artifacts = (ROOT / 'artifacts').resolve()
+    if not output.is_relative_to(artifacts) or output == artifacts or output.exists():
+        raise PublishError('Stage into a fresh directory under ignored artifacts/.')
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='.pages-', dir=output.parent) as temporary:
+        site = Path(temporary) / 'site'
+        for name, data in entries.items():
+            if name.startswith('site/'):
+                target = Path(temporary) / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(data)
+        (site / 'documentation-provenance.json').write_bytes(entries['documentation-provenance.json'])
+        os.replace(site, output)
+    return {'ok': True, 'source_commit': commit, 'stage': str(output),
+            'documentation_only': True, 'pages_deployment_verified': False}
+
+
 def publish(folder, commit, client, apply=False, create=False):
-    report, entries = bundle(folder, commit)  # Validate everything before any API mutation.
+    report, entries = bundle(folder, commit)
+    if create:
+        raise PublishError('The canonical source repository must already exist; creation is unsupported.')
     source = client.api('repos/' + SOURCE)
-    if source.get('full_name') != SOURCE or source.get('private') is not True:
-        raise PublishError('The application repository must remain private.')
-    target = client.api('repos/' + TARGET, missing=True)
-    result = {'ok': True, 'applied': apply, 'repository': TARGET, 'source_commit': commit,
+    if (not isinstance(source, dict) or source.get('full_name') != SOURCE
+            or source.get('private') is not False or source.get('default_branch') != 'main'):
+        raise PublishError('The authorized source must be public and use main; preserve unexpected settings.')
+    result = {'ok': True, 'applied': apply, 'repository': SOURCE, 'source_commit': commit,
               'documentation_only': True, 'application_visibility_changed': False,
-              'files': len(entries), 'repository_created': False, 'pages_deployment_verified': False}
-    if target is None:
-        if not create:
-            raise PublishError('The authorized docs-only repository does not yet exist; use explicit --create.')
-        if client.api('user').get('login') != 'Jdiller-86':
-            raise PublishError('Only the authorized owner may create this docs repository.')
-        if not apply:
-            result['would_create_repository'] = True
-            return result
-        target = client.api('user/repos', 'POST', {'name': 'CTR-2-WUP-docs', 'private': False,
-                             'auto_init': True, 'description': 'Documentation and aggregate progress for CTR2WUP. Application source remains private.'})
-        result['repository_created'] = True
-        if target.get('default_branch') != 'main':
-            branch = target.get('default_branch', '')
-            if not re.fullmatch('[A-Za-z0-9_-]+', branch):
-                raise PublishError('New docs repository has an unsupported initial branch.')
-            client.api('repos/' + TARGET + '/branches/' + branch + '/rename', 'POST', {'new_name': 'main'})
-            target = client.api('repos/' + TARGET)
-    if target.get('full_name') != TARGET or target.get('private') is not False or target.get('default_branch') != 'main':
-        raise PublishError('Preserve and review the existing docs repository identity/visibility/branch.')
-    if not apply:
-        return result
-    pages = client.api('repos/' + TARGET + '/pages', missing=True)
-    if pages is None:
-        client.api('repos/' + TARGET + '/pages', 'POST', {'build_type': 'workflow'})
-    elif pages.get('build_type') != 'workflow':
-        client.api('repos/' + TARGET + '/pages', 'PUT', {'build_type': 'workflow'})
-    base = client.api('repos/' + TARGET + '/git/ref/heads/main')['object']['sha']
-    tree = client.api('repos/' + TARGET + '/git/commits/' + base)['tree']['sha']
-    prior = client.api('repos/' + TARGET + '/git/trees/' + tree + '?recursive=1')
-    if prior.get('truncated'):
-        raise PublishError('Docs tree exceeds the bounded publication budget.')
-    old = {row['path']: row['sha'] for row in prior['tree'] if row['type'] == 'blob'}
-    changes = []
-    for path, data in entries.items():
-        blob_sha = hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
-        if old.get(path) == blob_sha:
-            continue
-        try:
-            record = {'content': data.decode('utf-8')}
-        except UnicodeDecodeError:
-            blob = client.api('repos/' + TARGET + '/git/blobs', 'POST', {'encoding': 'base64', 'content': base64.b64encode(data).decode('ascii')})
-            record = {'sha': blob['sha']}
-        changes.append({'path': path, 'mode': '100644', 'type': 'blob', **record})
-    if changes:
-        built = client.api('repos/' + TARGET + '/git/trees', 'POST', {'base_tree': tree, 'tree': changes})
-        created = client.api('repos/' + TARGET + '/git/commits', 'POST', {'tree': built['sha'], 'parents': [base],
-                             'message': 'Publish verified CTR2WUP documentation ' + report['version']})
-        client.api('repos/' + TARGET + '/git/refs/heads/main', 'PATCH', {'sha': created['sha'], 'force': False})
-        result['commit'] = created['sha']
-    result['changed_files'] = len(changes)
+              'files': len(entries), 'pages_deployment_verified': False,
+              'workflow_dispatched': False}
+    if apply:
+        current = client.api('repos/' + SOURCE + '/commits/main')
+        if not isinstance(current, dict) or current.get('sha') != commit:
+            raise PublishError('Dispatch requires the current trusted main commit.')
+        client.api('repos/' + SOURCE + '/actions/workflows/publish-docs.yml/dispatches',
+                   'POST', {'ref': 'main'})
+        result['workflow_dispatched'] = True
     return result
 
 
@@ -168,11 +147,17 @@ def main():
     parser.add_argument('--input', type=Path, required=True)
     parser.add_argument('--source-commit', required=True)
     parser.add_argument('--apply', action='store_true')
-    parser.add_argument('--create', action='store_true')
+    parser.add_argument('--create', action='store_true', help=argparse.SUPPRESS)
+    parser.add_argument('--stage', type=Path, help='Stage checked site files locally; no API calls')
     parser.add_argument('--output', type=Path)
     args = parser.parse_args()
     try:
-        result = publish(args.input, args.source_commit, GitHub(), args.apply, args.create)
+        if args.stage is not None:
+            if args.apply or args.create:
+                raise PublishError('Local staging cannot be combined with API apply/create.')
+            result = stage(args.input, args.source_commit, args.stage)
+        else:
+            result = publish(args.input, args.source_commit, GitHub(), args.apply, args.create)
     except (PublishError, OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired, zipfile.BadZipFile) as error:
         result = {'ok': False, 'error': str(error) if isinstance(error, PublishError) else 'Documentation publication could not be verified; review Actions receipt.'}
     if args.output:

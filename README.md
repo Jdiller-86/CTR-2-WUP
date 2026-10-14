@@ -2,12 +2,16 @@
 
 [![CI](https://github.com/Jdiller-86/CTR-2-WUP/actions/workflows/ci.yml/badge.svg)](https://github.com/Jdiller-86/CTR-2-WUP/actions/workflows/ci.yml)
 
-[Documentation](https://jdiller-86.github.io/CTR-2-WUP-docs/) · [Releases](https://github.com/Jdiller-86/CTR-2-WUP/releases) · [Project](https://github.com/users/Jdiller-86/projects/2) · [Contributing](CONTRIBUTING.md)
+[Documentation](https://jdiller-86.github.io/CTR-2-WUP/) · [Releases](https://github.com/Jdiller-86/CTR-2-WUP/releases) · [Project](https://github.com/users/Jdiller-86/projects/2) · [Contributing](CONTRIBUTING.md)
 
 First visit? [Take the repository tour](docs/repository-guide.md).
 
 Contributors can [develop and manage tracking without hosted Actions](docs/direct-development.md)
 using secure API access and recorded local validation.
+
+Source is public. Documentation and the live aggregate dashboard are being
+consolidated into this repository's Pages site; [current status](STATUS.md)
+records verified deployment, tracking and artifact evidence.
 
 CTR2WUP is an experimental 3DS-to-Wii U converter. Its goal is a Windows GUI
 that translates a 3DS game into an individual WUP title, with the top screen
@@ -46,15 +50,15 @@ for the supported subsets and current limits.
   original [software triangle scenes](docs/software-scenes.md), now driven by a
   [compiled guest through standard GSP](docs/guest-pica-draws.md). Broader PICA
   state, GPU shader translation and 3DS guest audio remain unfinished.
-- Unreleased [512-word vertex code capacity](docs/software-scenes.md#vertex-code-capacity)
-  has original upload/entry/rollback probes in draft PR #98; required platform
-  checks remain pending.
+- Merged [512-word vertex code capacity](docs/software-scenes.md#vertex-code-capacity)
+  has original upload/entry/rollback probes and passing required hosted platform
+  checks in PR #98; broader shader semantics remain open.
 - Reproducible RPX/WUHB diagnostics and original packaging fixtures. Actual
   WUP installation and full Windows conversion still require acceptance.
 
 ## Progress
 
-[![Project progress](https://jdiller-86.github.io/CTR-2-WUP-docs/progress/gates.svg)](https://jdiller-86.github.io/CTR-2-WUP-docs/progress/)
+[![Project progress](https://jdiller-86.github.io/CTR-2-WUP/progress/gates.svg)](https://jdiller-86.github.io/CTR-2-WUP/progress/)
 
 The chart is generated from live Project fields and refreshed hourly. It shows
 task status separately from full milestone acceptance. Click it for the

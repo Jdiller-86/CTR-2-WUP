@@ -90,8 +90,8 @@ def package(folder, audio, transfer_report, transfer_dir):
     notes = folder / 'release-notes.md'
     notes.write_text(notes.read_text() + '\n## Short audio retest\n\n'
                      + f'Use **{name}** for only Audio Check and GX Transfers. Follow START-HERE.md, '
-                     + 'then upload their new plain-text results from sd:/ctr2wup/ and report music/Minus return. '
-                     + 'Save/RomFS are already verified; no repeat is needed. The new audio behavior awaits console confirmation.\n')
+                     + 'if a changed audio/lifecycle path needs a focused regression; retain plain-text results and source identity. '
+                     + 'October 13 Audio Check/GX 0.20.0 scoped silence/tone/exit results are reviewed, as are Save/RomFS. Do not repeat unchanged completed tests. This new build has no separate physical acceptance.\n')
     records = manifest['artifacts'] + [{'name': 'manifest.json'}, {'name': 'release-notes.md'}]
     (folder / 'SHA256SUMS.txt').write_text(''.join(release.sha256(folder / row['name']) + '  ' + row['name'] + '\n'
                                                for row in sorted(records, key=lambda row: row['name'])))

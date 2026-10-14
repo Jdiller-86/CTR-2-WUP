@@ -21,7 +21,7 @@
     "merge_after_required_ci_and_documentation_pass": true,
     "preserve_existing_history": true,
     "branch_protection_requested": false,
-    "branch_protection_reason": "Private repository on GitHub Free; user explicitly declined protections."
+    "branch_protection_reason": "Owner declined protections; retain topic branches, reviews and required checks after the owner-made visibility change."
   },
   "project_requested": {
     "title": "CTR2WUP Development",
@@ -56,18 +56,20 @@
     ]
   },
   "pages_requested": {
-    "repository": "Jdiller-86/CTR-2-WUP-docs",
+    "repository": "Jdiller-86/CTR-2-WUP",
     "public_docs_only": true,
     "build_type": "workflow",
-    "workflow": ".github/workflows/docs.yml",
-    "expected_url": "https://jdiller-86.github.io/CTR-2-WUP-docs/",
+    "workflow": ".github/workflows/publish-docs.yml",
+    "expected_url": "https://jdiller-86.github.io/CTR-2-WUP/",
     "require_successful_strict_build": true,
     "preserve_repository_visibility": true,
-    "source_private_pages": "unavailable on the user's current free plan"
+    "legacy_repository": "Jdiller-86/CTR-2-WUP-docs",
+    "legacy_role": "redirect/archive after canonical publication verification"
   },
   "paid_features_enabled": false,
   "visibility_change_requested": false,
-  "project_live_verified": true,
-  "pages_live_verified": true,
-  "operations_receipts": "Trusted-main repository features, Project tracking and public documentation Actions retain live operation receipts; desired source settings are not a substitute for API verification."
+  "project_live_verified": false,
+  "pages_live_verified": false,
+  "operations_receipts": "Trusted-main repository features, Project tracking and public documentation Actions retain live operation receipts; desired source settings are not a substitute for API verification.",
+  "expected_visibility": "public"
 }

@@ -80,8 +80,8 @@ The structure adapts [Odysseus's coordination milestone](https://github.com/odys
 [review template](https://github.com/odysseus-dev/odysseus/blob/dev/.github/pull_request_template.md):
 focused tasks, explicit blockers/evidence, triage priority and reproducible review.
 CTR2WUP's acceptance criteria remain specific to Wii U execution and the planned
-injector; unavailable console/game tests stay pending. The user's GitHub Free,
-private-source and no-branch-protection choices remain in force.
+injector; unavailable console/game tests stay pending. The owner's public-source decision and existing no-branch-protection preference
+remain in force; hosted public Actions is available.
 
 ## Development continuity
 
@@ -130,13 +130,15 @@ Aroma/RPX launch and report delivery.
 
 The **Publish development diagnostics** workflow is dispatched explicitly from
 main with the version in `pyproject.toml`. It runs required checks, verifies SDK/
-lifter/libctru pins, executes the original GX application with sanitizers, builds
+lifter/libctru pins, executes original GX and Guest Draws with sanitizers and
+independent exact frame checks, builds
 RPX/WUHB and smoke-tests the wheel. The packager checks reported binaries/frames,
 source and wheel module equality, ZIP CRCs and SHA-256 sums. A separate job with
 `contents: write` publishes the matching prerelease with GitHub's native token;
 a failed upload leaves a draft. Published versions cannot be replaced by different
 artifacts. This route also avoids the cloud connection's rejected upload-host
-authentication. It does not close console or commercial acceptance gates.
+authentication. It does not close console or commercial acceptance gates. The current source is
+0.23.0; older published versions remain immutable and identified by their tags.
 
 ## Agent support
 
@@ -161,12 +163,14 @@ opens directly in a browser**, with navigation, search and a print layout. The
 HTML guide requires no account, server or internet connection to read its content.
 Download it from a matching development release or Documentation run artifact.
 
-The public [CTR2WUP documentation site](https://jdiller-86.github.io/CTR-2-WUP-docs/)
-is deployed on free GitHub Pages while application source stays private. The
-export contains rendered guides, notices, provenance and a pinned Pages workflow;
-application code, ROMs, keys and private test data are excluded. Publication and
-Pages Actions succeeded, and HTTP checks verify the site, dashboard, JSON and
-chart. Private-source Pages is not used. The offline reader remains available.
+The canonical [CTR2WUP documentation site](https://jdiller-86.github.io/CTR-2-WUP/)
+and live dashboard are built and deployed from this public source repository.
+The **Publish project site** workflow stages the checked export, reads Project
+#2 with the Actions management secret, adds only privacy-checked aggregates and
+deploys through native GitHub Pages. The site never includes commercial inputs,
+credentials or raw Project notes. The former docs repository is a migration
+source/redirect target, not a second maintained article tree. Migration and live
+HTTP verification are recorded in [current status](../STATUS.md).
 
 ```sh
 python3 -m venv artifacts/docs-build-venv
@@ -178,20 +182,20 @@ artifacts/docs-build-venv/bin/python tools/package-docs-site.py
 The strict build validates rendered links, anchors, search and assets. The site is
 in `artifacts/docs-site/site/`; the HTML guide and public-repository bundle are
 in `artifacts/docs-publication/`. Their JSON receipts and checksums identify the
-source commit. Source links stay commit-specific and require repository access.
+source commit. Source links stay commit-specific and are publicly readable.
 The site and HTML guide preserve the product goal, progress and acceptance limits.
 
 ## Maintenance on GitHub Free
 
-The private source repository uses topic branches and reviewable pull requests.
+The public source repository uses topic branches and reviewable pull requests.
 Check the latest **Required CI** and **Documentation build** on the PR before
 merging; keep source and evidence together. Preserve history and use a new
 version for changed published artifacts. Dependencies/actions are pinned,
 CODEOWNERS identifies the maintainer, and contributor/security/result guides
 provide the review context.
 
-The user explicitly declined branch protection because the repository is private
-on GitHub Free. No protection rule or administration setup tool is incorporated.
+The user previously declined branch protection; making the repository public does
+not change that preference. No protection or paid feature is enabled by this migration.
 These maintenance practices are team conventions; GitHub does not enforce them.
 
 ## Board setup
@@ -215,10 +219,10 @@ python3 tools/flesh-github-project.py --apply --output artifacts/github-project-
 ```
 
 `applied`, `live_project_verified`, completed operations and partial-change flags
-state what actually happened. A denied read cannot establish a live board. As of
-this source increment the personal secret requirement is saved, but the environment
-reports `has_saved_binding:false`; its Project read still uses the limited
-integration and returns **Resource not accessible by integration**.
+state what actually happened. A denied read cannot establish a live board.
+The Actions management identity reads Project #2 successfully. The environment
+binding is configured separately and still returns an integration access error;
+use the verified Actions route for the reviewed reconciliation.
 
 ## Project-backed progress
 
@@ -236,16 +240,13 @@ accept a full gate. Chart timestamps are visible; the dashboard marks snapshots
 older than two hours stale and preserves the previous update time on read errors.
 GitHub can cache README images; open the dashboard for current freshness.
 
-The public docs publisher runs reviewed immutable main source, requires a strict
-searchable documentation build and verifies the docs-only archive before any
-write. It can explicitly create only `Jdiller-86/CTR-2-WUP-docs` as public, configure
-free workflow-based Pages and publish its generated site. Application visibility
-never changes. Both publishers preserve existing tree contents and update main
-without force. Progress lives in `site/progress/`, inside the Pages upload root.
-[The documentation site](https://jdiller-86.github.io/CTR-2-WUP-docs/) and
-[interactive dashboard](https://jdiller-86.github.io/CTR-2-WUP-docs/progress/) are
-live. Their HTML, aggregate JSON and chart return HTTP 200; publication and Pages
-Actions succeeded. The README embeds the generated chart.
+The canonical publisher checks out immutable main, validates the searchable
+documentation export and stages it together with freshly read Project aggregates.
+It deploys one Pages artifact from `CTR-2-WUP`; it never creates another repository
+or commits generated article trees. The dashboard lives at `progress/` under the
+same deployment. Legacy articles become guarded redirects only after canonical
+source identity and available Project data verify. [Current status](../STATUS.md)
+records deployment, migration and live reconciliation receipts.
 
 Only seven documented milestone names, aggregate counts, accepted-gate counts,
 fixed waiting-resource categories, freshness and the Project link enter the public
@@ -256,8 +257,8 @@ Configure `CTR2WUP_GITHUB_MANAGEMENT_TOKEN` in repository Actions secrets with
 Project and the required repository/Pages permissions. Cloud-environment secrets
 are separate; the Actions route is verified, while cloud Project calls still use
 a limited integration. Tokens are never requested in chat or copied into reports.
-Use trusted-main **Project tracking** for setup/export and **Publish public
-documentation** for docs-only publication. Neither runs untrusted PR code with
+Use trusted-main **Project tracking** for setup/export, **Reviewed GitHub
+management** for bounded operations and **Publish project site** for deployment. Neither runs untrusted PR code with
 the management token. Dry-run tools are available for reviewing mutations.
 
 ## Repository settings and authentication
@@ -266,19 +267,20 @@ Normal Git, issues, milestones, PRs and Actions use the connected integration.
 Its direct cloud Project/administration calls remain limited. Trusted-main
 management workflows use the separate repository Actions secret
 `CTR2WUP_GITHUB_MANAGEMENT_TOKEN`; this route has populated Project #2 and
-published the docs-only Pages site. No further token entry is needed for those
-verified operations.
+published the historical docs site. Canonical deployment is verified separately;
+no further token entry is needed for the working Actions identity.
 
 **Repository features** applies the requested About/documentation URL, topics,
-Discussions, merged-branch cleanup and free Dependabot alerts, then verifies the
-result through the API. **Project tracking** owns board setup, explicit reviewed
-task transitions and public aggregates. **Publish public documentation** verifies
-the docs-only export before publication. Each preserves operation receipts.
+Discussions, merged-branch cleanup, free Dependabot alerts and canonical workflow
+Pages configuration, then verifies the result through the API. **Project tracking** owns board setup, explicit reviewed
+task transitions and public aggregates. **Publish project site** verifies
+the docs-only export and deployed HTTP identity. Each preserves operation receipts.
 The [desired settings](../.github/repository-settings.json) specify mutation scope;
 actual API receipts establish which operations succeeded.
 
 Only trusted immutable main code executes with the management token. Values are
 consumed normally by the GitHub CLI and never copied into reports, source or
 chat. Existing owner board values remain authoritative; source synchronization
-cannot overwrite them. No branch protection or paid feature is enabled, and
-application repository visibility remains private.
+cannot overwrite them. Existing branch protections are preserved. The source
+repository is public by owner decision; these tools never change visibility or
+enable paid features.

@@ -62,7 +62,7 @@ class DocsPackageTests(unittest.TestCase):
         self.assertIn(DOCS.page_id('docs/guide/index.html')+'--shared',parsed.ids)
         with zipfile.ZipFile(self.options.output/result['public_bundle']) as archive:
             self.assertIsNone(archive.testzip())
-            self.assertIn('.github/workflows/pages.yml',archive.namelist())
+            self.assertFalse(any(name.startswith('.github/') for name in archive.namelist()))
             self.assertIn('site/'+result['standalone_html'],archive.namelist())
             for line in archive.read('SHA256SUMS.txt').decode().splitlines():
                 expected,name=line.split('  ',1)

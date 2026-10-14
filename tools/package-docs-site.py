@@ -118,7 +118,7 @@ def static_files(site: Path) -> tuple[dict[str, bytes], list[str]]:
 
 
 def local_target(site: Path, page: Path, target: str, site_url: str) -> tuple[Path, str] | None:
-    if target == 'https://jdiller-86.github.io/CTR-2-WUP-docs/progress/':
+    if target == 'https://jdiller-86.github.io/CTR-2-WUP/progress/':
         return None  # Separately published live endpoint; an ordinary external link offline.
     parsed = urlsplit(target)
     base = urlsplit(site_url)
@@ -402,46 +402,6 @@ def audit_static(site: Path, files: dict[str, bytes], site_url: str) -> int:
     return checked
 
 
-PAGES_WORKFLOW = """name: Publish documentation
-on:
-  push:
-    branches: [main]
-  workflow_dispatch:
-permissions:
-  contents: read
-concurrency:
-  group: pages
-  cancel-in-progress: false
-jobs:
-  publish:
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Configure public documentation Pages
-        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
-        with:
-          enablement: false
-      - name: Upload generated documentation only
-        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
-        with:
-          path: site
-      - name: Deploy free public Pages site
-        id: deployment
-        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
-"""
-
-
 def package(options: argparse.Namespace) -> dict:
     root=options.source_root.resolve();site=options.site_dir.resolve();output=options.output.resolve()
     if not site.is_relative_to((root/'artifacts').resolve()) or site==(root/'artifacts').resolve() or 'private' in {part.lower() for part in site.parts}:
@@ -483,59 +443,35 @@ def package(options: argparse.Namespace) -> dict:
         rebased[relative]=data
     rebased[html_name]=standalone.encode()
     public_links=audit_static(site,files,report['site_url'])
-    instructions=f"""# CTR2WUP public documentation
+    instructions=f"""# CTR2WUP documentation export
 
-This repository contains generated documentation only. Application source remains
-in the private CTR2WUP repository. No ROMs, keys, saves, game assets, translated
-game code, SDK or application build binaries belong here.
-
-Website: {public_url}
+Canonical source and website: `{options.public_repository}` · {public_url}
 Source commit: `{commit}` · project version `{version}`.
-CTR2WUP is in early development: the Windows GUI and playable commercial-game
-WUP conversion remain unfinished. See the maintained progress and acceptance pages.
 
-## Free publishing
+This archive contains generated documentation only. No ROMs, keys, saves, game
+assets, translated game code, SDK or application binaries belong here. The
+Windows GUI and playable commercial-game WUP conversion remain unfinished.
 
-1. Create/use the public repository `{options.public_repository}` without changing
-   the private application repository's visibility.
-2. Extract this bundle into its root and push the generated files to `main`.
-3. In Settings → Pages, choose **GitHub Actions** as the source. Initial setup may
-   require the repository owner; no premium plan is needed for public Pages.
-4. The included native workflow publishes only `site/`. If setup or access is
-   denied, retain the generated files and report the actual GitHub error.
+Open `site/{html_name}` for offline navigation, search and printing. External
+source and issue links require internet. Project/runtime and site-engine
+licenses are retained; the raw ARM startup assembly/linker files stay in source.
 
-## Read without a website
+## Maintain and publish
 
-Open `site/{html_name}` in any modern browser. Reading, navigation and search work
-offline with no server or downloads. Printing includes all articles even if a
-search filter is active. External source/issue links require internet and may need
-repository access.
-
-## Update from the authorized source checkout
-
-```sh
-python3 -m venv artifacts/docs-venv
-artifacts/docs-venv/bin/python -m pip install -r docs-requirements.txt
-artifacts/docs-venv/bin/python tools/build-docs-site.py
-python3 tools/package-docs-site.py --output artifacts/docs-publication-NEW
-```
-
-Copy the new generated `site/`, this README and provenance/checksum files here;
-preserve repository settings and the Pages workflow. Do not edit the published
-articles independently: maintain the original Markdown and regenerate. If the
-public repository name changes, pass `--public-repository OWNER/NAME` when packaging.
-
-Project/runtime and site-engine licenses are preserved inside the site. The public
-bundle excludes application source and the raw ARM startup assembly/linker files;
-the maintained notice links back to their original source provenance. Generated
-Material JavaScript/CSS remains part of the documentation site, not game code.
+Maintain Markdown in the public source repository and regenerate with
+`tools/build-docs-site.py` and `tools/package-docs-site.py`. Its trusted-main
+`publish-docs.yml` workflow deploys the checked site and live aggregate dashboard
+through GitHub Pages; no premium plan or separate documentation repository is
+needed. Do not extract this archive over the source checkout or maintain a
+second generated article tree. Prior documentation links redirect to the
+canonical site. This export is suitable for independent offline review.
 """
     output.parent.mkdir(parents=True,exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='.docs-publication-',dir=output.parent) as temporary:
         stage=Path(temporary)
         (stage/html_name).write_text(standalone,encoding='utf-8')
         receipt={"schema_version":1,"ok":True,"version":version,"source_commit":commit,"public_repository":options.public_repository,"public_site_url":public_url,"standalone_html":html_name,"public_bundle":zip_name,"document_pages":len(reader.pages),"embedded_text_attachments":len(reader.attachments),"inline_images":reader.images,"excluded_source_files":excluded,"all_maintained_article_pages_retained":True,"public_site_internal_links_verified":public_links,"archive_contains_documentation_only":True,"application_source_bundled":False,"private_payloads_bundled":False,"progress_milestones_accepted":progress['full_milestones_accepted'],"console_acceptance_claimed":False,**audit}
-        bundle={"README.md":instructions.encode(),".github/workflows/pages.yml":PAGES_WORKFLOW.encode(),"documentation-provenance.json":json.dumps(receipt,indent=2).encode()}
+        bundle={"README.md":instructions.encode(),"documentation-provenance.json":json.dumps(receipt,indent=2).encode()}
         bundle.update({"site/"+name:data for name,data in rebased.items()})
         sums="".join(digest(data)+"  "+name+"\n" for name,data in sorted(bundle.items()))
         bundle["SHA256SUMS.txt"]=sums.encode()
@@ -568,7 +504,7 @@ def main() -> int:
     parser.add_argument('--site-dir',type=Path,default=ROOT/'artifacts/docs-site/site')
     parser.add_argument('--build-report',type=Path,default=ROOT/'artifacts/docs-site/build-report.json')
     parser.add_argument('--output',type=Path,default=ROOT/'artifacts/docs-publication')
-    parser.add_argument('--public-repository',default='Jdiller-86/CTR-2-WUP-docs')
+    parser.add_argument('--public-repository',default='Jdiller-86/CTR-2-WUP')
     try:report=package(parser.parse_args())
     except (ValueError,OSError,KeyError,TypeError,zipfile.BadZipFile) as error:parser.exit(1,f'Documentation packaging failed: {error}\n')
     print(json.dumps({key:report[key] for key in ('ok','standalone_html','public_bundle','document_pages','internal_anchors_verified','public_site_url')}));return 0

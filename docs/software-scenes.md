@@ -28,8 +28,8 @@ human display observations remain separate. An automatic failure cannot pass
 the picture guide.
 
 This check uses the existing native audio initialization and report/exit
-lifecycle. It does not replace the pending Audio Check/GX Transfers 0.20.0
-launch-music regression or repeat the completed Save/RomFS guides.
+lifecycle. The reviewed October 13 Audio Check/GX Transfers 0.20.0 and
+Save/RomFS results remain valid for their builds; no unchanged guide repeat is requested.
 
 ## Execution boundary
 
@@ -71,7 +71,7 @@ in-place swizzles and rejects undefined lanes or missing code/END.
 
 ### Vertex code capacity
 
-The unreleased capacity increment in [PR #98](https://github.com/Jdiller-86/CTR-2-WUP/pull/98)
+The merged capacity increment in [PR #98](https://github.com/Jdiller-86/CTR-2-WUP/pull/98)
 expands code storage from 256 to **512 words**. Entries 0–511 are valid;
 execution must encounter an actual END before leaving word 511. The upload
 cursor may retain the exhausted value 512, but another code word fails without
@@ -97,8 +97,8 @@ object grows from 3,556 to 4,836 bytes and scene state from 8,952 to 10,232 byte
 Each retained/staged scene therefore adds 1,280 heap bytes. Compiler
 `-fstack-usage` reports unchanged static frames: shader execution 640 bytes,
 scene execution 928 bytes, guest adapter 272 bytes. These are cross-compiler
-measurements, not physical memory/performance observations. Required Windows
-and hosted checks remain pending; this runtime PR stays draft. No commercial
+measurements, not physical memory/performance observations. Required Windows,
+Python, sanitizer, Wii U and documentation hosted checks pass. No commercial
 shader is executed by these original probes.
 
 The native Scene Check runs this CPU path, flips its owned image rows for display,

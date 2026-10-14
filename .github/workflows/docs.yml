@@ -69,6 +69,5 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
-# The source repository is private on GitHub Free. Publish the generated docs-only
-# bundle in a separate public repository; its native Pages workflow needs no paid
-# plan and cannot expose the application source or private development files.
+# The public source repository hosts its own checked documentation and dashboard.
+# The export remains docs-only: commercial/private inputs never enter Pages.

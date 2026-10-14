@@ -967,3 +967,15 @@ add opaque Windows binaries, inherited-source license ambiguity, wildcard
 cleanup or network seed fetching to the GUI pipeline. A source-built external
 backend remains an option only if a concrete unmet requirement justifies it.
 See [the audit](batch-decryptor-audit.md) and its original CCI handoff proof.
+
+## Archived status before the public-source migration
+
+The earlier October 14 checkpoint used private source, a separate docs-only
+repository and a hosted Actions outage. The environment binding could manage
+repository API operations but could not read the personal Project. The owner
+then made source public; hosted CI and Actions-secret Project reads resumed.
+
+The complete [pre-migration status snapshot](https://github.com/Jdiller-86/CTR-2-WUP/blob/d15d194386b8294d5d8949361209a38cd61f131b/STATUS.md)
+is preserved in Git. Its source-visibility, billing, Project and publication
+statements describe that earlier checkpoint. [Current status](../STATUS.md)
+supersedes those conditions without changing physical/commercial acceptance.

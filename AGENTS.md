@@ -98,6 +98,17 @@ versioned metadata and milestone evidence. Keep the current plan concise; put
 chronological background in `docs/development-history.md`. Validate maintained
 docs with `python3 tools/build-docs-site.py` using `docs-requirements.txt`.
 
+## Public repository and publication
+
+The owner made source public on October 14, 2026. Canonical documentation and
+the aggregate dashboard deploy from this repository through `publish-docs.yml`.
+Never restore the former private-source assumption or a second generated article
+repository. The old docs site is retained only for migration redirects/history.
+Keep commercial inputs and raw Project notes private even though source and
+Actions artifacts are public. Prefer Reviewed GitHub management on immutable
+main with the existing Actions secret; verify dry-run/apply receipts and actual
+Pages HTTP outcomes separately.
+
 ## Visible delivery and GitHub access
 
 - Develop on a focused topic branch. Commit useful checkpoints and push a draft
