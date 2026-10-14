@@ -632,8 +632,8 @@
         "The script runs on Windows/Python without a project installation; only selected files and a bounded receipt enter the private ZIP."
       ],
       "evidence": [
-        "22 original focused Python cases: actual original preparation/assets integration, isolated CLI, source/revision/hash/path/range boundaries, source mutation and atomic output preservation.",
-        "Required full coverage: 414 Python cases; no commercial input is included in source or CI artifacts.",
+        "23 original focused Python cases: actual original preparation/assets integration, isolated CLI, source/revision/hash/path/range boundaries, source mutation, path/handle timestamp precision and atomic output preservation.",
+        "Required full coverage: 415 Python cases; no commercial input is included in source or CI artifacts.",
         "Standalone script/guide/license artifact and contract: docs/private-asset-samples.md; source review: https://github.com/Jdiller-86/CTR-2-WUP/pull/93",
         "Supplied schema-1/0.20.0 report metadata validates; actual selected bytes and archive/shader/audio/module requirements remain uninspected."
       ]

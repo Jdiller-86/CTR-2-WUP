@@ -84,7 +84,8 @@ def fingerprint(value):
 class Input:
     def __init__(self, path, stack):
         self.path = Path(path).absolute()
-        if self.path.is_symlink() or not self.path.is_file():
+        self.initial_path = os.stat(self.path, follow_symlinks=False)
+        if not stat.S_ISREG(self.initial_path.st_mode):
             fail("unsafe_input", "Inputs must be regular files, not symbolic links")
         flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
         fd = os.open(self.path, flags)
@@ -92,11 +93,19 @@ class Input:
         self.initial = os.fstat(self.handle.fileno())
         if not stat.S_ISREG(self.initial.st_mode):
             fail("unsafe_input", "Inputs must be regular files")
+        # Windows path stat and CRT handle fstat can expose different timestamp
+        # precision/identity fields. Compare each API against its own snapshot;
+        # keep the path identity for alias detection and the handle for reads.
+        if self.initial.st_size != self.initial_path.st_size:
+            fail("input_changed", "An input changed while opening it")
+        if os.name != "nt" and not os.path.samestat(self.initial, self.initial_path):
+            fail("input_changed", "An input was replaced while opening it")
+        self.unchanged()
 
     def unchanged(self):
         current = os.stat(self.path, follow_symlinks=False)
         if (not stat.S_ISREG(current.st_mode) or
-                fingerprint(current) != fingerprint(self.initial) or
+                fingerprint(current) != fingerprint(self.initial_path) or
                 fingerprint(os.fstat(self.handle.fileno())) != fingerprint(self.initial)):
             fail("input_changed", "An input changed during export; retry with stable files")
 
@@ -265,7 +274,7 @@ def export_samples(manifest, preparation_report, romfs, paths, output):
             manifest_input, preparation_input, blob_input = [Input(p, stack) for p in
                                                             (manifest, preparation_report, romfs)]
             inputs = (manifest_input, preparation_input, blob_input)
-            identities = {(s.initial.st_dev, s.initial.st_ino) for s in inputs}
+            identities = {(s.initial_path.st_dev, s.initial_path.st_ino) for s in inputs}
             if len(identities) != len(inputs):
                 fail("input_alias", "Each input must be a distinct regular file")
             asset, manifest_hash = read_report(manifest_input, "prepare-assets")

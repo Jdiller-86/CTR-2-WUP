@@ -9,6 +9,8 @@ do not establish commercial-game compatibility or installable WUP acceptance.
   matching report provenance, full-blob/selected-file hashes and bounded ZIPs.
 - Reject ambiguous paths, invalid extents, changed inputs and output replacement;
   retain a private receipt with explicit integrity/compatibility evidence limits.
+- Compare path/handle metadata against their respective stable snapshots so
+  Windows timestamp precision differences do not reject unchanged sources.
 - Publish a small script/guide/license CI artifact with original boundary tests;
   existing schema-1/0.20.0 reports work without reinstalling the host wheel.
 

@@ -1,5 +1,6 @@
 """Original-byte fixtures for standalone private sample publication boundaries."""
 import copy
+from contextlib import ExitStack
 import hashlib
 import importlib.util
 import json
@@ -7,6 +8,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 import zipfile
@@ -293,6 +295,22 @@ class AssetSampleExportTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, "input_changed")
         self.assertFalse(self.output.exists())
         self.assertFalse(list(self.root.glob(".ctr2wup-samples-*")))
+
+    def test_path_and_handle_timestamp_precision_need_not_match(self):
+        actual = self.blob.stat()
+        handle = SimpleNamespace(st_mode=actual.st_mode, st_dev=actual.st_dev,
+                                 st_ino=actual.st_ino, st_size=actual.st_size,
+                                 st_mtime_ns=actual.st_mtime_ns//10**9*10**9,
+                                 st_ctime_ns=actual.st_ctime_ns//10**9*10**9)
+        # Model Windows CRT fstat precision while path stat retains nanoseconds.
+        with ExitStack() as stack, patch.object(exporter.os, "fstat", return_value=handle):
+            source = exporter.Input(self.blob, stack)
+            source.unchanged()
+            self.assertEqual(source.sha256(), sha(self.blob.read_bytes()))
+            self.blob.write_bytes(self.blob.read_bytes()+b"changed")
+            with self.assertRaises(exporter.SampleError) as caught:
+                source.unchanged()
+            self.assertEqual(caught.exception.code, "input_changed")
 
 
 if __name__ == "__main__":
