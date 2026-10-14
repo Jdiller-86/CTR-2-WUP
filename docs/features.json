@@ -596,8 +596,10 @@
       "title": "Review private Mario preparation provenance and asset inventory",
       "milestone": 5,
       "parent_issue": 32,
-      "state": "planned",
-      "pull_requests": [],
+      "state": "implemented",
+      "pull_requests": [
+        90
+      ],
       "scope": [
         "Cross-check local preparation and asset-manifest reports against the independently inspected executable/revision.",
         "Record aggregate asset/module findings and precise remaining byte-access/runtime requirements without publishing reports or commercial data."
@@ -608,7 +610,8 @@
       ],
       "evidence": [
         "October 13 private reports match the prepared main and verified USA executable/revision.",
-        "Reported RomFS: 1,756 files, 19 directories, 298,080,796 bytes; raw asset bytes remain on the user PC."
+        "Reported RomFS: 1,756 files, 19 directories, 298,080,796 bytes; raw asset bytes remain on the user PC.",
+        "Evidence review and source plan: https://github.com/Jdiller-86/CTR-2-WUP/pull/90"
       ]
     },
     {
