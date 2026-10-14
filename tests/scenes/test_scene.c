@@ -121,6 +121,42 @@ static void shader_errors(void) {
     CHECK(!memcmp(before,&aliased,sizeof(aliased)));
 #undef FAIL
 }
+static void shader_capacity(void) {
+    /* Fixed architectural boundary, independent of the implementation macro. */
+    CHECK(CTR_SHADER_MAX_CODE==512u);
+    ctr_shader_program p={0};ctr_vertex input={0};ctr_shader_output out,previous;
+    input.enabled=1;p.descriptors[127]=UINT32_C(0x36f);p.descriptor_defined[127]=1;
+    for(unsigned lane=0;lane<4;++lane)input.input[0][lane]=(float)(1u<<lane);
+    for(unsigned pc=0;pc<512u;++pc) { p.code[pc]=UINT32_C(0x84000000);p.code_defined[pc]=1; }
+    p.code[511]=UINT32_C(0x88000000);
+    /* Every executable entry, including both sides of the old 256-word bound.
+     * A high MOV and trailing NOPs must reach the actual final END. */
+    for(unsigned entry=0;entry<511u;++entry) {
+        p.entry=entry;p.code[entry]=mov(0,15,127);
+        CHECK(ctr_shader_execute(&p,&input,&out)==CTR_SHADER_OK && out.instructions==512u-entry);
+        CHECK(out.written[15]==15u);
+        for(unsigned lane=0;lane<4;++lane)CHECK(out.values[15][lane]==input.input[0][lane]);
+        p.code[entry]=UINT32_C(0x84000000);
+    }
+    p.entry=511;
+    CHECK(ctr_shader_execute(&p,&input,&out)==CTR_SHADER_OK && out.instructions==1);
+    for(unsigned reg=0;reg<16;++reg)CHECK(!out.written[reg]);
+    memset(&out,0xa5,sizeof(out));previous=out;
+#define FAIL(expected) do { CHECK(ctr_shader_execute(&p,&input,&out)==expected);CHECK(!memcmp(&out,&previous,sizeof(out))); } while(0)
+    p.code[511]=mov(0,15,127);FAIL(CTR_SHADER_NO_END);
+    p.entry=256;p.code_defined[511]=0;FAIL(CTR_SHADER_UNDEFINED);p.code_defined[511]=1;
+    p.code[511]=0;FAIL(CTR_SHADER_UNSUPPORTED);
+    p.code[511]=mov(0,15,127)|(1u<<19);FAIL(CTR_SHADER_UNSUPPORTED);
+    p.code[511]=UINT32_C(0x88000001);FAIL(CTR_SHADER_UNSUPPORTED);
+    p.code[511]=UINT32_C(0x88000000);p.code_defined[0]=0;
+    CHECK(ctr_shader_execute(&p,&input,&out)==CTR_SHADER_OK && out.instructions==256u);out=previous;
+    const unsigned invalid[]={512u,513u,65535u,UINT32_MAX};
+    for(unsigned i=0;i<sizeof(invalid)/sizeof(*invalid);++i) { p.entry=invalid[i];FAIL(CTR_SHADER_RANGE); }
+    ctr_shader_program before=p;
+    CHECK(ctr_shader_execute(&p,&input,(ctr_shader_output *)&p.code[256])==CTR_SHADER_ALIAS);
+    CHECK(!memcmp(&p,&before,sizeof(p)));
+#undef FAIL
+}
 static void finish(ctr_scene_fixture *f) {
     while(f->command_bytes && (get32(f->commands+f->command_bytes-4u)&65535u)==CTR_PICA_FINALIZE)f->command_bytes-=8u;
     put32(f->commands+f->command_bytes,CTR_PICA_FINALIZE_VALUE);
@@ -236,6 +272,52 @@ static void scenes(void) {
     put32(f.commands+find(&f,0x227,0),96u);put32(f.commands+find(&f,0x227,1),99u);
     CHECK(execute(&f,&state,pixels,&report)==CTR_SCENE_OK);golden(pixels,true,false);
 }
+static void scene_capacity(void) {
+    ctr_scene_fixture f;ctr_scene_state state,previous;ctr_scene_report report;
+    uint8_t pixels[CTR_SCENE_FIXTURE_BYTES],old_pixels[CTR_SCENE_FIXTURE_BYTES];
+    ctr_scene_fixture_make(&f,false);ctr_scene_init(&state);ctr_scene_fixture_background(pixels,sizeof(pixels));
+    memcpy(old_pixels,pixels,sizeof(pixels));
+    /* Upload every slot through all eight ports. Alternate consecutive-register
+     * batches and repeated-port batches, retaining storage between lists. */
+    for(unsigned base=0;base<512u;base+=8u) {
+        f.command_bytes=0;append(&f,0x2cb,base);
+        while((get32(f.commands+f.command_bytes-4u)&65535u)==CTR_PICA_FINALIZE)f.command_bytes-=8u;
+        uint32_t header=UINT32_C(0x007f02cc)|((base&8u)?UINT32_C(0x80000000):0);
+        put32(f.commands+f.command_bytes,mov(base&15u,0,0));
+        put32(f.commands+f.command_bytes+4u,header);
+        for(unsigned k=1;k<8;++k)put32(f.commands+f.command_bytes+4u+k*4u,mov((base+k)&15u,0,0));
+        f.command_bytes+=40u;finish(&f);
+        CHECK(execute(&f,&state,pixels,&report)==CTR_SCENE_OK);
+        CHECK(state.registers[0x2cb]==base+8u && !report.draws);
+        CHECK(!memcmp(pixels,old_pixels,sizeof(pixels)));
+    }
+    for(unsigned pc=0;pc<512u;++pc)CHECK(state.shader.code_defined[pc] && state.shader.code[pc]==mov(pc&15u,0,0));
+    /* Cursor 512 is a retained exhausted cursor, never an address or wrap. */
+    f.command_bytes=0;append(&f,0x2cb,512);
+    CHECK(execute(&f,&state,pixels,&report)==CTR_SCENE_OK);previous=state;
+    append(&f,0x2d3,UINT32_C(0x88000000));
+    CHECK(execute(&f,&state,pixels,&report)==CTR_SCENE_LIMIT && report.reg==0x2d3);
+    CHECK(!memcmp(&state,&previous,sizeof(state)) && !memcmp(pixels,old_pixels,sizeof(pixels)));
+    const unsigned invalid[]={513u,UINT32_MAX};
+    for(unsigned i=0;i<sizeof(invalid)/sizeof(*invalid);++i) {
+        f.command_bytes=0;append(&f,0x2cb,invalid[i]);
+        CHECK(execute(&f,&state,pixels,&report)==CTR_SCENE_LIMIT);
+        CHECK(!memcmp(&state,&previous,sizeof(state)) && !memcmp(pixels,old_pixels,sizeof(pixels)));
+    }
+    const unsigned entries[]={254u,255u,256u,509u};
+    for(unsigned i=0;i<sizeof(entries)/sizeof(*entries);++i) {
+        ctr_scene_fixture_make(&f,false);ctr_scene_init(&state);ctr_scene_fixture_background(pixels,sizeof(pixels));
+        set(&f,0x2cb,entries[i]);set(&f,0x2ba,entries[i]);
+        CHECK(execute(&f,&state,pixels,&report)==CTR_SCENE_OK && report.shader_instructions==18u);
+        CHECK(state.registers[0x2cb]==entries[i]+3u);golden(pixels,false,false);
+        previous=state;memcpy(old_pixels,pixels,sizeof(pixels));
+        /* Both draws and the last in-range upload succeed in staging. The next
+         * word overflows: neither pixels nor either code bank may commit. */
+        append(&f,0x2cb,511);append(&f,0x2cc,UINT32_C(0x84000000));append(&f,0x2cc,UINT32_C(0x88000000));
+        CHECK(execute(&f,&state,pixels,&report)==CTR_SCENE_LIMIT && report.draws==2u);
+        CHECK(!memcmp(&state,&previous,sizeof(state)) && !memcmp(pixels,old_pixels,sizeof(pixels)));
+    }
+}
 static void scene_errors(void) {
     ctr_scene_fixture f;ctr_scene_state state,previous;ctr_scene_report report;
     uint8_t pixels[CTR_SCENE_FIXTURE_BYTES],old_pixels[CTR_SCENE_FIXTURE_BYTES];
@@ -261,6 +343,7 @@ static void scene_errors(void) {
     RESET();put32(f.resources,UINT32_C(0x3f800001));FAIL(CTR_SCENE_SHADER);CHECK(report.shader_result==CTR_SHADER_NUMERIC);
     RESET();put32(f.resources+12,bits(2.0f));FAIL(CTR_SCENE_UNSUPPORTED);
     RESET();put32(f.commands+find(&f,0x2cc,1),0);FAIL(CTR_SCENE_SHADER);
+    RESET();set(&f,0x2ba,512);FAIL(CTR_SCENE_SHADER);CHECK(report.shader_result==CTR_SHADER_RANGE);
     RESET();set(&f,0x2cb,CTR_SHADER_MAX_CODE);FAIL(CTR_SCENE_LIMIT);
     RESET();set(&f,0x2d5,CTR_SHADER_MAX_DESCRIPTORS);FAIL(CTR_SCENE_LIMIT);
     RESET();f.commands[find(&f,0x2cc,0)+6]=0;FAIL(CTR_SCENE_UNSUPPORTED);
@@ -298,6 +381,6 @@ static void scene_errors(void) {
 #undef FAIL
 }
 int main(void) {
-    floats24();shader_patterns();shader_errors();scenes();scene_errors();
+    floats24();shader_patterns();shader_errors();shader_capacity();scenes();scene_capacity();scene_errors();
     printf("original shader/scene tests: %u assertions passed\n",assertions);return 0;
 }

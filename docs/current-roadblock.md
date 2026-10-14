@@ -30,7 +30,9 @@ Current requirements:
    those full criteria.
 4. **Renderer/runtime implementation:** broader shaders, TEV/sampling, native
    GX2 translation, coherency, dynamic modules, guest audio and retail saves
-   remain open. Independent original-fixture development can continue.
+   remain open. Draft PR #98 supplies original 512-word shader storage/upload/
+   entry/rollback probes; required platform checks remain pending. Independent
+   arithmetic/control and DSP reference development can continue.
 5. **Conversion/GUI:** prove the full native Windows conversion and WUP
    install/rebuild/save continuity, then complete GUI acceptance.
 

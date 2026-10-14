@@ -71,6 +71,13 @@ private issue titles, bodies or feature identifiers in the public dashboard.
 
 ## Next renderer features
 
+Scoped shader-capacity issue #97 has verified native parent #28 and M4 assignment;
+draft PR #98 also has M4. Its 512-word implementation and original probes do not
+accept #28/M4. Project membership/catalog reconciliation remains pending because
+the new environment's named credential still returns `Resource not accessible
+by integration` for personal Project #2. No live status or dashboard update is
+claimed; the reviewed Mario transitions remain queued.
+
 | Feature | Parent task | Acceptance focus |
 | --- | --- | --- |
 | Compiled original guest draws | #27 | Standard GSP queue, exact targets, rollback and retained state |

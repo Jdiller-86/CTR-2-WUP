@@ -44,7 +44,7 @@ full original CCI/RomFS hash and IVFC verification remain reported local evidenc
 | --- | --- | --- |
 | Three compressed archives | Yaz0 decompression yields bounded NARC allocation tables; four DVLB members, one CGFX member and one BYML member | Reusable bounded decompression/container readers; never turn guest names into arbitrary host paths |
 | Four layout shader members and the primitive shader binary | Five DVLB code/descriptor/DVLE table sets fit their files; five vertex entries and one geometry entry | Arithmetic, comparisons/addressing, bounded control flow and possible geometry support; actual entry selection is untraced |
-| CGFX shader resource | Its DATA block fits the file; three embedded DVLB regions have valid bounded code/tables and twelve vertex entries | CGFX dictionary/resource binding remains to be validated; code sizes 472, 428 and 264 exceed the current 256-word runtime limit |
+| CGFX shader resource | Its DATA block fits the file; three embedded DVLB regions have valid bounded code/tables and twelve vertex entries | CGFX dictionary/resource binding remains to be validated; code sizes 472, 428 and 264 exceed the former 256-word limit; the unreleased 512-word capacity increment has original probes, with platform checks pending |
 | System class table | Little-endian BYML version 1 header and table/root offsets fit the member | Validate typed nodes and bounds when consumed; class names do not establish service use |
 | Sound archive | CSAR version 2 STRG/INFO/FILE blocks fit the supplied file | Resolve archive references/banks/sequences/waves; nested signature candidates are not a validated complete inventory |
 | Two short streams | CSTM version 2 INFO/SEEK/DATA blocks; both declare non-looping, stereo DSP ADPCM at 32 kHz | Original codec/block/history/seek probes and guest DSP/audio integration; no decoded-audio or playback acceptance yet |
@@ -61,7 +61,7 @@ than proof that every instruction executes on the proposed gameplay route.
 | Area | Present evidence | Next acceptance |
 | --- | --- | --- |
 | Exact revision/input | Independently verified executable and selected bytes; complete local inventory reports | Retain private provenance; broader modules/assets and original full-container integrity remain bounded by available bytes |
-| Shader runtime | Actual resources exceed MOV-only semantics and include code beyond 256 words | Original numeric/control/capacity probes, safe upload/rollback and selected-entry traces before claiming support |
+| Shader runtime | Actual resources exceed MOV-only semantics; unreleased 512-word storage/upload/entry probes cover the static size gap | Required platform checks, original arithmetic/control probes and selected-entry traces before claiming support; capacity alone does not execute these shaders |
 | Fragment/rendering | Original canonical software draws pass their scoped routes | Capture actual required TEV/texture/depth/blend/coherency state; implement shared features and native GX2 translation |
 | Guest audio | Two sampled streams declare DSP ADPCM; archive structure exists | Verify codec/history/seek behavior with originals, required DSP protocol/mixing and later physical game audio |
 | Services/modules/saves | Declared DSP/loader capabilities and static executable analysis | Trace actual IPC/module/save demands; do not implement all declarations as silent successful stubs |
