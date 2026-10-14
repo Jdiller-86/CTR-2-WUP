@@ -19,8 +19,9 @@ from Actions. The direct tool never silently selects another credential.
 python3 tools/manage-github.py preflight
 ```
 
-Preflight checks fixed repository identities/write permission and reads all 42
-managed Project items/fields before mutations. Project read access alone does
+The full preflight checks fixed repository identities/write permission and all 42
+managed Project items/fields. Each operation checks only the access it needs:
+evidence/docs can proceed while Project access is missing. Project read access alone does
 not prove mutation access: supply read/write Project scope. A ready binding or
 successful issue write is insufficient. Current Project requests return 403;
 the ignored private access receipt identifies the failing stage without secrets.

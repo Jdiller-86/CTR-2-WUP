@@ -34,23 +34,28 @@ def credential_environment(environ):
     return env
 
 
-def preflight(client, source, report):
-    report.update(ok=False, stage='source_repository', writes_attempted=False)
+def preflight(client, source, report, operation='preflight'):
+    report.update(ok=False, stage='source_repository', writes_attempted=False,
+                  project_read_verified=False, project_write_verified=False,
+                  docs_write_permission_verified=False)
     repository = client.api('repos/' + tracking.REPOSITORY)
     if (not isinstance(repository, dict) or repository.get('full_name') != tracking.REPOSITORY
             or repository.get('private') is not True or repository.get('default_branch') != 'main'
             or repository.get('permissions', {}).get('push') is not True):
         raise tracking.TrackingError('Private source identity and repository write access could not be verified.')
-    report['stage'] = 'project'
-    project = client.project()
-    tracking.collect(project, source)
-    report['stage'] = 'public_docs_repository'
-    docs = client.api('repos/' + DOCS)
-    if (not isinstance(docs, dict) or docs.get('full_name') != DOCS or docs.get('private') is not False
-            or docs.get('default_branch') != 'main' or docs.get('permissions', {}).get('push') is not True):
-        raise tracking.TrackingError('Authorized public docs identity and repository write access could not be verified.')
-    report.update(ok=True, stage='ready', project_read_verified=True,
-                  project_write_verified=False, repository_write_permission_verified=True,
+    if operation in ('preflight', 'traceability', 'review', 'progress'):
+        report['stage'] = 'project'
+        project = client.project()
+        tracking.collect(project, source)
+        report['project_read_verified'] = True
+    if operation in ('preflight', 'progress', 'docs'):
+        report['stage'] = 'public_docs_repository'
+        docs = client.api('repos/' + DOCS)
+        if (not isinstance(docs, dict) or docs.get('full_name') != DOCS or docs.get('private') is not False
+                or docs.get('default_branch') != 'main' or docs.get('permissions', {}).get('push') is not True):
+            raise tracking.TrackingError('Authorized public docs identity and repository write access could not be verified.')
+        report['docs_write_permission_verified'] = True
+    report.update(ok=True, stage='ready', repository_write_permission_verified=True,
                   required_project_permission='project read/write; read access alone does not establish mutation access')
     return report
 
@@ -119,7 +124,7 @@ def main(argv=None):
         client = tracking.GitHub(env=env)
         access = {}
         try:
-            preflight(client, json.loads((ROOT / 'docs/milestone-status.json').read_text()), access)
+            preflight(client, json.loads((ROOT / 'docs/milestone-status.json').read_text()), access, args.operation)
         finally:
             (output / 'access.json').write_text(json.dumps(access, indent=2) + '\n', encoding='utf-8')
         report['stage'] = 'source'

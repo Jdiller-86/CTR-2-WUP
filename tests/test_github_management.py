@@ -220,6 +220,16 @@ class ManagementTests(unittest.TestCase):
         self.assertFalse(result['project_write_verified'])
         self.assertEqual(client.writes, [])
 
+    def test_evidence_and_docs_do_not_require_unrelated_project_access(self):
+        for operation in ('evidence', 'docs'):
+            client = Client()
+            client.denied = True
+            result = manage.preflight(client, client.source, {}, operation)
+            self.assertTrue(result['ok'])
+            self.assertFalse(result['project_read_verified'])
+            self.assertEqual(result['docs_write_permission_verified'], operation == 'docs')
+            self.assertEqual(client.writes, [])
+
     def test_apply_requires_clean_main_and_exact_remote_commit(self):
         client = Client()
         for branch, dirty, remote in [('topic', '', 'a'*40), ('main', ' M tools/script.py', 'a'*40), ('main', '', 'b'*40)]:

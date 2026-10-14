@@ -108,7 +108,7 @@ def comments(client, number):
     result = []
     for page in range(1, 11):
         batch = client.api(f'repos/{tracking.REPOSITORY}/issues/{number}/comments?per_page=100&page={page}')
-        if not isinstance(batch, list) or any(not isinstance(row, dict) or not isinstance(row.get('body'), str) for row in batch):
+        if not isinstance(batch, list) or len(batch) > 100 or any(not isinstance(row, dict) or not isinstance(row.get('body'), str) for row in batch):
             raise tracking.TrackingError('Project review comments could not be verified.')
         result.extend(batch)
         if len(batch) < 100:
