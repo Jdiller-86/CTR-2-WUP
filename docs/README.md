@@ -14,6 +14,7 @@ for the free docs-only site and build receipts.
 
 - [Repository tour](repository-guide.md): reader routes, source map and first host check.
 - [Development tracking](development-tracking.md): native feature/task/milestone/PR workflow.
+- [Without hosted Actions](direct-development.md): secure GitHub management and scoped local merge evidence.
 
 - [Getting started](getting-started.md): downloads, Aroma launch, SD layout and reports.
 - [Troubleshooting](troubleshooting.md): missing reports, storage failures and hangs.

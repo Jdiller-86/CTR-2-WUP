@@ -47,6 +47,14 @@ reviewed physical passes. Draw startup profiling, complete platform stability,
 installed-WUP acceptance, commercial conversion and final GUI are still pending.
 **0/7 full milestones are accepted.** Completed scoped features do not change that.
 
+## Development continuity
+
+Hosted Actions cannot start. [Direct management](direct-development.md), scoped
+issue #95 under M5/#5, supplies a secure API route and exact-head local evidence.
+Personal Project access is still 403; live M5 review/catalog/dashboard updates
+remain queued. Independent renderer/runtime work can proceed on focused branches.
+No spending or full-gate acceptance change is implied.
+
 ## Now, next and later
 
 | Priority | Concrete deliverable | Tracking and acceptance |

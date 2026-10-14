@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "repository": "Jdiller-86/CTR-2-WUP",
+  "project_url": "https://github.com/users/Jdiller-86/projects/2",
+  "reviews": [
+    {
+      "id": "mario-input-received-v023",
+      "overview": "m5",
+      "reason": "The user supplied the verified executable, matching preparation/inventory reports and all seven selected asset samples. M5/intake/requirements now support active analysis. Remove only the resolved owned-input wait; runtime, console and full-game acceptance remain open. User explicitly requested live Project and documentation tracker updates.",
+      "changes": [
+        {
+          "role": "milestone",
+          "id": "m5",
+          "from_status": [
+            "Blocked",
+            "In progress",
+            "Planned"
+          ],
+          "to_status": "In progress",
+          "remove_resources": [
+            "Owned decrypted executable and assets"
+          ]
+        },
+        {
+          "role": "work-item",
+          "id": "m5-intake",
+          "from_status": [
+            "Blocked",
+            "In progress",
+            "Planned"
+          ],
+          "to_status": "In progress",
+          "remove_resources": [
+            "Owned decrypted executable and assets"
+          ]
+        },
+        {
+          "role": "work-item",
+          "id": "m5-requirements",
+          "from_status": [
+            "Blocked",
+            "In progress",
+            "Planned"
+          ],
+          "to_status": "In progress",
+          "remove_resources": [
+            "Owned decrypted executable and assets"
+          ]
+        },
+        {
+          "role": "work-item",
+          "id": "m5-runtime-integration",
+          "from_status": [
+            "Planned",
+            "In progress",
+            "Awaiting evidence",
+            "Blocked",
+            "Ready for review"
+          ],
+          "to_status": null,
+          "remove_resources": [
+            "Owned decrypted executable and assets"
+          ]
+        },
+        {
+          "role": "work-item",
+          "id": "m5-gameplay-route",
+          "from_status": [
+            "Planned",
+            "In progress",
+            "Awaiting evidence",
+            "Blocked",
+            "Ready for review"
+          ],
+          "to_status": null,
+          "remove_resources": [
+            "Owned decrypted executable and assets"
+          ]
+        },
+        {
+          "role": "work-item",
+          "id": "m5-title-acceptance",
+          "from_status": [
+            "Planned",
+            "In progress",
+            "Awaiting evidence",
+            "Blocked",
+            "Ready for review"
+          ],
+          "to_status": null,
+          "remove_resources": [
+            "Owned decrypted executable and assets"
+          ]
+        }
+      ]
+    }
+  ]
+}

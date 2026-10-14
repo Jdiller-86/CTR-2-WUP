@@ -83,6 +83,16 @@ CTR2WUP's acceptance criteria remain specific to Wii U execution and the planned
 injector; unavailable console/game tests stay pending. The user's GitHub Free,
 private-source and no-branch-protection choices remain in force.
 
+## Development continuity
+
+Hosted jobs can refuse to start because of account billing/spending limits. The
+owner-authorized [direct route](direct-development.md) keeps API management and
+local development independent of hosted compute. For scoped Python management
+and documentation PRs, exact-head local evidence can replace unavailable hosted
+checks. Runtime/platform acceptance is unchanged; no fake passing check is
+created. The Actions identity is supplied independently through a secure named
+environment binding. Its actual personal Project access must be verified.
+
 ## Pull requests and CI
 
 Use a topic branch and the PR template for reviewable problem/behavior/validation

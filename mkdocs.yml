@@ -128,6 +128,7 @@ nav:
   - Contribute:
       - Contributor guide: contributing.md
       - GitHub development: docs/github-development.md
+      - Development without hosted Actions: docs/direct-development.md
       - Agent instructions: agent-instructions.md
       - Security: security.md
       - Changelog: changelog.md
