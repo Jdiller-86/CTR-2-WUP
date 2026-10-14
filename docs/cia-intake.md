@@ -21,8 +21,8 @@ keys. A report-only result still requires resolving its stated blocking error.
 The standalone .NET CIA helper below does not accept CCI.
 
 **Small intake received:** the two-step route supplied a valid, privately verified
-USA Mario executable and matching revision receipt. The full CCI and RomFS/CRO
-assets remain unavailable here. See [first-title findings](first-title.md).
+USA Mario executable and matching revision receipt. Matched local preparation/asset reports now inventory the full local RomFS.
+Raw CCI/blob bytes and nested archive/module contents remain unavailable here. See [first-title findings](first-title.md).
 The current inspector accepts checked decrypted v0 CFA data partitions alongside
 v2 executable content; v1 prototypes, v0 executable/header claims, encryption,
 bounds and integrity failures remain rejected. This compatibility fix does not

@@ -590,6 +590,49 @@
         "The received derived USA Mario executable is independently inspected and pinned static analysis succeeds; exact hashes, source data and analysis stay private. RomFS/CRO inventory and original full-container verification remain unavailable.",
         "Implementation: https://github.com/Jdiller-86/CTR-2-WUP/pull/89; no commercial profile or full milestone acceptance."
       ]
+    },
+    {
+      "id": "mario-asset-inventory-review",
+      "title": "Review private Mario preparation provenance and asset inventory",
+      "milestone": 5,
+      "parent_issue": 32,
+      "state": "implemented",
+      "pull_requests": [
+        90
+      ],
+      "scope": [
+        "Cross-check local preparation and asset-manifest reports against the independently inspected executable/revision.",
+        "Record aggregate asset/module findings and precise remaining byte-access/runtime requirements without publishing reports or commercial data."
+      ],
+      "acceptance": [
+        "Prepared-output, asset-source and executable-intake hashes/revisions agree; reported IVFC evidence and inventory bounds are checked.",
+        "The current title plan distinguishes reported local inventory from independently inspected bytes, and avoids inferring nested module absence or runtime compatibility."
+      ],
+      "evidence": [
+        "October 13 private reports match the prepared main and verified USA executable/revision.",
+        "Reported RomFS: 1,756 files, 19 directories, 298,080,796 bytes; raw asset bytes remain on the user PC.",
+        "Evidence review and source plan: https://github.com/Jdiller-86/CTR-2-WUP/pull/90"
+      ]
+    },
+    {
+      "id": "bounded-private-asset-samples",
+      "title": "Export bounded checked private asset samples from a local RomFS blob",
+      "milestone": 5,
+      "parent_issue": 33,
+      "state": "planned",
+      "pull_requests": [],
+      "scope": [
+        "Provide a standalone Python helper that selects explicit guest paths from a validated local asset manifest/blob.",
+        "Check source and selected-file hashes, size/path/alias boundaries, preserve existing outputs, and create a private ZIP below the transfer limit."
+      ],
+      "acceptance": [
+        "Original tests cover source/revision bindings, unsafe or duplicate paths, invalid extents/hash changes, output preservation and bounded ZIP publication.",
+        "The script runs on Windows/Python without a project installation; only selected files and a bounded receipt enter the private ZIP."
+      ],
+      "evidence": [
+        "Original tool/fixtures only; no commercial input is included in source or CI artifacts.",
+        "Planned after reviewed inventory; archive/shader/audio formats and nested modules remain unknown until actual selected bytes are inspected."
+      ]
     }
   ],
   "reviewed_statuses": {

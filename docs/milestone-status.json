@@ -425,13 +425,14 @@
         "needs-console",
         "needs-input"
       ],
-      "summary": "The USA Mario executable/revision is privately verified and pinned static analysis succeeds. RomFS/CRO inventory, observed runtime requirements and gameplay/audio/save/performance remain unverified.",
+      "summary": "USA Mario executable and local asset/preparation reports share verified revision bindings. Selected archive/shader/audio bytes, nested modules, runtime use and gameplay/audio/save/performance remain unverified.",
       "verified_foundations": [
         "Candidate and proposed private analysis/gameplay route documented",
-        "October 13 derived NCCH passes independent stored hashes, decompression and executable-revision checks; metadata establishes USA Mario. Pinned static lifter analysis succeeds. Exact hashes and commercial bytes remain private."
+        "October 13 derived NCCH passes independent stored hashes, decompression and executable-revision checks; metadata establishes USA Mario. Pinned static lifter analysis succeeds. Exact hashes and commercial bytes remain private.",
+        "October 13 local preparation and asset reports match the independently inspected executable/revision and identical reported IVFC evidence: 1,756 outer files, 19 directories, 298,080,796-byte RomFS blob. Raw asset bytes remain local."
       ],
       "acceptance_remaining": [
-        "Obtain private RomFS/CRO/module inventory and complete the exact-revision asset/runtime matrix",
+        "Inspect selected private archive/shader/audio bytes and possible nested modules; complete the exact-revision runtime/test-route matrix",
         "Implement the observed title CPU/services/modules/renderer/audio/retail-save requirements",
         "Prove boot/menu/gameplay/input/audio/save/reload/stability and useful Wii U performance"
       ],
@@ -440,7 +441,7 @@
         {
           "id": "m5-intake",
           "title": "Identify the owned Super Mario 3D Land executable and assets",
-          "summary": "The small uploaded USA executable is independently verified; private RomFS/CRO inventory and full original-container provenance remain needed. No commercial profile is enabled.",
+          "summary": "Executable and local preparation/asset report bindings match. Outer inventory is available; selected raw samples and full-source integrity are not independently inspected here. No commercial profile is enabled.",
           "acceptance_criteria": [
             "The actual NCCH/container metadata and input/executable hashes establish the exact title, region and revision; filename claims are not treated as verified identity.",
             "Required RomFS/modules/assets are available through the documented private workflow; keys stay local and no commercial payload is placed in issues, source or public artifacts."
@@ -454,7 +455,7 @@
         {
           "id": "m5-requirements",
           "title": "Create the exact-revision feature and test-route matrix",
-          "summary": "Analyze declared capabilities and observed execution separately to prioritize the selected title requirements.",
+          "summary": "Use the verified executable and matched local inventory to inspect selected shader/system/audio bytes and confirm actual module/service requirements; declared access and archive filenames are not runtime proof.",
           "acceptance_criteria": [
             "A private analysis records code/module layout, actual unsupported CPU/IPC/GPU/audio/save behavior and the distinction between declared services and observed use.",
             "A hash-matched profile and short repeatable boot/menu/course/save route are documented with explicit support gaps; upstream desktop claims do not activate the profile."
