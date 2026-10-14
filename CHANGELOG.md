@@ -5,6 +5,9 @@ do not establish commercial-game compatibility or installable WUP acceptance.
 
 ## Public repository consolidation — 2026-10-14
 
+- Canonical Pages, legacy deep-link redirects, reviewed Mario transitions and
+  mirrored status labels now have successful live receipts; full Project
+  membership and final artifact/retirement verification are tracked separately.
 - Follow the owner's public-source decision and restored hosted Actions access.
 - Stage checked documentation and live aggregate progress into the source
   repository's canonical Pages deployment; remove cross-repository generated writes.

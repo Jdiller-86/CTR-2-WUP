@@ -1,19 +1,23 @@
 # CTR2WUP status
 
-**October 14 public-repository consolidation:** the owner made source public.
-Hosted Actions is running again; the shader-capacity PR's exact head passes
-Required CI (Windows, Python 3.12/3.14, GCC/Clang sanitizers and Wii U) and
-Documentation. The Actions management identity successfully reads personal
-Project #2; the environment binding remains a separate access path.
-
-Scoped [#99](https://github.com/Jdiller-86/CTR-2-WUP/issues/99) and
-[PR #100](https://github.com/Jdiller-86/CTR-2-WUP/pull/100) consolidate maintained
-documentation and the live dashboard at
+**October 14 unified public hosting:** maintained documentation and the live
+dashboard deploy from this public source repository at
 [the canonical project site](https://jdiller-86.github.io/CTR-2-WUP/).
-The trusted-main management workflow supports reviewed Mario transitions,
-traceability and dashboard refresh. Canonical deployment, old-site redirects,
-live reconciliation and refreshed release verification are pending until their
-actual receipts are recorded. No full gate is accepted.
+Merged PR #100/#101 pass required hosted platform/documentation checks.
+[Canonical deployment](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38601781297),
+[repository settings](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38601840961)
+and [legacy redirect HTTP checks](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38606446452)
+verify successfully. Existing history, releases, visibility and protections are preserved.
+
+The [reviewed Mario update](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38605081338)
+activates M5/intake/requirements and removes the resolved owned-input wait from
+six targets while retaining console waits and owner notes. The
+[label/dashboard refresh](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38605491773)
+and live HTTP read-back show M5 **In progress** and **0/7** accepted gates.
+Native parent/PR links verify; complete Project membership, final legacy
+checksum/archival and versioned release verification remain operational work in
+[#99](https://github.com/Jdiller-86/CTR-2-WUP/issues/99). The Actions management
+secret works; the environment binding remains a separate access path.
 
 **Merged shader capacity:** [PR #98](https://github.com/Jdiller-86/CTR-2-WUP/pull/98)
 under [#97](https://github.com/Jdiller-86/CTR-2-WUP/issues/97), native parent #28/M4,
