@@ -693,7 +693,7 @@
       "title": "Expand checked shader resource capacity with upload and execution bounds",
       "milestone": 4,
       "parent_issue": 28,
-      "state": "planned",
+      "state": "active",
       "pull_requests": [],
       "scope": [
         "Support the documented hardware shader code capacity through checked program storage, uploads, entry bounds and transactional retained state.",
@@ -705,7 +705,8 @@
       ],
       "evidence": [
         "Three bounded private CGFX shader regions declare 472, 428 and 264 code words, beyond the current 256-word limit.",
-        "Actual runtime entry selection remains untraced; commercial code is never used as a redistributable fixture."
+        "Actual runtime entry selection remains untraced; commercial code is never used as a redistributable fixture.",
+        "Scoped issue #97 has verified native parent #28 and M4 assignment. Project membership remains pending because the new environment's named binding cannot read personal Project #2."
       ]
     },
     {
