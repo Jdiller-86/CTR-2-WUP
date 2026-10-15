@@ -34,6 +34,20 @@
 #include "test_guide.h"
 #include "test_lifecycle.h"
 #include "diagnostic_audio.h"
+#ifdef CTR_M1_ONLY
+#include "m1_storage_probe.h"
+#if defined(CTR_STREAM_AUDIO) || defined(CTR_AUDIO_ONLY) || defined(CTR_SCENE_ONLY) || defined(CTR_COMPILED_HOMEBREW) || CTR_GUEST_DEFAULT != 0
+#error M1_Check_requires_the_full_native_platform_profile
+#endif
+static CtrM1StorageEvidence m1_storage={.result=CTR_M1_STORAGE_ARGUMENT,.error_stage="not_run"};
+static void m1_storage_line(char *line,size_t capacity) {
+    snprintf(line,capacity,"M1_STORAGE protocol=scratch-v1 sentinel_written=%u sentinel_readback=%u fresh_reload=%u previous_recovered=%u pending_rejected=%u invalid_path_rejected=%u final_readback=%u result=%s errno=%d error_stage=%s writes=%u readbacks=%u recoveries=%u; software_recovery_not_power_loss=1",
+        m1_storage.sentinel_written,m1_storage.sentinel_readback,m1_storage.fresh_reload,
+        m1_storage.previous_recovered,m1_storage.pending_rejected,m1_storage.invalid_path_rejected,
+        m1_storage.final_readback,ctr_m1_storage_result_name(m1_storage.result),m1_storage.error_code,
+        m1_storage.error_stage?m1_storage.error_stage:"none",m1_storage.writes,m1_storage.readbacks,m1_storage.recoveries);
+}
+#endif
 #ifdef CTR_STREAM_AUDIO
 #include "audio_stream_app.h"
 #include "audio_stream_diagnostic.h"
@@ -199,7 +213,9 @@ static uint16_t touch_min_x=UINT16_MAX,touch_min_y=UINT16_MAX,touch_max_x,touch_
 #elif CTR_GUEST_DEFAULT == 1
 #define REPORT_APPLICATION "original-guest"
 #else
-#ifdef CTR_STREAM_AUDIO
+#ifdef CTR_M1_ONLY
+#define REPORT_APPLICATION "native-m1"
+#elif defined(CTR_STREAM_AUDIO)
 #define REPORT_APPLICATION "native-audio-streams"
 #elif defined(CTR_AUDIO_ONLY)
 #define REPORT_APPLICATION "native-audio"
@@ -407,6 +423,13 @@ static bool result_snapshot(const char *stage) {
         test_result.failed=true;test_result.error_code=EMSGSIZE;test_result.error_stage="format";return false;
     }
     OSTime storage_started=OSGetTime();
+#ifdef CTR_M1_ONLY
+    char storage_line[768];m1_storage_line(storage_line,sizeof(storage_line));
+    int extra=snprintf(body+n,sizeof(body)-(size_t)n,"%s\n",storage_line);
+    if(extra<0 || (size_t)extra>=sizeof(body)-(size_t)n) {
+        test_result.failed=true;test_result.error_code=EMSGSIZE;test_result.error_stage="m1_format";return false;
+    }
+#endif
     bool ok=ctr_test_result_update(&test_result,body);
     phase_add(PH_STORAGE,OSTicksToMicroseconds(OSGetTime()-storage_started));
     if(!ok)OSReport("CTR2WUP RESULT FAILED errno=%d operation=%s path=%s\n",test_result.error_code,
@@ -1094,6 +1117,13 @@ int main(int argc, char **argv) {
     WHBLogPrintf("CTR2WUP native diagnostic version=%s application=%s pointer_bits=%u endian=big UDP=%u TXT_report=%u",
                   CTR_APP_VERSION,REPORT_APPLICATION,(unsigned)(8*sizeof(void *)),udp_ready,report_handler_added);
     WHBLogPrintf("BUILD source_commit=%s source_dirty=%u evidence_schema=2 result_bytes=%u",CTR_SOURCE_COMMIT,CTR_SOURCE_DIRTY,CTR_TEST_RESULT_BYTES);
+#ifdef CTR_M1_ONLY
+    WHBLogPrintf("M1_SESSION ticks=%016llx source_commit=%s version=%s protocol=m1-v1",
+        (unsigned long long)session_started,CTR_SOURCE_COMMIT,CTR_APP_VERSION);
+    ctr_m1_storage_probe("fs:/vol/external01/ctr2wup",CTR_SOURCE_COMMIT,&m1_storage);
+    char storage_line[768];m1_storage_line(storage_line,sizeof(storage_line));
+    WHBLogPrintf("%s",storage_line);
+#endif
     WHBLogPrintf("Platform title_id=%016llx exit_route=%s SD_owner=WUT_devoptab",
         (unsigned long long)lifecycle.title_id,ctr_test_from_hbl(lifecycle.title_id)?"HBL_relaunch":"system_menu");
     WHBLogPrintf("TXT report path=%s status=%s errno=%d",test_report.path[0]?test_report.path:"unavailable",
@@ -1501,6 +1531,10 @@ int main(int argc, char **argv) {
             if(ctr_test_guide_take_restart(&test_guide))restart_guest();
         }
         char guide_rows[7][72];ctr_test_guide_view(&test_guide,guide_input.milliseconds,guide_rows);
+#ifdef CTR_M1_ONLY
+        snprintf(guide_rows[6],72,"SD proof: %s / fresh reload: %s / MINUS exits",
+            ctr_m1_storage_result_name(m1_storage.result),m1_storage.fresh_reload?"YES":"FIRST RUN");
+#endif
 #endif
         for(unsigned i=0;i<TOP_W*83;++i)top_image[i]=0x162d4fff;
         if(test_result.failed) {
