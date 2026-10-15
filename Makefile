@@ -29,9 +29,11 @@ check-c:
 	$(MAKE) -C tests/audio check sanitize
 	$(MAKE) -C tests/dsp-adpcm check sanitize
 	$(MAKE) -C tests/cstm check sanitize
+	$(MAKE) -C tests/audio-engine check sanitize
+	$(MAKE) -C tests/audio-stream-native check sanitize
 	$(MAKE) -C tests/recomp-progress check sanitize
 check-c-portable:
-	@set -e; for suite in cpu guest services heap kernel hid gsp gx pica vertex scenes guest-draws relay multiple threads filesystem assets textures apt report audio dsp-adpcm cstm recomp-progress; do $(MAKE) -C tests/$$suite check; done
+	@set -e; for suite in cpu guest services heap kernel hid gsp gx pica vertex scenes guest-draws relay multiple threads filesystem assets textures apt report audio dsp-adpcm cstm audio-engine audio-stream-native recomp-progress; do $(MAKE) -C tests/$$suite check; done
 prototype:
 	$(MAKE) -C runtime/wiiu -j 3
 doctor:

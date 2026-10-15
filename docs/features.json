@@ -856,8 +856,10 @@
       "title": "Deliver checked CSTM voices and guided native audio playback",
       "milestone": 3,
       "parent_issue": 25,
-      "state": "planned",
-      "pull_requests": [],
+      "state": "active",
+      "pull_requests": [
+        116
+      ],
       "scope": [
         "Connect checked CSTM/ADPCM blocks to a bounded two-voice pull engine with 48kHz stereo rate conversion, gains, pause, seek and EOF.",
         "Deliver a distinct native Audio Streams diagnostic using original fixtures and finite owned AX buffers, explicit guided listening/control tests, persistent source-bound reports and an FTP-ready testing kit."
