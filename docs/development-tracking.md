@@ -120,6 +120,9 @@ verified against merged PR #48/#57 and original reference traces. Its review
 marker is recorded once; later maintainer reopen/status changes are preserved.
 No full milestone or other unreviewed task can complete through that rule.
 
+Scoped #113/PR #114 under #25/M3 adds the checked CSTM block/SEEK foundation.
+Its original container/PCM evidence leaves guest DSP, mixing and physical audio open.
+
 Scoped #103 under #25/M3 implements the original DSP ADPCM decoding foundation.
 Its codec/rational/seek/failure checks do not close broad #25. The reviewed
 `dsp-adpcm-foundation-v025` transition activates only `m3-guest-audio`, preserving

@@ -70,9 +70,12 @@ static CtrCstmResult parse(const uint8_t *d,size_t bytes,Parsed *p) {
        v->last_padded_bytes>v->block_bytes ||
        (uint64_t)(v->blocks-1)*v->block_samples+v->last_samples!=v->samples)return CTR_CSTM_FORMAT;
     if(u32(d+s+40)!=4 || u32(d+s+44)!=v->block_samples)return CTR_CSTM_UNSUPPORTED;
-    size_t data_offset;
-    if(!ref(d,s+48,0x1f00,section[2]+8,section[2]+8,section[2]+length[2],0,&data_offset) ||
-       data_offset%32)return CTR_CSTM_FORMAT;
+    /* The reference itself is in INFO; its destination is in DATA. These may
+     * appear in either order, so they have distinct bounds. */
+    uint32_t relative=u32(d+s+52);
+    if(u16(d+s+48)!=0x1f00 || relative>length[2]-8)return CTR_CSTM_FORMAT;
+    size_t data_offset=section[2]+8+relative;
+    if(data_offset%32)return CTR_CSTM_FORMAT;
     uint64_t payload=((uint64_t)(v->blocks-1)*v->block_bytes+v->last_padded_bytes)*v->channels;
     if(payload>section[2]+length[2]-data_offset ||
        (uint64_t)v->blocks*v->channels*4>length[1]-8)return CTR_CSTM_BOUNDS;

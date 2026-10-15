@@ -72,7 +72,9 @@ transaction probes pass; required full/platform checks gate delivery through PR 
 
 Scoped #103/#25/M3 now implements the [DSP ADPCM reference](dsp-adpcm.md).
 Independent original PCM/history and seek/continuation checks pass; full platform
-checks pass and PR #109 is merged. Container metadata, guest DSP/mixing and physical playback
+checks pass and PR #109 is merged. Scoped #113/PR #114 adds the checked
+[CSTM block/SEEK subset](cstm.md) with original rational stream evidence.
+General containers/loops, guest DSP/mixing and physical playback
 remain open. The reviewed Project transition activates only the guest-audio task,
 preserving its console wait and all full gates.
 
@@ -98,7 +100,7 @@ build. PR #106 is merged with passing hosted checks; full gates remain open.
 | Resource/native renderer work | Version resource caches, prove invalidation/readback, define native shader ABI and translate the proven subset into GX2 | M4 #28/#30; retain software reference and explicit shader/cache misses |
 | Physical evidence and performance | Retain completed 0.24.1 arithmetic, picture-gating, repeat-draw and launcher evidence; compare the host-verified 0.25.0 cache on Wii U | #87/#20, M1 #13–#16, M3 #22/#26 and M4 #31; broader Espresso, stability/recovery and full renderer criteria remain open |
 | Title intake and analysis | Retain verified executable/report/sample provenance; validate required nested resources and refine the observed runtime/test-route matrix | M5 #32/#33 are active analysis; selected Yaz0/NARC/DVLB/CGFX/BYML/CSAR/CSTM structures are inspected; actual runtime selection/use remains pending |
-| Asset-informed shared work | Retain checked DSP ADPCM numeric/history/seek reference; next validate container metadata and exercised DSP/mixing interfaces alongside shader/control work | M4 #28 and M3 #25; static sampled resources justify scoped implementation, while runtime/console use needs separate evidence |
+| Asset-informed shared work | Retain checked DSP ADPCM and scoped CSTM block/SEEK evidence; next exercise DSP service/buffer/voice interfaces alongside shader/control work | M4 #28 and M3 #25; static sampled resources justify scoped implementation, while runtime/console use needs separate evidence |
 | Required game runtime | Implement observed CPU, services, dynamic modules, DSP/audio, saves and rendering requirements | M2/M3/M4 and M5 #34–#36; original probes support shared interfaces, then real title evidence |
 | Conversion engine | Connect proven stages on clean Windows with cancellation, traces, revision caches, stable identities, rebuild and safe diagnostics | M6 #37–#41; structural package checks stay separate from installation/launch |
 | Final GUI | Implement the responsive WPF Inject page, private setup help, saved projects and packaged prerequisites over the proven engine | M7 #42–#46; GUI-to-playable-WUP acceptance completes the MVP |

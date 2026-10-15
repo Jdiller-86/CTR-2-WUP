@@ -833,8 +833,10 @@
       "title": "Read checked CSTM DSP ADPCM blocks and seek histories",
       "milestone": 3,
       "parent_issue": 25,
-      "state": "planned",
-      "pull_requests": [],
+      "state": "active",
+      "pull_requests": [
+        114
+      ],
       "scope": [
         "Parse a bounded little-endian CSTM v2 non-looping mono/stereo DSP ADPCM subset using section-relative references.",
         "Expose exact per-channel full/final block bytes, numeric coefficients and block SEEK histories for the existing decoder without guest playback."
@@ -845,7 +847,8 @@
       ],
       "evidence": [
         "Follows merged codec #103/PR #109 under #25/M3; no commercial waveform, coefficients or files are fixtures.",
-        "Guest DSP IPC, tracks/mixing, loops, general SEEK intervals, big-endian streams, CSAR and physical audio acceptance remain open."
+        "Guest DSP IPC, tracks/mixing, loops, general SEEK intervals, big-endian streams, CSAR and physical audio acceptance remain open.",
+        "Scoped #113 / PR #114 adds original relocated mono/stereo fixtures, padded final blocks and SEEK histories; 240 independent rational streams agree on 57,980 samples and final histories. Required full validation is in progress."
       ]
     }
   ],

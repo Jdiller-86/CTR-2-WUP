@@ -67,7 +67,11 @@ static void valid(void) {
     CHECK(pcm[0]==123 && pcm[1]==456 && pcm[2]==789 && state.sample==0);
 }
 static void malformed(void) {
-    uint8_t d[512];for(size_t n=0;n<512;++n) { fixture(d);failure(d,n); }
+    uint8_t d[512];for(size_t n=0;n<512;++n) {
+        fixture(d);failure(d,n);
+        /* Also bypass the top-level declared-length check to reach section bounds. */
+        w32(d,12,(uint32_t)n);failure(d,n);
+    }
     const struct { size_t at;uint32_t value; } edits[]={
         {8,0x02010000},{12,513},{24,480},{28,63},{36,UINT32_MAX},{40,351},{48,64},
         {68,351},{76,UINT32_MAX},{92,UINT32_MAX},{132,0},{136,1},{140,16},
@@ -89,7 +93,20 @@ static void malformed(void) {
     CHECK(ctr_cstm_info(d,512,(CtrCstmInfo *)d)==CTR_CSTM_OVERLAP);
     CHECK(ctr_cstm_block(d,512,0,0,(CtrCstmBlock *)d)==CTR_CSTM_OVERLAP);
     CHECK(ctr_cstm_block(d,512,0,0,(CtrCstmBlock *)(UINTPTR_MAX-1))==CTR_CSTM_BOUNDS);
-    (void)block;
+    /* Deterministic mutations may be accepted (padding/coefficients can change).
+     * Exercise both edge blocks whenever the structural subset still validates. */
+    uint32_t random=0x4353544d;
+    for(unsigned i=0;i<8192;++i) {
+        fixture(d);random=random*1664525u+1013904223u;
+        d[random%512]^=(uint8_t)(1u<<((random>>16)%8));
+        if(ctr_cstm_info(d,512,&info)==CTR_CSTM_OK) {
+            for(unsigned c=0;c<info.channels;++c) {
+                CHECK(ctr_cstm_block(d,512,0,c,&block)==CTR_CSTM_OK);
+                CHECK(ctr_cstm_block(d,512,info.blocks-1,c,&block)==CTR_CSTM_OK);
+                CHECK(block.encoded>=d && block.encoded+block.bytes<=d+512);
+            }
+        } else failure(d,512);
+    }
     for(int i=0;i<=CTR_CSTM_OVERLAP;++i)CHECK(strcmp(ctr_cstm_result_name((CtrCstmResult)i),"invalid"));
     CHECK(!strcmp(ctr_cstm_result_name((CtrCstmResult)99),"invalid"));
 }

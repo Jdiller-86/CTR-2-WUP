@@ -5,6 +5,12 @@ do not establish commercial-game compatibility or installable WUP acceptance.
 
 ## 0.25.0 — unreleased
 
+- Read a checked non-looping mono/stereo CSTM v2 DSP ADPCM subset, including
+  relative metadata, per-channel regular/final padded blocks and SEEK histories.
+  Failures preserve output and unsupported layouts remain explicit. Compare 240
+  original streams / 57,980 samples with rational PCM, continuation and seek;
+  guest DSP services, mixing, loops and physical playback remain open.
+
 - Verify the repaired Pages source/fresh dashboard and native Project membership
   live; record reviewed receipts and remove resolved delivery blockers. The DSP
   codec is merged with all required checks; physical/game/full-gate limits remain.

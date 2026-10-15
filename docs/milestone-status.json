@@ -232,7 +232,8 @@
         "Original compiled input/framebuffer/save/reload/RomFS/GX applications verified on desktop, sanitizers and selected emulated PowerPC comparisons",
         "Physical Save 0.14.6 fresh-process reload, embedded RomFS 0.14.6, SD-file RomFS 0.16.0 and GX 0.18.0 transfer/configuration guides completed with zero fallback/fault; user confirmed pictures and Minus return.",
         "Original normal-CRT PICA draw guest has host exact-pixel checks and an October 13 physical own PASS/exit with zero fallback/fault; rendered second presentation at 57.33 seconds. User separately confirms pictures and Minus return.",
-        "Scoped #103 implements a bounded integer DSP ADPCM reference. 6,144 original rational cases / 175,770 samples verify PCM/history, streamed continuation and explicit checkpoint seek; normal/sanitized bounds/late-error tests pass. Container block/SEEK parsing, guest DSP IPC/mixing and actual Wii U playback remain open; no commercial waveform/coefficients are published."
+        "Scoped #103 implements a bounded integer DSP ADPCM reference. 6,144 original rational cases / 175,770 samples verify PCM/history, streamed continuation and explicit checkpoint seek; normal/sanitized bounds/late-error tests pass. Container block/SEEK parsing, guest DSP IPC/mixing and actual Wii U playback remain open; no commercial waveform/coefficients are published.",
+        "Scoped #113/PR #114 adds a checked LE CSTM v2 non-looping mono/stereo DSP ADPCM reader. 240 original relocated/padded streams match 57,980 rational PCM samples, block histories, continuation and SEEK. General containers/loops, guest DSP IPC/mixing and physical output remain open."
       ],
       "acceptance_remaining": [
         "Prove current compiled guest display/input/exit/save/assets on Wii U",
@@ -287,7 +288,7 @@
         {
           "id": "m3-guest-audio",
           "title": "Build the guest DSP/audio path with original probes",
-          "summary": "Original checked DSP ADPCM reference has exact numeric/history/seek evidence. Guest DSP IPC, container metadata, mixing and Wii U output still require implementation and physical acceptance.",
+          "summary": "Original DSP ADPCM and scoped CSTM block/SEEK readers have exact original sample/history evidence. Guest DSP IPC, general containers/loops, mixing and Wii U output still need implementation and physical acceptance.",
           "acceptance_criteria": [
             "Original guest audio fixtures exercise the implemented DSP/service path with checked buffers/voices and independently verified sample/timing results.",
             "Wii U output, synchronization, pause/exit and resource cleanup have focused console observations; unsupported audio commands fail visibly."
@@ -300,7 +301,8 @@
           ],
           "state": "in_progress",
           "evidence": [
-            "Scoped #103 implements a bounded integer DSP ADPCM reference. 6,144 original rational cases / 175,770 samples verify PCM/history, streamed continuation and explicit checkpoint seek; normal/sanitized bounds/late-error tests pass. Container block/SEEK parsing, guest DSP IPC/mixing and actual Wii U playback remain open; no commercial waveform/coefficients are published."
+            "Scoped #103 implements a bounded integer DSP ADPCM reference. 6,144 original rational cases / 175,770 samples verify PCM/history, streamed continuation and explicit checkpoint seek; normal/sanitized bounds/late-error tests pass. Container block/SEEK parsing, guest DSP IPC/mixing and actual Wii U playback remain open; no commercial waveform/coefficients are published.",
+            "Scoped #113/PR #114 adds a checked LE CSTM v2 non-looping mono/stereo DSP ADPCM reader. 240 original relocated/padded streams match 57,980 rational PCM samples, block histories, continuation and SEEK. General containers/loops, guest DSP IPC/mixing and physical output remain open."
           ]
         },
         {
