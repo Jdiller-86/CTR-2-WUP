@@ -2,7 +2,9 @@
 
 For the current **0.24.1** test snapshot, use [the focused hardware guide](console-retest.md).
 Its two apps write source-bound 8 KiB results and retain separate traces; the
-included Windows collector returns only that round's logs. The older fixed-size
+corrected source collector checks the native unversioned trace headers and warns
+about missing pairs. The initially shipped collector omitted those traces; return
+them manually by FTP as the current guide explains. The older fixed-size
 and controls contract below remains a historical reference.
 
 This page preserves the original 0.14.6 controls and reporting contract.

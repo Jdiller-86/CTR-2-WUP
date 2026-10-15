@@ -566,13 +566,15 @@
       ],
       "acceptance": [
         "Original tests cover instruction/time bounds, waiting/yield/no-progress exits and drawn-frame confirmation, with unchanged original guest pixel and own PASS checks.",
-        "A versioned native diagnostic retains phase/progress metrics and a focused physical comparison route; measured hardware speed remains pending until that build is run."
+        "A versioned native diagnostic retains phase/progress metrics and a focused physical comparison route; timing and evidence-binding and remaining stability limits are reported for the exact build without claiming useful game performance."
       ],
       "evidence": [
         "October 13 v0.23.0 trace: drawn presentation 57,330 ms; mean host refresh 153,189 us; visual answer accepted at 10,221 ms before the scene.",
         "PR #106 prepares the 0.24.1 premerge hardware round: cooperative 8 ms/500000-instruction/50-call slices, submitted-draw confirmation, per-phase/per-run metrics and source-bound 8 KiB results.",
         "Original policy and guide tests cover caps, waits/yields/stops, zero progress, bad clock/callbacks, startup-frame rejection and new-session restart. Arithmetic pixel self-checks and bounded package/collector/analyzer fixtures pass focused checks; full required checks gate publication.",
-        "The two-app SD-ready kit preserves earlier Save/RomFS/audio/GX evidence, includes a Windows allowlisted log collector and remains pending physical picture, speed and launcher-return observations. No full gate is accepted."
+        "October 15 returned source 4eeee0ba3a839f934c6bb7d6313f5fcb657782c5: two arithmetic guides/analytic pixels and first guest submitted picture/own PASS/exit pass, with zero fallback/fault and user-reported Minus/HOME return (5.5.6 U / Aroma Beta 27). The initial ZIP predates Plus repeat; the user later confirms restart PASS, with updated files still awaited. No full gate is accepted.",
+        "Scene submission takes 91.549 s; mean scale/publication is 132.281 ms, about 90% of summed recorded phase time. Optimize the measured native scale path; no speedup or game-FPS claim is supported.",
+        "The shipped collector missed actual unversioned traces. Corrected collector/analyzer tests cover the native filename/header contract, wrong build/source/app rejection, partial traces and missing-pair warnings; the four existing full traces remain requested without rerunning passed tests."
       ]
     },
     {

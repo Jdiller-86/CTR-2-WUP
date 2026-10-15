@@ -1,5 +1,14 @@
 # Focused Wii U hardware round — 0.24.1
 
+**October 15 result review:** two arithmetic launches and the first guest
+draw/picture/exit passed. The initial ZIP predates Plus repeat; the user later
+confirms restart PASS. Its updated result/trace are requested, without another run.
+Minus and optional HOME returns were reported. Do not repeat completed Scene
+Check tests. The [evidence review](console-evidence.md) names four existing full
+traces to retrieve by binary FTP; the original kit's collector omitted them
+because trace filenames do not contain the version. Send those TXT files in a
+ZIP directly. The complete procedure below is retained for future focused runs.
+
 This two-app test build checks new exact ADD/MUL arithmetic on Wii U and measures
 the corrected compiled-draw path. Its package manifest names the exact source
 commit. It is a premerge hardware evaluation from PR #106; host/cross-build
@@ -86,8 +95,12 @@ results are already written, but successful launcher return needs your observati
 1. Finish the tests and close the diagnostic apps before downloading logs. Then
    open your FTP server and browse to the SD card's `ctr2wup/` directory.
 2. In **binary transfer mode**, download **all** files matching
-   `*native-software-scene-0.24.1-*.txt` or `*compiled-pica-draws-0.24.1-*.txt`.
-   Include both `result-` reports and traces, and both Scene Check launches.
+   `result-native-software-scene-0.24.1-*.txt` or
+   `result-compiled-pica-draws-0.24.1-*.txt`. Also download each matching session's
+   trace: `native-software-scene-<session>-<attempt>.txt` or
+   `compiled-pica-draws-<session>-<attempt>.txt`. Trace filenames have no version;
+   use the `Full trace: ... file=...` field in each result to identify the file.
+   Include both Scene Check launches and incomplete runs.
 3. Keep the original filenames. Wait until the FTP queue finishes, then select
    the downloaded TXT files in Windows and **Compress to ZIP file**. Send that
    ZIP in this chat. The `.cmd` and Python are optional for this route.
@@ -109,6 +122,12 @@ checksummed receipt and observation prompts, download the matching files into
 the extracted kit. At its SD-root prompt enter **`C:\CTR2WUP-return`** (the
 parent of `ctr2wup`), even though the files came over FTP. Keep the kit's
 `manifest.json` beside the collector. Use the collector from the kit you tested.
+
+The initially delivered kit's collector omits unversioned traces. For that kit,
+send the named traces manually as described above; a missing-trace warning does
+not require redeploying the apps. The corrected source collector accepts native
+trace names after checking their application/build/source headers and warns when
+a result's paired trace is absent.
 
 With an SD reader, close the apps, remove the SD normally and enter its drive
 root instead, such as **E:**. The collector uses your installed Python 3 launcher.

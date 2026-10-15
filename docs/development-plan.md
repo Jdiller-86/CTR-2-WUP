@@ -1,6 +1,6 @@
 # CTR2WUP product development plan
 
-Updated **October 14, 2026** for **v0.24.1 hardware evaluation**. The requirements remain
+Updated **October 15, 2026** for **v0.24.1 hardware evidence**. The requirements remain
 [the original brief](project-brief.md), the reviewed [GUI workflow](gui-workflow.md)
 and the user amendment allowing [optional local encrypted-input preparation](encrypted-input.md).
 Upstream feasibility scores and compatibility percentages are research context,
@@ -43,7 +43,7 @@ broader PICA state and physical renderer acceptance remain open.
 Checked generated-code integration, owned guest memory, scoped services, original
 synthetic packaging and hosted Windows foundations exist. Reviewed physical
 Save/results/assets/GX evidence is retained, and the launch-music regression has
-reviewed physical passes. Draw startup profiling, complete platform stability,
+reviewed physical passes. Scale/publication optimization, complete platform stability,
 installed-WUP acceptance, commercial conversion and final GUI are still pending.
 **0/7 full milestones are accepted.** Completed scoped features do not change that.
 
@@ -71,17 +71,21 @@ transaction probes pass; required full/platform checks gate delivery through PR 
 
 ## Now, next and later
 
-PR #106/#87 prepares the focused 0.24.1 arithmetic/draw hardware round with
-bounded guest slices, accurate submitted-frame confirmation, separate host
-phase metrics and source-bound return logs. It is an evaluation snapshot;
-physical picture, speed, restart and launcher results remain pending.
+PR #106/#87 has reviewed 0.24.1 physical results: two arithmetic launches and the
+first submitted guest picture/own PASS/exit pass; Minus and optional HOME returns
+are reported on firmware 5.5.6 U / Aroma Beta 27. The initial ZIP predates Plus
+repeat; the user later confirms restart PASS, with updated files still awaited.
+The 91.549-second scene and 132.281 ms mean scale/publication phase identify the
+next measured optimization target. Retrieve the existing full traces omitted by
+the original collector; its filename fix and missing-trace warnings preserve
+partial evidence. This remains a premerge snapshot with full gates open.
 
 | Priority | Concrete deliverable | Tracking and acceptance |
 | --- | --- | --- |
 | Delivered checkpoint | Bounded compiled guest draws, transactional targets/completion, exact frames and checked 512-word shader storage | Scoped M4 command and capacity increments in PR #48/#57/#98; broader #28/#30 and full M4 acceptance remain open |
 | Next independent renderer work | Extend shader/control or bounded TEV and texture sampling using original references | M4 #28/#29; separate scoped features with numeric/pixel and rollback criteria |
 | Resource/native renderer work | Version resource caches, prove invalidation/readback, define native shader ABI and translate the proven subset into GX2 | M4 #28/#30; retain software reference and explicit shader/cache misses |
-| Physical evidence and performance | Run focused 0.24.1 arithmetic/draw evaluation and return source-bound logs; retain earlier passes and collect repeat launch/exit before broader Espresso/rendering costs | #87/#20, M1 #13–#16, M3 #22/#26 and M4 #31; only physical observations accept these gates |
+| Physical evidence and performance | Retain 0.24.1 arithmetic/first-draw/launcher passes, retrieve existing full traces, optimize measured scale/publication cost and obtain updated logs for the user-confirmed Plus restart | #87/#20, M1 #13–#16, M3 #22/#26 and M4 #31; broader Espresso, stability/recovery and full renderer criteria remain open |
 | Title intake and analysis | Retain verified executable/report/sample provenance; validate required nested resources and refine the observed runtime/test-route matrix | M5 #32/#33 are active analysis; selected Yaz0/NARC/DVLB/CGFX/BYML/CSAR/CSTM structures are inspected; actual runtime selection/use remains pending |
 | Asset-informed shared work | Extend shader code capacity/arithmetic/control safely and add original DSP ADPCM/container probes | M4 #28 and M3 #25; static sampled resources justify scoped implementation, while runtime/console use needs separate evidence |
 | Required game runtime | Implement observed CPU, services, dynamic modules, DSP/audio, saves and rendering requirements | M2/M3/M4 and M5 #34–#36; original probes support shared interfaces, then real title evidence |
@@ -89,8 +93,9 @@ physical picture, speed, restart and launcher results remain pending.
 | Final GUI | Implement the responsive WPF Inject page, private setup help, saved projects and packaged prerequisites over the proven engine | M7 #42–#46; GUI-to-playable-WUP acceptance completes the MVP |
 
 The user is available for focused physical tests with Windows 11 and Aroma.
-October 13 audio/GX/draw results are reviewed; the draw trace exposes a 57.33-second
-scene delay and premature visual confirmation. Continue original renderer/runtime
+October 13 audio/GX/draw results are retained. October 15 results confirm the new
+arithmetic and first draw route while identifying native scale/publication as the
+dominant measured cost. Continue original renderer/runtime
 and host development alongside targeted hardware follow-ups. Keep exact blocked acceptance
 visible; do not treat a host pass as a console result or ask for repeated tests of
 unchanged completed routes. Priorities may change when actual title requirements

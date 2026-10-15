@@ -46,6 +46,74 @@ class HardwareReturnTests(unittest.TestCase):
         self.assertFalse(result['full_milestone_acceptance'])
         self.assertEqual(result['observations']['draw_minus'], 'returned')
 
+    def trace(self, version=collector.VERSION, commit=COMMIT, app='compiled-pica-draws'):
+        return (f'CTR2WUP Wii U test report\nApplication: {app} | Build: {version}\n'
+                f'BUILD source_commit={commit} source_dirty=0 evidence_schema=2 result_bytes=8192\n'
+                'PHASE name=scale calls=2 total_us=260000 max_us=132000\n').encode()
+
+    def test_native_unversioned_trace_is_collected_and_reparsed(self):
+        name='compiled-pica-draws-0000000000000001-00.txt'
+        trace=self.trace();(self.sd/'ctr2wup'/name).write_bytes(trace)
+        report=collector.collect(self.sd,self.root/'trace.zip',self.kit)
+        self.assertEqual(len(report['files']),2);self.assertEqual(report['warnings'],[])
+        result=analyzer.analyze(self.root/'trace.zip',COMMIT)
+        summary=next(row for row in result['summaries'] if row['kind']=='trace')
+        self.assertTrue(summary['source_identity_seen']);self.assertEqual(summary['phase_records'],1)
+        self.assertEqual((self.sd/'ctr2wup'/name).read_bytes(),trace)
+
+    def test_partial_native_trace_without_result_is_preserved(self):
+        (self.sd/'ctr2wup'/self.name).unlink()
+        name='compiled-pica-draws-0000000000000001-00.txt'
+        (self.sd/'ctr2wup'/name).write_bytes(self.trace())
+        report=collector.collect(self.sd,self.root/'interrupted.zip',self.kit)
+        self.assertEqual(len(report['files']),1)
+        self.assertTrue(analyzer.analyze(self.root/'interrupted.zip',COMMIT)['summaries'][0]['source_identity_seen'])
+
+    def test_trace_pair_uses_reported_collision_suffix(self):
+        name='compiled-pica-draws-0000000000000001-01.txt'
+        data=self.data.rstrip()+f'\nFull trace: SAVING | file={name} errno=0\n'.encode()
+        (self.sd/'ctr2wup'/self.name).write_bytes(data)
+        (self.sd/'ctr2wup'/name).write_bytes(self.trace())
+        report=collector.collect(self.sd,self.root/'collision.zip',self.kit)
+        self.assertEqual(report['warnings'],[])
+        self.assertEqual(analyzer.analyze(self.root/'collision.zip',COMMIT)['warnings'],[])
+
+    def test_unversioned_trace_rejects_other_build_source_and_application(self):
+        name='compiled-pica-draws-0000000000000001-00.txt'
+        for kind,trace in [('version',self.trace(version='0.23.0')),('source',self.trace(commit='b'*40)),
+                           ('application',self.trace(app='native-software-scene'))]:
+            with self.subTest(kind=kind):
+                (self.sd/'ctr2wup'/name).write_bytes(trace)
+                output=self.root/(kind+'-trace.zip')
+                report=collector.collect(self.sd,output,self.kit)
+                self.assertEqual(len(report['files']),1)
+                self.assertTrue(any('identity differs' in warning for warning in report['warnings']))
+                with zipfile.ZipFile(output) as archive:self.assertNotIn('logs/'+name,archive.namelist())
+
+    def test_missing_trace_is_reported_without_discarding_result(self):
+        report=collector.collect(self.sd,self.root/'result-only.zip',self.kit)
+        self.assertEqual(len(report['files']),1)
+        self.assertTrue(any('full trace missing' in warning for warning in report['warnings']))
+        # Also diagnose older collector receipts that silently omitted traces.
+        with zipfile.ZipFile(self.root/'result-only.zip') as archive:entries={n:archive.read(n) for n in archive.namelist()}
+        receipt=json.loads(entries['collection.json']);receipt['warnings']=[]
+        entries['collection.json']=json.dumps(receipt).encode()
+        with zipfile.ZipFile(self.root/'old-collector.zip','w') as archive:
+            for name,data in entries.items():archive.writestr(name,data)
+        result=analyzer.analyze(self.root/'old-collector.zip',COMMIT)
+        self.assertTrue(any('full trace missing' in warning for warning in result['warnings']))
+
+    def test_returned_unversioned_trace_requires_source_identity_even_with_new_hash(self):
+        collector.collect(self.sd,self.root/'result.zip',self.kit)
+        with zipfile.ZipFile(self.root/'result.zip') as archive:entries={n:archive.read(n) for n in archive.namelist()}
+        name='logs/compiled-pica-draws-0000000000000001-00.txt';data=self.trace(commit='b'*40)
+        entries[name]=data;receipt=json.loads(entries['collection.json'])
+        receipt['files'].append({'path':name,'size':len(data),'sha256':hashlib.sha256(data).hexdigest()})
+        entries['collection.json']=json.dumps(receipt).encode()
+        with zipfile.ZipFile(self.root/'wrong-trace.zip','w') as archive:
+            for name,data in entries.items():archive.writestr(name,data)
+        with self.assertRaisesRegex(ValueError,'trace build/source identity'):analyzer.analyze(self.root/'wrong-trace.zip',COMMIT)
+
     def test_partial_and_failed_reports_are_included_without_claiming_complete(self):
         (self.sd/'ctr2wup'/self.name).write_bytes(b'Session: STARTED\nGuide: not completed\n')
         collector.collect(self.sd, self.root/'partial.zip', self.kit)
@@ -56,7 +124,7 @@ class HardwareReturnTests(unittest.TestCase):
         extra = self.sd/'ctr2wup/native-software-scene-0.24.1-0000000000000002-00.txt'
         extra.write_bytes(b'x'*(collector.MAX_FILE+1))
         result = collector.collect(self.sd, self.root/'bounded.zip', self.kit)
-        self.assertEqual(len(result['files']), 1);self.assertEqual(len(result['warnings']), 1)
+        self.assertEqual(len(result['files']), 1);self.assertTrue(any('exceeds 4 MiB' in w for w in result['warnings']))
         extra.unlink()
         try:extra.symlink_to(self.root/'outside.txt')
         except OSError:return  # Symlink creation is restricted on some Windows runners.

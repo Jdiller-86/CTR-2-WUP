@@ -3,8 +3,13 @@
 For the **0.24.1** hardware snapshot, follow [the current two-app guide](console-retest.md).
 PR #106 gates confirmation on a successfully decoded/submitted drawn frame,
 adds a measured bounded runner and an automatic second-run prompt, and supplies
-source-bound results plus a Windows return-log collector. Those new bytes still
-need their own physical observations; the earlier results below remain dated evidence.
+source-bound results plus a Windows return-log collector. October 15 source-bound
+results pass the first submitted picture and own PASS/exit. The initial ZIP
+predates Plus repeat; the user later confirms restart PASS, with updated files
+still awaited. Scene latency is 91.549 s and native scale/publication averages
+132.281 ms. Existing full traces are still needed because the shipped collector
+omitted unversioned filenames. See [the evidence review](console-evidence.md).
+The earlier results below remain dated evidence.
 
 Version **0.23.0** connects a bounded PICA draw subset to the standard guest GSP
 queue. An original normal-CRT ARM application uses unmodified pinned libctru to

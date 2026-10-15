@@ -11,13 +11,14 @@ reviewed results. No blanket repeat is requested. See [evidence](console-evidenc
 
 Current requirements:
 
-1. **Draw progress and accurate evidence:** the rendered second presentation
-   took 57.33 seconds in the old trace; its visual guide accepted an answer before
-   that scene. PR #106 supplies a correctly gated, cooperative bounded draw run,
-   phase/progress metrics and a two-app [hardware round](console-retest.md).
-   Compare that exact build on Wii U; measure the new arithmetic Scene Check,
-   repeated launch/exit and the draw run's in-app restart. Aggregate
-   host refresh time is not a GPU/CPU breakdown or a game-performance result.
+1. **Measured scale/publication cost and remaining repeat:** October 15 results
+   pass two 0.24.1 arithmetic launches and the first submitted guest picture/own
+   PASS/exit, with reported Minus/HOME return. The scene takes 91.549 s; native
+   scale/publication averages 132.281 ms and dominates recorded phases. Optimize
+   that measured path; no speedup or game performance is established. Plus restart
+   is later user-confirmed PASS; its updated result and trace are awaited. Retrieve the four existing full traces omitted by the
+   original collector's filename filter; do not rerun completed tests for those
+   files. [Evidence and exact filenames](console-evidence.md).
 2. **Mario observed runtime requirements:** the executable, preparation/inventory
    reports and all seven requested sample payloads are verified and available.
    M5/intake/matrix analysis can proceed; missing input is no longer its blocker.
@@ -28,8 +29,8 @@ Current requirements:
    the received samples is requested. [First-title findings](first-title.md).
 3. **Platform acceptance:** complete documented repeat launch, Home/APT,
    stability, SD recovery and original WUP install/Menu-launch checks with exact
-   environment/build identity. The three successful sessions do not complete
-   those full criteria.
+   environment/build identity. Scoped arithmetic/first-draw/Minus/HOME results
+   do not complete those full criteria.
 4. **Renderer/runtime implementation:** broader shaders, TEV/sampling, native
    GX2 translation, coherency, dynamic modules, guest audio and retail saves
    remain open. Merged PR #98 supplies original 512-word shader storage/upload/

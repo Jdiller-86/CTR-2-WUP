@@ -1,5 +1,74 @@
 # Console evidence review
 
+## October 15: exact arithmetic, submitted guest draws and measured scaling
+
+The returned 0.24.1 collector ZIP has four 8 KiB result files. ZIP/receipt
+checksums and every result's clean source identity agree with tested kit source
+`4eeee0ba3a839f934c6bb7d6313f5fcb657782c5` (the source tree at PR #106 head
+`d292d762dca03b03815c74435bda5535def7e023`). Raw files and the intake receipt
+remain in ignored `private/console-evidence-20261015/`; only aggregates are
+published. The user reports firmware **5.5.6 U**, **Aroma Beta 27**, no separate
+launcher, normal Minus returns, optional HOME return and no observed problems.
+
+| Diagnostic | Reviewed physical evidence | Remaining scope |
+|---|---|---|
+| Scene Check 0.24.1, two launches | Both exact ADD/MUL analytic pixel/index checks pass; picture and shared diagonal each PASS; normal Minus exit reported on both launches | Scoped CPU software raster/GX2-copy check, not native shader translation or full lifecycle acceptance |
+| Guest Draws 0.24.1, first run | Own PASS/exit, 4 draws/4 triangles/97,200 fragments/36 shader steps, zero fallback/fault; submitted serial 2 and user picture PASS | Guide cancelled after 2 PASS; Plus repeat NOT TESTED. User confirms exiting before pressing Plus, rather than a failed restart |
+| Guest Draws 0.24.1, later Plus follow-up | User separately confirms trying Plus restart and receiving PASS without an issue | Updated result/trace not yet received; keep this user-reported pass distinct from the earlier uploaded run and its timing/counters |
+| Scene Check 0.24.1, third launch | Automatic arithmetic checks pass; guide remains at step 1; host exit result 0 | Optional HOME return is a separate user observation; the absent full trace cannot independently establish its exit route |
+
+The first two arithmetic launches report `pixel_selftest=0`, both index renders
+`ok`, 30 shader steps per render and 0.666–0.951 ms render times. Guest Draws
+executes 17,532,421 instructions; this physical count differs from the host
+reference because it is a separate live-time run. All four reports reach
+`resources_closed_before_system_transition` with host exit result 0 and no
+reported storage error. That checkpoint is before the final system transition;
+successful launcher return comes from the user's observation.
+
+The Guest Draws submitted-scene latency is **91,549 ms** and mean diagnostic
+host frame is **146,527 us**. These results do not establish an improvement over
+the dated 57,330 ms 0.23.0 trace: the builds, logging and timestamp origins differ,
+and this is not a controlled CPU/game benchmark. The recorded host phase counters
+identify a concrete next optimization target:
+
+| Host phase | Calls | Total seconds | Mean ms/call | Maximum ms/call |
+|---|---:|---:|---:|---:|
+| Guest execution/HLE | 824 | 6.515 | 7.906 | 46.146 |
+| Pixel decode | 2 | 0.108 | 53.908 | 53.923 |
+| Scale and source/cache publication | 824 | 108.999 | 132.281 | 133.886 |
+| GPU wait API | 824 | 0.006 | 0.007 | 0.205 |
+| Presentation APIs | 824 | 2.280 | 2.767 | 3.224 |
+| Result/trace commit storage | 239 | 3.171 | 13.270 | 16.051 |
+
+Scaling accounts for about 90% of the sum of these recorded phase times. The
+two completed native launches also spend about 132 ms per scale call without
+running the compiled draw guest. This supports optimizing the measured native
+scale/publication path before increasing guest budgets. These are cumulative
+host wall-time counters with diagnostic overhead, not GPU timestamps or a full
+CPU/GPU attribution. The 46.146 ms maximum guest phase also confirms that the
+8 ms cooperative target is not a hard per-frame deadline.
+
+**Collection defect:** the shipped collector expected a version in trace names;
+the native writer uses `application-<session>-<attempt>.txt`. It therefore
+included results but silently missed full traces. The corrected collector
+accepts the actual trace names only after matching application, build and clean
+source headers, and warns about absent paired traces. The analyzer also warns
+when an older collector's return lacks them. The original return remains valid
+for the four result files; final exit/guide chronology and slice-stop details
+await the existing traces. Download them over binary FTP without rerunning tests:
+
+- `native-software-scene-00baaad302e7d6fb-00.txt`
+- `native-software-scene-00baaad4198b7ee9-00.txt`
+- `compiled-pica-draws-00baaad54d7a7322-00.txt`
+- `native-software-scene-00baaad7f714b202-00.txt`
+
+The user later confirms a successful Plus restart without issues. Obtain its
+new result and matching full trace to corroborate the new session, own PASS and
+drawn submission; do not request another run. The initial ZIP's cancelled guide
+is retained as the first run's history. Do not repeat completed Scene Check,
+Save, RomFS, audio or GX tests merely to collect files. Full stability/recovery,
+installed WUP, commercial gameplay and all seven full gates remain open.
+
 ## October 13: launch audio, GX transfers and compiled PICA draws
 
 The new private ZIP contains three full traces and two independent 4 KiB result

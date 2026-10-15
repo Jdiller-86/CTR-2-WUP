@@ -29,14 +29,21 @@ def analyze(path, expected):
         rows = receipt.get('files', [])
         if not isinstance(rows, list) or len(rows) != len(names)-1 or {r['path'] for r in rows} != set(names)-{'collection.json'}:
             raise ValueError('Return manifest does not match its payload')
-        summaries = []
+        summaries, payload = [], {}
         for row in rows:
             data = archive.read(row['path'])
             if row.get('size') != len(data) or row.get('sha256') != hashlib.sha256(data).hexdigest():
                 raise ValueError('Returned log checksum differs')
+            name = row['path'][5:]
+            if not name.startswith('result-') and not collector.trace_identity_matches(name, data, expected):
+                raise ValueError('Returned trace build/source identity differs or is incomplete')
+            payload[row['path']] = data
             summaries.append(collector.result_summary(row['path'][5:], data, expected))
+        warnings = list(receipt.get('warnings', []))
+        for warning in collector.missing_trace_warnings(payload):
+            if warning not in warnings:warnings.append(warning)
     return {'ok': True, 'transport_verified': True, 'source_commit': expected,
-            'observations': receipt.get('observations', {}), 'warnings': receipt.get('warnings', []),
+            'observations': receipt.get('observations', {}), 'warnings': warnings,
             'summaries': summaries, 'full_milestone_acceptance': False}
 
 

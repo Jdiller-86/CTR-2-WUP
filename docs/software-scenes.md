@@ -13,7 +13,11 @@ The focused native check below remains a separate original diagnostic.
 
 Build with `python -m host build --target scene-check --output artifacts/my-scene-check`.
 The 0.24.1 evaluation runs the exact ADD/MUL transform and console-side analytic
-pixel checks in this app. Use [the focused hardware guide](console-retest.md) for
+pixel checks; October 15 results pass these and both picture prompts on two
+launches. This is a scoped software-renderer pass; broader shader and native GPU
+acceptance remains open. See [the hardware evidence](console-evidence.md).
+The procedure below is retained for focused follow-ups. Use
+[the focused hardware guide](console-retest.md) for
 the current two-app package, repeat launch and the Windows log collector.
 The matching CI run also supplies `wiiu-scene-check-<source commit>`, containing
 RPX/WUHB, build receipt, checksums, source identity and notices. Use its WUHB

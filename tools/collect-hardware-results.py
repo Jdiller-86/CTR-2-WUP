@@ -13,14 +13,45 @@ VERSION = '0.24.1'
 APPS = ('native-software-scene', 'compiled-pica-draws')
 MAX_FILE = 4 * 1024 * 1024
 MAX_TOTAL = 24 * 1024 * 1024
-PATTERN = re.compile(r'^(?:result-)?('+'|'.join(APPS)+r')-'+re.escape(VERSION)+r'-[0-9a-f]{16}-[0-9]{2}\.txt$')
+APP_PATTERN = r'(?:'+'|'.join(APPS)+r')'
+SESSION_PATTERN = r'[0-9a-f]{16}-[0-9]{2}\.txt'
+RESULT_PATTERN = re.compile(r'^result-(?P<app>'+APP_PATTERN+')-'+re.escape(VERSION)+r'-(?P<session>[0-9a-f]{16})-(?P<attempt>[0-9]{2})\.txt$')
+# The native trace writer deliberately omits the version from its filename.
+PATTERN = re.compile(r'^(?:result-'+APP_PATTERN+'-'+re.escape(VERSION)+'-|'+APP_PATTERN+r'-(?:'+re.escape(VERSION)+'-)?'+r')'+SESSION_PATTERN+'$')
+
+
+def trace_identity_matches(name, data, commit):
+    app = next((app for app in APPS if name.startswith(app+'-')), None)
+    text = data.decode('utf-8', errors='replace')
+    return (app is not None and text.startswith('CTR2WUP Wii U test report\n')
+        and re.search(r'^Application: '+re.escape(app)+r' \| Build: '+re.escape(VERSION)+r'\r?$', text, re.MULTILINE) is not None
+        and re.search(r'^BUILD source_commit='+re.escape(commit)+r' source_dirty=0(?: |\r?$)', text, re.MULTILINE) is not None)
+
+
+def missing_trace_warnings(entries):
+    entries = {name.removeprefix('logs/'): data for name, data in entries.items()}
+    warnings = []
+    for name in sorted(entries):
+        match = RESULT_PATTERN.fullmatch(name)
+        if not match:continue
+        versioned = name.removeprefix('result-')
+        actual = versioned.replace('-'+VERSION+'-', '-', 1)
+        candidates = {actual, versioned}
+        # Result and trace writers resolve filename collisions independently.
+        hint = re.search(r'^Full trace: [^\r\n]*? \| file=([^ |\r\n]+)', entries[name].decode('utf-8', errors='replace'), re.MULTILINE)
+        if hint and PATTERN.fullmatch(hint[1]) and any(hint[1].startswith(prefix) for prefix in (
+            match['app']+'-'+match['session']+'-', match['app']+'-'+VERSION+'-'+match['session']+'-')):
+            actual = hint[1];candidates = {actual}
+        if not candidates.intersection(entries):
+            warnings.append(actual+': full trace missing; keep the result and download this trace if available')
+    return warnings
 
 
 def result_summary(name, data, commit):
     text = data.decode('utf-8', errors='replace')
     summary = {'file': name, 'kind': 'result' if name.startswith('result-') else 'trace'}
     if summary['kind'] == 'trace':
-        summary['source_identity_seen'] = f'source_commit={commit} source_dirty=0' in text
+        summary['source_identity_seen'] = trace_identity_matches(name, data, commit)
         summary['draw_submissions'] = re.findall(r'DRAWN FRAME SUBMITTED[^\r\n]*', text)
         summary['phase_records'] = len(re.findall(r'PHASE name=', text))
         return summary
@@ -44,7 +75,7 @@ def collect(sd_root, output, kit, observations=None):
         raise ValueError('Use the matching hardware-round manifest.json beside this collector')
     folder = sd_root / 'ctr2wup'
     if folder.is_symlink() or not folder.is_dir():
-        raise ValueError('Select the SD root containing its real ctr2wup directory')
+        raise ValueError('Select the SD root or local FTP download root containing its real ctr2wup directory')
     matches = sorted(p for p in folder.iterdir() if PATTERN.fullmatch(p.name))
     if not matches:
         raise ValueError('No 0.24.1 round logs found. Preserve any on-screen storage error and report that no files were created.')
@@ -62,7 +93,9 @@ def collect(sd_root, output, kit, observations=None):
             data = stream.read(MAX_FILE+1)
         after = path.lstat()
         if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns) or len(data) != before.st_size:
-            raise ValueError('A log changed while being read; close the app and safely reinsert the SD card')
+            raise ValueError('A log changed while being read; close the app and finish FTP downloads or safely reinsert the SD card')
+        if not path.name.startswith('result-') and not trace_identity_matches(path.name, data, kit['source_commit']):
+            warnings.append(path.name+': trace build/source identity differs or is incomplete; excluded (keep it separately)');continue
         total += len(data)
         if total > MAX_TOTAL:
             raise ValueError('Round logs exceed 24 MiB; return smaller batches while preserving the originals')
@@ -71,6 +104,7 @@ def collect(sd_root, output, kit, observations=None):
         summaries.append(result_summary(path.name, data, kit['source_commit']))
     if not entries:
         raise ValueError('No regular bounded round logs could be collected; preserve the originals')
+    warnings.extend(missing_trace_warnings(entries))
     report = {'schema_version': 1, 'kind': 'ctr2wup-hardware-return', 'version': VERSION,
               'source_commit': kit['source_commit'], 'collected_at': datetime.now(timezone.utc).isoformat(),
               'observations': observations or {}, 'warnings': warnings, 'files': records,
@@ -93,7 +127,7 @@ def main():
     args = parser.parse_args()
     root = Path(__file__).resolve().parent
     kit = json.loads((root/'manifest.json').read_text(encoding='utf-8'))
-    selected = str(args.sd_root or input('SD drive/root (for example E:\\): ').strip().strip('"'))
+    selected = str(args.sd_root or input('SD root or local FTP download root (parent of ctr2wup): ').strip().strip('"'))
     if re.fullmatch('[A-Za-z]:', selected):selected += '/'
     observations = {}
     if not args.noninteractive:
