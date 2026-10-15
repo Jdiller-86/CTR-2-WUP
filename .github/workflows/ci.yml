@@ -339,6 +339,20 @@ jobs:
           include-hidden-files: true
           retention-days: 30
           if-no-files-found: error
+      - name: Build and package the full M1 platform acceptance suite
+        run: |
+          set -euo pipefail
+          python -m host build --target m1-check --output artifacts/ci/m1-check
+          python3 tools/package-m1-suite.py --native artifacts/ci/m1-check \
+            --audio-kit artifacts/ci/audio-round/stage --output artifacts/ci/m1-suite
+      - name: Upload the guided M1 acceptance suite
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wiiu-m1-acceptance-${{ github.sha }}
+          path: artifacts/ci/m1-suite/stage/
+          include-hidden-files: true
+          retention-days: 30
+          if-no-files-found: error
       - name: Upload checked compiled guest draws and source provenance
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

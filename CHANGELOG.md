@@ -5,6 +5,13 @@ do not establish commercial-game compatibility or installable WUP acceptance.
 
 ## 0.26.0 — unreleased
 
+- Deliver a full M1 Check profile, guided platform/600-second stability run and
+  source-bound original SD sentinel/recovery/error-retry probe. Add short fresh
+  Minus/HOME runs, process-session trace binding and a strict per-criterion reviewer.
+- Package exact-source M1 and Audio Streams diagnostics together with FTP-only
+  instructions. Keep WUP Installer GX2 installation explicitly blocked without
+  a real verified original package; never count WUHB icons or host checks as M1.
+
 - Connect checked CSTM/ADPCM to two bounded voices, integer linear 48 kHz stereo
   conversion, independent Q15 gains, saturation, pause, seek and EOF. Preserve
   complete output/state on late failures; compare original rational PCM and controls.

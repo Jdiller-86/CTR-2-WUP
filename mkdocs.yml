@@ -117,6 +117,7 @@ nav:
       - CSTM blocks and seek: docs/cstm.md
       - Audio stream engine: docs/audio-streams.md
       - Audio Streams hardware test: docs/audio-stream-testing.md
+      - Full M1 acceptance suite: docs/m1-acceptance.md
   - Project:
       - Development tracking: docs/development-tracking.md
       - Project tracking policy: docs/github-project-overview.md

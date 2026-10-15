@@ -212,6 +212,12 @@ def prototype(output: str | Path, guest_path=None, *, backend="original", audio_
         if stream_audio:
             manifest["stages"].append({"name":"original_cstm_mixing_native_pcm_human_hearing","state":"awaiting_console_test"})
             manifest["limitations"].append("Original checked CSTM, two portable voices and fixed finite native PCM; guest DSP IPC, asynchronous streaming and audible hardware output remain unverified")
+        if m1_only:
+            manifest["m1_acceptance"]={"full_native_guide":True,"storage_protocol":"scratch-v1",
+                "sentinel_bytes":128,"process_session_trace":True,"installed_wup":False,
+                "console_verified":False,"full_milestone_acceptance":False}
+            manifest["stages"].append({"name":"native_controls_stability_sd_recovery_fresh_lifecycle","state":"awaiting_console_test"})
+            manifest["limitations"].append("Original closed-write/readback and software recovery probe; no power-loss durability or installed-WUP acceptance")
         if scene_only:
             manifest["stages"].append({"name":"original_scene_pixels_and_user_display_confirmation","state":"awaiting_console_test"})
             manifest["limitations"].append("Original exact ADD/MUL scenes rasterized on CPU and copied to GX2 surfaces; physical picture/performance and GPU shader translation remain unverified")

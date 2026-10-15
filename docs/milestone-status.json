@@ -22,7 +22,8 @@
         "0.25.0 native display cache has independent exact-output/failure checks and original host workload reductions, retaining both GX2 copies and cache APIs. Split scale/publish and work/memory logs support a new source-bound two-app physical comparison; Wii U freshness/restart/speed remain pending. Host publication-byte savings do not accept performance or any full milestone.",
         "Owner merged PR #106 after all required checks and removed branch rulesets October 15. Canonical publication 38745496120 verifies merged source and fresh Project data over HTTP. Scoped #107 hardens verification; physical cache/lifecycle/WUP criteria remain open.",
         "Scoped #110 adds independent exact issue/PR Project membership reads after PR #108 addition was acknowledged but connection readback omitted it. Public receipts preserve both views; archived/ambiguous/missing membership still fails and owner settings remain unchanged. Trusted-main apply 38752814566 verifies 71 parent links, 33 PR links and all 111 expected Project members at that checkpoint, using exact independent links when the connection lags. Publication 38752341776 verifies source 150aa5c and fresh available Project data.",
-        "The v0.26.0 Audio Streams diagnostic adds original finite stereo clips and guided channel/rate/pause/seek/repeat evidence collection. Host math and AX mocks do not establish physical sound, full lifecycle/stability or installed-WUP acceptance."
+        "The v0.26.0 Audio Streams diagnostic adds original finite stereo clips and guided channel/rate/pause/seek/repeat evidence collection. Host math and AX mocks do not establish physical sound, full lifecycle/stability or installed-WUP acceptance.",
+        "Scoped #117/PR #118 adds a full native ten-step/600-second guide, persistent source-bound original SD sentinel, closed-write/reload/backup/pending/error-retry probes, separate fresh Minus/HOME sessions and strict source/session/criterion review. Host checks do not establish physical acceptance. WUP Installer GX2 is selected; installed-title criteria remain Blocked without real local packaging material/provenance and a verified collision-checked original WUP."
       ],
       "acceptance_remaining": [
         "Verify documented SD publication recovery and repeat launch/Home/APT lifecycle acceptance",
@@ -34,7 +35,7 @@
         {
           "id": "m1-results",
           "title": "Verify current TXT result collection on Wii U",
-          "summary": "Current named TXT collection is physically verified across Save, RomFS, SD assets and GX; preserve older missing-report failures separately. Project review can mark this scoped task Done without accepting M1.",
+          "summary": "The live Project reviewed scoped TXT result collection as Done. Preserve that prior physical evidence; the M1 suite binds its newly changed platform/probe sessions without reopening unchanged collection checks.",
           "acceptance_criteria": [
             "A fresh launch creates a uniquely named, closed-file read-back-verified TXT report in the documented SD results directory; its header identifies the tested build and diagnostic.",
             "Upload the requested TXT files and preserved snapshot/siblings through the private intake route; retain automatic observations, user confirmations, failures and skips separately."
@@ -65,7 +66,8 @@
           "state": "awaiting_evidence",
           "evidence": [
             "Completed 0.24.1 hardware round (October 14 evening / October 15 UTC): five source-matched traces and five reports verify two arithmetic guides, the full Guest Draws/Plus-repeat guide and all five launches through main_return. The user confirms Minus/HOME return on firmware 5.5.6 U / Aroma Beta 27. All files are received and the corrected collector/analyzer passes on them; full stability/recovery and installed-WUP acceptance remain open.",
-            "0.25.0 native display cache has independent exact-output/failure checks and original host workload reductions, retaining both GX2 copies and cache APIs. Split scale/publish and work/memory logs support a new source-bound two-app physical comparison; Wii U freshness/restart/speed remain pending. Host publication-byte savings do not accept performance or any full milestone."
+            "0.25.0 native display cache has independent exact-output/failure checks and original host workload reductions, retaining both GX2 copies and cache APIs. Split scale/publish and work/memory logs support a new source-bound two-app physical comparison; Wii U freshness/restart/speed remain pending. Host publication-byte savings do not accept performance or any full milestone.",
+            "Scoped #117/PR #118 adds a full native ten-step/600-second guide, persistent source-bound original SD sentinel, closed-write/reload/backup/pending/error-retry probes, separate fresh Minus/HOME sessions and strict source/session/criterion review. Host checks do not establish physical acceptance. WUP Installer GX2 is selected; installed-title criteria remain Blocked without real local packaging material/provenance and a verified collision-checked original WUP."
           ]
         },
         {
@@ -80,12 +82,15 @@
           "waiting_labels": [
             "needs-console"
           ],
-          "state": "awaiting_evidence"
+          "state": "awaiting_evidence",
+          "evidence": [
+            "Scoped #117/PR #118 adds a full native ten-step/600-second guide, persistent source-bound original SD sentinel, closed-write/reload/backup/pending/error-retry probes, separate fresh Minus/HOME sessions and strict source/session/criterion review. Host checks do not establish physical acceptance. WUP Installer GX2 is selected; installed-title criteria remain Blocked without real local packaging material/provenance and a verified collision-checked original WUP."
+          ]
         },
         {
           "id": "m1-package-launch",
           "title": "Verify an original diagnostic as an installed Wii U title",
-          "summary": "Use the validated original-homebrew WUP smoke package to prove installation and Wii U Menu launch rather than inferring them from RPX/WUHB launch.",
+          "summary": "Blocked on a real source-matched original WUP with reviewed local packaging material/provenance and collision-checked identity. WUP Installer GX2 installation, two Menu launches/exits and exact environment still need physical evidence; RPX/WUHB icons do not qualify.",
           "acceptance_criteria": [
             "The original diagnostic installs with the recorded homebrew/installer environment and launches from the Wii U Menu with its expected title identity and screens.",
             "The installed diagnostic exits normally and can be relaunched; retain the versioned build/package report and installation observations without exposing local packaging material."
@@ -115,7 +120,10 @@
           "waiting_labels": [
             "needs-console"
           ],
-          "state": "blocked"
+          "state": "blocked",
+          "evidence": [
+            "Scoped #117/PR #118 adds a full native ten-step/600-second guide, persistent source-bound original SD sentinel, closed-write/reload/backup/pending/error-retry probes, separate fresh Minus/HOME sessions and strict source/session/criterion review. Host checks do not establish physical acceptance. WUP Installer GX2 is selected; installed-title criteria remain Blocked without real local packaging material/provenance and a verified collision-checked original WUP."
+          ]
         }
       ]
     },
@@ -595,7 +603,10 @@
             "needs-input",
             "needs-console"
           ],
-          "state": "blocked"
+          "state": "blocked",
+          "evidence": [
+            "The M1 suite exposes the missing real original WUP/local packaging and provenance prerequisite as Blocked; synthetic key/certificate integrity fixtures and RPX/WUHB launches cannot satisfy WUP Installer GX2/Menu acceptance."
+          ]
         },
         {
           "id": "m6-conversion-pipeline",

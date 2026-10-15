@@ -879,8 +879,10 @@
       "title": "Deliver source-bound guided M1 platform acceptance suite",
       "milestone": 1,
       "parent_issue": 16,
-      "state": "planned",
-      "pull_requests": [],
+      "state": "active",
+      "pull_requests": [
+        118
+      ],
       "scope": [
         "Bundle one full native guided platform run plus short fresh Minus/HOME runs and an original source-bound SD persistence/recovery probe.",
         "Review exact source/session result+trace pairs, manual observations and each M1 criterion; document WUP Installer GX2 installation separately and block full acceptance without a real verified install-test package."
@@ -891,7 +893,8 @@
       ],
       "evidence": [
         "User explicitly requested definitive guided M1 suite and identified WUP Installer GX2. Prior unchanged scoped hardware evidence is retained.",
-        "Installed original WUP still requires real local packaging material/provenance, collision-checked title identity and physical installer/Menu evidence. Current suite exposes this prerequisite as BLOCKED."
+        "Installed original WUP still requires real local packaging material/provenance, collision-checked title identity and physical installer/Menu evidence. Current suite exposes this prerequisite as BLOCKED.",
+        "Scoped #117/PR #118 adds a full native ten-step/600-second guide, persistent source-bound original SD sentinel, closed-write/reload/backup/pending/error-retry probes, separate fresh Minus/HOME sessions and strict source/session/criterion review. Host checks do not establish physical acceptance. WUP Installer GX2 is selected; installed-title criteria remain Blocked without real local packaging material/provenance and a verified collision-checked original WUP."
       ]
     }
   ],

@@ -1,11 +1,23 @@
 # CTR2WUP status
 
+**Full M1 acceptance suite — #117/PR #118:** the new M1 Check app runs the full
+native ten-step guide, adds a source-bound persistent SD sentinel and deterministic
+backup/pending/error-retry probe, and binds each trace to its own process session.
+One full run plus short fresh Minus/HOME runs collect the missing platform evidence.
+The strict reviewer maps every M1 criterion and never accepts a gate automatically.
+[User guide](docs/m1-acceptance.md). WUP Installer GX2 is the selected installer;
+the installed-title segment is explicitly **BLOCKED** until a real verified original
+WUP and local packaging/provenance prerequisites exist. RPX/WUHB Menu icons cannot
+substitute for installation. Prior scoped result collection remains Done; full M1
+physical acceptance remains open.
+
 **Audio stream-to-output checkpoint — #115/PR #116, v0.26.0:** two checked
 CSTM voices now feed a bounded 48 kHz stereo mixer and finite owned AX clips.
 Original references agree on 252 cases / 1,884,081 output frames and 9,589
 control/state snapshots. The new Audio Streams app has eight guided listening,
 pause, seek and restart steps, source-bound reference WAVs and FTP log return.
-Required full checks gate delivery. [Contract](docs/audio-streams.md) and
+PR #116 merged after required CI 38801335533 and Documentation 38801335222
+passed, including Windows and GCC/Clang sanitizer references. [Contract](docs/audio-streams.md) and
 [hardware guide](docs/audio-stream-testing.md). Guest DSP firmware/IPC, real-time
 streaming/synchronization and physical audible acceptance remain open.
 

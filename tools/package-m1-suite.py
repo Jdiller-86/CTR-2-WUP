@@ -84,7 +84,10 @@ def package(native, audio_kit, output):
             or type(reference.get('cases')) is not int or reference['cases'] < 240
             or entries.get('sdk-image-digest.txt',b'').decode().strip() != release.SDK_IMAGE):
         raise ValueError('Audio build/reference/SDK receipts are incomplete or from another source')
-    entries['AUDIO-STREAMS.md'] = entries.pop('START-HERE.md')
+    entries['AUDIO-STREAMS.md'] = entries.pop('START-HERE.md')+(
+        '\n\nIn this combined M1 kit, the audio manifest is `audio-manifest.json`. '
+        'Keep it with Audio Streams returns. If using the optional collector, '
+        'select it with `--manifest audio-manifest.json`; manual FTP ZIP return remains valid.\n').encode()
     entries['audio-manifest.json'] = (json.dumps(manifest, indent=2)+'\n').encode()
     for name in NAMES:
         release.validate_binary(native/name)

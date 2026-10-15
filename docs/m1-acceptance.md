@@ -30,6 +30,11 @@ The kit must declare `recovery.available: true` with protocol `scratch-v1` for
 the persistence/recovery test. A kit without that probe is explicitly blocked
 for this criterion. An ordinary successful save cannot substitute for recovery.
 
+The kit also contains **Audio Streams 0.26.0**, a separate five-minute test of
+the new stream/mixer path. Use `AUDIO-STREAMS.md` for that optional development
+round; use **M1 Check** for the full platform guide below. Its listening return
+uses `audio-manifest.json`, while the M1 return uses `manifest.json`.
+
 ## 1. Native: the full guide, once
 
 Open **CTR2WUP M1 Check 0.26.0** from this kit (not an older Native icon). It shows a unique result filename and **RESULT
