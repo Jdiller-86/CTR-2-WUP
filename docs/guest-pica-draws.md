@@ -1,13 +1,14 @@
 # Compiled original guest PICA draws
 
-For the **0.24.1** hardware snapshot, follow [the current two-app guide](console-retest.md).
+For the **0.25.0** display-cache comparison, follow [the current two-app guide](console-retest.md).
 PR #106 gates confirmation on a successfully decoded/submitted drawn frame,
 adds a measured bounded runner and an automatic second-run prompt, and supplies
-source-bound results plus a Windows return-log collector. The complete report/
+source-bound results plus a Windows return-log collector. The completed 0.24.1 report/
 trace follow-up verifies correct picture-confirmation order, two guest sessions
 and all three guide steps PASS, including Plus restart and its own draw/PASS/exit.
 All files are received. Scenes take 91.190–91.613 s; native scale/publication
-averages 132.218–132.281 ms and is the next measured target. See
+averages 132.218–132.281 ms. The 0.25.0 cache targets that measured cost;
+its host pixel/work checks pass and new-build physical comparison remains pending. See
 [the evidence review](console-evidence.md).
 The earlier results below remain dated evidence.
 

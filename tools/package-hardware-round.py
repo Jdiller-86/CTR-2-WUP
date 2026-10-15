@@ -87,6 +87,12 @@ def package(scene, draw_report, draw_app, sdk_receipt, sdk_licenses, output):
         'build-reports/compiled-draw.json': draw_report,
         'sdk-image-digest.txt': sdk_receipt,
     }.items():entries[target] = release.regular(path).read_bytes()
+    # START-HERE is at the artifact root; its repository-relative links must
+    # point to this immutable source instead of missing sibling documents.
+    guide = entries['START-HERE.md'].decode('utf-8')
+    for name in ('console-evidence.md', 'gsp-display.md#native-display-cache'):
+        guide = guide.replace(']('+name+')', '](https://github.com/Jdiller-86/CTR-2-WUP/blob/'+commit+'/docs/'+name+')')
+    entries['START-HERE.md'] = guide.encode('utf-8')
     licenses = sorted(p for p in sdk_licenses.rglob('*') if p.is_file())
     if not licenses:raise ValueError('Require SDK redistribution notices')
     for path in licenses:

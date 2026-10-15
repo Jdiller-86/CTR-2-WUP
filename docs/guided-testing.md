@@ -1,10 +1,11 @@
 # Guided Wii U tests and TXT results (0.14.6)
 
-For the current **0.24.1** test snapshot, use [the focused hardware guide](console-retest.md).
+For the current **0.25.0** test snapshot, use [the focused hardware guide](console-retest.md).
 Its two apps write source-bound 8 KiB results and retain separate traces; the
 corrected source collector checks the native unversioned trace headers and warns
-about missing pairs. The initially shipped collector omitted those traces; the
-complete FTP return has now been reviewed with no missing files. The older fixed-size
+about missing pairs. The earlier 0.24.1 collector omitted those traces; its
+complete FTP return has now been reviewed with no missing files. The new cache
+requires only its focused picture/restart/timing comparison. The older fixed-size
 and controls contract below remains a historical reference.
 
 This page preserves the original 0.14.6 controls and reporting contract.

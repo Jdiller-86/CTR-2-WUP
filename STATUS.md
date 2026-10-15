@@ -79,7 +79,7 @@ live Project review replace the resolved input blocker. Actual runtime use,
 broader modules and all full
 milestones remain open. [Evidence review](docs/console-evidence.md).
 
-Updated **October 14, 2026 (America/New_York; October 15 UTC intake)** · **v0.24.1 hardware evidence**.
+Updated **October 15, 2026 (America/New_York)** · **v0.25.0 display-cache evaluation**.
 The target remains an UWUVCI-style Windows GUI: select an owned 3DS game, configure
 title/artwork, click Inject, install its individual WUP and play from Wii U Menu.
 [Requirements](docs/project-brief.md), [product plan](docs/development-plan.md),
@@ -134,7 +134,7 @@ PR #98 merged at `926cf8cf23d17a091bea69ad1e2ee850b1374045` with owner approval
 after passing hosted Required CI and Documentation. Its original probes do not
 establish commercial shader semantics or physical renderer acceptance.
 
-This test snapshot is **0.24.1**; main's earlier arithmetic checkpoint is 0.24.0.
+This test snapshot is **0.25.0**; main's earlier arithmetic checkpoint is 0.24.0.
 The latest tagged diagnostic release remains 0.23.0. [Development releases](https://github.com/Jdiller-86/CTR-2-WUP/releases)
 identify immutable source commits and matching original diagnostic kits, developer
 wheel and offline documentation. The release workflow verifies source/version,
@@ -144,9 +144,9 @@ publication identity. Older tags/assets and their console evidence are preserved
 
 ## Remaining acceptance
 
-- Optimize the measured native scale/publication cost while retaining completed
-  0.24.1 arithmetic, first/repeat draw, picture-gating and launcher evidence.
-  No files or reruns remain requested for this round; broader performance,
+- Compare the new 0.25.0 cache on Wii U for picture freshness, restart and
+  scale+publish timing while retaining completed 0.24.1 evidence. No files or
+  reruns remain requested for that completed baseline; broader performance,
   stability/recovery and installed-WUP acceptance remain open.
 - Extend shader rounding/remaining arithmetic/control, TEV/sampling, coherency, modules, guest audio
   and retail saves using original references and actual observed requirements.
