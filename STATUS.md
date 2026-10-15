@@ -1,11 +1,36 @@
 # CTR2WUP status
 
+**Native display optimization — 0.25.0, premerge:** [PR #106](https://github.com/Jdiller-86/CTR-2-WUP/pull/106)
+extends scoped #87/#20/M2 with exact changed-span scaling and row publication.
+Independent pixel/failure tests and six original host workloads pass. Over 60
+frames, requested publication bytes fall 98.3% for static images and 90.2% for
+small TV counter changes with a static GamePad; full motion has no byte saving.
+Both screens still receive normal GX2 copies. Logs split scale/publication and
+record cache work/memory. Full required checks gate delivery; actual Wii U
+correctness and speed require the new [focused two-app test](docs/console-retest.md).
+[Contract and limits](docs/gsp-display.md#native-display-cache). No full gate is accepted.
+
+**Focused hardware evaluation:** [PR #106](https://github.com/Jdiller-86/CTR-2-WUP/pull/106)
+under #87/#20/M2 has reviewed **0.24.1** hardware results: two native ADD/MUL
+Scene Check launches pass their analytic pixels and picture guides; Guest Draws
+passes its first submitted picture/own readback/exit with zero fallback/fault.
+The complete follow-up verifies **Plus restart and all three Guest Draws steps
+PASS**, two guest sessions and all five launches' cleanup through `main_return`.
+The user confirms Minus and optional HOME returns on firmware 5.5.6 U / Aroma
+Beta 27. All five traces and five reports are received; no files/reruns remain
+requested for this round. Drawn scenes take **91.190–91.613 s** and native
+scale/publication averages **132.218–132.281 ms**, dominating recorded phases.
+It is the baseline for the 0.25.0 cache; no Wii U speedup is established. The collector's
+unversioned-trace correction passes on the actual files with no missing-pair
+warnings. [Review](docs/console-evidence.md) and [FTP guide](docs/console-retest.md).
+This remains a premerge snapshot.
+
 **Exact shader arithmetic:** [PR #105](https://github.com/Jdiller-86/CTR-2-WUP/pull/105)
 implements scoped #76 under #28/M4: component-wise ADD/MUL, independent operand
 descriptors and checked integer dyadic evaluation. All 167,730 original rational
 cases, four analytic pixel scenes and 282,626 pinned encodings agree. Late errors
 preserve shader/target/guest queue state. Required host/sanitizer/native/Windows and documentation checks gate merge; receipts are linked from PR #105.
-The source version is **0.24.0 (unreleased)**; the latest published diagnostic
+Current development source is **0.25.0 (unreleased)**; the latest published diagnostic
 release remains **0.23.0**. Hardware rounding, broader arithmetic/control, native
 GX2 and commercial execution remain open. [Contract](docs/software-scenes.md#exact-add-and-mul).
 
@@ -54,7 +79,7 @@ live Project review replace the resolved input blocker. Actual runtime use,
 broader modules and all full
 milestones remain open. [Evidence review](docs/console-evidence.md).
 
-Updated **October 14, 2026 (America/New_York)** · **v0.24.0 source, unreleased**.
+Updated **October 15, 2026 (America/New_York)** · **v0.25.0 display-cache evaluation**.
 The target remains an UWUVCI-style Windows GUI: select an owned 3DS game, configure
 title/artwork, click Inject, install its individual WUP and play from Wii U Menu.
 [Requirements](docs/project-brief.md), [product plan](docs/development-plan.md),
@@ -109,7 +134,8 @@ PR #98 merged at `926cf8cf23d17a091bea69ad1e2ee850b1374045` with owner approval
 after passing hosted Required CI and Documentation. Its original probes do not
 establish commercial shader semantics or physical renderer acceptance.
 
-The source version is **0.24.0 (unreleased)**. [Development releases](https://github.com/Jdiller-86/CTR-2-WUP/releases)
+This test snapshot is **0.25.0**; main's earlier arithmetic checkpoint is 0.24.0.
+The latest tagged diagnostic release remains 0.23.0. [Development releases](https://github.com/Jdiller-86/CTR-2-WUP/releases)
 identify immutable source commits and matching original diagnostic kits, developer
 wheel and offline documentation. The release workflow verifies source/version,
 pinned SDK, original frames, binaries, source/wheel equality, ZIP CRCs and checksums.
@@ -118,16 +144,18 @@ publication identity. Older tags/assets and their console evidence are preserved
 
 ## Remaining acceptance
 
-- Correct the drawn-frame confirmation gate and measure execution/rendering/
-  transfer/wait phases; do not repeat unchanged passed guides.
+- Compare the new 0.25.0 cache on Wii U for picture freshness, restart and
+  scale+publish timing while retaining completed 0.24.1 evidence. No files or
+  reruns remain requested for that completed baseline; broader performance,
+  stability/recovery and installed-WUP acceptance remain open.
 - Extend shader rounding/remaining arithmetic/control, TEV/sampling, coherency, modules, guest audio
   and retail saves using original references and actual observed requirements.
 - Record full platform stability/recovery and original WUP installation/Menu launch.
 - Demonstrate the selected game's gameplay/audio/save/performance and full clean
   Windows conversion, then implement and accept the final GUI.
 
-The tester reports Windows 11, Python 3.12+, an SD reader and mainstream Aroma/Wii U
-firmware; exact console versions remain unrecorded. Source/API/host/cross-build
+The tester reports Windows 11, Python 3.12+, FTP transfer, firmware 5.5.6 U and
+Aroma Beta 27. Source/API/host/cross-build
 checks do not fill physical or commercial evidence gaps. Full acceptance stays
 **0/7**. See [the detailed gates](docs/milestones.md),
 [console evidence](docs/console-evidence.md) and

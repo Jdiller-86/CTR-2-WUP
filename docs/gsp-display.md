@@ -78,3 +78,48 @@ claimed to boot. This bridge is a reusable display foundation for the injector.
 The next planned acceptance gate is physical Wii U input/display/stability and
 the selected Mario revision's private executable intake. Without that evidence,
 M3/M4/M5, commercial conversion, installer acceptance and the GUI remain open.
+
+## Native display cache
+
+Version 0.25.0 retains the previous original 400×240/320×240 CPU image for each
+TV/GamePad destination. The immutable nearest-neighbor plan and exclusive output
+ownership are required. Cold use, destination/pitch/capacity changes, guest
+restart or foreground reacquisition force a complete rebuild/publication,
+including black borders, pitch padding and allocation tail. Unchanged input
+uses exact equality and needs no CPU image write or publication. A warm change
+maps each source row's first/last changed columns into output spans, scales the
+span once and copies repeated rows; dirty output rows coalesce into full-pitch
+publication ranges. Unsampled downscale changes update history without output.
+
+All returned ranges still pass through `DCFlushRange` and
+`GX2Invalidate(CPU_TEXTURE)`. `GX2DrawDone` precedes CPU writes; both surfaces
+still receive `GX2CopySurface` and normal WHB presentation every frame. The guide
+continues to require a submitted draw and a fresh positive input. This cache does
+not implement guest PICA resource coherency or native shader translation.
+
+The portable cache bounds sources to 1,048,576 pixels, validates capacities,
+rejects source/history/output overlap and address wrap before writes, and
+preserves destination/history/damage on invalid arguments. Initialization failure
+aborts visibly; it does not silently select a different renderer. Native source
+history uses 691,200 bytes plus row ranges (12,480 bytes at the measured output
+sizes with 32-bit `size_t`), cache structs and allocator overhead. Logs report
+actual owned history/range bytes. There is no additional full-size output image.
+
+`make -C tests/report check` compares all output bytes against an independent
+integer nearest-neighbor reference: full-screen/unchanged/sparse changes,
+downsampling, odd dimensions, borders/padding/tails, rebind/invalidation and
+failure atomicity. `python3 tools/benchmark-display.py --cc gcc --output
+artifacts/display-benchmark` compares six original 60-frame workloads against
+the retained uncached scaler with exact bytes. Static content avoids 98.3% of
+requested publication bytes; small changing counters on TV with static GamePad
+avoid 90.2% combined. Full-screen motion has no byte saving. Host CPU timing
+excludes generated-input work, comparison, publication APIs and GPU copies;
+no timing threshold is used. Hosted GCC/Clang repeat the comparison.
+
+Native `scale` and `publish` phases are separate. Compare their combined totals
+and call counts to the completed 0.24.1 `scale` phase, which covered both.
+`PUBLISH` trace records and `Scale cache` result lines expose per-screen full,
+reused, scaled-pixel, requested-byte, range and heap counters. The
+[focused guide](console-retest.md) covers picture freshness, Plus restart and
+fresh launch/Minus. Physical correctness and speed for 0.25.0 remain pending;
+prior scoped results do not automatically validate a changed display path.

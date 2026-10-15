@@ -3,6 +3,50 @@
 All releases are development increments. RPX/WUHB diagnostics and desktop passes
 do not establish commercial-game compatibility or installable WUP acceptance.
 
+## 0.25.0 — display-cache evaluation, premerge
+
+- Retain exact source history and scale only changed mapped spans; publish
+  coalesced dirty rows with the existing CPU/GX2 cache APIs. Unchanged images
+  avoid scaling/publication while both screens retain normal presentation.
+- Rebuild completely on cold use, destination changes, guest restart and
+  foreground reacquisition; reject invalid/overlapping input before writes.
+- Compare independent full outputs, borders/padding/tails, sparse/full motion,
+  downscale and failure behavior; add six original host benchmark workloads.
+  Static 60-frame workloads avoid 98.3% of requested publication bytes; small
+  TV counters/static GamePad avoid 90.2%. Full motion has no byte saving.
+- Separate scale/publication timing and log work/memory for a source-bound
+  0.25.0 two-app hardware comparison. Wii U correctness/speed remain pending.
+- Keep 0.24.1 return collection/analysis supported with its matching manifest;
+  preserve its completed physical evidence and corrected native-trace handling.
+
+## 0.24.1 — hardware evaluation, premerge
+
+- Gate visual confirmation on a decoded and submitted drawn frame with exact
+  original counters; a startup framebuffer cannot establish the picture.
+- Bound Guest Draws by instructions/calls and cooperative real wall time,
+  returning on a frame, wait, yield, stop or lack of progress. Log separate host
+  execution/decode/scaling/wait/presentation/storage metrics and per-run latency.
+- Run exact ADD/MUL analytic pixels on the native Scene Check; guide fresh
+  launch/exit plus compiled-draw restart without repeating completed long guides.
+- Save source identity, named outcomes and counters in closed/read-back-verified
+  8 KiB results; preserve per-launch traces and visible storage failures.
+- Stage a source/SDK/binary/checksum-checked two-app kit and a Windows collector
+  that includes partial evidence while excluding saves, keys and unrelated files.
+- Document binary-mode FTP deployment and raw-log ZIP return without Python or
+  an SD reader; the existing kit's collector can also read a local FTP mirror.
+- Review the complete hardware return (October 14 evening / October 15 UTC):
+  two arithmetic guides and all Guest Draws/Plus-repeat steps pass. All five
+  source-matched traces reach `main_return`; picture confirmation follows the
+  actual submitted draw. The user confirms Minus/HOME return. All files are
+  received. Scenes take 91.190–91.613 s; mean native scale/publication is
+  132.218–132.281 ms and remains the next measured target.
+- Fix the collector's omission of native traces whose filenames lack a version;
+  require matching app/build/source headers, preserve partial traces and warn
+  about missing pairs, including when analyzing older returns. Full gates stay open.
+- Verify the corrected collector/analyzer on the actual five traces and five
+  reports with matching source/CRC/checksums and no missing-pair warnings;
+  remove resolved file/rerun requests while preserving the earlier cancelled run.
+
 ## 0.24.0 — unreleased
 
 - Add original checked component-wise PICA ADD/MUL execution with independent

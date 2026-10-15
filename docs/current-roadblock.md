@@ -1,4 +1,4 @@
-# Remaining acceptance gates (0.24.0 source, unreleased)
+# Remaining acceptance gates (0.25.0 display-cache evaluation)
 
 The product remains a Windows GUI that converts owned 3DS games into individual
 Wii U WUP titles. Approximately 20% implementation and 0/7 full gates accepted
@@ -11,11 +11,16 @@ reviewed results. No blanket repeat is requested. See [evidence](console-evidenc
 
 Current requirements:
 
-1. **Draw progress and accurate evidence:** the rendered second presentation
-   takes 57.33 seconds in the trace; the visual guide accepted an answer before
-   that scene. Gate confirmation on the drawn frame, measure individual phases
-   and investigate the fixed guest-instruction-per-refresh budget. Aggregate
-   host refresh time is not a GPU/CPU breakdown or a game-performance result.
+1. **Measured scale/publication cost:** the completed 0.24.1 round verifies two
+   arithmetic launches, correct picture-confirmation order and the full guest
+   draw/Plus-repeat guide, with all five traces reaching `main_return` and
+   reported Minus/HOME return. All requested files are received. Scenes take
+   91.190–91.613 s; native scale/publication averages 132.218–132.281 ms and
+   dominates recorded phases. Version 0.25.0 implements changed-span scaling and coalesced row
+   publication with independent exact host checks. Physical freshness, restart
+   and scale+publish timing for that changed path remain pending; no Wii U
+   speedup or game performance is established. No more files or reruns are needed for
+   this round. [Reviewed evidence](console-evidence.md).
 2. **Mario observed runtime requirements:** the executable, preparation/inventory
    reports and all seven requested sample payloads are verified and available.
    M5/intake/matrix analysis can proceed; missing input is no longer its blocker.
@@ -26,8 +31,8 @@ Current requirements:
    the received samples is requested. [First-title findings](first-title.md).
 3. **Platform acceptance:** complete documented repeat launch, Home/APT,
    stability, SD recovery and original WUP install/Menu-launch checks with exact
-   environment/build identity. The three successful sessions do not complete
-   those full criteria.
+   environment/build identity. Scoped arithmetic/first-draw/Minus/HOME results
+   do not complete those full criteria.
 4. **Renderer/runtime implementation:** broader shaders, TEV/sampling, native
    GX2 translation, coherency, dynamic modules, guest audio and retail saves
    remain open. Merged PR #98 supplies original 512-word shader storage/upload/

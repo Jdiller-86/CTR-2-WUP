@@ -553,22 +553,31 @@
     },
     {
       "id": "compiled-draw-progress",
-      "title": "Bound compiled guest execution and measure diagnostic draw startup",
+      "title": "Bound guest draw progress and cache native display publication",
       "milestone": 2,
       "parent_issue": 20,
-      "state": "planned",
-      "pull_requests": [],
+      "state": "active",
+      "pull_requests": [
+        106
+      ],
       "scope": [
         "Decouple bounded guest execution from the fixed 50,000 instructions per expensive host refresh while retaining real guest time, input and lifecycle responsiveness.",
-        "Gate the visual answer on a drawn presentation rather than startup output; record execution, scaling, GPU waits/presentation and storage phases."
+        "Gate the visual answer on a drawn presentation rather than startup output; record execution, scaling, GPU waits/presentation and storage phases.",
+        "Optimize the measured native scale/publication bottleneck using exact source history, changed mapped spans and coalesced row publication, retaining normal GX2 display copies and forced rebuild on restart/reacquisition."
       ],
       "acceptance": [
         "Original tests cover instruction/time bounds, waiting/yield/no-progress exits and drawn-frame confirmation, with unchanged original guest pixel and own PASS checks.",
-        "A versioned native diagnostic retains phase/progress metrics and a focused physical comparison route; measured hardware speed remains pending until that build is run."
+        "A versioned native diagnostic retains phase/progress metrics and a focused physical comparison route; timing and evidence-binding and remaining stability limits are reported for the exact build without claiming useful game performance.",
+        "Independent full-output and failure tests cover cold/unchanged/sparse/full-motion/downsample/rebind/invalidation behavior; original host workloads report exact pixels and publication work. A source-bound new hardware kit exposes cache work and split timing without claiming Wii U speed from host evidence."
       ],
       "evidence": [
         "October 13 v0.23.0 trace: drawn presentation 57,330 ms; mean host refresh 153,189 us; visual answer accepted at 10,221 ms before the scene.",
-        "Planned focused follow-up; aggregate timing does not establish a renderer bottleneck or useful game performance."
+        "PR #106 prepares the 0.24.1 premerge hardware round: cooperative 8 ms/500000-instruction/50-call slices, submitted-draw confirmation, per-phase/per-run metrics and source-bound 8 KiB results.",
+        "Original policy and guide tests cover caps, waits/yields/stops, zero progress, bad clock/callbacks, startup-frame rejection and new-session restart. Arithmetic pixel self-checks and bounded package/collector/analyzer fixtures pass focused checks; full required checks gate publication.",
+        "Complete 0.24.1 return for source 4eeee0ba3a839f934c6bb7d6313f5fcb657782c5 verifies five reports/five traces: two arithmetic guides, correct picture-answer order, all three Guest Draws steps including new-session Plus draw/own PASS/exit, and all five launches through main_return. The user confirms Minus/HOME return (5.5.6 U / Aroma Beta 27). The initial cancelled run is retained separately. All requested files are received; no rerun is requested for this round.",
+        "Three drawn guest sessions take 91.190\u201391.613 s; mean native scale/publication is 132.218\u2013132.281 ms, about 90% of summed recorded phase times. Optimize that measured path; no speedup, GPU-timestamp, game-FPS or full Espresso/M4 acceptance is inferred.",
+        "The shipped collector omitted unversioned traces. Its correction checks actual filename/app/build/source identity, partial traces, independent collision suffixes and missing pairs. The corrected collector/analyzer passes on the real five traces/five reports with no missing-pair warnings; all original bytes and receipts remain private.",
+        "0.25.0 implements the native cache with focused pixel/failure checks and six original host workloads: static images avoid 98.3% of requested publication bytes over 60 frames; small TV counters/static GamePad avoid 90.2%; full motion saves no bytes. Native cross-build passes; full required checks gate delivery and the new physical comparison remains pending."
       ]
     },
     {

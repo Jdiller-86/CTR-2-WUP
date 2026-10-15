@@ -3,7 +3,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define CTR_TEST_RESULT_BYTES 4096u
+#define CTR_TEST_RESULT_BYTES 8192u
 typedef struct {
     bool ready,failed;
     int error_code;

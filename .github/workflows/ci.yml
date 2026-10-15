@@ -141,6 +141,8 @@ jobs:
           git -C artifacts/nihstro-reference checkout --detach f4d8659decbfe5d234f04134b5002b82dc515a44
           python3 tools/validate-scenes.py --sanitize --nihstro-dir artifacts/nihstro-reference \
             --output artifacts/ci/scenes 2>&1 | tee artifacts/ci/native/scenes.log
+      - name: Compare display cache work and exact output
+        run: python3 tools/benchmark-display.py --cc "${{ matrix.cc }}" --output artifacts/ci/display-benchmark
       - name: Upload portable C logs
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -148,6 +150,7 @@ jobs:
           name: native-${{ matrix.cc }}-${{ github.sha }}
           path: |
             artifacts/ci/native/*.log
+            artifacts/ci/display-benchmark/report.json
             artifacts/ci/scenes/*.json
             artifacts/ci/scenes/*.png
             artifacts/ci/scenes/*.rgba
@@ -286,6 +289,22 @@ jobs:
           cp "$DEVKITPRO/ctr2wup-image-digest.txt" artifacts/ci/guest-draws/sdk-image-digest.txt
           git rev-parse HEAD > artifacts/ci/guest-draws/source-commit.txt
           (cd artifacts/ci/guest-draws && sha256sum -- *.rpx *.wuhb > SHA256SUMS)
+      - name: Stage the source-matched guided hardware round
+        run: |
+          set -euo pipefail
+          python3 tools/package-hardware-round.py --scene artifacts/ci/scene-check \
+            --draw-report artifacts/ci/compiled-draw/report.json \
+            --draw-app artifacts/ci/compiled-draw/draw \
+            --sdk-receipt "$DEVKITPRO/ctr2wup-image-digest.txt" \
+            --sdk-licenses "$DEVKITPRO/licenses" --output artifacts/ci/hardware-round
+      - name: Upload the SD-ready guided hardware round
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wiiu-hardware-round-${{ github.sha }}
+          path: artifacts/ci/hardware-round/stage/
+          include-hidden-files: true
+          retention-days: 30
+          if-no-files-found: error
       - name: Upload checked compiled guest draws and source provenance
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

@@ -380,7 +380,11 @@ static void scenes(void) {
 static void arithmetic_scenes(void) {
     ctr_scene_fixture f;ctr_scene_state state,previous;ctr_scene_report report;
     uint8_t pixels[CTR_SCENE_FIXTURE_BYTES],before[CTR_SCENE_FIXTURE_BYTES];
+    CHECK(ctr_scene_arithmetic_selftest()==0);
     for(unsigned shorts=0;shorts<2;++shorts) {
+        ctr_scene_fixture_background(pixels,sizeof(pixels));
+        CHECK(ctr_scene_fixture_render_arithmetic(shorts!=0,pixels,sizeof(pixels),&report)==CTR_SCENE_OK && report.shader_instructions==30);
+        golden(pixels,false,false);
         ctr_scene_fixture_make_arithmetic(&f,shorts!=0);ctr_scene_init(&state);
         ctr_scene_fixture_background(pixels,sizeof(pixels));
         CHECK(execute(&f,&state,pixels,&report)==CTR_SCENE_OK && report.shader_instructions==30);

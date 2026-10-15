@@ -85,6 +85,16 @@ and label/dashboard refresh also verify; console/full gate criteria remain open.
 
 ## Next renderer features
 
+The focused hardware round is scoped #87 under #20/M2, with PR #106 and
+references to #13/#28/#31/#81 for fresh launch, arithmetic and picture/timing
+evidence. Its exact tested build now has all requested reports/traces: two
+arithmetic launches, correctly ordered picture confirmation, Guest Draws Plus
+repeat/all three guide passes and all five exits through `main_return`. Version 0.25.0 extends the same #87/#106 scope with exact changed-span
+scaling and row publication for that measured cost. Independent full-pixel,
+failure and original workload checks pass; new physical correctness/speed
+remain pending. Normal review
+is pending before merge; no files or reruns remain requested for this round.
+
 | Feature | Parent task | Acceptance focus |
 | --- | --- | --- |
 | Compiled original guest draws | #27 | Standard GSP queue, exact targets, rollback and retained state |

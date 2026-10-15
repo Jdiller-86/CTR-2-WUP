@@ -1,5 +1,98 @@
 # Console evidence review
 
+## October 14 evening: arithmetic, repeated guest draws and measured scaling
+
+Received October 15 UTC (October 14 in America/New_York). The later complete
+folder ZIP resolves all requested trace/repeat evidence for this hardware round.
+It contains five source-matched full traces and five 8 KiB result files; the
+four reports from the earlier collector ZIP are byte-identical. All CRCs and
+per-file hashes verify. The corrected collector/analyzer processes the actual
+native filenames with no missing-pair warnings. The request for more files is
+resolved; no additional test run is requested for this round.
+
+The returned 0.24.1 collector ZIP has four 8 KiB result files. ZIP/receipt
+checksums and every result's clean source identity agree with tested kit source
+`4eeee0ba3a839f934c6bb7d6313f5fcb657782c5` (the source tree at PR #106 head
+`d292d762dca03b03815c74435bda5535def7e023`). Raw files and the intake receipt
+remain in ignored `private/console-evidence-20261015/`; only aggregates are
+published. The user reports firmware **5.5.6 U**, **Aroma Beta 27**, no separate
+launcher, normal Minus returns, optional HOME return and no observed problems.
+
+| Diagnostic | Reviewed physical evidence | Remaining scope |
+|---|---|---|
+| Scene Check 0.24.1, two launches | Both exact ADD/MUL analytic pixel/index checks pass; picture and shared diagonal each PASS; normal Minus exit reported on both launches | Scoped CPU software raster/GX2-copy check, not native shader translation or full lifecycle acceptance |
+| Guest Draws 0.24.1, first run | Own PASS/exit, 4 draws/4 triangles/97,200 fragments/36 shader steps, zero fallback/fault; submitted serial 2 and user picture PASS | Guide cancelled after 2 PASS; Plus repeat NOT TESTED. User confirms exiting before pressing Plus, rather than a failed restart |
+| Guest Draws 0.24.1, later Plus follow-up | Matching report/trace verify 2 guest sessions, 2 own PASS messages, submitted serial 2 in each session and all 3 guide steps PASS, with no failures/skips/fallback/fault | Drawn latency is 91.190 s initially and 91.613 s after Plus; timing remains diagnostic rather than game FPS |
+| Scene Check 0.24.1, third launch | Automatic arithmetic checks pass; guide remains at step 1; ProcUI transitions 0/2/3 and complete shutdown through `main_return` | User identifies this as the optional HOME return; picture prompts were intentionally not repeated |
+
+The first two arithmetic launches report `pixel_selftest=0`, both index renders
+`ok`, 30 shader steps per render and 0.666–0.951 ms render times. Guest Draws
+executes 17,532,421 instructions; this physical count differs from the host
+reference because it is a separate live-time run. All four reports reach
+`resources_closed_before_system_transition` with host exit result 0 and no
+reported storage error. That checkpoint is before the final system transition;
+successful launcher return comes from the user's observation.
+
+The full traces now show ordered guest/audio/graphics/report cleanup, ProcUI and
+WHB shutdown and `main_return` for **all five launches**. Both completed Scene
+Checks and both Guest Draws launches use Minus; the HOME-associated Scene Check
+exits through the foreground-release/exiting ProcUI path. Launcher return still
+has the separate user confirmation; `main_return` alone is not a Menu screenshot.
+
+Picture confirmation now has direct chronological evidence. The first draw is
+submitted before the visual-ready marker and fresh R answer in both launches.
+In the completed follow-up, submission is at 92.250 s of the host session and
+the ready marker at 92.325 s; the picture answer follows at 122.831 s. Plus then
+requests session 2, its own scene is submitted at 218.665 s of the host session,
+and its own guest PASS/exit precede step 3 PASS and guide completion. The final
+report records 17,537,612 instructions for the second guest session, zero
+fallback/fault and unchanged 4/4/97,200/36 draw counters. The original cancelled
+first run is retained as history, rather than overwritten by the successful run.
+
+The Guest Draws submitted-scene latency is **91,549 ms** and mean diagnostic
+host frame is **146,527 us**. These results do not establish an improvement over
+the dated 57,330 ms 0.23.0 trace: the builds, logging and timestamp origins differ,
+and this is not a controlled CPU/game benchmark. The recorded host phase counters
+identify a concrete next optimization target:
+
+| Host phase | Calls | Total seconds | Mean ms/call | Maximum ms/call |
+|---|---:|---:|---:|---:|
+| Guest execution/HLE | 824 | 6.515 | 7.906 | 46.146 |
+| Pixel decode | 2 | 0.108 | 53.908 | 53.923 |
+| Scale and source/cache publication | 824 | 108.999 | 132.281 | 133.886 |
+| GPU wait API | 824 | 0.006 | 0.007 | 0.205 |
+| Presentation APIs | 824 | 2.280 | 2.767 | 3.224 |
+| Result/trace commit storage | 239 | 3.171 | 13.270 | 16.051 |
+
+Scaling accounts for about 90% of the sum of these recorded phase times. The
+two completed native launches also spend about 132 ms per scale call without
+running the compiled draw guest. This supports optimizing the measured native
+scale/publication path before increasing guest budgets. These are cumulative
+host wall-time counters with diagnostic overhead, not GPU timestamps or a full
+CPU/GPU attribution. The 46.146 ms maximum guest phase also confirms that the
+8 ms cooperative target is not a hard per-frame deadline.
+
+The completed two-session launch corroborates the bottleneck: mean host frame
+146.579 ms, mean scale/publication 132.218 ms, about 89.9% of summed recorded
+phase time. Guest execution/HLE totals 13.021 s with a 48.636 ms maximum phase.
+Final slice stops are 1,168 soft-time, 4 new-frame, 7 waiting and 440 stopped;
+there is no slice-contract failure. Each guest still records 3 IPC lookup
+failures, so zero fallback/fault must not be described as zero service failures.
+
+**Collection defect:** the shipped collector expected a version in trace names;
+the native writer uses `application-<session>-<attempt>.txt`. It therefore
+included results but silently missed full traces. The corrected collector
+accepts the actual trace names only after matching application, build and clean
+source headers, and warns about absent paired traces. The analyzer also warns
+when an older collector's return lacks them. The original return remains valid
+for its four result files; the later folder ZIP supplies the full chronology,
+slice-stop details and new completed repeat report. The actual-file collector/
+analyzer round trip verifies all ten payloads without missing-pair warnings.
+The file-retrieval request is closed. The initial ZIP's cancelled guide remains
+the first run's history. No further files or reruns are requested for this round.
+Full stability/recovery, installed WUP, commercial gameplay and all seven full
+gates remain open.
+
 ## October 13: launch audio, GX transfers and compiled PICA draws
 
 The new private ZIP contains three full traces and two independent 4 KiB result

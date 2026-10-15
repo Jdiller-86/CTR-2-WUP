@@ -34,6 +34,16 @@ def _sha256(path):
     return digest.hexdigest()
 
 
+def _source_state(repo):
+    """Read source identity without depending on a caller's current directory."""
+    try:
+        commit = subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True).strip()
+        dirty = bool(subprocess.check_output(['git', '-C', str(repo), 'status', '--porcelain'], text=True))
+        return commit, dirty
+    except (OSError, subprocess.CalledProcessError):
+        return None, True  # A packager must reject unverified source identity.
+
+
 def _validate_rpx(path):
     if not path.is_file():
         raise HostError("missing_artifact", "Build did not produce the expected RPX", stage="compile")
@@ -99,6 +109,7 @@ def prototype(output: str | Path, guest_path=None, *, backend="original", audio_
     if backend not in ("original","upstream") or (backend=="upstream" and guest_path is None):
         raise HostError("invalid_backend", "Upstream builds require the original guest fixture", stage="arguments")
     repo = repository_root()
+    source_commit, source_dirty = _source_state(repo)
     image = None
     if guest_path is not None:
         from .guest_pipeline import generated_sources, profiled_image
@@ -147,6 +158,8 @@ def prototype(output: str | Path, guest_path=None, *, backend="original", audio_
                      "OUTPUT=../../artifacts/"+work.name+"/wiiu","TARGET="+target,"GUEST_DEFAULT=1",
                      "EXTERNAL_AOT=1","UPSTREAM_DIR=../../artifacts/"+work.name+"/aot","-j3"]
         _run_build(command, env, log, repo)
+        if (source_commit, source_dirty) != _source_state(repo):
+            raise HostError('source_changed', 'Source identity changed during compilation; use a fresh build', stage='compile')
         artifact = repo / "artifacts" / ("wiiu-guest" if image else "wiiu-audio" if audio_only else "wiiu-scene" if scene_only else "wiiu") / (target+".rpx")
         if work: artifact=work/"wiiu"/(target+".rpx")
         _validate_rpx(artifact)
@@ -164,6 +177,7 @@ def prototype(output: str | Path, guest_path=None, *, backend="original", audio_
         manifest = {"schema_version": 1, "ok": True, "stage": "complete",
                     "target": "guest-fixture" if image else "audio-check" if audio_only else "scene-check" if scene_only else "prototype", "package_format": "RPX",
                     "host_version": __version__, "runtime_version": __version__,
+                    "source_commit": source_commit, "source_dirty": source_dirty,
                     "translator_version": ("external-abi4-checked-v1" if backend=="upstream" else "bounded-aot-v2") if image else None,
                     "backend":backend,"generation":generation,
                     "profile": "ctr2wup-framebuffer-fixture-v1" if image else "native-audio-check" if audio_only else "owned-software-scenes-v1" if scene_only else "native-diagnostics",
@@ -187,7 +201,7 @@ def prototype(output: str | Path, guest_path=None, *, backend="original", audio_
             manifest["limitations"].append("Original controlled ARM fixture with explicit input/raw-framebuffer contract; HID/GSP/IPC/PICA unavailable")
         if scene_only:
             manifest["stages"].append({"name":"original_scene_pixels_and_user_display_confirmation","state":"awaiting_console_test"})
-            manifest["limitations"].append("Original bounded PICA MOV scenes rasterized on CPU and copied to GX2 surfaces; guest GSP draws and GPU shader translation remain unsupported")
+            manifest["limitations"].append("Original exact ADD/MUL scenes rasterized on CPU and copied to GX2 surfaces; physical picture/performance and GPU shader translation remain unverified")
         (staging / "build-report.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         publish_directory(staging, output)
         return {**manifest, "output": str(output)}

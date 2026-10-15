@@ -19,7 +19,9 @@ AUDIO_ONLY ?= 0
 SCENE_ONLY ?= 0
 UDP_LOG ?= 0
 CALL_LIMIT ?= 64
-APP_VERSION := 0.24.0
+APP_VERSION := 0.25.0
+CTR_BUILD_SHA := $(shell git rev-parse HEAD)
+CTR_BUILD_DIRTY := $(if $(shell git status --porcelain --untracked-files=normal),1,0)
 UPSTREAM_DIR ?= ../../artifacts/generated-upstream-guest
 ifeq ($(GUEST_DEFAULT),1)
 APP_NAME := CTR2WUP ARM Guest $(APP_VERSION)
@@ -31,6 +33,7 @@ CC := $(DEVKITPPC)/bin/powerpc-eabi-gcc
 WUT := $(DEVKITPRO)/wut
 CFLAGS := -std=c11 -O2 -g -Wall -Wextra -Werror -ffunction-sections -fdata-sections \
           -DCTR_APP_VERSION=\"$(APP_VERSION)\" \
+          -DCTR_SOURCE_COMMIT=\"$(CTR_BUILD_SHA)\" -DCTR_SOURCE_DIRTY=$(CTR_BUILD_DIRTY) \
           -DESPRESSO -D__WIIU__ -D__WUT__ -DCTR_GUEST_DEFAULT=$(GUEST_DEFAULT) -DCTR_DIAGNOSTIC_UDP=$(UDP_LOG) -mcpu=750 -meabi -mhard-float -I"$(WUT)/include" -I../core
 ifeq ($(COMPILED_HOMEBREW),1)
 CFLAGS += -DCTR_COMPILED_HOMEBREW -I"$(COMPILED_IMAGE_DIR)"
@@ -70,7 +73,7 @@ APP_NAME := CTR2WUP Scene Check $(APP_VERSION)
 endif
 LDFLAGS := -mcpu=750 -meabi -mhard-float -specs="$(WUT)/share/wut.specs" \
            -Wl,-Map,$(OUTPUT)/$(TARGET).map
-SOURCES := main.c viewport.c diagnostic_font.c test_report.c test_guide.c test_lifecycle.c image_scale.c report_storage.c test_result.c diagnostic_audio.c
+SOURCES := main.c viewport.c diagnostic_font.c test_report.c test_guide.c test_lifecycle.c image_scale.c report_storage.c test_result.c diagnostic_audio.c guest_slice.c
 OBJECTS := $(addprefix $(BUILD)/,$(SOURCES:.c=.o))
 CORE_SOURCES := $(CTR_RUNTIME_SOURCES) ../core/ctr_cpu_selftest.c \
     ../core/ctr_fs_snapshot.c ../core/ctr_guest_fixture.c \
@@ -100,11 +103,14 @@ endif
 CORE_OBJECTS := $(addprefix $(BUILD)/,$(notdir $(CORE_SOURCES:.c=.o)))
 OBJECTS += $(CORE_OBJECTS)
 vpath %.c ../core ../recomp ../../tests/fixtures/cpu ../../tests/fixtures/guest ../../tests/fixtures/services ../../tests/fixtures/heap ../../tests/fixtures/kernel ../../tests/fixtures/hid ../../tests/fixtures/gsp ../../tests/fixtures/relay ../../tests/fixtures/stack ../../tests/fixtures/threads $(UPSTREAM_DIR)
-.PHONY: all clean
+.PHONY: all clean identity-force
 all: $(OUTPUT)/$(TARGET).rpx $(OUTPUT)/$(TARGET).wuhb
 $(BUILD):
 	mkdir -p "$@"
-$(BUILD)/%.o: %.c $(CTR_RUNTIME_MANIFEST) Makefile | $(BUILD)
+$(BUILD)/identity: identity-force | $(BUILD)
+	@printf '%s\n' '$(CTR_BUILD_SHA):$(CTR_BUILD_DIRTY):$(APP_VERSION)' > "$@.tmp"
+	@if ! cmp -s "$@.tmp" "$@"; then mv "$@.tmp" "$@"; else rm "$@.tmp"; fi
+$(BUILD)/%.o: %.c $(CTR_RUNTIME_MANIFEST) Makefile $(BUILD)/identity | $(BUILD)
 	"$(CC)" $(CFLAGS) -MMD -MP -c "$<" -o "$@"
 $(OUTPUT)/$(TARGET).elf: $(OBJECTS)
 	"$(CC)" $(LDFLAGS) $(OBJECTS) -L"$(WUT)/lib" -lwut -lm -o "$@"
