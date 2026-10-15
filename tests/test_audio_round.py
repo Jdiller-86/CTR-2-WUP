@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import struct
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 import wave
@@ -183,6 +184,18 @@ class AudioReturnTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'changed'):
                 self.collect()
         self.assertFalse((self.root/'return.zip').exists())
+
+    def test_path_and_descriptor_timestamp_semantics_may_differ(self):
+        original = collector.os.fstat
+        def descriptor_stat(fd):
+            row = original(fd)
+            return SimpleNamespace(st_dev=row.st_dev, st_ino=row.st_ino,
+                st_mode=row.st_mode, st_size=row.st_size,
+                st_mtime_ns=row.st_mtime_ns, st_ctime_ns=row.st_ctime_ns+1000000000)
+        with patch.object(collector.os, 'fstat', side_effect=descriptor_stat):
+            report = self.collect()
+        self.assertEqual(len(report['files']), 2)
+        self.assertEqual(report['warnings'], [])
 
     def test_bounds_and_overwrite_preserve_original_files(self):
         (self.folder/self.trace_name).write_bytes(b'x'*(collector.MAX_FILE+1))

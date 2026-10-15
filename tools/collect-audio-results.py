@@ -52,8 +52,13 @@ def bounded_read(path: Path) -> bytes:
         closed = os.fstat(stream.fileno())
     after = path.lstat()
     fingerprint = lambda row: (row.st_dev, row.st_ino, row.st_size, row.st_mtime_ns, row.st_ctime_ns)
-    if (fingerprint(before) != fingerprint(opened) or fingerprint(opened) != fingerprint(closed)
-            or fingerprint(closed) != fingerprint(after) or len(data) != before.st_size):
+    # Windows path stat and descriptor stat can expose different ctime semantics.
+    # Compare timestamps within each API, and bind both observations by the same
+    # device/inode/size. A changed path or open file still fails closed.
+    identity = lambda row: (row.st_dev, row.st_ino, row.st_size)
+    if (fingerprint(before) != fingerprint(after) or fingerprint(opened) != fingerprint(closed)
+            or identity(before) != identity(opened) or identity(closed) != identity(after)
+            or len(data) != before.st_size):
         raise RuntimeError('A log changed while being read; finish FTP downloads before collecting')
     return data
 
