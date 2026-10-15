@@ -1,6 +1,6 @@
 # Original homebrew WUP packaging
 
-## Current original install-test profile (0.27.0)
+## Plaintext original homebrew
 
 `host.package_homebrew` adds original plaintext **`0x2000`** contents and a
 self-generated test-signing chain for a signature-patched homebrew environment.
@@ -16,24 +16,29 @@ Wii U Menu launch/exit/relaunch remain unverified until a physical return.
 The explicit diagnostic ID **`0005000043543257`** is not a reserved safe range:
 check the console for an unrelated title with that ID before installation.
 
-The focused `native-install` diagnostic checks its actual title identity and
-runs safe original SD recovery probes in `sd:/ctr2wup/install-check/`.
-[One short guide](m1-acceptance.md) covers two brief new installed-title launches;
-prior native controls/tone/ten-minute, ordinary exits and save reload are reused.
-The kit exposes one `START-HERE.md` and one `sd-card/` deployment tree. Source,
-checksums, receipts and notices belong under `support/`, with no extra tester steps.
+The `native-install` diagnostic checks its actual title identity and original SD
+recovery behavior in `sd:/ctr2wup/install-check/`. Its matching package supplies
+the install instructions. The package's source, notices and receipts are under
+`support/`; user deployment uses one `sd-card/` tree.
 
-## Existing encrypted research profile
+```sh
+python -m host stage-title PATH.rpx --title-id YOUR_APPLICATION_ID --name "My title" --output private/staging
+python -m host pack-homebrew private/staging --output private/package
+python -m host verify-package private/package --expected-staging private/staging
+```
+
+The producer generates an ephemeral RSA4096 Root and RSA2048 CA/CP/XS test chain.
+No private key is serialized. The independent verifier checks signatures and
+content consistency while explicitly retaining an untrusted-root result.
+
+## Encrypted research profile
 
 The encrypted `0x2001` writer remains supported with its separately configured
-local inputs. Those inputs are unnecessary for the new original plaintext test.
+local inputs. Those inputs are unnecessary for plaintext homebrew packing.
 
-Version 0.4.0 implements an original, scoped encrypted writer and a separate
-decrypting verifier. **No package has been installed or launched on a physical
-Wii U.** That encrypted offline fixture uses invented test certificates and a
-synthetic key; its pass does not establish installer acceptance. Commercial
-conversion remains disabled. The original plaintext candidate above is a separate
-new physical install-test route.
+The original encrypted writer has a separate decrypting verifier. Offline fixtures
+use synthetic inputs; they cannot establish trusted signatures or installer
+acceptance. Commercial conversion remains disabled.
 
 ## Implemented profile
 
@@ -128,9 +133,9 @@ ciphertext are package revisions; title/save identity remains the explicit ID.
 Rebuild/save continuity, installation, Menu launch, exit and uninstall await
 physical-console tests. No installation is automated.
 
-## Evidence and dependency audit
+## Validation and dependencies
 
-20 new offline tests exercise streaming across chunk boundaries, empty/Unicode
+Offline tests exercise streaming across chunk boundaries, empty/Unicode
 paths, OpenSSL independently decrypting the ticket and all contents, wrong keys,
 ciphertext corruption, malicious FSTs with repaired hashes, source mutation,
 unsafe inputs, cancellation and output preservation. `tools/validate-packaging.py`
@@ -151,8 +156,7 @@ no source, binary, XML template, certificate or key from those packers is adopte
 This is a scoped research profile, not a full Wii U package-format implementation.
 
 The MIT-root makefst candidate bundles GPLv2-or-later PolarSSL, MIT ezxml and
-Unlicense miniz. Its code was not incorporated or executed. Earlier research
-focused on the encrypted profile; the new plaintext/test-signing route above is
-an original implementation and supplies no makefst production certificate. The nuspacker/CNUS_Packer
+Unlicense miniz. Its code was not incorporated or executed. The plaintext/test-signing route is an original implementation and supplies no
+makefst production certificate. The nuspacker/CNUS_Packer
 checkouts have no identified license grant and remain research references only.
-See `foundation-audit.md` for pins and licensing constraints.
+Dependency pins and shipped license notices remain in the source and third-party notices.

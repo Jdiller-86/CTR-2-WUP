@@ -75,7 +75,7 @@ static void enter_step(ctr_test_guide *g) {
     if(g->step==count) {
         g->done=true;
         log_line(g,"GUIDE COMPLETE: passed=%u failed=%u skipped=%u. Press Minus to close the report.",g->passed,g->failed,g->skipped);
-        log_line(g,"DELIVERY: upload the .txt files from sd:/ctr2wup/ in this chat. Photos are optional for unexplained visual failures.");
+        log_line(g,"DELIVERY: ZIP sd:/ctr2wup/results/ and return the folder. Photos are optional for unexplained visual failures.");
         if(g->kind==CTR_GUIDE_SAVE)log_line(g,g->fresh_reload_confirmed?
             "Fresh-launch reload confirmed. Upload this report and the preceding launch report if available.":
             "NEXT: exit and relaunch this app ONCE for fresh-process reload; upload both launch reports.");
@@ -192,8 +192,8 @@ void ctr_test_guide_view(const ctr_test_guide *g,uint64_t milliseconds,char rows
         snprintf(rows[0],72,"GUIDED TEST COMPLETE");
         snprintf(rows[1],72,"PASS %u / FAIL %u / SKIPPED %u",g->passed,g->failed,g->skipped);
         snprintf(rows[2],72,"Press MINUS to close; report is already saved.");
-        snprintf(rows[3],72,"Results: SD:/CTR2WUP/*.TXT");
-        snprintf(rows[4],72,"Upload the TXT files in this chat.");
+        snprintf(rows[3],72,"Results: SD:/CTR2WUP/RESULTS/");
+        snprintf(rows[4],72,"ZIP and return the whole RESULTS folder.");
         snprintf(rows[5],72,"Filename and SD status are shown below.");
         if(g->kind==CTR_GUIDE_SAVE && !g->fresh_reload_confirmed && !g->failed && !g->skipped) {
             snprintf(rows[0],72,"SAVE CHECK: ONE FRESH LAUNCH STILL NEEDED");

@@ -109,7 +109,7 @@ void ctr_stream_app_view(const ctr_stream_app *app,char rows[7][72]) {
     if(app->done) {
         snprintf(rows[1],72,"PASS %u / FAIL %u / SKIP %u",app->passed,app->failed,app->skipped);
         snprintf(rows[2],72,"MINUS: EXIT AND CLOSE BOTH TXT FILES");
-        snprintf(rows[3],72,"Send result + trace from SD:/CTR2WUP");
+        snprintf(rows[3],72,"ZIP and return SD:/CTR2WUP/RESULTS/");
         snprintf(rows[4],72,"Human hearing; original finite native clips");
         snprintf(rows[5],72,"Guest DSP / game audio are not tested");return;
     }

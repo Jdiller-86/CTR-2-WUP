@@ -21,6 +21,11 @@ typedef struct {
     char path[512];
 } ctr_test_report;
 
+/* Create the dedicated log directory under the data root. Saves and RomFS stay
+ * in the data root; installed-title evidence retains its separate directory. */
+bool ctr_test_report_directory(const char *data_root, bool install_check,
+                               char *directory, size_t capacity);
+
 /* The caller supplies an existing directory and a zero-initialized report.
  * Each launch reserves a new file exclusively; existing reports are preserved.
  * The ID is a platform tick count, not a wall-clock date. */

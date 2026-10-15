@@ -1,0 +1,138 @@
+{
+  "schema_version": 1,
+  "kind": "ctr2wup-m1-evidence-review",
+  "reviewed_on": "2026-10-15",
+  "reviewed_against_source_commit": "1b59d766ddf425bb79c044cf3816ef2e0fb23817",
+  "milestone": "m1",
+  "full_milestone_acceptance": false,
+  "policy": "Reuse reviewed physical evidence within its recorded scope. A version change alone does not require a repeat. Later display-cache, stream/mixer and guest DSP behavior do not inherit earlier physical acceptance.",
+  "sources": [
+    {
+      "id": "native-v0141",
+      "version": "0.14.1",
+      "source_commit": null,
+      "identity_boundary": "Previously reviewed native report identifies version 0.14.1; this ledger does not assign an unverified exact build commit.",
+      "references": [
+        "https://github.com/Jdiller-86/CTR-2-WUP/blob/8da7a4a2cde0e6f80f7df5c6ec263efb4c98b702/docs/console-evidence.md#latest-folder-upload-and-v0145-feedback",
+        "https://github.com/Jdiller-86/CTR-2-WUP/blob/8da7a4a2cde0e6f80f7df5c6ec263efb4c98b702/docs/development-history.md"
+      ],
+      "evidence": "Ten native guide steps and nine software self-tests passed with zero input errors/faults. The subsequent Minus hang is retained as a separate historical failure.",
+      "guide_definition_commit": "b56fef7b8476a96beb827179fdff5dbc20f051df",
+      "guide_definition_path": "runtime/wiiu/test_guide.c",
+      "guide_boundary": "The original and reviewed current definitions have the same ten native steps and 600000 ms stability condition. This supports the original controls/stability result, not blanket acceptance of changed runtime paths."
+    },
+    {
+      "id": "save-v0146",
+      "version": "0.14.6",
+      "source_commit": null,
+      "identity_boundary": "Previously reviewed named results and fresh-launch trace identify Save 0.14.6; an exact source commit is not asserted here.",
+      "references": [
+        "https://github.com/Jdiller-86/CTR-2-WUP/blob/8da7a4a2cde0e6f80f7df5c6ec263efb4c98b702/docs/console-evidence.md#october-12-follow-up-current-reports-and-fresh-launch-save"
+      ],
+      "evidence": "Completed named reports, valid visit-2 snapshot/CRC and fresh-process RELOAD PASS establish successful SD publication and persistence. The user confirms pictures and normal Minus return. Earlier failed saves remain historical evidence."
+    },
+    {
+      "id": "audio-v0200",
+      "version": "0.20.0",
+      "source_commit": null,
+      "identity_boundary": "Previously reviewed full trace identifies Audio Check 0.20.0; its separate result TXT was absent and an exact source commit is not asserted here.",
+      "references": [
+        "https://github.com/Jdiller-86/CTR-2-WUP/blob/8da7a4a2cde0e6f80f7df5c6ec263efb4c98b702/docs/console-evidence.md#october-13-launch-audio-gx-transfers-and-compiled-pica-draws"
+      ],
+      "evidence": "Launch-music silence and original native tone on both TV/GamePad outputs passed, with five tone requests and clean shutdown. The user separately confirms silence and correct return. This does not verify the new stream/mixer or guest DSP."
+    },
+    {
+      "id": "lifecycle-v0241",
+      "version": "0.24.1",
+      "source_commit": "4eeee0ba3a839f934c6bb7d6313f5fcb657782c5",
+      "identity_boundary": "All five full traces and five 8192-byte reports match this clean kit source; the earlier four reports are byte-identical in the completed return.",
+      "references": [
+        "https://github.com/Jdiller-86/CTR-2-WUP/blob/8da7a4a2cde0e6f80f7df5c6ec263efb4c98b702/docs/console-evidence.md#october-14-evening-arithmetic-repeated-guest-draws-and-measured-scaling"
+      ],
+      "environment": {
+        "firmware": "5.5.6 U",
+        "aroma": "Beta 27",
+        "separate_launcher": "none"
+      },
+      "evidence": "Four Minus exits and one HOME exit reach ordered cleanup through main_return; the user separately confirms actual returns and no observed problems. Transport checks, per-file hashes and the corrected real-file collector/analyzer round trip pass with no missing-pair warnings."
+    }
+  ],
+  "criteria": [
+    {
+      "id": "m1-results",
+      "issue": 12,
+      "reviewed_status": "Done",
+      "evidence_sources": [
+        "save-v0146",
+        "lifecycle-v0241"
+      ],
+      "accepted_scope": [
+        "Unique named closed-file read-back result collection and completed private result/trace intake for the reviewed rounds."
+      ],
+      "remaining": []
+    },
+    {
+      "id": "m1-lifecycle",
+      "issue": 13,
+      "reviewed_status": "Awaiting evidence",
+      "evidence_sources": [
+        "save-v0146",
+        "lifecycle-v0241"
+      ],
+      "accepted_scope": [
+        "Repeated normal launches and observed Minus/HOME returns in the recorded environment.",
+        "Successful SD save publication and exact fresh-process reload."
+      ],
+      "remaining": [
+        "Physical automatic interrupted-publication/error-recovery probe on the SD path. Combine this with the eventual installed-title run; no separate ordinary lifecycle or successful-save repeat is requested."
+      ]
+    },
+    {
+      "id": "m1-controls-audio",
+      "issue": 14,
+      "reviewed_status": "Done",
+      "evidence_sources": [
+        "native-v0141",
+        "audio-v0200"
+      ],
+      "accepted_scope": [
+        "Reviewed native baseline: TV/GamePad pictures, buttons, both sticks, touch positions/border/alignment and both-output native tone.",
+        "Original timed ten-minute native stability step and final problem-free observation.",
+        "Focused launch-music silence/native-tone regression on Audio Check 0.20.0."
+      ],
+      "remaining": [],
+      "excluded_scope": [
+        "Physical behavior/performance of the later display cache.",
+        "New finite Audio Streams playback/mixing and guest DSP behavior.",
+        "Universal stability or acceptance of every later build."
+      ]
+    },
+    {
+      "id": "m1-package-launch",
+      "issue": 15,
+      "reviewed_status": "Awaiting evidence",
+      "evidence_sources": [],
+      "accepted_scope": [],
+      "remaining": [
+        "Record actual WUP Installer GX2 installation of the independently verified original plaintext/self-signed candidate under signature-patched Aroma, then two brief Wii U Menu launch/exits. Check the explicit title identity for collision. Homebrew RPX/WUHB launch does not establish installation."
+      ]
+    },
+    {
+      "id": "m1-platform-acceptance",
+      "issue": 16,
+      "reviewed_status": "Awaiting evidence",
+      "evidence_sources": [
+        "native-v0141",
+        "save-v0146",
+        "audio-v0200",
+        "lifecycle-v0241"
+      ],
+      "accepted_scope": [
+        "Existing scoped evidence is retained across recorded builds; the full native guide is not reset by a version bump."
+      ],
+      "remaining": [
+        "Resolve the narrow SD recovery and installed-title criteria, then explicitly review the combined versioned platform record. This ledger does not automatically accept M1."
+      ]
+    }
+  ]
+}

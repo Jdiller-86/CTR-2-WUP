@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Stage checked documentation or dispatch Pages for the canonical public source.
-
-Dry-run by default. Run only from trusted main with normal gh authentication.
-Only validated site files are staged. Never write generated files into source.
-"""
+"""Stage only the verified documentation archive for GitHub Pages deployment."""
 import argparse
 import os
 import tempfile
@@ -12,7 +8,6 @@ import importlib.util
 import json
 from pathlib import Path, PurePosixPath
 import re
-import subprocess
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,26 +20,6 @@ spec.loader.exec_module(docs)
 
 class PublishError(RuntimeError):
     pass
-
-
-class GitHub:
-    def api(self, path, method='GET', payload=None, missing=False):
-        command = ['gh', 'api', path, '--method', method]
-        if payload is not None:
-            command += ['--input', '-']
-        result = subprocess.run(command, input=json.dumps(payload) if payload is not None else None,
-                                capture_output=True, text=True, encoding='utf-8', timeout=60)
-        if result.returncode == 0 and not result.stdout.strip():
-            return None  # Successful 204 responses, such as alert enablement.
-        try:
-            response = json.loads(result.stdout)
-        except ValueError:
-            raise PublishError('GitHub returned no usable JSON; review Actions access.') from None
-        if result.returncode:
-            if missing and isinstance(response, dict) and str(response.get('status')) == '404':
-                return None
-            raise PublishError('GitHub denied or could not complete the docs operation; review Actions access.')
-        return response
 
 
 def bundle(folder, commit):
@@ -120,50 +95,18 @@ def stage(folder, commit, output):
             'documentation_only': True, 'pages_deployment_verified': False}
 
 
-def publish(folder, commit, client, apply=False, create=False):
-    report, entries = bundle(folder, commit)
-    if create:
-        raise PublishError('The canonical source repository must already exist; creation is unsupported.')
-    source = client.api('repos/' + SOURCE)
-    if (not isinstance(source, dict) or source.get('full_name') != SOURCE
-            or source.get('private') is not False or source.get('default_branch') != 'main'):
-        raise PublishError('The authorized source must be public and use main; preserve unexpected settings.')
-    result = {'ok': True, 'applied': apply, 'repository': SOURCE, 'source_commit': commit,
-              'documentation_only': True, 'application_visibility_changed': False,
-              'files': len(entries), 'pages_deployment_verified': False,
-              'workflow_dispatched': False}
-    if apply:
-        current = client.api('repos/' + SOURCE + '/commits/main')
-        if not isinstance(current, dict) or current.get('sha') != commit:
-            raise PublishError('Dispatch requires the current trusted main commit.')
-        client.api('repos/' + SOURCE + '/actions/workflows/publish-docs.yml/dispatches',
-                   'POST', {'ref': 'main'})
-        result['workflow_dispatched'] = True
-    return result
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--input', type=Path, required=True)
     parser.add_argument('--source-commit', required=True)
-    parser.add_argument('--apply', action='store_true')
-    parser.add_argument('--create', action='store_true', help=argparse.SUPPRESS)
-    parser.add_argument('--stage', type=Path, help='Stage checked site files locally; no API calls')
-    parser.add_argument('--output', type=Path)
+    parser.add_argument('--stage', type=Path, required=True)
     args = parser.parse_args()
     try:
-        if args.stage is not None:
-            if args.apply or args.create:
-                raise PublishError('Local staging cannot be combined with API apply/create.')
-            result = stage(args.input, args.source_commit, args.stage)
-        else:
-            result = publish(args.input, args.source_commit, GitHub(), args.apply, args.create)
-    except (PublishError, OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired, zipfile.BadZipFile) as error:
-        result = {'ok': False, 'error': str(error) if isinstance(error, PublishError) else 'Documentation publication could not be verified; review Actions receipt.'}
-    if args.output:
-        args.output.write_text(json.dumps(result, indent=2) + '\n')
+        result = stage(args.input, args.source_commit, args.stage)
+    except (PublishError, OSError, ValueError, KeyError, TypeError, zipfile.BadZipFile):
+        parser.exit(2, 'Documentation archive/staging validation failed.\n')
     print(json.dumps(result))
-    return 0 if result['ok'] else 2
+    return 0
 
 
 if __name__ == '__main__':

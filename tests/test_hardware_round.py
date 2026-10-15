@@ -1,13 +1,10 @@
 """Original structural delivery/return fixtures; no console acceptance inferred."""
-import copy
 import hashlib
 import importlib.util
 import json
 from pathlib import Path
-import struct
 import tempfile
 import unittest
-from unittest.mock import patch
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,7 +17,6 @@ def module(name, filename):
 
 collector = module('round_collector', 'collect-hardware-results.py')
 analyzer = module('round_analyzer', 'analyze-hardware-results.py')
-package = module('round_package', 'package-hardware-round.py')
 COMMIT = 'a'*40
 
 
@@ -60,6 +56,20 @@ class HardwareReturnTests(unittest.TestCase):
         summary=next(row for row in result['summaries'] if row['kind']=='trace')
         self.assertTrue(summary['source_identity_seen']);self.assertEqual(summary['phase_records'],1)
         self.assertEqual((self.sd/'ctr2wup'/name).read_bytes(),trace)
+
+    def test_results_subdirectory_preserves_legacy_intake_and_rejects_ambiguous_duplicates(self):
+        folder = self.sd/'ctr2wup'
+        results = folder/'results'; results.mkdir()
+        (folder/self.name).rename(results/self.name)
+        trace_name = 'compiled-pica-draws-0000000000000001-00.txt'
+        (folder/trace_name).write_bytes(self.trace())
+        (folder/'filesystem-test.snapshot').write_bytes(b'Original save is excluded')
+        report = collector.collect(self.sd,self.root/'results.zip',self.kit)
+        self.assertEqual(len(report['files']),2)
+        self.assertEqual(report['warnings'],[])
+        (folder/self.name).write_bytes(self.data)
+        with self.assertRaisesRegex(ValueError,'Duplicate log filename'):
+            collector.collect(self.sd,self.root/'duplicate-layout.zip',self.kit)
 
     def test_legacy_round_remains_source_bound_after_tool_upgrade(self):
         old = '0.24.1'
@@ -163,56 +173,3 @@ class HardwareReturnTests(unittest.TestCase):
             with zipfile.ZipFile(path, 'w') as archive:
                 for name,data in changed.items():archive.writestr(name,data)
             with self.subTest(kind=kind), self.assertRaises(ValueError):analyzer.analyze(path, COMMIT)
-
-
-class HardwarePackageTests(unittest.TestCase):
-    def setUp(self):
-        self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
-        self.root=Path(self.temp.name);self.scene=self.root/'scene';self.app=self.root/'draw'
-        self.scene.mkdir();(self.app/'wiiu').mkdir(parents=True)
-        header=bytearray(92);header[:8]=b'\x7fELF\x01\x02\x01\xca';header[16:20]=b'\xfe\x01\x00\x14'
-        struct.pack_into('>I',header,32,52)
-        for offset,value in ((40,52),(46,40),(48,1),(50,0)):struct.pack_into('>H',header,offset,value)
-        records=[]
-        for folder,names in ((self.scene,package.SCENE),(self.app/'wiiu',package.DRAW)):
-            rows=[]
-            for name in names:
-                data=bytes(header) if name.endswith('.rpx') else b'WUHBoriginal structural fixture'
-                (folder/name).write_bytes(data);rows.append({'name':name,'size':len(data),'sha256':hashlib.sha256(data).hexdigest()})
-            records.append(rows)
-        self.native={'ok':True,'runtime_version':package.VERSION,'target':'scene-check','source_commit':COMMIT,'source_dirty':False,'artifacts':records[0]}
-        checks=[]
-        for screen,width in (('top',400),('bottom',320)):
-            data=f'P6\n{width} 240\n255\n'.encode()+bytes(width*240*3)
-            (self.app/f'frame-0-{screen}.ppm').write_bytes(data)
-            checks.append({'screen':screen,'width':width,'height':240,'pixels':width*240,'exact_match':True,'sha256':hashlib.sha256(data).hexdigest()})
-        app={'application':'draw','wiiu_artifacts':records[1],'independent_frame_checks':checks,
-             'generation':{'input_identity':{'program_id':'000400000ff00f0c'}},
-             'guest':{'state':'exited','fault':'ok','fallback':0,'messages':['CTR2WUP compiled PICA draws PASS'],
-                      'pica_render':{'draws':4,'triangles':4,'fragments':97200,'shader_instructions':36}}}
-        self.draw={'ok':True,'version':package.VERSION,'source_commit':COMMIT,'source_dirty':False,'libctru_pin':package.release.LIBCTRU,'applications':[app]}
-        self.report=self.root/'draw-report.json';self.sdk=self.root/'sdk.txt';self.sdk.write_text(package.release.SDK_IMAGE+'\n')
-        self.patch=patch.object(package,'identity',return_value=COMMIT);self.patch.start();self.addCleanup(self.patch.stop)
-
-    def validate(self):
-        (self.scene/'build-report.json').write_text(json.dumps(self.native));self.report.write_text(json.dumps(self.draw))
-        return package.validate_inputs(self.scene,self.report,self.app,self.sdk)
-
-    def test_matching_original_bytes_are_checked(self):
-        commit,entries=self.validate();self.assertEqual(commit,COMMIT);self.assertEqual(len(entries),6)
-
-    def test_source_dirty_missing_pixels_wrong_counters_and_sdk_fail(self):
-        saved=copy.deepcopy(self.draw)
-        for mutation in ('dirty','source','pixels','counters'):
-            self.draw=copy.deepcopy(saved)
-            if mutation=='dirty':self.draw['source_dirty']=True
-            if mutation=='source':self.draw['source_commit']='b'*40
-            if mutation=='pixels':self.draw['applications'][0]['independent_frame_checks'][0]['exact_match']=False
-            if mutation=='counters':self.draw['applications'][0]['guest']['pica_render']['draws']=3
-            with self.subTest(mutation=mutation),self.assertRaises(ValueError):self.validate()
-        self.draw=saved;self.sdk.write_text('unverified SDK')
-        with self.assertRaises(ValueError):self.validate()
-
-    def test_changed_binary_is_rejected(self):
-        (self.scene/package.SCENE[1]).write_bytes(b'WUHBchanged')
-        with self.assertRaises(ValueError):self.validate()

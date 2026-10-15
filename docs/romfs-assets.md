@@ -1,6 +1,6 @@
-# Current-process read-only RomFS assets (0.16.0)
+# Current-process read-only RomFS assets
 
-This shared M3 foundation lets ordinary libctru `romfsInit` and newlib code read
+This shared runtime interface lets ordinary libctru `romfsInit` and newlib code read
 an explicitly supplied **decrypted Level-3 RomFS view**. No game patch or host
 path exposure is involved. The original fixture contains three tiny files and
 no commercial content.
@@ -41,12 +41,10 @@ consistency does not establish signature authenticity.
 It emits `CTR2WUP compiled RomFS PASS` only after all checks. Desktop and
 ASan/UBSan runs exit after 49,550 instructions with zero interpreter fallback.
 The same original generated program also passes in **QEMU emulated big-endian
-PPC Linux**. The Compiled RomFS RPX/WUHB is built for Wii U; physical execution
-is pending. The portable FS suite adds lifetime, copied-handle, sparse >4 GiB,
+PPC Linux**. The optional native build uses the same runtime. The portable FS suite adds lifetime, copied-handle, sparse >4 GiB,
 malformed-descriptor, read-failure atomicity and permission/alias checks.
 
 ```sh
-source /workspace/ctr2wup-tools/environment/activate.sh
 python3 tools/validate-libctru.py --application romfs --wiiu \
   --output artifacts/reports/my-romfs
 make -C tests/filesystem check sanitize
@@ -58,11 +56,11 @@ lowest in the list, and ARMv6 U=1/A=0 unaligned single-data accesses. These were
 implemented in the runtime and checked against ARM1176 references, without
 changing the program's library implementation. Time starts at an explicitly
 synthetic Unix-zero epoch and advances with the guest clock; no real console RTC
-or timezone accuracy is claimed. See [cpu-stack.md](cpu-stack.md).
+or timezone accuracy is claimed. See [cpu.md](cpu.md).
 
 ## Host asset preparation
 
-`prepare-rom` now verifies the complete canonical three-level IVFC tree whenever
+`prepare-rom` verifies the complete canonical three-level IVFC tree whenever
 RomFS exists. `prepare-assets` performs the same full verification after checked
 decrypted container inspection, validates Level-3 metadata, and exports a private
 blob and manifest:
@@ -86,9 +84,9 @@ Output publication is atomic and refuses replacement; sources remain unchanged.
 When the blob exceeds the transfer limit, use the
 [standalone private sample helper](private-asset-samples.md) to share only explicit
 hash-checked guest files and a small receipt. It works with existing schema-1
-reports, including 0.20.0, without reinstalling the host wheel.
+reports without reinstalling the host wheel.
 
-## File-backed provider and optional Wii U test
+## File-backed provider
 
 `ctr_romfs_file` opens an explicitly configured immutable blob, streams its
 SHA-256 and requires the expected manifest hash before mounting. It lends the
@@ -113,23 +111,8 @@ reuses its `romfs/` directory to prove original encrypted CIA -> local preparati
 -> full IVFC -> private asset blob -> actual compiled libctru file access, with
 transient synthetic keys and zero interpreter fallback.
 
-The delivery ZIP places its WUHB in `sd-card/wiiu/apps/` and the tiny original
-blob in **`sd-card/ctr2wup/romfs-test.bin`**. Copy the contents of `sd-card` to SD
-root when available, launch **CTR2WUP Asset Files 0.16.0** in Aroma, and follow
-its short existing RomFS guide. It reads root/nested/Unicode files, lists/seeks,
-denies writes and exits. This test needs no ROM or key. A missing/changed blob
-fails visibly and is preserved.
-
-Reports appear under **`sd:/ctr2wup/`**, using
-**`result-compiled-romfs-file-0.16.0-*.txt`** plus any full trace. Return those TXT
-files together in a ZIP; include the observed exit result if it was not recorded.
-No new physical success is claimed, and the earlier Save/RomFS result round in
-[console-retest.md](console-retest.md) remains pending. Completed long native/
-input guides do not need to be repeated for this asset test.
-
 ## Remaining work
 
-Actual Mario asset/revision integration, other cartridge/archive selectors,
-extdata/retail saves, console SD behavior and Windows conversion integration
-remain unfinished. Signature authenticity is unverified. This diagnostic does
+Commercial asset/revision integration, other cartridge/archive selectors,
+extdata/retail saves and Windows conversion integration remain unfinished. Signature authenticity is unverified. This diagnostic does
 not enable a retail profile, render PICA scenes or establish console speed.

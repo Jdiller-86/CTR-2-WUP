@@ -3,15 +3,6 @@
 Windows development tooling is verified. The finished injector GUI, native Wii U
 conversion and playable WUP output remain under development.
 
-The [hosted baseline](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38289820946)
-passes Python fixtures and all 17 normal C suites on Windows Server 2022,
-including Unicode guest compilation/execution. Three filesystem/privilege-specific
-Python tests are explicitly skipped; their platform behavior remains unverified.
-The [deep Windows run](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38289835013)
-also passes real pinned external ARM/Thumb/VFP generation, 14 execution probes,
-runtime API checks, Unicode output and a .NET 10.0.401 WPF tooling build.
-The WPF probe verifies the SDK; it is not CTR2WUP's final application.
-
 ## Prerequisites
 
 - Python 3.12 or newer and Git.
@@ -77,17 +68,13 @@ the Windows baseline is not evidence that those optional comparisons ran there.
 
 ## CIA intake helper
 
-The v0.5.0 `CTR2WUP-CIA-Intake` console utility has a separate self-contained
+The `CTR2WUP-CIA-Intake` console utility has a separate self-contained
 Windows x64 bundle. It needs no Python/SDK/runtime installation and exports
-private analysis data. See [CIA intake](cia-intake.md) for controls, build pins and
-its user-machine acceptance check. It is separate from the planned injector GUI.
+private analysis data. See [CIA intake](cia-intake.md) for controls, build pins and build pins. It is separate from the planned injector GUI.
 
-## Remaining Windows acceptance
+## Product boundary
 
-Full native devkitPPC conversion, personal decrypted/keyed inputs, untested
-filesystem/privilege behavior, installer acceptance and the complete GUI need
-their own evidence. The end-to-end product must convert the selected title,
-install its WUP, launch from Wii U Menu and support gameplay/audio/save/reload.
-Original synthetic packing checks and development SDK probes do not close these
-gates. Follow [milestones](milestones.md) and [GitHub development](github-development.md)
-for the current record.
+Host tests, original fixtures and a WPF tooling probe do not implement the final
+injector. Native Wii U conversion, locally prepared owned inputs and the complete
+GUI-to-installed-game workflow require their own demonstrated behavior. See
+[compatibility](compatibility.md) and [architecture](architecture.md).

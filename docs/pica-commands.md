@@ -1,11 +1,11 @@
 # PICA command front end
 
-The original v0.18 front end processes a small **no-draw configuration** command list
+The original front end processes a small **no-draw configuration** command list
 through the standard GSP queue. It stores raw viewport/scissor register values,
 applies byte masks and recognizes the finalization emitted by libctru. This is a
-step toward M4. It produces no pixels, runs no shader and submits no GX2 draw.
+configuration boundary. It produces no pixels, runs no shader and submits no GX2 draw.
 
-Version 0.23 also adapts [bounded compiled guest draws](guest-pica-draws.md)
+The scene adapter also adapts [bounded compiled guest draws](guest-pica-draws.md)
 through the standard queue. The configuration-only API below remains unchanged;
 the separate scene/guest adapter handles its explicitly defined shader/target subset.
 
@@ -84,7 +84,7 @@ The TXT report records completed lists, writes, markers and the last parser's
 result/register/offset. Guest-memory failures retain the existing memory-fault
 report. These observations are distinct from picture/launcher confirmations.
 
-## Evidence and next work
+## Validation
 
 - `make check` includes the PICA C suite and integrated GSP rejection/completion
   tests, normal and with ASan/UBSan. The standalone suite exercises capacity,
@@ -94,19 +94,12 @@ report. These observations are distinct from picture/launcher confirmations.
   the independent Python decoder and checked no-draw state expectations. All 353
   vector receipts match an emulated big-endian PowerPC Linux run; this does not
   establish physical Espresso execution.
-- The original normal-CRT/libctru GX application now sends a builder-produced
+- The original normal-CRT/libctru GX application sends a builder-produced
   finalized configuration list and waits for P3D. Its AOT execution exits after
   **1,489,172 instructions**, with **zero fallback**, 17 GX commands and the
   expected masked viewport word. Its green/red/green pictures still come from
   CPU-backed fills/transfers, not PICA draws.
 
-Native/GX RPX and WUHB cross-builds are available. The October 13 GX 0.20.0
-configuration/picture/exit results have reviewed scoped evidence. No unchanged
-passed guide repeat is requested. Current v0.23 [compiled guest draws](guest-pica-draws.md)
-add the bounded owned-resource/MOV/software-scene route; they preserve this
-configuration-only API separately.
-
-Merged PR #48/#57 establish the scoped command-task criteria. Broader shader and
-fragment behavior, GX2 submission, resource coherency and full renderer/reference
-performance acceptance remain open. Project #2 owns the task's live reviewed
-status; completing it does not accept M4.
+The [compiled guest draw adapter](guest-pica-draws.md) executes its separately
+bounded software subset. General shaders, textures/TEV, geometry, native GX2
+translation and full renderer compatibility remain unsupported.

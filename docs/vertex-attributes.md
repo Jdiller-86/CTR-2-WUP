@@ -25,7 +25,7 @@ padding rules before providing this explicit layout.
 | 3 | Little-endian IEEE binary32 | Finite bit pattern preserved on the verified host |
 
 Each attribute supplies one to four components. Missing components start at
-`(0, 0, 0, 1)`, so a one-component attribute produces `(x, 0, 0, 1)` and an
+`(0,0,0,1)`, so a one-component attribute produces `(x, 0,0,1)` and an
 explicit fourth component replaces the default W. Unconfigured input slots also
 contain that deterministic vector but remain absent from the returned `enabled`
 mask; they are not claimed as supplied or fixed PICA attributes.
@@ -71,7 +71,7 @@ are decoded with byte loads. `first_index` and `vertex_count` select elements,
 not byte offsets. Each element selects a source vertex independently in every
 stream, preserving requested order and duplicates.
 
-For example, indices `[2, 0, 2, 1]` produce source records 2, 0, 2 and 1, with
+For example, indices `[2,0,2,1]` produce source records 2,0,2 and 1, with
 their input permutation and component defaults intact. Stream offsets resolve
 the source vertex base. The API does not add `first_index` to a decoded index,
 interpret PICA's vertex-offset register, or treat 0xff/0xffff as restart markers.
@@ -100,7 +100,7 @@ at `9b55eda44cf80b971503991e0c78f9bc8fe50425`:
 and the twelve loader banks are in the same revision's
 [register definitions](https://github.com/devkitPro/libctru/blob/9b55eda44cf80b971503991e0c78f9bc8fe50425/libctru/include/3ds/gpu/registers.h).
 Published register information is available at
-[3dbrew](https://www.3dbrew.org/wiki/GPU/Internal_Registers).
+[3dbrew](https://www. 3dbrew.org/wiki/GPU/Internal_Registers).
 The signed-short, missing-component and loader distinctions were also inspected
 in [Azahar's reference loader](https://github.com/azahar-emu/azahar/blob/d409087405bc299b88ff35dd5b96b6e2698d5929/src/video_core/pica/vertex_loader.cpp)
 at `d409087405bc299b88ff35dd5b96b6e2698d5929`. No emulator implementation is copied,
@@ -124,4 +124,4 @@ unreferenced nonfinite data, late atomic rejection and full index-span aliases.
 The combined suite has **364,123 original assertions**. Root `make check-c` and
 the portable Windows target include this suite, and the native Wii U source list
 cross-compiles the module. Desktop/sanitizer passes and cross-compilation do not
-establish Espresso execution or any rendered scene. Milestone M4 remains open.
+establish Espresso execution or any rendered scene.

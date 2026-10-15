@@ -1,35 +1,29 @@
-name: Reviewed GitHub management
+name: Simplify GitHub tracking
 
 on:
   workflow_dispatch:
     inputs:
-      operation:
-        description: Fixed management operation on immutable trusted main
-        type: choice
-        options: [preflight, traceability, evidence, review, progress, overview, legacy-docs, archive-legacy, verify-sites]
-        default: preflight
       apply:
-        description: Apply only after inspecting the corresponding dry-run receipt
+        description: Apply the reviewed cleanup plan
         type: boolean
         default: false
-      review:
-        description: Explicit reviewed status/resource plan
-        type: choice
-        options: [none, mario-input-received-v023, dsp-adpcm-foundation-v025, m1-install-prerequisite-v026, m1-evidence-reuse-v027, m6-original-homebrew-v027]
-        default: none
+      plan_sha256:
+        description: Exact plan digest from a fresh dry run; required for apply
+        type: string
+        default: ''
 
 permissions:
   contents: read
 
 concurrency:
-  group: project-tracking-${{ github.repository }}
+  group: github-maintenance-${{ github.repository }}
   cancel-in-progress: false
 
 jobs:
-  manage:
+  simplify:
     if: github.repository == 'Jdiller-86/CTR-2-WUP' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 15
     steps:
       - name: Resolve immutable trusted main
         id: trusted
@@ -44,59 +38,22 @@ jobs:
         with:
           ref: ${{ steps.trusted.outputs.sha }}
           persist-credentials: false
-      - name: Run fixed reviewed operation
+      - name: Review or apply fixed cleanup
         env:
-          CTR2WUP_GITHUB_MANAGEMENT_TOKEN: ${{ secrets.CTR2WUP_GITHUB_MANAGEMENT_TOKEN }}
-          CTR_OPERATION: ${{ inputs.operation }}
+          GH_TOKEN: ${{ secrets.CTR2WUP_GITHUB_MANAGEMENT_TOKEN }}
           CTR_APPLY: ${{ inputs.apply }}
-          CTR_REVIEW: ${{ inputs.review }}
+          CTR_PLAN: ${{ inputs.plan_sha256 }}
         run: |
           set -euo pipefail
-          # Attach main without changing the immutable checked-out contents.
           git switch -c main
           CTR_ARGS=()
-          if [[ "$CTR_APPLY" == true ]]; then CTR_ARGS+=(--apply); fi
-          if [[ "$CTR_OPERATION" == review ]]; then CTR_ARGS+=(--review "$CTR_REVIEW"); fi
-          python3 tools/manage-github.py "$CTR_OPERATION" "${CTR_ARGS[@]}" \
-            --output artifacts/reviewed-management
-      - name: Print public-safe operation receipts
-        if: always()
-        run: |
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-          root = Path('artifacts/reviewed-management')
-          for name in ('access', 'receipt', 'traceability', 'review', 'project', 'legacy', 'sites'):
-              path = root / (name + '.json')
-              if path.is_file():
-                  print(json.dumps({'receipt': name, 'data': json.loads(path.read_text())}))
-          # Evidence descriptions are source-generated but need not be repeated in logs.
-          path = root / 'evidence.json'
-          if path.is_file():
-              report = json.loads(path.read_text())
-              print(json.dumps({'receipt': 'evidence', 'data': {key: report[key] for key in
-                  ('ok', 'applied', 'tracker_count', 'work_item_count', 'writes_attempted', 'error') if key in report}}))
-          path = root / 'overview.json'
-          if path.is_file():
-              report = json.loads(path.read_text())
-              print(json.dumps({'receipt': 'overview', 'data': {key: report[key] for key in
-                  ('ok', 'applied', 'enrichment_operations', 'completed_operations', 'managed_overview_verified', 'error', 'partial_changes') if key in report}}))
-          PY
-      - name: Retain receipts without command logs or Project notes
+          if [[ "$CTR_APPLY" == true ]]; then CTR_ARGS+=(--apply --plan-sha256 "$CTR_PLAN"); fi
+          python3 tools/simplify-github.py "${CTR_ARGS[@]}" --output artifacts/github-cleanup.json
+      - name: Retain public-safe cleanup receipt
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: reviewed-management-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            artifacts/reviewed-management/access.json
-            artifacts/reviewed-management/receipt.json
-            artifacts/reviewed-management/traceability.json
-            artifacts/reviewed-management/evidence.json
-            artifacts/reviewed-management/review.json
-            artifacts/reviewed-management/project.json
-            artifacts/reviewed-management/legacy.json
-            artifacts/reviewed-management/sites.json
-            artifacts/reviewed-management/overview.json
-            artifacts/reviewed-management/progress/
+          name: github-cleanup-${{ github.run_id }}
+          path: artifacts/github-cleanup.json
           retention-days: 14
           if-no-files-found: error

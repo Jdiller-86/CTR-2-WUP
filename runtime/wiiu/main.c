@@ -1151,16 +1151,19 @@ int main(int argc, char **argv) {
     /* WUT's newlib devoptab already owns the SD mount. A second WHB mount
        followed by FSUnmount conflicts with that process-wide ownership. */
     {
-        const char *directory="fs:/vol/external01/ctr2wup";
-        bool directory_ok=mkdir(directory,0777)==0 || errno==EEXIST;
+        const char *data_directory="fs:/vol/external01/ctr2wup";
+        char directory[512];
 #ifdef CTR_INSTALL_ONLY
-        directory=INSTALL_DIRECTORY;
-        if(directory_ok)directory_ok=mkdir(directory,0777)==0 || errno==EEXIST;
+        bool install_check=true;
+#else
+        /* Keep the single FTP return folder free of saves and RomFS inputs. */
+        bool install_check=false;
 #endif
+        bool directory_ok=ctr_test_report_directory(data_directory,install_check,directory,sizeof(directory));
         if(directory_ok)ctr_test_result_open(&test_result,directory,REPORT_APPLICATION,CTR_APP_VERSION,(uint64_t)session_started);
         else { test_result.failed=true;test_result.error_code=errno;test_result.error_stage="directory"; }
 #ifdef CTR_FILESYSTEM_HOMEBREW
-        if(directory_ok)snprintf(diagnostic_save_path,sizeof(diagnostic_save_path),"%s/filesystem-test.snapshot",directory);
+        if(directory_ok)snprintf(diagnostic_save_path,sizeof(diagnostic_save_path),"%s/filesystem-test.snapshot",data_directory);
 #endif
         if(directory_ok && ctr_test_report_open(&test_report,directory,REPORT_APPLICATION,CTR_APP_VERSION,(uint64_t)session_started)) {
             ctr_test_report_set_volume_sync(&test_report,ctr_report_storage_sync,&report_storage);
@@ -1654,7 +1657,7 @@ int main(int argc, char **argv) {
 #ifdef CTR_INSTALL_ONLY
         image_text(top_image,TOP_W,15,test_result.ready && !test_result.failed?"RESULT SAVED / RETURN INSTALL-CHECK FOLDER":"RESULT FAILED / CHECK SD CARD");
 #else
-        image_text(top_image,TOP_W,15,test_result.ready && !test_result.failed?"RESULT VERIFIED / UPLOAD SD:/CTR2WUP":"RESULT FAILED / CHECK SD CARD");
+        image_text(top_image,TOP_W,15,test_result.ready && !test_result.failed?"RESULT VERIFIED / RETURN CTR2WUP/RESULTS":"RESULT FAILED / CHECK SD CARD");
 #endif
         char report_line[100];
         if(!test_result.failed)snprintf(report_line,sizeof(report_line),"%.63s",test_result.filename);

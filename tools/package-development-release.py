@@ -27,7 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SDK_IMAGE = "devkitpro/devkitppc@sha256:44cb1a920e1ec3ec7c06767493c3b85f8d643d6137cc4661f0201895ac6e4967"
 LIBCTRU = "9b55eda44cf80b971503991e0c78f9bc8fe50425"
 SOURCE_DIRS = {".github", ".githooks", "docs", "host", "translator", "runtime", "renderer", "packaging", "profiles", "tests", "tools"}
-SOURCE_FILES = {".gitignore", "AGENTS.md", "CHANGELOG.md", "CONTRIBUTING.md", "LICENSE", "Makefile", "README.md", "SECURITY.md", "STATUS.md", "THIRD_PARTY_NOTICES", "pyproject.toml", "mkdocs.yml", "docs-requirements.txt"}
+SOURCE_FILES = {".gitignore", "AGENTS.md", "CHANGELOG.md", "CONTRIBUTING.md", "LICENSE", "Makefile", "README.md", "SECURITY.md", "plans.md", "THIRD_PARTY_NOTICES", "pyproject.toml", "mkdocs.yml", "docs-requirements.txt"}
 FORBIDDEN = {".3ds", ".cxi", ".cci", ".cia", ".3dsx", ".rom", ".sav", ".key", ".keys", ".cert", ".app", ".h3", ".tik", ".tmd", ".pyc", ".log", ".elf", ".o", ".rpx", ".wuhb", ".zip", ".exe", ".dll", ".so", ".pyd", ".whl", ".tar", ".gz", ".7z", ".wup", ".snapshot", ".trace"}
 REQUIRED_CHECKS = {"make-check", "make-prototype", "native-build", "transfer-validation", "wheel-build", "wheel-smoke", "pica-validation"}
 CHECK_NAMES = REQUIRED_CHECKS | {"sdk-install", "arm-fixtures-install", "translator-install", "docs-build", "docs-package", "draw-validation"}
@@ -51,6 +51,12 @@ def regular(path: Path, limit: int = 64 * 1024 * 1024) -> Path:
     if any(part.lower() in {"private", ".aws", ".git", ".env"} for part in resolved.parts):
         raise ValueError("Private input paths cannot be published")
     return resolved
+
+
+def render_guide(path: Path, version: str, commit: str) -> bytes:
+    """Render the small guide shipped with a package, using its actual identity."""
+    return (regular(path, 64 * 1024).read_text(encoding="utf-8")
+            .replace("@VERSION@", version).replace("@SOURCE_COMMIT@", commit).encode("utf-8"))
 
 
 def read_json(path: Path) -> dict:
@@ -248,12 +254,12 @@ def package(options: argparse.Namespace) -> dict:
                 if not name.endswith("/") and (relative in {"LICENSE", "THIRD_PARTY_NOTICES", ".github/repository-settings.json"}
                         or root_document or repository_document or relative.startswith("docs/")):
                     entries[relative] = src.read(name)
-            for required in ("docs/gx-transfers.md", "docs/licenses/libctru.txt", "docs/licenses/COPYING.NEWLIB.ARM", "docs/licenses/devkitarm-crtls/3dsx_crt0.s", "docs/licenses/MPL-2.0.txt"):
+            for required in ("docs/graphics-transport.md", "docs/licenses/libctru.txt", "docs/licenses/COPYING.NEWLIB.ARM", "docs/licenses/devkitarm-crtls/3dsx_crt0.s", "docs/licenses/MPL-2.0.txt"):
                 if required not in entries:
                     raise ValueError("Required diagnostic guide or corresponding license/CRT source is missing")
             entries["source-commit.txt"] = (commit + "\n").encode()
             entries["sdk-image-digest.txt"] = (SDK_IMAGE + "\n").encode()
-            entries["README.txt"] = (f"CTR2WUP original diagnostics {version}\nSource commit: {commit}\n\nCopy sd-card contents to the SD root; launch the WUHB in Aroma.\nRPX files need an RPX-capable homebrew launcher. These are not WUP packages.\nGX Transfers: green/red/green TV, blue GamePad; R confirms the observed picture,\nL reports a problem, Minus exits. Results: sd:/ctr2wup/result-compiled-gx-transfer-{version}-*.txt.\nSee docs/gx-transfers.md. Preserve existing reports/saves.\nDeveloper builds require extracting the separate matching source ZIP.\nNo ROM/key is required. New-build console acceptance, commercial gameplay, general PICA rendering,\nguest audio and WUP installation are pending separate acceptance.\n").encode()
+            entries["README.txt"] = (f"CTR2WUP original diagnostics {version}\nSource commit: {commit}\n\nCopy sd-card contents to the SD root; launch the WUHB in Aroma.\nRPX files need an RPX-capable homebrew launcher. These are not WUP packages.\nGX Transfers: green/red/green TV, blue GamePad; R confirms the observed picture,\nL reports a problem, Minus exits. Results: sd:/ctr2wup/result-compiled-gx-transfer-{version}-*.txt.\nSee docs/graphics-transport.md. Preserve existing reports/saves.\nDeveloper builds require extracting the separate matching source ZIP.\nNo ROM/key is required. New-build console acceptance, commercial gameplay, general PICA rendering,\nguest audio and WUP installation are pending separate acceptance.\n").encode()
             for name, data in sorted(entries.items()):
                 entry = zipfile.ZipInfo(name, date_time=date)
                 entry.external_attr = 0o100644 << 16
@@ -272,7 +278,7 @@ def package(options: argparse.Namespace) -> dict:
         manifest = {"schema_version": 1, "version": version, "source_commit": commit, "prerelease": True, "original_fixtures_only": True, "artifacts": published}
         (stage / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         rows = published + [{"name": "manifest.json", "sha256": sha256(stage / "manifest.json")}]
-        notes = f"# CTR2WUP {version} development diagnostics\n\nSource commit: `{commit}`.\n\nOriginal Native and GX Transfer WUHB/RPX diagnostics, exact reference frames,\nsource and a pure-Python developer wheel. Required host/C/sanitizer checks,\nWUT builds and original transfer execution passed for this source commit.\nZIP CRCs and SHA-256 checksums were verified before publication.\n\nCopy the diagnostic ZIP's `sd-card/` contents to the SD root and launch in Aroma.\nSee `docs/gx-transfers.md` inside the ZIP; preserve older SD reports and saves.\nThe wheel is a developer CLI, not the planned Windows injector GUI.\n\nFull physical-console acceptance, playable commercial games, general PICA rendering,\nguest audio, installed WUP output and the Windows GUI remain pending.\nNo game dump, personal key, commercial asset or external reference implementation\nis included. SDK/runtime/CRT notices and corresponding startup source accompany\nthe original diagnostic.\n\n| Asset | SHA-256 |\n|---|---|\n"
+        notes = f"# CTR2WUP {version} development diagnostics\n\nSource commit: `{commit}`.\n\nOriginal Native and GX Transfer WUHB/RPX diagnostics, exact reference frames,\nsource and a pure-Python developer wheel. Required host/C/sanitizer checks,\nWUT builds and original transfer execution passed for this source commit.\nZIP CRCs and SHA-256 checksums were verified before publication.\n\nCopy the diagnostic ZIP's `sd-card/` contents to the SD root and launch in Aroma.\nSee `docs/graphics-transport.md` inside the ZIP; preserve older SD reports and saves.\nThe wheel is a developer CLI, not the planned Windows injector GUI.\n\nFull physical-console acceptance, playable commercial games, general PICA rendering,\nguest audio, WUP installer acceptance and the Windows GUI remain pending.\nNo game dump, personal key, commercial asset or external reference implementation\nis included. SDK/runtime/CRT notices and corresponding startup source accompany\nthe original diagnostic.\n\n| Asset | SHA-256 |\n|---|---|\n"
         notes += "".join(f"| `{row['name']}` | `{row['sha256']}` |\n" for row in rows)
         if documentation is not None:
             notes += f"\nDownload `CTR2WUP-Documentation-{version}.html` and open it directly in a browser for offline navigation, search and printing. The checked export also supports offline review; the public source repository hosts the canonical Pages site.\n"

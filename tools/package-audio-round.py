@@ -9,7 +9,6 @@ import io
 import json
 import os
 from pathlib import Path, PurePosixPath
-import posixpath
 import re
 import stat
 import subprocess
@@ -135,20 +134,6 @@ def validate_inputs(app: Path, reference_report: Path, sdk_receipt: Path) -> tup
     return commit, entries
 
 
-def immutable_guide(data: bytes, commit: str) -> bytes:
-    base = 'https://github.com/Jdiller-86/CTR-2-WUP/blob/'+commit+'/'
-    def replace(match):
-        target = match[1]
-        if target.startswith(('#', '/', 'https://', 'http://', 'mailto:')):
-            return match[0]
-        path, marker, anchor = target.partition('#')
-        normalized = posixpath.normpath('docs/'+path)
-        if normalized.startswith('../') or normalized == '..' or '\\' in normalized:
-            raise ValueError('Guide contains an unsafe relative documentation link')
-        return ']('+base+normalized+(marker+anchor if marker else '')+')'
-    return re.sub(r'\]\(([^\s)]+)\)', replace, data.decode('utf-8')).encode('utf-8')
-
-
 def sdk_entries(folder: Path) -> dict[str, bytes]:
     if folder.is_symlink() or not folder.is_dir():
         raise ValueError('Require the real SDK redistribution-notice directory')
@@ -199,12 +184,11 @@ def package(app: Path, reference_report: Path, sdk_receipt: Path, sdk_licenses: 
         raise FileExistsError('Preserve the existing Audio Streams package output')
     entries['source-and-notices/CTR2WUP-source-'+VERSION+'.zip'] = checked_source(commit)
     for target, path in {
-        'START-HERE.md': ROOT/'docs/audio-stream-testing.md',
         'collect-audio-results.py': ROOT/'tools/collect-audio-results.py',
         'LICENSE': ROOT/'LICENSE', 'THIRD_PARTY_NOTICES': ROOT/'THIRD_PARTY_NOTICES',
     }.items():
         entries[target] = release.regular(path, 4*1024*1024).read_bytes()
-    entries['START-HERE.md'] = immutable_guide(entries['START-HERE.md'], commit)
+    entries['START-HERE.md'] = release.render_guide(ROOT/'tools/templates/audio-streams.md', VERSION, commit)
     entries.update(sdk_entries(sdk_licenses))
     if identity() != commit:
         raise ValueError('Source changed before publication')

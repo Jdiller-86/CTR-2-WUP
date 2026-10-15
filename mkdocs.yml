@@ -1,5 +1,5 @@
 site_name: CTR2WUP
-site_description: Progress, original diagnostic builds and development contracts for the planned 3DS-to-Wii-U Windows injector.
+site_description: Usage and technical documentation for the CTR2WUP 3DS-to-Wii-U project.
 site_url: https://jdiller-86.github.io/CTR-2-WUP/
 repo_url: https://github.com/Jdiller-86/CTR-2-WUP
 repo_name: Jdiller-86/CTR-2-WUP
@@ -73,71 +73,39 @@ extra:
 
 nav:
   - Overview: index.md
-  - Start here:
-      - Repository tour: docs/repository-guide.md
+  - Usage:
       - Documentation: docs/index.md
-      - Download and launch: docs/getting-started.md
-      - Testing and evidence: docs/testing.md
-      - Troubleshooting: docs/troubleshooting.md
-      - Current limits: docs/compatibility.md
-      - Progress: docs/progress.md
-      - Milestone acceptance: docs/milestones.md
-      - Remaining inputs: docs/current-roadblock.md
-  - Guides:
-      - Guided console tests: docs/guided-testing.md
-      - GX Transfers: docs/gx-transfers.md
-      - Save and result follow-up: docs/console-retest.md
-      - RomFS assets: docs/romfs-assets.md
+      - Getting started: docs/getting-started.md
+      - Compatibility: docs/compatibility.md
+      - Encrypted inputs: docs/encrypted-input.md
+      - Private executable intake: docs/cia-intake.md
       - Private asset samples: docs/private-asset-samples.md
-      - Local encrypted inputs: docs/encrypted-input.md
-      - CIA intake: docs/cia-intake.md
-      - Packaging: docs/packaging.md
-      - Original compiled homebrew: docs/compiled-homebrew.md
-      - Guest fixture: docs/guest-fixture.md
+      - WUP packaging: docs/packaging.md
+      - Troubleshooting: docs/troubleshooting.md
+  - Development:
+      - Contributing: contributing.md
       - Windows builds: docs/build-windows.md
-  - Runtime contracts:
+      - Testing: docs/testing.md
       - Architecture: docs/architecture.md
-      - CPU subset: docs/cpu-subset.md
-      - CPU stack and transfers: docs/cpu-stack.md
-      - AOT integration: docs/upstream-integration.md
+      - First-title target: docs/first-title.md
+  - Runtime:
+      - CPU and threads: docs/cpu.md
       - Guest memory: docs/guest-memory.md
-      - Guest threads: docs/guest-threads.md
-      - Kernel objects: docs/kernel-objects.md
-      - Shared services: docs/shared-services.md
-      - HID input: docs/hid-input.md
-      - GSP display: docs/gsp-display.md
-      - GSP queues: docs/gsp-queues.md
-      - Renderer status: docs/renderer-status.md
-      - PICA command front end: docs/pica-commands.md
+      - Services and input: docs/services.md
+      - Display and transfers: docs/graphics-transport.md
+      - Controlled guest fixture: docs/guest-fixture.md
+      - Compiled original homebrew: docs/compiled-homebrew.md
+      - External AOT integration: docs/upstream-integration.md
+      - PICA commands: docs/pica-commands.md
       - Vertex attributes: docs/vertex-attributes.md
-      - First software scenes: docs/software-scenes.md
-      - Compiled guest PICA draws: docs/guest-pica-draws.md
-      - Filesystem and saves: docs/filesystem.md
-      - DSP ADPCM reference: docs/dsp-adpcm.md
-      - CSTM blocks and seek: docs/cstm.md
-      - Audio stream engine: docs/audio-streams.md
-      - Audio Streams hardware test: docs/audio-stream-testing.md
-      - Full M1 acceptance suite: docs/m1-acceptance.md
-  - Project:
-      - Development tracking: docs/development-tracking.md
-      - Project tracking policy: docs/github-project-overview.md
-      - Current status: status.md
-      - Product plan: docs/development-plan.md
-      - GUI workflow: docs/gui-workflow.md
-      - First game profile: docs/first-title.md
-      - Original requirements: docs/project-brief.md
-      - Dependency audit: docs/foundation-audit.md
-      - Batch decryptor audit: docs/batch-decryptor-audit.md
-      - Console evidence: docs/console-evidence.md
-      - Physical-console checklist: docs/console-testing.md
-  - Contribute:
-      - Contributor guide: contributing.md
-      - GitHub development: docs/github-development.md
-      - Development without hosted Actions: docs/direct-development.md
-      - Agent instructions: agent-instructions.md
+      - Base textures: docs/textures.md
+      - Software scenes: docs/software-scenes.md
+      - Compiled guest draws: docs/guest-pica-draws.md
+      - Filesystem and lifecycle: docs/filesystem.md
+      - RomFS assets: docs/romfs-assets.md
+      - Audio: docs/audio.md
+  - Notices:
       - Security: security.md
-      - Changelog: changelog.md
-      - Development history: docs/development-history.md
       - License: license.md
       - Third-party notices: third-party-notices.md
       - Site engine licenses: site-licenses.md

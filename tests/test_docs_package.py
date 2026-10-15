@@ -25,17 +25,15 @@ class DocsPackageTests(unittest.TestCase):
         (self.site/'docs/images').mkdir()
         (self.site/'search').mkdir()
         (self.site/'site-licenses').mkdir()
-        progress = {'version':'0.17.0','full_milestones_accepted':0,'milestones':[{'id':str(i)} for i in range(7)]}
-        (self.site/'docs/milestone-status.json').write_text(json.dumps(progress))
-        (self.site/'docs/images/progress.svg').write_text('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 40"><defs><linearGradient id="color"><stop stop-color="blue"/></linearGradient></defs><rect width="100" height="40" fill="url(#color)"/><text>0/7</text></svg>')
+        (self.site/'docs/images/diagram.svg').write_text('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 40"><defs><linearGradient id="color"><stop stop-color="blue"/></linearGradient></defs><rect width="100" height="40" fill="url(#color)"/><text>Fixture</text></svg>')
         (self.site/'site-licenses/notice.txt').write_text('Original synthetic license notice.')
-        overview = f'<h1 id="goal">Windows GUI to playable WUP</h1><p>0 of 7 accepted.</p><h2 id="shared">Overview section</h2><a href="#shared">here</a><a href="docs/guide/#shared">guide</a><a href="site-licenses/notice.txt">notice</a><img src="docs/images/progress.svg" alt="progress"><a href="https://github.com/users/Jdiller-86/projects/2">Live Project</a><a href="https://github.com/example/private/blob/{COMMIT}/README.md">source</a><pre>&lt;img src="private.key"&gt;</pre>'
+        overview = f'<h1 id="goal">Windows GUI to playable WUP</h1><h2 id="shared">Overview section</h2><a href="#shared">here</a><a href="docs/guide/#shared">guide</a><a href="site-licenses/notice.txt">notice</a><img src="docs/images/diagram.svg" alt="diagram"><a href="https://github.com/example/private/blob/{COMMIT}/README.md">source</a><pre>&lt;img src="private.key"&gt;</pre>'
         guide = '<h1 id="guide">Original guide</h1><h2 id="shared">Guide section</h2><p>Independent original fixture and irregular whitespace.</p><a href="../../index.html#shared">overview</a>'
         self.page('index.html',overview)
         self.page('docs/guide/index.html',guide)
         self.page('404.html','<h1>Not found</h1>')
         (self.site/'search/search_index.json').write_text(json.dumps({'docs':[{'location':'','text':'Windows GUI'},{'location':'docs/guide/#shared','text':'Original fixture'}]}))
-        self.report = {'ok':True,'strict_build':True,'all_rendered_internal_links_resolve':True,'source_commit':COMMIT,'project_version':'0.17.0','site_url':SITE_URL,'full_milestones_accepted':0,'html_pages':3}
+        self.report = {'ok':True,'strict_build':True,'all_rendered_internal_links_resolve':True,'source_commit':COMMIT,'project_version':'0.17.0','site_url':SITE_URL,'html_pages':3}
         self.report_path = self.site.parent/'build-report.json'
         self.report_path.write_text(json.dumps(self.report))
         self.options = argparse.Namespace(source_root=self.root,site_dir=self.site,build_report=self.report_path,output=self.root/'artifacts/docs-publication',public_repository='example/visible-docs')
@@ -51,11 +49,11 @@ class DocsPackageTests(unittest.TestCase):
         self.assertTrue(result['zip_crc_verified'])
         text = (self.options.output/result['standalone_html']).read_text()
         self.assertIn(COMMIT,text)
-        self.assertIn('0/7 full milestones accepted',text)
+        self.assertIn('Version 0.17.0',text)
         self.assertIn('<svg',text)
         self.assertIn('Original synthetic license notice.',text)
         self.assertIn('&lt;img src="private.key"&gt;',text)
-        self.assertNotIn('src="docs/images/progress.svg"',text)
+        self.assertNotIn('src="docs/images/diagram.svg"',text)
         parsed = DOCS.LinkAudit(text)
         self.assertTrue(set(parsed.targets)<=parsed.ids)
         self.assertIn(DOCS.page_id('index.html')+'--shared',parsed.ids)
@@ -74,14 +72,14 @@ class DocsPackageTests(unittest.TestCase):
             self.assertEqual(DOCS.digest((self.options.output/row['name']).read_bytes()),row['sha256'])
         with self.assertRaises(ValueError):DOCS.package(self.options)
 
-    def test_project_link_replaces_the_required_static_progress_image(self):
+    def test_documents_need_no_mandatory_image_or_project_link(self):
         page = self.site / 'index.html'
-        page.write_text(page.read_text().replace('<img src="docs/images/progress.svg" alt="progress">', ''))
-        (self.site / 'docs/images/progress.svg').unlink()
+        page.write_text(page.read_text().replace('<img src="docs/images/diagram.svg" alt="diagram">', ''))
+        (self.site / 'docs/images/diagram.svg').unlink()
         result = DOCS.package(self.options)
         reader = (self.options.output / result['standalone_html']).read_text()
         self.assertNotIn('<svg', reader)
-        self.assertIn('https://github.com/users/Jdiller-86/projects/2', reader)
+        self.assertNotIn('https://github.com/users/Jdiller-86/projects/2', reader)
         self.assertFalse(result['external_runtime_dependencies'])
 
     def test_missing_page_or_fragment_is_rejected(self):

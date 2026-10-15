@@ -102,6 +102,23 @@ class AudioReturnTests(unittest.TestCase):
             self.assertNotIn(b'never publish', b''.join(archive.read(name) for name in archive.namelist()))
             self.assertNotIn(b'private.keys', archive.read('collection.json'))
 
+    def test_dedicated_return_folder_and_legacy_logs_are_both_accepted(self):
+        results = self.folder/'results'
+        results.mkdir()
+        (self.folder/self.result_name).rename(results/self.result_name)
+        (self.folder/'filesystem-test.snapshot').write_bytes(b'Original save must never be read')
+        (self.folder/'romfs-test.bin').write_bytes(b'Original RomFS must never be read')
+        original = collector.bounded_read
+        with patch.object(collector, 'bounded_read', side_effect=original) as reads:
+            report = self.collect()
+        self.assertEqual({call.args[0] for call in reads.call_args_list},
+                         {results/self.result_name, self.folder/self.trace_name})
+        self.assertEqual(len(report['files']), 2)
+        self.assertFalse(any('missing' in warning for warning in report['warnings']))
+        (self.folder/self.result_name).write_bytes(self.result_data)
+        with self.assertRaisesRegex(ValueError, 'Duplicate log filename'):
+            self.collect('duplicate-layout.zip')
+
     def test_wrong_source_version_app_dirty_and_header_identity_are_excluded(self):
         originals = {'wrong_source': self.result(commit='b'*40), 'wrong_app': self.result(application='native-audio-check'),
                      'wrong_version': self.result(version='0.25.0'), 'wrong_session': self.result(session='0'*16),
@@ -230,9 +247,8 @@ class AudioPackageTests(unittest.TestCase):
         self.references = self.root/'references'
         self.references.mkdir()
         self.source = self.root/'source'
-        (self.source/'docs').mkdir(parents=True)
-        (self.source/'tools').mkdir()
-        (self.source/'docs/audio-stream-testing.md').write_text('Original guide [Contract](audio-engine.md#limits).\n')
+        (self.source/'tools/templates').mkdir(parents=True)
+        (self.source/'tools/templates/audio-streams.md').write_text('Original guide @VERSION@ from @SOURCE_COMMIT@.\n')
         for name in ('LICENSE', 'THIRD_PARTY_NOTICES'):
             (self.source/name).write_text('Original notice fixture\n')
         (self.source/'tools/collect-audio-results.py').write_bytes((ROOT/'tools/collect-audio-results.py').read_bytes())
@@ -316,6 +332,8 @@ class AudioPackageTests(unittest.TestCase):
             self.assertTrue(manifest['finite_prerender'])
             self.assertFalse(manifest['guest_dsp_accepted'])
             self.assertIn(COMMIT.encode(), archive.read('START-HERE.md'))
+            self.assertIn(package.VERSION.encode(), archive.read('START-HERE.md'))
+            self.assertNotIn(b'@SOURCE_COMMIT@', archive.read('START-HERE.md'))
             for row in manifest['files']:
                 data = archive.read(row['path'])
                 self.assertEqual(package.digest(data), row['sha256'])

@@ -1,27 +1,27 @@
-name: Publish project site
+name: Publish documentation
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths:
-      - 'AGENTS.md'
-      - 'CHANGELOG.md'
       - 'README.md'
-      - 'STATUS.md'
+      - 'CONTRIBUTING.md'
+      - 'SECURITY.md'
+      - 'LICENSE'
+      - 'THIRD_PARTY_NOTICES'
+      - 'pyproject.toml'
       - 'docs/**'
       - 'mkdocs.yml'
       - 'docs-requirements.txt'
       - 'tools/*docs*.py'
-      - 'tools/*progress*.py'
-      - 'tools/project-progress-dashboard.html'
       - '.github/workflows/publish-docs.yml'
 
 permissions:
   contents: read
 
 concurrency:
-  group: project-tracking-${{ github.repository }}
+  group: pages-${{ github.repository }}
   cancel-in-progress: false
 
 jobs:
@@ -64,21 +64,6 @@ jobs:
           python tools/package-docs-site.py
           python tools/publish-docs-site.py --input artifacts/docs-publication \
             --source-commit "$CTR_SOURCE_COMMIT" --stage artifacts/pages-site
-      - name: Read live Project into a privacy-checked aggregate
-        id: project
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.CTR2WUP_GITHUB_MANAGEMENT_TOKEN }}
-        run: |
-          python tools/export-github-project.py --output artifacts/site-progress \
-            --report artifacts/site-project-receipt.json
-      - name: Stage the live dashboard or explicit unavailable state
-        run: |
-          python tools/publish-project-progress.py --input artifacts/site-progress \
-            --output artifacts/pages-site/progress
-      - name: Report unavailable Project data
-        if: steps.project.outcome != 'success'
-        run: echo '::warning::Project access failed; the site will show unavailable data, never source-seeded or stale counts.'
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
         with:
           enablement: false
@@ -88,9 +73,9 @@ jobs:
       - name: Deploy canonical project site
         id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
-      - name: Verify deployed source identity and Project freshness over HTTP
-        run: python tools/verify-project-site.py --output artifacts/pages-verification.json
-      - name: Retain public-safe build and Project receipts
+      - name: Verify deployed documentation over HTTP
+        run: python tools/verify-docs-site.py --output artifacts/pages-verification.json
+      - name: Retain documentation receipts
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -98,8 +83,6 @@ jobs:
           path: |
             artifacts/docs-publication/
             artifacts/docs-site/build-report.json
-            artifacts/site-project-receipt.json
-            artifacts/site-progress/
             artifacts/pages-verification.json
           retention-days: 14
           if-no-files-found: warn

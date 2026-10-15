@@ -1,7 +1,7 @@
 PYTHON ?= python3
 .PHONY: help check check-python check-c check-c-portable prototype regenerate doctor upstream-check
 help:
-	@printf '%s\n' 'CTR2WUP developer commands:' '  make check             Python and portable C checks with ASan/UBSan' '  make check-python      Original host fixtures (no Wii U SDK)' '  make check-c-portable  Normal C checks, including Windows' '  make prototype         Native RPX/WUHB (verified Wii U SDK required)' '  make doctor            Inspect local tools and dependencies' '  make upstream-check    Original generated-code ABI validation' 'Read docs/repository-guide.md for source layout and docs/development-tracking.md for issue/PR policy.'
+	@printf '%s\n' 'CTR2WUP developer commands:' '  make check             Python and portable C checks with ASan/UBSan' '  make check-python      Original host fixtures (no Wii U SDK)' '  make check-c-portable  Normal C checks, including Windows' '  make prototype         Native RPX/WUHB (verified Wii U SDK required)' '  make doctor            Inspect local tools and dependencies' '  make upstream-check    Original generated-code ABI validation' 'Read README.md for the source map and plans.md for current work.'
 check: check-python check-c
 check-python:
 	$(PYTHON) -m unittest discover -s tests -v

@@ -89,7 +89,15 @@ def collect(sd_root, output, kit, observations=None):
     folder = sd_root / 'ctr2wup'
     if folder.is_symlink() or not folder.is_dir():
         raise ValueError('Select the SD root or local FTP download root containing its real ctr2wup directory')
-    matches = sorted(p for p in folder.iterdir() if pattern.fullmatch(p.name))
+    folders = [folder]
+    results = folder / 'results'
+    if results.is_symlink() or (results.exists() and not results.is_dir()):
+        raise ValueError('Select the real downloaded results directory, not a link or regular file')
+    if results.is_dir():
+        folders.append(results)
+    matches = sorted(p for location in folders for p in location.iterdir() if pattern.fullmatch(p.name))
+    if len({p.name for p in matches}) != len(matches):
+        raise ValueError('Duplicate log filename across legacy/results directories; preserve both originals')
     if not matches:
         raise ValueError(f'No {version} round logs found. Preserve any on-screen storage error and report that no files were created.')
     if len(matches) > 64:
