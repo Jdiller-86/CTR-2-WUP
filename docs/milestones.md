@@ -342,7 +342,9 @@ Acceptance:
 The DSP ADPCM reference has bounded frame/history/seek and independent exact
 rational evidence. Scoped #113/PR #114 adds original checked CSTM v2 block/SEEK
 parsing and 240-stream rational evidence. Guest DSP protocol, general containers,
-loops, mixing and Wii U output remain unimplemented; native tone evidence stays separate.
+loops and real-time synchronization remain unimplemented. Scoped #115/PR #116
+adds original bounded voices/mixing and finite owned native playback with an
+eight-step audio guide; physical audible acceptance and guest DSP remain open.
 
 State: **In progress** · Needs: `needs-console`.
 

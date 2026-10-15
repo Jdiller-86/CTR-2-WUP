@@ -622,8 +622,10 @@ static void exit_order_tests(void) {
     CHECK(!state.requested && !state.finished);
 }
 
+unsigned test_audio_stream_app(void);
 int main(int argc,char **argv) {
     if(argc==4 && !strcmp(argv[1],"--ctr-test-child"))return interrupted_report(argv[2],argv[3]);
+    checks+=test_audio_stream_app();
     storage_tests();
     slice_tests();guide_tests();
     lifecycle_tests();

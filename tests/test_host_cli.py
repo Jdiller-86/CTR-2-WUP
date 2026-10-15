@@ -15,6 +15,17 @@ from tests.host_fixtures import ncch
 
 
 class CliTests(unittest.TestCase):
+    def test_audio_stream_check_rejects_mixed_profiles_before_build(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / 'stream-output'
+            for options in ({'guest_path': 'owned-game.cxi'}, {'backend': 'upstream'}, {'audio_only': True}, {'scene_only': True}):
+                with self.subTest(options=options), patch.object(build, 'doctor') as probe:
+                    with self.assertRaises(HostError) as caught:
+                        build.prototype(output, stream_audio=True, **options)
+                    self.assertEqual(caught.exception.code, 'invalid_profile')
+                    probe.assert_not_called()
+                    self.assertFalse(output.exists())
+
     def test_scene_check_rejects_other_profiles_before_build(self):
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / 'scene-output'

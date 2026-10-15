@@ -850,6 +850,29 @@
         "Guest DSP IPC, tracks/mixing, loops, general SEEK intervals, big-endian streams, CSAR and physical audio acceptance remain open.",
         "Scoped #113 / PR #114 adds original relocated mono/stereo fixtures, optional tracks, padded final blocks and SEEK histories; 240 independent rational streams agree on 57,980 samples and final histories. 8,192 mutation cases and atomic failures are checked; required platform/documentation checks gate delivery. Guest DSP and physical audio remain open."
       ]
+    },
+    {
+      "id": "audio-stream-output",
+      "title": "Deliver checked CSTM voices and guided native audio playback",
+      "milestone": 3,
+      "parent_issue": 25,
+      "state": "active",
+      "pull_requests": [
+        116
+      ],
+      "scope": [
+        "Connect checked CSTM/ADPCM blocks to a bounded two-voice pull engine with 48kHz stereo rate conversion, gains, pause, seek and EOF.",
+        "Deliver a distinct native Audio Streams diagnostic using original fixtures and finite owned AX buffers, explicit guided listening/control tests, persistent source-bound reports and an FTP-ready testing kit."
+      ],
+      "acceptance": [
+        "Independent exact rational fixtures verify cross-block samples/histories, resampling, mixing, clipping, seek/pause/EOF and atomic failure; required sanitizer, Windows and native build checks pass.",
+        "AX ownership, partial failures and release-before-quit have host mocks; source-bound original kit is audited, guides/logs distinguish human hearing and physical lifecycle from host math."
+      ],
+      "evidence": [
+        "Follows #103/PR #109 and #113/PR #114 under M3 #25. No commercial samples, coefficients or DSP firmware are bundled.",
+        "Finite native pre-rendered clips are a testable stream-to-output path. Guest DSP firmware/IPC, real-time streaming/synchronization and hardware audible acceptance remain open.",
+        "Scoped #115/PR #116 connects checked CSTM/ADPCM to two bounded voices, 48 kHz integer stereo conversion/mixing and finite owned native clips. Independent original references cover 252 cases / 1,884,081 output frames and 9,589 state snapshots; eight guided hardware steps and source-bound logs keep physical audible acceptance separate. Guest DSP firmware/IPC and real-time synchronization remain open."
+      ]
     }
   ],
   "reviewed_statuses": {

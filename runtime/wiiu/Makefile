@@ -16,10 +16,11 @@ ROMFS_FILE ?= 0
 GX_HOMEBREW ?= 0
 PICA_HOMEBREW ?= 0
 AUDIO_ONLY ?= 0
+STREAM_AUDIO ?= 0
 SCENE_ONLY ?= 0
 UDP_LOG ?= 0
 CALL_LIMIT ?= 64
-APP_VERSION := 0.25.0
+APP_VERSION := 0.26.0
 CTR_BUILD_SHA := $(shell git rev-parse HEAD)
 CTR_BUILD_DIRTY := $(if $(shell git status --porcelain --untracked-files=normal),1,0)
 UPSTREAM_DIR ?= ../../artifacts/generated-upstream-guest
@@ -67,6 +68,13 @@ ifeq ($(AUDIO_ONLY),1)
 CFLAGS += -DCTR_AUDIO_ONLY
 APP_NAME := CTR2WUP Audio Check $(APP_VERSION)
 endif
+ifeq ($(STREAM_AUDIO),1)
+ifneq ($(filter 1,$(GUEST_DEFAULT) $(EXTERNAL_AOT) $(COMPILED_HOMEBREW) $(FILESYSTEM_HOMEBREW) $(ROMFS_HOMEBREW) $(GX_HOMEBREW) $(PICA_HOMEBREW) $(AUDIO_ONLY) $(SCENE_ONLY)),)
+$(error STREAM_AUDIO requires its own native diagnostic profile)
+endif
+CFLAGS += -DCTR_STREAM_AUDIO
+APP_NAME := CTR2WUP Audio Streams $(APP_VERSION)
+endif
 ifeq ($(SCENE_ONLY),1)
 CFLAGS += -DCTR_SCENE_ONLY
 APP_NAME := CTR2WUP Scene Check $(APP_VERSION)
@@ -74,6 +82,9 @@ endif
 LDFLAGS := -mcpu=750 -meabi -mhard-float -specs="$(WUT)/share/wut.specs" \
            -Wl,-Map,$(OUTPUT)/$(TARGET).map
 SOURCES := main.c viewport.c diagnostic_font.c test_report.c test_guide.c test_lifecycle.c image_scale.c report_storage.c test_result.c diagnostic_audio.c guest_slice.c
+ifeq ($(STREAM_AUDIO),1)
+SOURCES += audio_stream_app.c audio_stream_diagnostic.c
+endif
 OBJECTS := $(addprefix $(BUILD)/,$(SOURCES:.c=.o))
 CORE_SOURCES := $(CTR_RUNTIME_SOURCES) ../core/ctr_cpu_selftest.c \
     ../core/ctr_fs_snapshot.c ../core/ctr_guest_fixture.c \
@@ -99,6 +110,9 @@ CFLAGS += -DCTR_EXTERNAL_AOT -I../recomp -I"$(UPSTREAM_DIR)" -ffp-contract=off -
 CFLAGS += -DCTR_RECOMP_CALL_LIMIT=$(CALL_LIMIT)
 CORE_SOURCES := $(filter-out ../../tests/fixtures/guest/framebuffer.generated.c,$(CORE_SOURCES))
 CORE_SOURCES += ../recomp/ctr_recomp.c $(UPSTREAM_DIR)/entries.c $(wildcard $(UPSTREAM_DIR)/code*.c)
+endif
+ifeq ($(STREAM_AUDIO),1)
+CORE_SOURCES += ../core/ctr_audio_fixture.c
 endif
 CORE_OBJECTS := $(addprefix $(BUILD)/,$(notdir $(CORE_SOURCES:.c=.o)))
 OBJECTS += $(CORE_OBJECTS)
