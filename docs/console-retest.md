@@ -8,8 +8,8 @@ changed path. Do not repeat Save/RomFS/audio/GX guides. The
 [baseline review](console-evidence.md) records 91.190–91.613 s draw latency and
 132.218–132.281 ms mean scale/publication on firmware 5.5.6 U / Aroma Beta 27.
 
-The manifest identifies the exact clean source of the kit built for PR #106,
-which is now merged. The existing kit retains its original source identity.
+The manifest identifies the exact clean source of this kit. The original kit
+from merged PR #106 remains valid with its own unchanged source identity.
 Host pixel/traffic comparisons and cross-builds do not establish Wii U speed or
 picture correctness. See the [cache contract](gsp-display.md#native-display-cache).
 

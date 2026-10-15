@@ -732,7 +732,7 @@
       "title": "Implement an original checked DSP ADPCM decoding reference",
       "milestone": 3,
       "parent_issue": 25,
-      "state": "active",
+      "state": "implemented",
       "pull_requests": [
         109
       ],
@@ -746,7 +746,8 @@
       ],
       "evidence": [
         "Both received CSTM samples declare non-looping stereo DSP ADPCM at 32 kHz; block/history/seek semantics and actual game playback are not yet accepted.",
-        "Scoped #103 implements a bounded integer DSP ADPCM reference. 6,144 original rational cases / 175,770 samples verify PCM/history, streamed continuation and explicit checkpoint seek; normal/sanitized bounds/late-error tests pass. Container block/SEEK parsing, guest DSP IPC/mixing and actual Wii U playback remain open; no commercial waveform/coefficients are published."
+        "Scoped #103 implements a bounded integer DSP ADPCM reference. 6,144 original rational cases / 175,770 samples verify PCM/history, streamed continuation and explicit checkpoint seek; normal/sanitized bounds/late-error tests pass. Container block/SEEK parsing, guest DSP IPC/mixing and actual Wii U playback remain open; no commercial waveform/coefficients are published.",
+        "PR #109 merged at 103363d73b636efb904720992477cf43de6d7b8b after required CI 38749440696 and Documentation 38749440640 passed, including Windows and GCC/Clang independent normal/sanitized references. Guest DSP/mixing/playback and all full gates remain open."
       ]
     },
     {
@@ -801,6 +802,26 @@
         "Publication 38743632395 deployed successfully but HTTP verification failed with an uninformative receipt; the original precise cause is unavailable.",
         "Publication 38745496120 verifies merged source abe37a95d4eb364cf08a3648ec7131d9ff03e607 and fresh live Project data. Scoped issue #107 has native parent #1 and M1 assignment.",
         "PR #108 merged at 9175168c778d6c285f41c345239241da08f28ddd after Required CI/Documentation passed. Publication 38747514158 verifies that source on attempt one. New catalog membership is reconciled separately; unavailable data stays explicit until refreshed."
+      ]
+    },
+    {
+      "id": "project-membership-readback",
+      "title": "Verify Project membership through an independent per-item read",
+      "milestone": 1,
+      "parent_issue": 1,
+      "state": "planned",
+      "pull_requests": [],
+      "scope": [
+        "For a bounded missing set, independently read issue/PR projectItems with exact content/Project identity and archived-state checks.",
+        "Preserve owner settings, genuine failures and separate connection/direct receipts; never count mutation acknowledgement as membership."
+      ],
+      "acceptance": [
+        "Original mocks cover connection lag with independent active membership, real absence, wrong identities/Project, archived/ambiguous entries, read budgets and public-safe receipts.",
+        "Trusted-main reconciliation verifies native hierarchy/membership or records the precise unresolved blocker; refresh the live dashboard and verify Pages separately."
+      ],
+      "evidence": [
+        "Scoped #110 has native parent #1 and M1 assignment. Apply 38748103325 acknowledged PR #108 addition but connection readbacks and dry-run 38749067251 still omitted it. Owner confirms no Project settings changed.",
+        "GitHub documents projectItems(includeArchived:true) on Issue and PullRequest. Focused reference/identity/privacy tests pass; full required checks and live verification gate delivery."
       ]
     }
   ],

@@ -12,7 +12,9 @@ reviewed results. No blanket repeat is requested. See [evidence](console-evidenc
 PR #106 is merged and the owner removed branch rulesets on October 15.
 The canonical 0.25.0 publication verifies successfully; deployment verification
 is hardened by merged #107/PR #108. These are resolved delivery constraints, while
-required checks and the physical gates below remain.
+required checks and the physical gates below remain. Project membership
+readback after the PR #108 add is being independently verified under #110;
+Project settings are preserved and unavailable data stays explicit.
 
 Current requirements:
 

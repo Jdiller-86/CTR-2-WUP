@@ -155,6 +155,9 @@ class TraceabilityTests(unittest.TestCase):
             def connection(self, *args):
                 self.reads += 1
                 return []
+            def graphql(self, query, variables):
+                return {'node': {'id': variables['id'], '__typename': 'Issue',
+                    'projectItems': {'nodes': [], 'pageInfo': {'hasNextPage': False}}}}
         client = Client()
         with patch.object(trace.time, 'sleep') as sleep:
             with self.assertRaises(trace.tracking.TrackingError):
@@ -209,6 +212,9 @@ class TraceabilityTests(unittest.TestCase):
             def connection(self, *args):
                 return copy.deepcopy(self.items)
             def graphql(self, query, variables):
+                if 'projectItems(first:' in query:
+                    return {'node': {'id': variables['id'], '__typename': 'PullRequest',
+                        'projectItems': {'nodes': [], 'pageInfo': {'hasNextPage': False}}}}
                 if query.startswith('mutation'):
                     payload = variables['input']
                     self.writes.append(copy.deepcopy(payload))
@@ -232,6 +238,48 @@ class TraceabilityTests(unittest.TestCase):
         self.assertEqual(len(client.writes), 2)
         self.assertTrue(all(row['status']['name'] == 'Blocked' for row in client.items if
                             row['content']['id'] not in ('pr-8', 'issue-47')))
+
+    def test_independent_active_membership_verifies_without_repeating_mutation(self):
+        expected={'pr-node': {'kind': 'pull_request', 'number': 108}}
+        row={'id':'PRIVATE-item','project':{'id':'selected'},'isArchived':False,
+             'content':{'id':'pr-node','__typename':'PullRequest','number':108},'status':{'name':'Ready for review'}}
+        class Client:
+            def connection(self, *args):return []
+            def graphql(self, query, variables):
+                return {'node':{'id':'pr-node','__typename':'PullRequest',
+                    'projectItems':{'nodes':[row,dict(row,project={'id':'PRIVATE-other'})],
+                                    'pageInfo':{'hasNextPage':False}}}}
+        report={}
+        with patch.object(trace.time,'sleep'):
+            self.assertEqual(trace.verify_membership(Client(),'selected',expected,{'pr-node'},report),{'pr-node'})
+        self.assertEqual(report['membership_readback']['matched_total'],1)
+        self.assertEqual(report['membership_connection_readback']['matched_total'],0)
+        self.assertNotIn('PRIVATE',json.dumps(report))
+        self.assertEqual(report['membership_readback_direct'][0]['selected_project_links'],1)
+
+    def test_independent_membership_rejects_archived_wrong_identity_and_ambiguous_data(self):
+        expected={'pr-node': {'kind':'pull_request','number':108}}
+        original={'id':'item','project':{'id':'selected'},'isArchived':False,
+                  'content':{'id':'pr-node','__typename':'PullRequest','number':108}}
+        class Client:
+            def graphql(self, query, variables):return self.response
+        for kind in ('archived','content','duplicate','budget','node','wrong_project'):
+            client=Client();row=copy.deepcopy(original)
+            detail={'id':'pr-node','__typename':'PullRequest',
+                    'projectItems':{'nodes':[row],'pageInfo':{'hasNextPage':False}}}
+            if kind=='archived':row['isArchived']=True
+            if kind=='content':row['content']['id']='other'
+            if kind=='duplicate':detail['projectItems']['nodes'].append(copy.deepcopy(row))
+            if kind=='budget':detail['projectItems']['pageInfo']['hasNextPage']=True
+            if kind=='node':detail['id']='wrong'
+            if kind=='wrong_project':row['project']['id']='other'
+            client.response={'node':detail}
+            with self.subTest(kind=kind):
+                if kind=='wrong_project':
+                    self.assertEqual(trace.complete_membership_read(client,'selected',expected,[],{},'diagnostic'),[])
+                else:
+                    with self.assertRaises(trace.tracking.TrackingError):
+                        trace.complete_membership_read(client,'selected',expected,[],{},'diagnostic')
 
     def test_untracked_repository_pr_fails_before_writes(self):
         client = ReadOnlyInventory()
