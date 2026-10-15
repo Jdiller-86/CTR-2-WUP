@@ -5,6 +5,10 @@ do not establish commercial-game compatibility or installable WUP acceptance.
 
 ## 0.25.0 — unreleased
 
+- Verify the repaired Pages source/fresh dashboard and native Project membership
+  live; record reviewed receipts and remove resolved delivery blockers. The DSP
+  codec is merged with all required checks; physical/game/full-gate limits remain.
+
 - Independently verify a small set of missing Project members through exact
   issue/PR reverse links before adding again or counting success. Preserve
   archived/ambiguous failures, owner settings and both public-safe readbacks.
