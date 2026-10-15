@@ -9,7 +9,7 @@ scale/publication is the dominant measured phase. All requested files are
 received. No general game compatibility is implied. See
 [the evidence review](console-evidence.md) and [focused test round](console-retest.md).
 
-Version 0.25.0 adds a [native display cache](gsp-display.md#native-display-cache)
+Merged PR #106 / version 0.25.0 adds a [native display cache](gsp-display.md#native-display-cache)
 with independent exact host checks and workload reductions. Its focused physical
 picture/restart/timing comparison is pending; full motion has no publication-byte
 saving and both GX2 display copies remain. Earlier builds keep their scoped passes.

@@ -100,7 +100,7 @@ def package(scene, draw_report, draw_app, sdk_receipt, sdk_licenses, output):
     if identity() != commit:raise ValueError('Source changed before publication')
     if sum(map(len, entries.values())) > 24*1024*1024:raise ValueError('Hardware kit exceeds its size budget')
     manifest = {'schema_version': 1, 'kind': 'ctr2wup-hardware-round', 'version': VERSION,
-                'source_commit': commit, 'source_dirty': False, 'review_state': 'premerge-hardware-evaluation',
+                'source_commit': commit, 'source_dirty': False, 'review_state': 'source-bound-hardware-evaluation',
                 'original_inputs_only': True, 'console_verified': False, 'installable_wup': False,
                 'applications': ['arithmetic-scene', 'compiled-pica-draws'],
                 'files': [{'path': n, 'size': len(data), 'sha256': hashlib.sha256(data).hexdigest()}

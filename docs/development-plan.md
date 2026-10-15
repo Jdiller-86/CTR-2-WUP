@@ -83,7 +83,7 @@ Version 0.25.0 now implements changed-span scaling and coalesced row
 publication with independent pixel/failure and six-workload host checks.
 Static/small-counter publication-byte reductions are measured on host;
 full motion saves no bytes. Physical correctness/speed need the focused new
-build. This remains a premerge snapshot with full gates open.
+build. PR #106 is merged with passing hosted checks; full gates remain open.
 
 | Priority | Concrete deliverable | Tracking and acceptance |
 | --- | --- | --- |

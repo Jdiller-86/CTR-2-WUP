@@ -12,6 +12,16 @@ No credential is retrieved from Actions or copied into source, logs or artifacts
 The earlier maintenance-only local merge exception remains available for a future
 hosted outage; it does not waive runtime/platform evidence.
 
+The owner removed branch rulesets on October 15 and merged tested PR #106.
+Required local/hosted validation remains repository policy. The former GitHub
+one-review rule no longer blocks tested changes; no administrator bypass is
+needed. Pages verification retries old-source/missing-route/transient HTTP and
+freshness failures up to six attempts, ten seconds apart. Privacy/schema errors
+fail immediately, and receipts retain safe error codes/attempts without response
+bodies. Run `python3 tools/verify-project-site.py --output artifacts/site-check.json`
+for the fixed canonical endpoints. The first 0.25.0 post-merge publication is
+[verified run 38745496120](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38745496120).
+
 ## Reviewed Actions operations
 
 Dispatch **Reviewed GitHub management** from `main` with a fixed operation and

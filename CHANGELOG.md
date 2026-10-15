@@ -3,8 +3,13 @@
 All releases are development increments. RPX/WUHB diagnostics and desktop passes
 do not establish commercial-game compatibility or installable WUP acceptance.
 
-## 0.25.0 — display-cache evaluation, premerge
+## 0.25.0 — unreleased
 
+- Harden post-deployment Pages verification with bounded propagation/HTTP
+  retries and specific safe failure receipts; fail privacy/schema violations
+  immediately. Preserve exact source/freshness requirements and old failure history.
+- Record PR #106's owner merge and ruleset removal; retain required contributor
+  validation and the immutable 0.25.0 hardware kit's pending physical comparison.
 - Retain exact source history and scale only changed mapped spans; publish
   coalesced dirty rows with the existing CPU/GX2 cache APIs. Unchanged images
   avoid scaling/publication while both screens retain normal presentation.

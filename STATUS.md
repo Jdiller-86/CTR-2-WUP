@@ -1,14 +1,22 @@
 # CTR2WUP status
 
-**Native display optimization — 0.25.0, premerge:** [PR #106](https://github.com/Jdiller-86/CTR-2-WUP/pull/106)
+**Merged native display optimization — 0.25.0:** [PR #106](https://github.com/Jdiller-86/CTR-2-WUP/pull/106)
 extends scoped #87/#20/M2 with exact changed-span scaling and row publication.
 Independent pixel/failure tests and six original host workloads pass. Over 60
 frames, requested publication bytes fall 98.3% for static images and 90.2% for
 small TV counter changes with a static GamePad; full motion has no byte saving.
 Both screens still receive normal GX2 copies. Logs split scale/publication and
-record cache work/memory. Full required checks gate delivery; actual Wii U
+record cache work/memory. All required hosted checks passed before merge; actual Wii U
 correctness and speed require the new [focused two-app test](docs/console-retest.md).
 [Contract and limits](docs/gsp-display.md#native-display-cache). No full gate is accepted.
+
+**Pages and repository policy:** the owner merged PR #106 and removed branch
+rulesets on October 15. Required checks remain part of the contributor workflow.
+[Publication 38745496120](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38745496120)
+verifies canonical source `abe37a9` and fresh live Project data over HTTP.
+An earlier deployment succeeded but its HTTP verification failed without a
+specific reason. Scoped #107 adds bounded propagation/HTTP retries and safe
+failure codes; privacy/schema violations continue to fail immediately.
 
 **Focused hardware evaluation:** [PR #106](https://github.com/Jdiller-86/CTR-2-WUP/pull/106)
 under #87/#20/M2 has reviewed **0.24.1** hardware results: two native ADD/MUL
@@ -23,7 +31,9 @@ scale/publication averages **132.218–132.281 ms**, dominating recorded phases.
 It is the baseline for the 0.25.0 cache; no Wii U speedup is established. The collector's
 unversioned-trace correction passes on the actual files with no missing-pair
 warnings. [Review](docs/console-evidence.md) and [FTP guide](docs/console-retest.md).
-This remains a premerge snapshot.
+PR #106 merged at `abe37a95d4eb364cf08a3648ec7131d9ff03e607`; the
+[0.25.0 kit](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38740546356/artifacts/11975052860)
+retains its original tested source identity and awaits its focused physical run.
 
 **Exact shader arithmetic:** [PR #105](https://github.com/Jdiller-86/CTR-2-WUP/pull/105)
 implements scoped #76 under #28/M4: component-wise ADD/MUL, independent operand
