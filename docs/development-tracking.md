@@ -119,3 +119,8 @@ The v0.23 command review completes only task #27 after its two criteria are
 verified against merged PR #48/#57 and original reference traces. Its review
 marker is recorded once; later maintainer reopen/status changes are preserved.
 No full milestone or other unreviewed task can complete through that rule.
+
+Scoped #103 under #25/M3 implements the original DSP ADPCM decoding foundation.
+Its codec/rational/seek/failure checks do not close broad #25. The reviewed
+`dsp-adpcm-foundation-v025` transition activates only `m3-guest-audio`, preserving
+the console wait and owner notes. It cannot accept a full gate.

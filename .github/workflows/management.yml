@@ -15,7 +15,7 @@ on:
       review:
         description: Explicit reviewed status/resource plan
         type: choice
-        options: [none, mario-input-received-v023]
+        options: [none, mario-input-received-v023, dsp-adpcm-foundation-v025]
         default: none
 
 permissions:

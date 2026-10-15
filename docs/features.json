@@ -732,8 +732,10 @@
       "title": "Implement an original checked DSP ADPCM decoding reference",
       "milestone": 3,
       "parent_issue": 25,
-      "state": "planned",
-      "pull_requests": [],
+      "state": "active",
+      "pull_requests": [
+        109
+      ],
       "scope": [
         "Implement bounded DSP ADPCM frames with explicit coefficients/history, clipping, sample/block/seek boundaries and owned output.",
         "Use original fixtures and independent reference comparisons; keep codec decoding separate from guest DSP IPC/mixing and native audio acceptance."
@@ -743,7 +745,8 @@
         "Desktop/Windows and sanitizer/reference checks establish the stated codec subset; no commercial waveform, coefficients or decoded audio is published."
       ],
       "evidence": [
-        "Both received CSTM samples declare non-looping stereo DSP ADPCM at 32 kHz; block/history/seek semantics and actual game playback are not yet accepted."
+        "Both received CSTM samples declare non-looping stereo DSP ADPCM at 32 kHz; block/history/seek semantics and actual game playback are not yet accepted.",
+        "Scoped #103 implements a bounded integer DSP ADPCM reference. 6,144 original rational cases / 175,770 samples verify PCM/history, streamed continuation and explicit checkpoint seek; normal/sanitized bounds/late-error tests pass. Container block/SEEK parsing, guest DSP IPC/mixing and actual Wii U playback remain open; no commercial waveform/coefficients are published."
       ]
     },
     {
@@ -782,7 +785,7 @@
       "title": "Harden Pages deployment verification and preserve failure reasons",
       "milestone": 1,
       "parent_issue": 1,
-      "state": "active",
+      "state": "implemented",
       "pull_requests": [
         108
       ],
@@ -796,7 +799,8 @@
       ],
       "evidence": [
         "Publication 38743632395 deployed successfully but HTTP verification failed with an uninformative receipt; the original precise cause is unavailable.",
-        "Publication 38745496120 verifies merged source abe37a95d4eb364cf08a3648ec7131d9ff03e607 and fresh live Project data. Scoped issue #107 has native parent #1 and M1 assignment."
+        "Publication 38745496120 verifies merged source abe37a95d4eb364cf08a3648ec7131d9ff03e607 and fresh live Project data. Scoped issue #107 has native parent #1 and M1 assignment.",
+        "PR #108 merged at 9175168c778d6c285f41c345239241da08f28ddd after Required CI/Documentation passed. Publication 38747514158 verifies that source on attempt one. New catalog membership is reconciled separately; unavailable data stays explicit until refreshed."
       ]
     }
   ],

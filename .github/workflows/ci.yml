@@ -143,6 +143,8 @@ jobs:
             --output artifacts/ci/scenes 2>&1 | tee artifacts/ci/native/scenes.log
       - name: Compare display cache work and exact output
         run: python3 tools/benchmark-display.py --cc "${{ matrix.cc }}" --output artifacts/ci/display-benchmark
+      - name: Compare original DSP ADPCM samples with rational reference
+        run: python3 tools/validate-dsp-adpcm.py --cc "${{ matrix.cc }}" --sanitize --output artifacts/ci/dsp-adpcm
       - name: Upload portable C logs
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -151,6 +153,8 @@ jobs:
           path: |
             artifacts/ci/native/*.log
             artifacts/ci/display-benchmark/report.json
+            artifacts/ci/dsp-adpcm/report.json
+            artifacts/ci/dsp-adpcm/original-vectors.bin
             artifacts/ci/scenes/*.json
             artifacts/ci/scenes/*.png
             artifacts/ci/scenes/*.rgba
@@ -202,6 +206,10 @@ jobs:
           mkdir -p artifacts/ci/windows
           gcc --version > artifacts/ci/windows/compiler.log
           make check-c-portable 2>&1 | tee artifacts/ci/windows/portable-c-tests.log
+      - name: Compare original DSP ADPCM samples on Windows
+        if: ${{ !cancelled() && steps.msys.outcome == 'success' }}
+        shell: msys2 {0}
+        run: python tools/validate-dsp-adpcm.py --cc gcc --output artifacts/ci/windows/dsp-adpcm
       - name: Upload Windows baseline logs
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -210,6 +218,8 @@ jobs:
           include-hidden-files: true
           path: |
             artifacts/ci/windows/*.log
+            artifacts/ci/windows/dsp-adpcm/report.json
+            artifacts/ci/windows/dsp-adpcm/original-vectors.bin
             artifacts/logs/*.log
           retention-days: 14
           if-no-files-found: warn

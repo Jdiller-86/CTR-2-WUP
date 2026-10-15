@@ -93,6 +93,23 @@
           ]
         }
       ]
+    },
+    {
+      "id": "dsp-adpcm-foundation-v025",
+      "overview": "m3",
+      "reason": "Scoped #103 adds an independently checked original DSP ADPCM decoding reference with exact PCM/history/checkpoint/continuation evidence. This is partial guest audio implementation; activate only the planned guest-audio work item. Preserve the console wait, owner notes and full criteria; DSP IPC, containers, mixing and actual Wii U playback remain open.",
+      "changes": [
+        {
+          "role": "work-item",
+          "id": "m3-guest-audio",
+          "from_status": [
+            "Planned",
+            "In progress"
+          ],
+          "to_status": "In progress",
+          "remove_resources": []
+        }
+      ]
     }
   ]
 }

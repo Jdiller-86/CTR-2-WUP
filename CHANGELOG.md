@@ -5,6 +5,12 @@ do not establish commercial-game compatibility or installable WUP acceptance.
 
 ## 0.25.0 — unreleased
 
+- Add a portable checked DSP ADPCM reference with explicit coefficients/history,
+  integer rounding/clipping, partial frames, continuation and checkpoint seek.
+  Validate all requested headers/bounds before publishing PCM or state.
+- Compare 6,144 original cases / 175,770 samples with independent rational
+  arithmetic, streaming and seek; add normal/sanitized and Windows coverage.
+  Guest DSP IPC, containers, mixing and audible Wii U output remain open.
 - Harden post-deployment Pages verification with bounded propagation/HTTP
   retries and specific safe failure receipts; fail privacy/schema violations
   immediately. Preserve exact source/freshness requirements and old failure history.
