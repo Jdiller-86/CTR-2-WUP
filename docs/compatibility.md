@@ -3,9 +3,10 @@
 The 0.24.1 hardware snapshot in PR #106 packages exact arithmetic scenes and a
 correctly gated, measured original guest draw route. Its cooperative execution
 policy now has scoped physical evidence: two exact arithmetic launches and the
-first drawn picture/own PASS/exit pass, with reported Minus/HOME return. Plus
-restart is later user-confirmed PASS, with updated repeat files pending; the scene took 91.549 s and native scale/publication is the
-dominant measured phase. No general game compatibility is implied. See
+full Guest Draws/Plus-repeat guide, with all five traces reaching `main_return`
+and reported Minus/HOME return. Scenes take 91.190–91.613 s and native
+scale/publication is the dominant measured phase. All requested files are
+received. No general game compatibility is implied. See
 [the evidence review](console-evidence.md) and [focused test round](console-retest.md).
 
 | Input/workflow | Current state | Evidence and limit |
@@ -34,7 +35,7 @@ dominant measured phase. No general game compatibility is implied. See
 | Resolved vertex arrays and indices | Bounded portable decoding implemented | Explicit streams/input permutation, unsigned 8-bit/16-bit indexed gather, transactional range/float/alias checks; no PICA loaders, fixed attributes, shaders or draws |
 | Original owned software scenes | Exact desktop scenes verified; focused Wii U cross-build available | PICA-format loader/index/fixed/uniform/MOV/ADD/MUL shader and bounded opaque triangles; 512-word capacity and exact integer arithmetic have original numeric/pixel/rollback probes; required arithmetic platform checks gate delivery through PR #105; no rounding/sampling/general TEV/depth or GPU shader translation; hardware evidence pending |
 | Original compiled GX transfer program | Sanitized desktop/reference and scoped console results reviewed | 0.20.0 guest PASS/exit and exact transfer pictures; 17 GX operations, scoped DMA/fill/transfer/copy/cache and no-draw configuration; full renderer acceptance remains open |
-| Original compiled guest PICA draws | Exact desktop frames and scoped 0.23.0/0.24.1 console results reviewed | 0.24.1 first submitted picture and own PASS/exit pass with four triangles, 97,200 fragments and zero fallback/fault; 91.549-second scene latency, 132.281 ms mean scale/publication and updated logs for the user-confirmed Plus repeat remain follow-ups; general shaders/TEV/GX2 remain open |
+| Original compiled guest PICA draws | Exact desktop frames and scoped 0.23.0/0.24.1 console results reviewed | 0.24.1 confirms correct picture timing and all three guide steps including a new Plus session's own draw/PASS/exit, with four triangles, 97,200 fragments and zero fallback/fault. Scenes take 91.190–91.613 s; 132.218–132.281 ms mean native scale/publication is the next measured target. General shaders/TEV/GX2 remain open |
 | `.3dsx`, update/DLC merges | Unsupported | No corresponding loader/pipeline; renamed input is not accepted as NCCH |
 | Any commercial revision | Unsupported; active M5 analysis | USA Mario executable and seven selected payloads have verified provenance; selected container/shader/audio structures are identified, with 512-word code capacity implemented and shader semantics/DSP ADPCM gaps recorded; broader modules, actual HLE/GPU/audio/save use and Wii U gameplay remain unverified |
 | WUP installation | Unverified/unavailable | Original encrypted writer and independent verification pass synthetic-input checks; installer acceptance and actual installable output remain pending |

@@ -1,6 +1,7 @@
 # Milestones and remaining work
 
-Updated **October 15, 2026** for **v0.24.1 hardware evidence**. The product is an UWUVCI-style
+Updated **October 14, 2026 (America/New_York; October 15 UTC intake)** for
+**v0.24.1 hardware evidence**. The product is an UWUVCI-style
 Windows GUI: **Select owned 3DS ROM → configure title/artwork → Inject →
 install its WUP → play from the Wii U Menu**. The CLI is the shared engine.
 The USA Super Mario 3D Land executable/revision is privately verified; reported local asset inventory is matched; selected byte formats,
@@ -18,11 +19,11 @@ receipts remain in [development history](development-history.md).
 
 ## How to use the roadmap
 
-The [October 15 physical review](console-evidence.md) advances scoped M1/M2/M4
-evidence: two 0.24.1 arithmetic launches and the first guest draw pass; Minus and
-optional HOME return are reported. The user later confirms Plus restart PASS.
-Its updated logs, existing full traces and measured scale/publication performance
-remain follow-ups. Full lifecycle/recovery,
+The [completed physical review](console-evidence.md) advances scoped M1/M2/M4
+evidence: two 0.24.1 arithmetic guides and all Guest Draws/Plus-repeat steps pass;
+all five traces reach `main_return`, with reported Minus/HOME return. All files
+are received; measured native scale/publication cost is the next target.
+Full lifecycle/recovery,
 Espresso benchmarks, native GPU rendering and all seven full gates remain open;
 existing Project states and waiting resources are preserved.
 

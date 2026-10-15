@@ -1,13 +1,13 @@
 # Focused Wii U hardware round — 0.24.1
 
-**October 15 result review:** two arithmetic launches and the first guest
-draw/picture/exit passed. The initial ZIP predates Plus repeat; the user later
-confirms restart PASS. Its updated result/trace are requested, without another run.
-Minus and optional HOME returns were reported. Do not repeat completed Scene
-Check tests. The [evidence review](console-evidence.md) names four existing full
-traces to retrieve by binary FTP; the original kit's collector omitted them
-because trace filenames do not contain the version. Send those TXT files in a
-ZIP directly. The complete procedure below is retained for future focused runs.
+**Completed hardware round:** two arithmetic launches and all three Guest Draws
+steps, including Plus restart, have matching source-bound reports and traces.
+All five launches reach `main_return`; Minus and optional HOME return also have
+the user's confirmation. All requested files are received. No further files or
+reruns are needed for this round. The [review](console-evidence.md) records
+October 14 evening results (October 15 UTC intake), the original collector
+omission and the measured scale/publication bottleneck. The complete procedure
+below is retained for future focused runs.
 
 This two-app test build checks new exact ADD/MUL arithmetic on Wii U and measures
 the corrected compiled-draw path. Its package manifest names the exact source

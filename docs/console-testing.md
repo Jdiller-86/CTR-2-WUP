@@ -3,10 +3,10 @@
 **Current round:** use the [0.24.1 two-app hardware package](console-retest.md)
 for exact arithmetic scenes, corrected draw confirmation, phase/startup metrics
 and repeat launch/exit. Its collector returns one bounded ZIP with partial and
-failure evidence. October 15 results pass two arithmetic launches and the first
-guest draw/exit, with user-reported Minus/HOME return. Plus restart is later
-user-confirmed PASS; updated repeat logs, existing full traces and measured
-scale/publication performance remain follow-ups.
+failure evidence. The completed report/trace follow-up verifies two arithmetic
+guides, correct picture timing and all Guest Draws/Plus-repeat steps, with all
+five traces reaching `main_return` and user-reported Minus/HOME return. All files
+are received; measured native scale/publication performance is the next target.
 
 **Earlier evidence:** October 13 audio/GX/draw results are reviewed in
 [console-evidence.md](console-evidence.md). There is no request to repeat the

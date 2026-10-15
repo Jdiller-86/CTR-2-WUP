@@ -18,14 +18,18 @@ do not establish commercial-game compatibility or installable WUP acceptance.
   that includes partial evidence while excluding saves, keys and unrelated files.
 - Document binary-mode FTP deployment and raw-log ZIP return without Python or
   an SD reader; the existing kit's collector can also read a local FTP mirror.
-- Review October 15 source-matched hardware results: two arithmetic guides and
-  first submitted guest draw/own PASS/exit pass, with user-reported Minus/HOME
-  return. The initial ZIP predates Plus repeat; the user later reports a new
-  restart PASS, with updated files pending. Scene latency is 91.549 s; measured
-  scale/publication averages 132.281 ms and is the next optimization target.
+- Review the complete hardware return (October 14 evening / October 15 UTC):
+  two arithmetic guides and all Guest Draws/Plus-repeat steps pass. All five
+  source-matched traces reach `main_return`; picture confirmation follows the
+  actual submitted draw. The user confirms Minus/HOME return. All files are
+  received. Scenes take 91.190–91.613 s; mean native scale/publication is
+  132.218–132.281 ms and remains the next measured target.
 - Fix the collector's omission of native traces whose filenames lack a version;
   require matching app/build/source headers, preserve partial traces and warn
   about missing pairs, including when analyzing older returns. Full gates stay open.
+- Verify the corrected collector/analyzer on the actual five traces and five
+  reports with matching source/CRC/checksums and no missing-pair warnings;
+  remove resolved file/rerun requests while preserving the earlier cancelled run.
 
 ## 0.24.0 — unreleased
 

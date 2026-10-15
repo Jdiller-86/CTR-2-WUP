@@ -11,14 +11,14 @@ reviewed results. No blanket repeat is requested. See [evidence](console-evidenc
 
 Current requirements:
 
-1. **Measured scale/publication cost and remaining repeat:** October 15 results
-   pass two 0.24.1 arithmetic launches and the first submitted guest picture/own
-   PASS/exit, with reported Minus/HOME return. The scene takes 91.549 s; native
-   scale/publication averages 132.281 ms and dominates recorded phases. Optimize
-   that measured path; no speedup or game performance is established. Plus restart
-   is later user-confirmed PASS; its updated result and trace are awaited. Retrieve the four existing full traces omitted by the
-   original collector's filename filter; do not rerun completed tests for those
-   files. [Evidence and exact filenames](console-evidence.md).
+1. **Measured scale/publication cost:** the completed 0.24.1 round verifies two
+   arithmetic launches, correct picture-confirmation order and the full guest
+   draw/Plus-repeat guide, with all five traces reaching `main_return` and
+   reported Minus/HOME return. All requested files are received. Scenes take
+   91.190–91.613 s; native scale/publication averages 132.218–132.281 ms and
+   dominates recorded phases. Optimize that measured path next; no speedup or
+   game performance is established. No more files or reruns are needed for
+   this round. [Reviewed evidence](console-evidence.md).
 2. **Mario observed runtime requirements:** the executable, preparation/inventory
    reports and all seven requested sample payloads are verified and available.
    M5/intake/matrix analysis can proceed; missing input is no longer its blocker.

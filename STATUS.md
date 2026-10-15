@@ -4,13 +4,16 @@
 under #87/#20/M2 has reviewed **0.24.1** hardware results: two native ADD/MUL
 Scene Check launches pass their analytic pixels and picture guides; Guest Draws
 passes its first submitted picture/own readback/exit with zero fallback/fault.
-The user confirms Minus returns and optional HOME return on firmware 5.5.6 U /
-Aroma Beta 27. Plus restart is later user-confirmed PASS; its updated result/trace are still awaited. The drawn scene
-took **91.549 s**; scale/publication averages **132.281 ms** per host frame and
-dominates measured phases. No speedup is established. The collector missed full
-traces because their filenames omit the version; its correction and missing-trace
-warnings preserve the existing result evidence. [Review](docs/console-evidence.md)
-and [FTP guide](docs/console-retest.md). This remains a premerge snapshot.
+The complete follow-up verifies **Plus restart and all three Guest Draws steps
+PASS**, two guest sessions and all five launches' cleanup through `main_return`.
+The user confirms Minus and optional HOME returns on firmware 5.5.6 U / Aroma
+Beta 27. All five traces and five reports are received; no files/reruns remain
+requested for this round. Drawn scenes take **91.190–91.613 s** and native
+scale/publication averages **132.218–132.281 ms**, dominating recorded phases.
+Optimize that measured path next; no speedup is established. The collector's
+unversioned-trace correction passes on the actual files with no missing-pair
+warnings. [Review](docs/console-evidence.md) and [FTP guide](docs/console-retest.md).
+This remains a premerge snapshot.
 
 **Exact shader arithmetic:** [PR #105](https://github.com/Jdiller-86/CTR-2-WUP/pull/105)
 implements scoped #76 under #28/M4: component-wise ADD/MUL, independent operand
@@ -66,7 +69,7 @@ live Project review replace the resolved input blocker. Actual runtime use,
 broader modules and all full
 milestones remain open. [Evidence review](docs/console-evidence.md).
 
-Updated **October 15, 2026 UTC** · **v0.24.1 hardware evidence**.
+Updated **October 14, 2026 (America/New_York; October 15 UTC intake)** · **v0.24.1 hardware evidence**.
 The target remains an UWUVCI-style Windows GUI: select an owned 3DS game, configure
 title/artwork, click Inject, install its individual WUP and play from Wii U Menu.
 [Requirements](docs/project-brief.md), [product plan](docs/development-plan.md),
@@ -131,9 +134,10 @@ publication identity. Older tags/assets and their console evidence are preserved
 
 ## Remaining acceptance
 
-- Retrieve the existing 0.24.1 full traces over FTP; retain the reviewed
-  arithmetic/first-draw/launcher passes. Obtain the updated user-confirmed Plus-repeat logs and optimize
-  the measured native scale/publication cost before broader performance claims.
+- Optimize the measured native scale/publication cost while retaining completed
+  0.24.1 arithmetic, first/repeat draw, picture-gating and launcher evidence.
+  No files or reruns remain requested for this round; broader performance,
+  stability/recovery and installed-WUP acceptance remain open.
 - Extend shader rounding/remaining arithmetic/control, TEV/sampling, coherency, modules, guest audio
   and retail saves using original references and actual observed requirements.
 - Record full platform stability/recovery and original WUP installation/Menu launch.

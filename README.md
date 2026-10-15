@@ -9,8 +9,8 @@ First visit? [Take the repository tour](docs/repository-guide.md).
 Testing on Wii U? The [focused 0.24.1 hardware round](docs/console-retest.md)
 contains two guided apps and a Windows collector for returning one log ZIP.
 Its [reviewed hardware results](docs/console-evidence.md) pass two arithmetic
-launches and the first draw/exit; Plus restart is later user-confirmed PASS.
-Updated repeat logs and performance work remain open.
+launches and the full Guest Draws/Plus-repeat guide, with all requested traces
+received. Native scale/publication performance is the next measured target.
 It is a tested PR snapshot awaiting merge review.
 
 Contributors can [develop and manage tracking without hosted Actions](docs/direct-development.md)
