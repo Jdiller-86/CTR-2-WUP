@@ -48,7 +48,8 @@ Current requirements:
    entry/rollback probes and passing required hosted platform checks. PR #105
    adds exact ADD/MUL original rational/scene/rollback probes; required host/native/Windows/docs checks gate delivery;
    receipts are linked from PR #105. The DSP ADPCM reference now has exact original sample/history/seek
-   evidence; container parsing and guest DSP/mixing/output remain open. Hardware
+   evidence; scoped #113/PR #114 now adds original CSTM block/SEEK checks. Broader
+   containers, guest DSP/mixing/output remain open. Hardware
    rounding, remaining arithmetic/control and shared runtime development continue
    independently of the new display-cache physical comparison.
 5. **Conversion/GUI:** prove the full native Windows conversion and WUP

@@ -2,7 +2,8 @@
 
 Scoped #103 under #25/M3 implements a portable integer codec foundation using
 original vectors. Guest DSP IPC, firmware/components, voices, mixing,
-CSTM/CSAR parsing and native audio output remain separate work. No commercial
+CSAR parsing and native audio output remain separate work. The scoped
+[CSTM reader](cstm.md) now supplies checked channel blocks and SEEK histories. No commercial
 waveform, coefficients or decoded audio is bundled. Earlier native silence/tone
 results remain valid for their builds and do not establish guest audio.
 
@@ -35,7 +36,8 @@ checkpoint supplies the two preceding samples and sample index; earlier frames
 are not re-decoded or authenticated. A frame-aligned block can use a new base
 and cursor zero with its supplied history. Only requested bytes/nibbles are
 required, allowing a final partial frame. Unused headers/nibbles are not checked.
-Channel interleaving, block padding, loops and CSTM SEEK-table parsing remain open.
+The [CSTM subset](cstm.md) supplies channel interleaving, final padding and
+block-aligned SEEK histories; general intervals and loops remain open.
 
 Each call allocates nothing and is bounded to 1,048,576 samples. Argument,
 capacity/cursor/address bounds, write/input overlap and every requested frame's
@@ -65,5 +67,6 @@ combinations and seeded varying headers/coefficients/histories/partial frames ar
 covered. GCC/Clang repeat normal and ASan/UBSan comparisons; Windows runs the
 same independent vectors. CI retains original vectors, compiler/source identity,
 hashes and reports. These checks establish the stated codec subset only.
-Game stream selection, container metadata, DSP services, mixing/synchronization
-and Wii U playback/cleanup still need implementation and physical evidence.
+The scoped CSTM reader has original container/block/SEEK evidence. Game stream
+selection, broader containers, DSP services, mixing/synchronization and Wii U
+playback/cleanup still need implementation and physical evidence.

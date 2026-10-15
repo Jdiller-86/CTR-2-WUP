@@ -340,8 +340,9 @@ Acceptance:
 #### m3-guest-audio: Build the guest DSP/audio path with original probes
 
 The DSP ADPCM reference has bounded frame/history/seek and independent exact
-rational evidence. Guest DSP protocol, containers, mixing and Wii U output remain
-unimplemented; native tone evidence stays separate.
+rational evidence. Scoped #113/PR #114 adds original checked CSTM v2 block/SEEK
+parsing and 240-stream rational evidence. Guest DSP protocol, general containers,
+loops, mixing and Wii U output remain unimplemented; native tone evidence stays separate.
 
 State: **In progress** · Needs: `needs-console`.
 

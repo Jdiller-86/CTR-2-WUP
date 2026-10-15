@@ -1,5 +1,13 @@
 # CTR2WUP status
 
+**CSTM block/SEEK reader — #113/PR #114 under #25/M3:** checked little-endian
+v2 non-looping mono/stereo streams now expose exact channel block spans, numeric
+coefficients and SEEK histories to the existing codec. Original relocated/padded
+fixtures match 57,980 independently computed samples across 240 streams; 8,192
+mutation cases and atomic failures pass focused checks. Required host/sanitizer, Windows, native and documentation checks gate
+delivery through PR #114. [Contract](docs/cstm.md). Guest DSP IPC, mixing, loops and physical
+Wii U playback remain open; no full gate or commercial audio is accepted.
+
 **Verified Project readback:** [PR #111](https://github.com/Jdiller-86/CTR-2-WUP/pull/111)
 resolves a lagging Project connection with independent exact active membership
 reads. [Reviewed dry-run](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38752356368)
@@ -16,8 +24,8 @@ bounded frames, explicit history/cursor, partial-frame continuation/seek,
 integer rounding/clipping and atomic failures. A separate rational reference
 agrees on 6,144 original cases / 175,770 samples; focused normal/sanitizer checks
 pass. All required hosted checks pass; merge is `103363d73b636efb904720992477cf43de6d7b8b`. [Contract](docs/dsp-adpcm.md).
-Guest DSP IPC, container/seek-table parsing, mixing and audible Wii U playback
-remain open; this does not accept M3 or commercial audio.
+Scoped CSTM block/seek parsing is now implemented by #113/PR #114.
+Guest DSP IPC, general containers/loops, mixing and audible Wii U playback remain open; this does not accept M3 or commercial audio.
 
 **Merged native display optimization — 0.25.0:** [PR #106](https://github.com/Jdiller-86/CTR-2-WUP/pull/106)
 extends scoped #87/#20/M2 with exact changed-span scaling and row publication.

@@ -16,3 +16,4 @@ ctr_transfer.c
 ctr_fs.c
 ctr_apt.c
 ctr_dsp_adpcm.c
+ctr_cstm.c

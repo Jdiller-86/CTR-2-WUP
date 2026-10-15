@@ -113,6 +113,8 @@ nav:
       - First software scenes: docs/software-scenes.md
       - Compiled guest PICA draws: docs/guest-pica-draws.md
       - Filesystem and saves: docs/filesystem.md
+      - DSP ADPCM reference: docs/dsp-adpcm.md
+      - CSTM blocks and seek: docs/cstm.md
   - Project:
       - Development tracking: docs/development-tracking.md
       - Project tracking policy: docs/github-project-overview.md

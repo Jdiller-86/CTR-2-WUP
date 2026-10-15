@@ -31,6 +31,10 @@ matching verified provenance. M5 analysis is active; shader/container/audio
 formats are identified, while runtime requirements and gameplay support remain
 unfinished.
 
+The shared audio foundation now includes a checked [CSTM block/SEEK reader](docs/cstm.md)
+for the original DSP ADPCM codec. Guest DSP services, mixing and Wii U audio
+playback remain under development.
+
 ## Approach
 
 The PC translates ARM game code ahead of time into C, which is compiled for
