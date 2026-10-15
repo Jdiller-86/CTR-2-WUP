@@ -732,8 +732,10 @@
       "title": "Implement an original checked DSP ADPCM decoding reference",
       "milestone": 3,
       "parent_issue": 25,
-      "state": "planned",
-      "pull_requests": [],
+      "state": "active",
+      "pull_requests": [
+        109
+      ],
       "scope": [
         "Implement bounded DSP ADPCM frames with explicit coefficients/history, clipping, sample/block/seek boundaries and owned output.",
         "Use original fixtures and independent reference comparisons; keep codec decoding separate from guest DSP IPC/mixing and native audio acceptance."
