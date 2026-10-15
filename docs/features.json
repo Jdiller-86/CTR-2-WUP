@@ -809,8 +809,10 @@
       "title": "Verify Project membership through an independent per-item read",
       "milestone": 1,
       "parent_issue": 1,
-      "state": "planned",
-      "pull_requests": [],
+      "state": "active",
+      "pull_requests": [
+        111
+      ],
       "scope": [
         "For a bounded missing set, independently read issue/PR projectItems with exact content/Project identity and archived-state checks.",
         "Preserve owner settings, genuine failures and separate connection/direct receipts; never count mutation acknowledgement as membership."
