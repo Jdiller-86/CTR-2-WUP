@@ -13,8 +13,10 @@ PR #106 is merged and the owner removed branch rulesets on October 15.
 The canonical 0.25.0 publication verifies successfully; deployment verification
 is hardened by merged #107/PR #108. These are resolved delivery constraints, while
 required checks and the physical gates below remain. Project membership
-readback after the PR #108 add is being independently verified under #110;
-Project settings are preserved and unavailable data stays explicit.
+readback is resolved by #110/PR #111: reviewed apply 38752814566 independently
+verifies all expected members while preserving Project settings. Native links,
+Project access through Actions and Pages are verified delivery foundations; the
+remaining blockers below concern physical/runtime/product acceptance.
 
 Current requirements:
 

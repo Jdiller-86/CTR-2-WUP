@@ -1,11 +1,15 @@
 # CTR2WUP status
 
-**Live Project readback follow-up — #110:** GitHub acknowledged adding PR #108,
-but five connection reads and a later dry-run still omit it. The owner confirms
-no Project settings changed. Independent issue/PR `projectItems` reads now check
-exact active content/Project identity before counting membership or adding again;
-archived/ambiguous/genuine absence remains a failure. Receipts retain both views
-without private Project IDs/notes. Trusted-main live verification follows merge.
+**Verified Project readback:** [PR #111](https://github.com/Jdiller-86/CTR-2-WUP/pull/111)
+resolves a lagging Project connection with independent exact active membership
+reads. [Reviewed dry-run](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38752356368)
+then [apply/readback](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38752814566)
+verify 71 native parent links, 33 PR links and all 111 expected members as of
+that run, with no untracked PRs. Both connection and independent receipts remain
+visible. Owner settings/notes and console resources are preserved. Scoped
+#25 is now In progress after [its reviewed activation](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38751560046);
+all full gates remain open. The [live dashboard](https://jdiller-86.github.io/CTR-2-WUP/progress/)
+reports the current Project authority.
 
 **Merged DSP ADPCM foundation — #103/PR #109 under #25/M3:** the portable decoder now has
 bounded frames, explicit history/cursor, partial-frame continuation/seek,
@@ -32,8 +36,8 @@ verifies canonical source `abe37a9` and fresh live Project data over HTTP.
 An earlier deployment succeeded but its HTTP verification failed without a
 specific reason. Merged PR #108 adds bounded propagation/HTTP retries and safe failure codes;
 privacy/schema violations fail immediately. Publication 38747514158 verifies
-merged source 9175168 on its first attempt. Project membership reconciliation
-follows the new catalog; unavailable data is explicit until refreshed.
+merged source 9175168 on its first attempt. The later [canonical publication](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38752341776)
+verifies merged source 150aa5c and fresh available Project data on attempt one.
 
 **Focused hardware evaluation:** [PR #106](https://github.com/Jdiller-86/CTR-2-WUP/pull/106)
 under #87/#20/M2 has reviewed **0.24.1** hardware results: two native ADD/MUL

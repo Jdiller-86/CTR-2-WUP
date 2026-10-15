@@ -147,3 +147,11 @@ only repository references/counts/booleans and retain the original connection
 readback separately. Archived entries and ambiguous/invalid identities fail;
 no Project archive/settings change is inferred from a missing connection row.
 See [GitHub's PullRequest schema](https://docs.github.com/en/graphql/reference/pulls#pullrequest).
+
+The independent read route is live-verified in
+[apply 38752814566](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38752814566):
+connection readback sees 109/111 members, while exact reverse links independently
+confirm the two active additions and verify the complete 111-member set.
+[Publication 38752341776](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38752341776)
+verifies source 150aa5c with fresh available Project data. Earlier failed receipts
+remain evidence; Project settings and owner notes were preserved.

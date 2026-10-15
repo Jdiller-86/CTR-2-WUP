@@ -823,7 +823,8 @@
       ],
       "evidence": [
         "Scoped #110 has native parent #1 and M1 assignment. Apply 38748103325 acknowledged PR #108 addition but connection readbacks and dry-run 38749067251 still omitted it. Owner confirms no Project settings changed.",
-        "GitHub documents projectItems(includeArchived:true) on Issue and PullRequest. Focused reference/identity/privacy tests pass; full required checks and live verification gate delivery."
+        "GitHub documents projectItems(includeArchived:true) on Issue and PullRequest. Focused reference/identity/privacy tests pass; full required checks and live verification gate delivery.",
+        "PR #111 merged at 150aa5caf62ad2d13cf6256e3224d1239c4a3e85 after Required CI/Documentation passed. Reviewed dry-run 38752356368 then apply 38752814566 verify 71 native parents, 33 PR links and all 111 expected members at that checkpoint. Exact reverse links verify new PR #109/#111 while the connection still omits them. Owner settings/notes remain preserved; final documentation tracking follows separately."
       ]
     }
   ],

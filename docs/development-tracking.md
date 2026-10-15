@@ -132,3 +132,10 @@ edge, including archived state, exact content and selected Project identities.
 It counts only independently confirmed active members, preserves both readbacks
 and never unarchives or changes Project settings. Archived/ambiguous identities,
 genuine absence, permission errors and read budgets still fail visibly.
+
+The #110/PR #111 live check is complete: [dry-run 38752356368](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38752356368)
+was inspected before [apply 38752814566](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38752814566).
+At that checkpoint, 71 native parents, 33 PR links and 111/111 Project members
+verify with no untracked PRs. PR #109/#111 are confirmed through exact independent
+active links while the Project connection still lags. Final documentation PRs
+are reconciled separately; the live board/dashboard remain authoritative.
