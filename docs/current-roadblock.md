@@ -38,7 +38,11 @@ Current requirements:
    required additional nested resources and actual runtime use; static code,
    filenames and declared services are not gameplay proof. No repeat upload of
    the received samples is requested. [First-title findings](first-title.md).
-3. **Platform acceptance:** complete documented repeat launch, Home/APT,
+3. **Platform acceptance:** use the [full M1 suite](m1-acceptance.md) for the
+   native guide, timed stability, safe original SD recovery and short fresh Minus/HOME
+   runs. Installed WUP launch remains Blocked on real local packaging material,
+   provenance and verified collision-checked original output; WUP Installer GX2 is
+   the chosen installer. Complete documented repeat launch, Home/APT,
    stability, SD recovery and original WUP install/Menu-launch checks with exact
    environment/build identity. Scoped arithmetic/first-draw/Minus/HOME results
    do not complete those full criteria.

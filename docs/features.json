@@ -873,6 +873,29 @@
         "Finite native pre-rendered clips are a testable stream-to-output path. Guest DSP firmware/IPC, real-time streaming/synchronization and hardware audible acceptance remain open.",
         "Scoped #115/PR #116 connects checked CSTM/ADPCM to two bounded voices, 48 kHz integer stereo conversion/mixing and finite owned native clips. Independent original references cover 252 cases / 1,884,081 output frames and 9,589 state snapshots; eight guided hardware steps and source-bound logs keep physical audible acceptance separate. Guest DSP firmware/IPC and real-time synchronization remain open."
       ]
+    },
+    {
+      "id": "m1-guided-acceptance",
+      "title": "Deliver source-bound guided M1 platform acceptance suite",
+      "milestone": 1,
+      "parent_issue": 16,
+      "state": "active",
+      "pull_requests": [
+        118
+      ],
+      "scope": [
+        "Bundle one full native guided platform run plus short fresh Minus/HOME runs and an original source-bound SD persistence/recovery probe.",
+        "Review exact source/session result+trace pairs, manual observations and each M1 criterion; document WUP Installer GX2 installation separately and block full acceptance without a real verified install-test package."
+      ],
+      "acceptance": [
+        "Native guide covers both screens/controls/touch/tone and600000ms stability; actual closed-write/reload/backup-recovery/error-retry probe has normal/sanitizer and native-build checks.",
+        "User-friendly FTP-only instructions, exact-source kit and fail-closed reviewer preserve missing/failed/skipped/blocked attempts. Full M1 acceptance is never inferred from host success or WUHB Menu icons."
+      ],
+      "evidence": [
+        "User explicitly requested definitive guided M1 suite and identified WUP Installer GX2. Prior unchanged scoped hardware evidence is retained.",
+        "Installed original WUP still requires real local packaging material/provenance, collision-checked title identity and physical installer/Menu evidence. Current suite exposes this prerequisite as BLOCKED.",
+        "Scoped #117/PR #118 adds a full native ten-step/600-second guide, persistent source-bound original SD sentinel, closed-write/reload/backup/pending/error-retry probes, separate fresh Minus/HOME sessions and strict source/session/criterion review. Host checks do not establish physical acceptance. WUP Installer GX2 is selected; installed-title criteria remain Blocked without real local packaging material/provenance and a verified collision-checked original WUP."
+      ]
     }
   ],
   "reviewed_statuses": {

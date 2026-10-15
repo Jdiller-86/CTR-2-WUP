@@ -98,6 +98,11 @@ so independent work can overlap without claiming downstream completion.
 
 References: [Console evidence](console-evidence.md) · [Short follow-up](console-retest.md) · [Guided tests](guided-testing.md) · [Console guide](console-testing.md).
 
+The [source-bound M1 acceptance suite](m1-acceptance.md) now provides the full
+guided native run, short fresh lifecycle runs and original SD recovery probe.
+Its strict reviewer keeps installed-title acceptance Blocked without a real WUP.
+The suite itself is host/native-build evidence, not physical gate completion.
+
 ### Actionable work items
 
 <a id="m1-results"></a>
@@ -106,7 +111,7 @@ References: [Console evidence](console-evidence.md) · [Short follow-up](console
 
 Current Save/RomFS/SD-asset/GX named reports are physically verified, including fresh-launch save reload. Retain older failed/missing reports separately; their exact original cause remains unknown. Project review records this scoped collection task independently of M1 acceptance.
 
-State: **Awaiting evidence** · Needs: `needs-console`.
+State: **Done — reviewed scoped result collection** · Needs: `needs-console`.
 
 Depends on: none.
 

@@ -17,6 +17,7 @@ GX_HOMEBREW ?= 0
 PICA_HOMEBREW ?= 0
 AUDIO_ONLY ?= 0
 STREAM_AUDIO ?= 0
+M1_ONLY ?= 0
 SCENE_ONLY ?= 0
 UDP_LOG ?= 0
 CALL_LIMIT ?= 64
@@ -79,9 +80,16 @@ ifeq ($(SCENE_ONLY),1)
 CFLAGS += -DCTR_SCENE_ONLY
 APP_NAME := CTR2WUP Scene Check $(APP_VERSION)
 endif
+ifeq ($(M1_ONLY),1)
+CFLAGS += -DCTR_M1_ONLY
+APP_NAME := CTR2WUP M1 Check $(APP_VERSION)
+endif
 LDFLAGS := -mcpu=750 -meabi -mhard-float -specs="$(WUT)/share/wut.specs" \
            -Wl,-Map,$(OUTPUT)/$(TARGET).map
-SOURCES := main.c viewport.c diagnostic_font.c test_report.c test_guide.c test_lifecycle.c image_scale.c report_storage.c test_result.c diagnostic_audio.c guest_slice.c
+ifeq ($(M1_ONLY),1)
+M1_SOURCES := m1_storage_probe.c
+endif
+SOURCES := $(M1_SOURCES) main.c viewport.c diagnostic_font.c test_report.c test_guide.c test_lifecycle.c image_scale.c report_storage.c test_result.c diagnostic_audio.c guest_slice.c
 ifeq ($(STREAM_AUDIO),1)
 SOURCES += audio_stream_app.c audio_stream_diagnostic.c
 endif

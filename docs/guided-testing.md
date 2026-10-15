@@ -1,12 +1,14 @@
 # Guided Wii U tests and TXT results (0.14.6)
 
-For the current **0.25.0** test snapshot, use [the focused hardware guide](console-retest.md).
-Its two apps write source-bound 8 KiB results and retain separate traces; the
-corrected source collector checks the native unversioned trace headers and warns
-about missing pairs. The earlier 0.24.1 collector omitted those traces; its
-complete FTP return has now been reviewed with no missing files. The new cache
-requires only its focused picture/restart/timing comparison. The older fixed-size
-and controls contract below remains a historical reference.
+For the current **0.26.0** checkpoint, use [the full M1 acceptance suite](m1-acceptance.md)
+or the separate [Audio Streams guide](audio-stream-testing.md). Both use FTP-friendly
+source-bound 8 KiB results and paired full traces. Installed-title acceptance
+requires an actual verified WUP and is explicitly Blocked in the current M1 kit.
+
+The source-bound **0.25.0 display-cache comparison** remains pending under
+[its focused hardware guide](console-retest.md). Its earlier 0.24.1 FTP return is
+complete; no more trace files are requested for that completed round. The older
+4 KiB controls/reporting contract below is retained as historical reference.
 
 This page preserves the original 0.14.6 controls and reporting contract.
 The current physical results and focused follow-up are in

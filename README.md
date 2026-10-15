@@ -6,6 +6,11 @@
 
 First visit? [Take the repository tour](docs/repository-guide.md).
 
+Testing the full native platform? The [M1 acceptance suite](docs/m1-acceptance.md)
+provides one guided full run, short fresh-launch/HOME checks, safe SD recovery
+fixtures and FTP return. Actual installed-WUP acceptance has an explicit package
+prerequisite and remains blocked; homebrew launches do not complete that gate.
+
 Testing audio on Wii U? The [Audio Streams 0.26.0 guide](docs/audio-stream-testing.md)
 covers the new checked stream/mixer/native path with eight listening/control steps
 and FTP result return. Actual hardware acceptance remains pending.

@@ -81,6 +81,16 @@ containers/loops, guest DSP firmware/services, real-time synchronization and phy
 audio acceptance remain open. The reviewed Project transition activates only the guest-audio task,
 preserving its console wait and all full gates.
 
+## M1 acceptance evidence route
+
+Scoped #117/PR #118 supplies the [full guided M1 suite](m1-acceptance.md): one
+full native controls/touch/tone/ten-minute run, safe original SD recovery probes,
+two short fresh lifecycle runs and a fail-closed review of all criteria. Reviewed
+result collection is already Done. Installed-title testing needs a real verified
+original WUP and WUP Installer GX2 observations, so that segment is Blocked. Native
+RPX/WUHB evidence cannot accept the installed-title gate. No full milestone changes
+state merely because the suite builds.
+
 ## Now, next and later
 
 PR #106/#87 has complete source-matched evidence for the 0.24.1 hardware round:

@@ -110,6 +110,23 @@
           "remove_resources": []
         }
       ]
+    },
+    {
+      "id": "m1-install-prerequisite-v026",
+      "overview": "m1",
+      "reason": "The user requested a definitive full M1 suite and identified WUP Installer GX2. The installation row currently says Awaiting evidence, but the repository has no real verified source-matched install-test WUP/local packaging provenance. Correct only this dependency to Blocked, preserve console waits and owner notes, and keep all full gates open. Reviewed result collection remains Done.",
+      "changes": [
+        {
+          "role": "work-item",
+          "id": "m1-package-launch",
+          "from_status": [
+            "Awaiting evidence",
+            "Blocked"
+          ],
+          "to_status": "Blocked",
+          "remove_resources": []
+        }
+      ]
     }
   ]
 }
