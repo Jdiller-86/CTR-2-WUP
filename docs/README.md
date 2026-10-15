@@ -17,6 +17,7 @@ for the canonical project site, live dashboard and build receipts.
 - [Without hosted Actions](direct-development.md): secure GitHub management and scoped local merge evidence.
 
 - [Getting started](getting-started.md): downloads, Aroma launch, SD layout and reports.
+- [Full M1 suite](m1-acceptance.md) and [Audio Streams](audio-stream-testing.md): guided current testing and FTP returns.
 - [Troubleshooting](troubleshooting.md): missing reports, storage failures and hangs.
 - [Testing](testing.md): which checks establish desktop, Windows and console evidence.
 - [Current status](../STATUS.md) and [progress assessment](progress.md).

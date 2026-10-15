@@ -13,6 +13,13 @@ instructions together. CI builds are available from each successful
 [Actions run](https://github.com/Jdiller-86/CTR-2-WUP/actions), with the source
 commit in their artifact names. Hosted builds are structural/test evidence.
 
+For the unreleased **0.26.0** testing checkpoint, download the successful run's
+`wiiu-m1-acceptance` artifact and start with `KIT-STATUS.md` and
+[the full M1 guide](m1-acceptance.md). It includes M1 Check and the separate
+[Audio Streams test](audio-stream-testing.md), exact source, reference WAVs and
+FTP return instructions. The kit has no installable WUP; that M1 segment stays
+Blocked. The prior source-bound 0.25.0 display-cache comparison remains separate.
+
 Release manifests identify separate **Native/GX**, **Audio Check/GX** and
 **Guest Draws** kits, together with matching source, a developer wheel, offline
 documentation and checksums. Keep each kit's guide and exact source/version
@@ -27,8 +34,9 @@ path or a specific remaining acceptance check. Preserve save snapshots and old r
 ## Wii U prerequisites
 
 The diagnostic launch route targets a homebrew Wii U with **Aroma** and an SD
-card. The current tester reports a U.S. Wii U using latest firmware/Aroma/WUP
-Installer GX2; exact version numbers have not been recorded. This is a reported
+card. The tester previously confirmed firmware **5.5.6 U / Aroma Beta 27** and now
+selects **WUP Installer GX2**. Confirm the versions again for the new run and
+record the installer version/build when an installable package is available. This is a reported
 environment, not a promise for every setup. Follow your homebrew environment's
 own installation instructions; CTR2WUP does not install or update console firmware.
 WUP Installer is not needed to launch the diagnostic WUHB files.
