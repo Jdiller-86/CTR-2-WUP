@@ -19,9 +19,14 @@ def fixture():
     options = [{'id': f'option{i}', 'name': name} for i, name in enumerate(('Planned', 'In progress', 'Awaiting evidence'))]
     project = {'id': 'project2', 'fields': {'nodes': [{'id': 'status', 'name': 'Status', 'options': options}]},
                'items': [{'id': f'item{n}', 'isArchived': False, 'status': {'name': 'Planned'},
+                          'waiting': {'text': 'Owned decrypted executable and assets'}, 'workType': {'name': 'Feature'},
                           'content': {'__typename': 'Issue', 'id': f'issue{n}', 'number': n,
                                       'state': 'OPEN', 'repository': {'nameWithOwner': cleanup.REPO}}}
                          for n in cleanup.KEEP]}
+    project['fields']['nodes'] += [
+        {'id': 'waiting', 'name': 'Waiting resource', 'dataType': 'TEXT'},
+        {'id': 'worktype', 'name': 'Work type', 'dataType': 'SINGLE_SELECT', 'options': [
+            {'id': 'gate', 'name': 'Milestone'}, {'id': 'task', 'name': 'Task'}, {'id': 'feature', 'name': 'Feature'}]}]
     project['items'] += [
         {'id': 'duplicate121', 'isArchived': False, 'content': {'__typename': 'Issue', 'number': 121,
           'state': 'CLOSED', 'repository': {'nameWithOwner': cleanup.REPO}}},
@@ -77,11 +82,19 @@ class FakeGitHub:
             self.project_row['hierarchy'][f't{n}']['parent'] = {'id': payload['issueId'], 'number': int(payload['issueId'].removeprefix('issue'))}
         else:
             item = next(i for i in self.project_row['items'] if i['id'] == payload['itemId'])
-            if name == 'archiveProjectV2Item':
+            if name == 'clearProjectV2ItemFieldValue':
+                self.assert_field = payload['fieldId']
+                assert self.assert_field == 'waiting'
+                item['waiting'] = None
+            elif name == 'archiveProjectV2Item':
                 item['isArchived'] = True
             elif name == 'updateProjectV2ItemFieldValue':
-                options = self.project_row['fields']['nodes'][0]['options']
-                item['status'] = {'name': next(o['name'] for o in options if o['id'] == payload['value']['singleSelectOptionId'])}
+                field = next(f for f in self.project_row['fields']['nodes'] if f['id'] == payload['fieldId'])
+                if field['name'] == 'Waiting resource':
+                    item['waiting'] = {'text': payload['value']['text']}
+                else:
+                    key = 'status' if field['name'] == 'Status' else 'workType'
+                    item[key] = {'name': next(o['name'] for o in field['options'] if o['id'] == payload['value']['singleSelectOptionId'])}
             else:
                 raise AssertionError(name)
 
@@ -109,6 +122,14 @@ class GitHubCleanupTests(unittest.TestCase):
             result = cleanup.cleanup(api, True, dry['plan_sha256'])
             self.assertTrue(result['readback_verified'])
             self.assertEqual(result['milestones_accepted_by_cleanup'], 0)
+            self.assertEqual(result['verified_project_active_issue_count'], 10)
+            for item in api.project_row['items']:
+                n = item.get('content', {}).get('number')
+                if n not in cleanup.KEEP or item['content']['repository']['nameWithOwner'] != cleanup.REPO:
+                    continue
+                waiting = (item.get('waiting') or {}).get('text')
+                self.assertEqual(waiting, 'Wii U console results' if n in (1, 37) else None)
+                self.assertEqual(item['workType']['name'], 'Milestone' if n in cleanup.GATES else 'Task')
             self.assertEqual(trusted.call_count, 2)
             writes = len(api.writes)
             dry = cleanup.cleanup(api)

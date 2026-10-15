@@ -4,10 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Version in pyproject.toml; publishes original diagnostics as a prerelease
-        required: true
+        description: Optional expected version; leave blank to use pyproject.toml
+        required: false
         type: string
-        default: '0.23.0'
 
 permissions:
   contents: read
@@ -38,15 +37,16 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Require main, matching version and clean source
+      - name: Require main, current version and clean source
         id: identity
         run: |
           python3 - <<'PY'
           import os, pathlib, re, subprocess, tomllib
           assert os.environ['GITHUB_REF'] == 'refs/heads/main', 'Dispatch releases from main only'
-          version = os.environ['REQUESTED_VERSION']
+          version = tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version']
           assert re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version), 'Invalid version'
-          assert tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'] == version, 'Version mismatch'
+          expected = os.environ.get('REQUESTED_VERSION', '').strip()
+          assert not expected or expected == version, 'Expected version does not match pyproject.toml'
           assert subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip() == os.environ['GITHUB_SHA'], 'Source mismatch'
           assert not subprocess.check_output(['git', 'status', '--porcelain'], text=True), 'Source is not clean'
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:

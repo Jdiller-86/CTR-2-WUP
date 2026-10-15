@@ -167,6 +167,50 @@ def check_documentation(folder: Path, version: str, commit: str, checks: list[di
     return report, records
 
 
+def write_diagnostic(source: Path, diagnostic: Path, options: argparse.Namespace,
+                     version: str, commit: str, date: tuple[int, ...]) -> None:
+    """Keep the deployable tree and one guide visible; put review material in support."""
+    entries = {}
+    for folder, names in ((options.native_dir, NATIVE_NAMES), (options.transfer_dir, TRANSFER_NAMES)):
+        for name in names:
+            destination = "sd-card/wiiu/apps/" if name.endswith(".wuhb") else "support/rpx/"
+            entries[destination + name] = regular(folder / name).read_bytes()
+    for name in sorted(FRAME_NAMES):
+        entries[f"support/reference/gx-transfer/{name}"] = regular(options.reference_dir / name).read_bytes()
+    licenses = ("libctru.txt", "COPYING.NEWLIB.ARM", "COPYING.NEWLIB", "COPYING.RUNTIME", "COPYING3",
+                "MPL-2.0.txt", "devkitarm-crtls/README.md", "devkitarm-crtls/3dsx_crt0.s",
+                "devkitarm-crtls/3dsx.ld", "devkitarm-crtls/3dsx.specs")
+    with zipfile.ZipFile(source) as src:
+        for name in licenses:
+            entries["support/licenses/" + name] = src.read("CTR2WUP/docs/licenses/" + name)
+        for name in ("LICENSE", "THIRD_PARTY_NOTICES"):
+            entries["support/" + name] = src.read("CTR2WUP/" + name)
+        guide = src.read("CTR2WUP/tools/templates/native-gx.md").decode("utf-8")
+        entries["START-HERE.md"] = guide.replace("@VERSION@", version).replace("@SOURCE_COMMIT@", commit).encode("utf-8")
+    entries["support/" + source.name] = regular(source, 128 * 1024 * 1024).read_bytes()
+    entries["support/source-commit.txt"] = (commit + "\n").encode()
+    entries["support/sdk-image-digest.txt"] = (SDK_IMAGE + "\n").encode()
+    for name, path in (("native.json", options.native_dir / "build-report.json"),
+                       ("gx-transfer.json", options.transfer_report)):
+        entries["support/build-reports/" + name] = regular(path, 2 * 1024 * 1024).read_bytes()
+    manifest = {"schema_version": 1, "kind": "ctr2wup-native-gx-diagnostics", "version": version,
+                "source_commit": commit, "original_fixtures_only": True, "console_verified": False,
+                "files": [{"path": name, "size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+                          for name, data in sorted(entries.items())]}
+    entries["support/manifest.json"] = (json.dumps(manifest, indent=2) + "\n").encode()
+    entries["support/SHA256SUMS.txt"] = "".join(hashlib.sha256(data).hexdigest() + "  " + name + "\n"
+                                                     for name, data in sorted(entries.items())).encode()
+    with zipfile.ZipFile(diagnostic, "x", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+        for name, data in sorted(entries.items()):
+            entry = zipfile.ZipInfo(name, date_time=date)
+            entry.external_attr = 0o100644 << 16
+            entry.compress_type = zipfile.ZIP_DEFLATED
+            archive.writestr(entry, data)
+    with zipfile.ZipFile(diagnostic) as archive:
+        if archive.testzip() or set(archive.namelist()) != set(entries) or any(archive.read(n) != d for n, d in entries.items()):
+            raise ValueError("Diagnostic archive byte/CRC verification failed")
+
+
 def package(options: argparse.Namespace) -> dict:
     root = options.source_root.resolve()
     commit = git(root, "rev-parse", "HEAD")
@@ -239,32 +283,7 @@ def package(options: argparse.Namespace) -> dict:
         timestamp = datetime.fromtimestamp(int(git(root, "show", "-s", "--format=%ct", commit)), timezone.utc)
         date = (max(1980, timestamp.year), timestamp.month, timestamp.day, timestamp.hour, timestamp.minute, timestamp.second)
         diagnostic = stage / f"CTR2WUP-original-diagnostics-{version}.zip"
-        with zipfile.ZipFile(source) as src, zipfile.ZipFile(diagnostic, "x", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
-            entries = {}
-            for folder, names in ((options.native_dir, NATIVE_NAMES), (options.transfer_dir, TRANSFER_NAMES)):
-                for name in names:
-                    destination = f"sd-card/wiiu/apps/{name}" if name.endswith(".wuhb") else f"rpx/{name}"
-                    entries[destination] = regular(folder / name).read_bytes()
-            for name in sorted(FRAME_NAMES):
-                entries[f"reference/gx-transfer/{name}"] = regular(options.reference_dir / name).read_bytes()
-            for name in src.namelist():
-                relative = name.removeprefix("CTR2WUP/")
-                root_document = "/" not in relative and relative.endswith(".md")
-                repository_document = relative.startswith(".github/") and relative.endswith(".md")
-                if not name.endswith("/") and (relative in {"LICENSE", "THIRD_PARTY_NOTICES", ".github/repository-settings.json"}
-                        or root_document or repository_document or relative.startswith("docs/")):
-                    entries[relative] = src.read(name)
-            for required in ("docs/graphics-transport.md", "docs/licenses/libctru.txt", "docs/licenses/COPYING.NEWLIB.ARM", "docs/licenses/devkitarm-crtls/3dsx_crt0.s", "docs/licenses/MPL-2.0.txt"):
-                if required not in entries:
-                    raise ValueError("Required diagnostic guide or corresponding license/CRT source is missing")
-            entries["source-commit.txt"] = (commit + "\n").encode()
-            entries["sdk-image-digest.txt"] = (SDK_IMAGE + "\n").encode()
-            entries["README.txt"] = (f"CTR2WUP original diagnostics {version}\nSource commit: {commit}\n\nCopy sd-card contents to the SD root; launch the WUHB in Aroma.\nRPX files need an RPX-capable homebrew launcher. These are not WUP packages.\nGX Transfers: green/red/green TV, blue GamePad; R confirms the observed picture,\nL reports a problem, Minus exits. Results: sd:/ctr2wup/result-compiled-gx-transfer-{version}-*.txt.\nSee docs/graphics-transport.md. Preserve existing reports/saves.\nDeveloper builds require extracting the separate matching source ZIP.\nNo ROM/key is required. New-build console acceptance, commercial gameplay, general PICA rendering,\nguest audio and WUP installation are pending separate acceptance.\n").encode()
-            for name, data in sorted(entries.items()):
-                entry = zipfile.ZipInfo(name, date_time=date)
-                entry.external_attr = 0o100644 << 16
-                entry.compress_type = zipfile.ZIP_DEFLATED
-                archive.writestr(entry, data)
+        write_diagnostic(source, diagnostic, options, version, commit, date)
         diagnostic_entries = validate_zip(diagnostic)
         shutil.copyfile(wheel, stage / wheel.name)
         if documentation is not None:
@@ -278,7 +297,7 @@ def package(options: argparse.Namespace) -> dict:
         manifest = {"schema_version": 1, "version": version, "source_commit": commit, "prerelease": True, "original_fixtures_only": True, "artifacts": published}
         (stage / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         rows = published + [{"name": "manifest.json", "sha256": sha256(stage / "manifest.json")}]
-        notes = f"# CTR2WUP {version} development diagnostics\n\nSource commit: `{commit}`.\n\nOriginal Native and GX Transfer WUHB/RPX diagnostics, exact reference frames,\nsource and a pure-Python developer wheel. Required host/C/sanitizer checks,\nWUT builds and original transfer execution passed for this source commit.\nZIP CRCs and SHA-256 checksums were verified before publication.\n\nCopy the diagnostic ZIP's `sd-card/` contents to the SD root and launch in Aroma.\nSee `docs/graphics-transport.md` inside the ZIP; preserve older SD reports and saves.\nThe wheel is a developer CLI, not the planned Windows injector GUI.\n\nFull physical-console acceptance, playable commercial games, general PICA rendering,\nguest audio, WUP installer acceptance and the Windows GUI remain pending.\nNo game dump, personal key, commercial asset or external reference implementation\nis included. SDK/runtime/CRT notices and corresponding startup source accompany\nthe original diagnostic.\n\n| Asset | SHA-256 |\n|---|---|\n"
+        notes = f"# CTR2WUP {version} development diagnostics\n\nSource commit: `{commit}`.\n\nOriginal Native and GX Transfer WUHB/RPX diagnostics, exact reference frames,\nsource and a pure-Python developer wheel. Required host/C/sanitizer checks,\nWUT builds and original transfer execution passed for this source commit.\nZIP CRCs and SHA-256 checksums were verified before publication.\n\nCopy the diagnostic ZIP's `sd-card/` contents to the SD root and launch in Aroma.\nFollow its single `START-HERE.md`; source, references, notices and receipts are under `support/`.\nDo not repeat accepted hardware checks solely for a new build.\nThe wheel is a developer CLI, not the planned Windows injector GUI.\n\nFull physical-console acceptance, playable commercial games, general PICA rendering,\nguest audio, WUP installer acceptance and the Windows GUI remain pending.\nNo game dump, personal key, commercial asset or external reference implementation\nis included. SDK/runtime/CRT notices and corresponding startup source accompany\nthe original diagnostic.\n\n| Asset | SHA-256 |\n|---|---|\n"
         notes += "".join(f"| `{row['name']}` | `{row['sha256']}` |\n" for row in rows)
         if documentation is not None:
             notes += f"\nDownload `CTR2WUP-Documentation-{version}.html` and open it directly in a browser for offline navigation, search and printing. The checked export also supports offline review; the public source repository hosts the canonical Pages site.\n"

@@ -54,7 +54,7 @@ TASKS = {
          'Translate the proven original PICA vertex subset into real GX2 shaders.\n\nAcceptance: independent original reference scenes establish supported arithmetic/control-flow/output parity, unsupported input fails explicitly, and the native target builds. Record real Wii U output/cost evidence only for the changed path.'),
 }
 KEEP = set(GATES) | set(TASKS)
-PROJECT_README = ('Active work: seven milestone gates and three concrete tasks. '
+PROJECT_README = ('Milestones and active development. '
                   '[Development plan](' + BASE + 'plans.md).\n\n'
                   'Closed work and pull requests are archived, with history retained. '
                   'A task finishing never accepts a full milestone. Existing hardware '
@@ -100,7 +100,8 @@ class GitHub:
     def project(self):
         owner = self.graphql('query { user(login:"Jdiller-86") { projectV2(number:2) { '
                              'id url closed title shortDescription readme fields(first:30) { nodes { '
-                             '... on ProjectV2SingleSelectField { id name options { id name } } } } } } }', {})['user']
+                             '... on ProjectV2Field { id name dataType } '
+                             '... on ProjectV2SingleSelectField { id name dataType options { id name } } } } } } }', {})['user']
         project = owner['projectV2']
         if project['url'] != PROJECT or project['closed']:
             raise CleanupError('Selected Project identity changed.')
@@ -110,7 +111,9 @@ class GitHub:
                 'items(first:100,after:$after) { nodes { id isArchived content { __typename '
                 '... on Issue { id number state repository { nameWithOwner } } '
                 '... on PullRequest { id number repository { nameWithOwner } } } '
-                'status:fieldValueByName(name:"Status") { ... on ProjectV2ItemFieldSingleSelectValue { name } } } '
+                'status:fieldValueByName(name:"Status") { ... on ProjectV2ItemFieldSingleSelectValue { name } } '
+                'waiting:fieldValueByName(name:"Waiting resource") { ... on ProjectV2ItemFieldTextValue { text } } '
+                'workType:fieldValueByName(name:"Work type") { ... on ProjectV2ItemFieldSingleSelectValue { name } } } '
                 'pageInfo { hasNextPage endCursor } } } } }', {'id': project['id'], 'after': after})['node']['items']
             for row in page['nodes']:
                 if row['id'] in seen:
@@ -152,6 +155,13 @@ def plan(issues, project):
     field = next((f for f in project['fields']['nodes'] if f.get('name') == 'Status'), None)
     if not field or not {'Planned', 'In progress', 'Awaiting evidence'} <= {o['name'] for o in field['options']}:
         raise CleanupError('Expected Project status options are missing.')
+    waiting_field = next((f for f in project['fields']['nodes'] if f.get('name') == 'Waiting resource'), None)
+    type_field = next((f for f in project['fields']['nodes'] if f.get('name') == 'Work type'), None)
+    if waiting_field and waiting_field.get('dataType') != 'TEXT':
+        raise CleanupError('Waiting resource field type changed; preserve and review.')
+    if type_field and (type_field.get('dataType') != 'SINGLE_SELECT'
+            or not {'Milestone', 'Task'} <= {o['name'] for o in type_field.get('options', [])}):
+        raise CleanupError('Work type field options changed; preserve and review.')
     operations = []
     milestones = {}
     for row in project['milestones']:
@@ -226,8 +236,21 @@ def plan(issues, project):
         if item is None or (item.get('status') or {}).get('name') != status:
             operations.append({'kind': 'status', 'number': n, 'item': item['id'] if item else None,
                                'field': field['id'], 'option': next(o['id'] for o in field['options'] if o['name'] == status)})
+        # Correct only the ten active items; archived metadata remains historical.
+        if waiting_field:
+            waiting = 'Wii U console results' if n in (1, 37) else None
+            current_waiting = (item.get('waiting') or {}).get('text') if item else None
+            if current_waiting != waiting:
+                operations.append({'kind': 'field', 'number': n, 'item': item['id'] if item else None,
+                                   'field': waiting_field['id'], 'value': {'text': waiting} if waiting else None})
+        if type_field:
+            label = 'Milestone' if n in GATES else 'Task'
+            if item is None or (item.get('workType') or {}).get('name') != label:
+                option = next(o['id'] for o in type_field['options'] if o['name'] == label)
+                operations.append({'kind': 'field', 'number': n, 'item': item['id'] if item else None,
+                                   'field': type_field['id'], 'value': {'singleSelectOptionId': option}})
     desired_project = {'projectId': project['id'], 'title': 'CTR2WUP',
-                       'shortDescription': 'Seven milestone gates and three active development tasks.', 'readme': PROJECT_README}
+                       'shortDescription': 'Milestones and active development.', 'readme': PROJECT_README}
     if any(project.get(k) != v for k, v in desired_project.items() if k != 'projectId'):
         operations.append({'kind': 'project', 'payload': desired_project})
     return operations
@@ -277,6 +300,12 @@ def cleanup(client, apply=False, plan_sha256=None):
             data = client.graphql('mutation($input:AddProjectV2ItemByIdInput!) { addProjectV2ItemById(input:$input) { item { id } } }',
                                   {'input': {'projectId': project['id'], 'contentId': op['content']}})
             added[op['number']] = data['addProjectV2ItemById']['item']['id']
+        elif kind == 'field':
+            payload = {'projectId': project['id'], 'itemId': op['item'] or added[op['number']], 'fieldId': op['field']}
+            if op['value'] is None:
+                client.mutate('clearProjectV2ItemFieldValue', 'ClearProjectV2ItemFieldValueInput', payload)
+            else:
+                client.mutate('updateProjectV2ItemFieldValue', 'UpdateProjectV2ItemFieldValueInput', dict(payload, value=op['value']))
         elif kind == 'status':
             client.mutate('updateProjectV2ItemFieldValue', 'UpdateProjectV2ItemFieldValueInput', {
                 'projectId': project['id'], 'itemId': op['item'] or added[op['number']],
@@ -298,6 +327,11 @@ def cleanup(client, apply=False, plan_sha256=None):
         if remaining:
             raise CleanupError('Cleanup readback differs; inspect a fresh dry run. Partial changes may have occurred.')
         report['readback_verified'] = True
+        report['verified_project_active_issues'] = sorted(
+            row['content']['number'] for row in fresh_project['items'] if not row['isArchived']
+            and (row.get('content') or {}).get('__typename') == 'Issue'
+            and row['content'].get('repository', {}).get('nameWithOwner') == REPO)
+        report['verified_project_active_issue_count'] = len(report['verified_project_active_issues'])
     return report
 
 
