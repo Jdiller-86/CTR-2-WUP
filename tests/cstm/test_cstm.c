@@ -78,7 +78,7 @@ static void malformed(void) {
     for(size_t i=0;i<sizeof(edits)/sizeof(*edits);++i) { fixture(d);w32(d,edits[i].at,edits[i].value);failure(d,512); }
     const struct { size_t at;unsigned value; } bytes[]={
         {0,'X'},{4,0xfe},{128,1},{129,1},{130,0},{130,3},{288,0x80},{424,11},
-        {448,'X'},{196,0},{224,0},{312+32,0x80}};
+        {448,'X'},{196,0},{224,1},{312+32,0x80}};
     for(size_t i=0;i<sizeof(bytes)/sizeof(*bytes);++i) { fixture(d);d[bytes[i].at]=(uint8_t)bytes[i].value;failure(d,512); }
     fixture(d);CtrCstmInfo info;CtrCstmBlock block;
     CHECK(ctr_cstm_info(NULL,512,&info)==CTR_CSTM_ARGUMENT);
