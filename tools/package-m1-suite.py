@@ -51,10 +51,19 @@ def package(native, audio_kit, output):
     if not isinstance(records, list) or not 10 <= len(records) <= 512:
         raise ValueError('Audio kit inventory exceeds its bounds')
     entries = {}
+    audio_names={'START-HERE.md','collect-audio-results.py','LICENSE','THIRD_PARTY_NOTICES',
+        'sdk-image-digest.txt','source-and-notices/CTR2WUP-source-'+VERSION+'.zip',
+        'rpx/ctr2wup-audio-stream-check.rpx','sd-card/wiiu/apps/ctr2wup-audio-stream-check.wuhb',
+        'build-reports/native-audio-streams.json','build-reports/independent-audio-reference.json',
+        'reference/guided-scenes.json'}
+    audio_names.update('reference/scene-'+scene+'-48k.wav' for scene in audio.SCENES)
     for row in records:
         name = row.get('path') if isinstance(row, dict) else None
         if not safe_name(name) or name in entries or name in ('manifest.json', 'SHA256SUMS.txt'):
             raise ValueError('Unsafe or repeated audio kit path')
+        sdk_notice=name.startswith('licenses/sdk/') and PurePosixPath(name).suffix.lower() not in release.FORBIDDEN
+        if name not in audio_names and not sdk_notice:
+            raise ValueError('Unexpected audio kit payload; include only the original reviewed files')
         data = release.regular(audio_kit/name, MAX_TOTAL).read_bytes()
         if type(row.get('size')) is not int or len(data) != row['size'] or audio.digest(data) != row.get('sha256'):
             raise ValueError('Audio kit payload differs from its receipt')

@@ -110,7 +110,15 @@ class M1PackageTests(unittest.TestCase):
         row=next(r for r in self.manifest['files'] if r['path']=='build-reports/native-audio-streams.json')
         data=(self.kit/row['path']).read_bytes()
         row['path']='reference/extra.txt';(self.kit/row['path']).write_bytes(data);self.write_manifest()
-        with self.assertRaisesRegex(ValueError,'missing'):self.package()
+        with self.assertRaisesRegex(ValueError,'Unexpected|missing'):self.package()
+
+    def test_rehashed_unreviewed_payload_is_not_publicly_copied(self):
+        name='reference/unrelated.bin';data=b'Original unrelated private fixture'
+        (self.kit/name).write_bytes(data)
+        self.manifest['files'].append(dict(path=name,size=len(data),sha256=audio.digest(data)))
+        self.write_manifest()
+        with self.assertRaisesRegex(ValueError,'Unexpected'):self.package()
+        self.assertFalse((self.root/'out').exists())
 
 
 if __name__=='__main__':unittest.main()
