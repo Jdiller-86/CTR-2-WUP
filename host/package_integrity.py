@@ -20,7 +20,7 @@ READ_SIZE = 1024 * 1024
 
 
 def _plaintext(path, key, index, expected, size):
-    decryptor = cipher(key, index.to_bytes(2, "big") + bytes(14)).decryptor()
+    decryptor = cipher(key, index.to_bytes(2, "big") + bytes(14)).decryptor() if key is not None else None
     digest = hashlib.sha1()
     read = 0
     with path.open("rb") as handle:
@@ -28,12 +28,12 @@ def _plaintext(path, key, index, expected, size):
             read += len(encrypted)
             if read > size:
                 fail("content_changed", "Encrypted content grew after structural validation")
-            data = decryptor.update(encrypted)
+            data = decryptor.update(encrypted) if decryptor is not None else encrypted
             digest.update(data)
             yield data
     if read != size:
         fail("content_changed", "Encrypted content shrank after structural validation")
-    tail = decryptor.finalize()
+    tail = decryptor.finalize() if decryptor is not None else b""
     if tail:
         digest.update(tail)
         yield tail
@@ -41,12 +41,12 @@ def _plaintext(path, key, index, expected, size):
         fail("plaintext_digest_mismatch", "Decrypted content SHA-1 does not match its TMD record; check local key and package integrity")
 
 
-def _fst(data, records, title, group):
+def _fst(data, records, title, group, *, plaintext=False):
     count = len(records)
     if len(data) < 0x20 + count * 0x20 + 16 or data[:4] != b"FST\0":
         fail("invalid_fst", "Boot content is not a supported FST")
     factor, declared = struct.unpack_from(">II", data, 4)
-    if factor != 32 or declared != count or any(data[12:32]):
+    if (factor != 32 or declared != count or data[12] != int(plaintext) or any(data[13:32])):
         fail("invalid_fst", "FST header is outside the supported unmodified application profile")
     extents = []
     for number in range(count):
@@ -54,7 +54,8 @@ def _fst(data, records, title, group):
         tail = data[32 + 32 * number + 21:32 + 32 * (number + 1)]
         expected_owner = int(title, 16) if number == 2 else 0
         expected_group = group if number == 2 else 0x400 if number == 3 else 0
-        if (length != records[number]["size"] // UNIT or owner != expected_owner or gid != expected_group
+        expected_length = 0 if plaintext and number == 0 else records[number]["size"] // UNIT
+        if (length != expected_length or owner != expected_owner or gid != expected_group
                 or mode != (0 if number == 0 else 1) or any(tail)):
             fail("invalid_fst", "FST content descriptors do not match the scoped TMD/ownership profile")
         if number == 0 and start != 0 or number and start < extents[-1][1]:
@@ -82,7 +83,7 @@ def _fst(data, records, title, group):
         kind, name_offset = field >> 24, field & 0xFFFFFF
         name_start = strings + name_offset
         name_end = data.find(b"\0", name_start, min(name_start + 256, len(data)))
-        if kind not in (0, 1) or name_start >= len(data) or name_end < name_start or flags:
+        if kind not in (0, 1) or name_start >= len(data) or name_end < name_start or flags != (0x666 if plaintext else 0):
             fail("invalid_fst", "FST node type, flags or name is unsupported")
         try:
             name = data[name_start:name_end].decode("utf-8")
@@ -235,7 +236,7 @@ def _compare_staging(source, files, directories):
         fail("staging_mismatch", "Decrypted package files or directories differ from expected staging")
 
 
-def verify_package(path, key_file, *, expected_staging=None):
+def verify_package(path, key_file=None, *, expected_staging=None):
     path = Path(path)
     try:
         report = validate_package(path)
@@ -252,17 +253,26 @@ def verify_package(path, key_file, *, expected_staging=None):
             fail("certificate_issuer_mismatch", "Package signer names are invalid")
         if issuer not in subjects or not subjects[issuer]["name"].startswith(prefix) or subjects[issuer]["key_type"] != 1:
             fail("certificate_issuer_mismatch", "Package issuers do not name the supplied CP/XS certificates")
-    if ticket[0x1F1] or any(ticket[0x1D8:0x1DC]) or any(tmd[4:0x104]) or any(ticket[4:0x104]):
-        fail("unsupported_ticket_profile", "Deep verification supports only common-key-0, unpersonalized, unsigned homebrew packages")
-    title_bytes = ticket[0x1DC:0x1E4]
-    decryptor = cipher(common_key(key_file), title_bytes + bytes(8)).decryptor()
-    title_key = decryptor.update(ticket[0x1BF:0x1CF]) + decryptor.finalize()
+    plaintext = all(not row["encrypted"] for row in report["contents"])
+    if plaintext:
+        from .package_test_signing import verify_test_chain
+        signing = verify_test_chain(cert, tmd, ticket)
+        title_key = None
+    else:
+        if ticket[0x1F1] or any(ticket[0x1D8:0x1DC]) or any(tmd[4:0x104]) or any(ticket[4:0x104]):
+            fail("unsupported_ticket_profile", "Encrypted verification supports common-key-0, unpersonalized, unsigned homebrew packages")
+        if key_file is None:
+            fail("common_key_required", "Encrypted contents require the local common-key file; plaintext homebrew does not")
+        title_bytes = ticket[0x1DC:0x1E4]
+        decryptor = cipher(common_key(key_file), title_bytes + bytes(8)).decryptor()
+        title_key = decryptor.update(ticket[0x1BF:0x1CF]) + decryptor.finalize()
+        signing = None
     records = []
     for number in range(report["content_count"]):
         base = CONTENT_START + number * 48
         identifier, index, flags, size = struct.unpack_from(">IHHQ", tmd, base)
         digest = tmd[base + 16:base + 36]
-        if (flags != 0x2001 or index != number or identifier != number or size % UNIT
+        if (flags != (0x2000 if plaintext else 0x2001) or index != number or identifier != number or size % UNIT
                 or any(tmd[base + 36:base + 48]) or size > 1024 * 1024 * 1024):
             fail("unsupported_integrity_profile", "Deep verification supports ordered IDs 0..3, nonhashed padded SHA-1 contents, at most 1 GiB each")
         records.append({"path": path / f"{identifier:08x}.app", "index": index, "size": size, "digest": digest})
@@ -275,7 +285,7 @@ def verify_package(path, key_file, *, expected_staging=None):
     if any(ticket[0x2CC:0x2D0]) or ticket[0x2D0] & 15 != 15:
         fail("invalid_ticket_rights", "Ticket does not grant all four scoped content indices")
     boot = b"".join(_plaintext(records[0]["path"], title_key, 0, records[0]["digest"], records[0]["size"]))
-    grouped, directories = _fst(boot, records, report["title_id"], int.from_bytes(tmd[0x198:0x19A], "big"))
+    grouped, directories = _fst(boot, records, report["title_id"], int.from_bytes(tmd[0x198:0x19A], "big"), plaintext=plaintext)
     files, xml = [], {}
     for number in range(1, 4):
         record = records[number]
@@ -285,8 +295,8 @@ def verify_package(path, key_file, *, expected_staging=None):
         _compare_staging(expected_staging, files, directories)
     for item in report["contents"]:
         item["plaintext_integrity"] = "padded_sha1_matches_tmd"
-    return {**report, "validation": "decrypted_integrity", "files": files,
+    return {**report, "validation": "plaintext_integrity" if plaintext else "decrypted_integrity", "files": files,
             "fst": "bounds/tree/names/ranges/zero-padding verified",
             "staging_comparison": "all files and directories match" if expected_staging is not None else "not_requested",
             "certificate_layout": "parsed; CP/XS subjects match metadata; trust chain unauthenticated",
-            "installation": "unverified", "console_verified": False}
+            "test_signing": signing, "installation": "unverified", "console_verified": False}

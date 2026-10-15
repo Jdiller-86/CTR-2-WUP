@@ -18,10 +18,11 @@ PICA_HOMEBREW ?= 0
 AUDIO_ONLY ?= 0
 STREAM_AUDIO ?= 0
 M1_ONLY ?= 0
+INSTALL_ONLY ?= 0
 SCENE_ONLY ?= 0
 UDP_LOG ?= 0
 CALL_LIMIT ?= 64
-APP_VERSION := 0.26.0
+APP_VERSION := 0.27.0
 CTR_BUILD_SHA := $(shell git rev-parse HEAD)
 CTR_BUILD_DIRTY := $(if $(shell git status --porcelain --untracked-files=normal),1,0)
 UPSTREAM_DIR ?= ../../artifacts/generated-upstream-guest
@@ -80,13 +81,20 @@ ifeq ($(SCENE_ONLY),1)
 CFLAGS += -DCTR_SCENE_ONLY
 APP_NAME := CTR2WUP Scene Check $(APP_VERSION)
 endif
+ifeq ($(INSTALL_ONLY),1)
+ifneq ($(filter 1,$(GUEST_DEFAULT) $(EXTERNAL_AOT) $(COMPILED_HOMEBREW) $(FILESYSTEM_HOMEBREW) $(ROMFS_HOMEBREW) $(GX_HOMEBREW) $(PICA_HOMEBREW) $(AUDIO_ONLY) $(STREAM_AUDIO) $(SCENE_ONLY) $(M1_ONLY)),)
+$(error INSTALL_ONLY requires its own installed-title profile)
+endif
+CFLAGS += -DCTR_INSTALL_ONLY
+APP_NAME := CTR2WUP Install Check $(APP_VERSION)
+endif
 ifeq ($(M1_ONLY),1)
 CFLAGS += -DCTR_M1_ONLY
 APP_NAME := CTR2WUP M1 Check $(APP_VERSION)
 endif
 LDFLAGS := -mcpu=750 -meabi -mhard-float -specs="$(WUT)/share/wut.specs" \
            -Wl,-Map,$(OUTPUT)/$(TARGET).map
-ifeq ($(M1_ONLY),1)
+ifneq ($(filter 1,$(M1_ONLY) $(INSTALL_ONLY)),)
 M1_SOURCES := m1_storage_probe.c
 endif
 SOURCES := $(M1_SOURCES) main.c viewport.c diagnostic_font.c test_report.c test_guide.c test_lifecycle.c image_scale.c report_storage.c test_result.c diagnostic_audio.c guest_slice.c

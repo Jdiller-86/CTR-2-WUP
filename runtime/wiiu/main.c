@@ -34,7 +34,7 @@
 #include "test_guide.h"
 #include "test_lifecycle.h"
 #include "diagnostic_audio.h"
-#ifdef CTR_M1_ONLY
+#if defined(CTR_M1_ONLY) || defined(CTR_INSTALL_ONLY)
 #include "m1_storage_probe.h"
 #if defined(CTR_STREAM_AUDIO) || defined(CTR_AUDIO_ONLY) || defined(CTR_SCENE_ONLY) || defined(CTR_COMPILED_HOMEBREW) || CTR_GUEST_DEFAULT != 0
 #error M1_Check_requires_the_full_native_platform_profile
@@ -213,7 +213,9 @@ static uint16_t touch_min_x=UINT16_MAX,touch_min_y=UINT16_MAX,touch_max_x,touch_
 #elif CTR_GUEST_DEFAULT == 1
 #define REPORT_APPLICATION "original-guest"
 #else
-#ifdef CTR_M1_ONLY
+#ifdef CTR_INSTALL_ONLY
+#define REPORT_APPLICATION "native-install"
+#elif defined(CTR_M1_ONLY)
 #define REPORT_APPLICATION "native-m1"
 #elif defined(CTR_STREAM_AUDIO)
 #define REPORT_APPLICATION "native-audio-streams"
@@ -312,8 +314,46 @@ static bool stream_result_snapshot(const char *stage) {
 }
 #endif
 
+#ifdef CTR_INSTALL_ONLY
+#define INSTALL_TITLE_ID UINT64_C(0x0005000043543257)
+#define INSTALL_DIRECTORY "fs:/vol/external01/ctr2wup/install-check"
+static bool install_result_snapshot(const char *stage) {
+    char body[CTR_TEST_RESULT_BYTES],storage_line[768];
+    m1_storage_line(storage_line,sizeof(storage_line));
+    int n=snprintf(body,sizeof(body),
+        "Source: %s dirty=%u | Evidence schema: 2\n"
+        "Stage: %s\nHost exit result: %d (-1 means still running)\n"
+        "Install Check title: CTR2WUP Install Check\n"
+        "Actual title ID: %016llx | Expected title ID: %016llx | Match: %u\n"
+        "Session: %016llx | Protocol: install-v1\n"
+        "Frames: host=%u | Input: samples=%u errors=%u Minus_presses=%u\n"
+        "%s\n"
+        "Native audio context: result=%s owned=%u attempts=%u successes=%u failures=%u releases=%u\n"
+        "Full trace: %s | file=%s errno=%d operation=%s FSA=%d commits=%llu\n"
+        "Previous result writes verified: %llu\n"
+        "Scope: installed Menu route, automatic original SD recovery and fresh-process reload.\n"
+        "Prior controls/touch/tone/stability evidence is retained; those tests are not repeated.\n"
+        "User confirms both screens and actual Menu return separately.\n",
+        CTR_SOURCE_COMMIT,CTR_SOURCE_DIRTY,stage,app_exit_result,
+        (unsigned long long)lifecycle.title_id,(unsigned long long)INSTALL_TITLE_ID,lifecycle.title_id==INSTALL_TITLE_ID,
+        (unsigned long long)session_started,completed_frames,input_samples,input_errors,button_presses[2],storage_line,
+        ctr_diagnostic_audio_result_name(diagnostic_audio.result),diagnostic_audio.owned,
+        diagnostic_audio.attempts,diagnostic_audio.successes,diagnostic_audio.failures,diagnostic_audio.releases,
+        report_handler_added&&!test_report.failed?"SAVING":"FAILED",test_report.filename,test_report.error_code,
+        test_report.error_stage?test_report.error_stage:"none",report_storage.last_status,
+        (unsigned long long)test_report.commits,(unsigned long long)test_result.verified_writes);
+    if(n<0 || (size_t)n>=sizeof(body)) {
+        test_result.failed=true;test_result.error_code=EMSGSIZE;test_result.error_stage="install_format";return false;
+    }
+    return ctr_test_result_update(&test_result,body);
+}
+#endif
+
 static bool result_snapshot(const char *stage) {
     if(!test_result.ready || test_result.failed)return false;
+#ifdef CTR_INSTALL_ONLY
+    return install_result_snapshot(stage);
+#endif
 #ifdef CTR_STREAM_AUDIO
     return stream_result_snapshot(stage);
 #endif
@@ -423,7 +463,7 @@ static bool result_snapshot(const char *stage) {
         test_result.failed=true;test_result.error_code=EMSGSIZE;test_result.error_stage="format";return false;
     }
     OSTime storage_started=OSGetTime();
-#ifdef CTR_M1_ONLY
+#if defined(CTR_M1_ONLY) || defined(CTR_INSTALL_ONLY)
     char storage_line[768];m1_storage_line(storage_line,sizeof(storage_line));
     int extra=snprintf(body+n,sizeof(body)-(size_t)n,"%s\n",storage_line);
     if(extra<0 || (size_t)extra>=sizeof(body)-(size_t)n) {
@@ -636,9 +676,11 @@ static void file_log(const char *message) {
     }
 }
 static void system_log(const char *message) { OSReport("%s\n", message); }
+#ifndef CTR_INSTALL_ONLY
 static void guide_log(void *context,const char *message) {
     (void)context;WHBLogPrintf("%s",message);
 }
+#endif
 
 #ifdef CTR_STREAM_AUDIO
 static bool stream_start(void *context,unsigned step,unsigned session) {
@@ -704,6 +746,14 @@ static void stream_stop(void *context) {
 static void session_summary(int result) {
     phase_log();
     WHBLogPrintf("===== SESSION SUMMARY =====");
+#ifdef CTR_INSTALL_ONLY
+    WHBLogPrintf("INSTALL SUMMARY title_id=%016llx expected_title_id=%016llx title_match=%u frames=%u elapsed_ms=%llu input_errors=%u Minus_presses=%u result=%d",
+        (unsigned long long)lifecycle.title_id,(unsigned long long)INSTALL_TITLE_ID,lifecycle.title_id==INSTALL_TITLE_ID,
+        completed_frames,(unsigned long long)(OSTicksToMicroseconds(OSGetTime()-session_started)/1000),input_errors,button_presses[2],result);
+    char storage_line[768];m1_storage_line(storage_line,sizeof(storage_line));WHBLogPrintf("%s",storage_line);
+    WHBLogPrintf("INSTALL scope=installed_route_and_automatic_SD_only; prior_console_native_evidence_retained=1; Menu_return_requires_user_confirmation=1");
+    return;
+#endif
     WHBLogPrintf("SD commits=%llu maximum_sync_us=%llu policy=file_sync_close_volume_sync; crash_recovery_requires_console_evidence",
         (unsigned long long)test_report.commits,(unsigned long long)report_sync_max_us);
 #ifdef CTR_STREAM_AUDIO
@@ -712,7 +762,9 @@ static void session_summary(int result) {
         REPORT_APPLICATION,CTR_APP_VERSION,result,stream_app.session);
     return;
 #else
+#ifndef CTR_INSTALL_ONLY
     ctr_test_guide_summary(&test_guide);
+#endif
 #endif
     WHBLogPrintf("Application: %s | Build: %s | Entering cleanup: result=%d",REPORT_APPLICATION,CTR_APP_VERSION,result);
     WHBLogPrintf("Elapsed milliseconds: %llu | Completed display frames: %u | Guest sessions: %u",
@@ -1101,6 +1153,10 @@ int main(int argc, char **argv) {
     {
         const char *directory="fs:/vol/external01/ctr2wup";
         bool directory_ok=mkdir(directory,0777)==0 || errno==EEXIST;
+#ifdef CTR_INSTALL_ONLY
+        directory=INSTALL_DIRECTORY;
+        if(directory_ok)directory_ok=mkdir(directory,0777)==0 || errno==EEXIST;
+#endif
         if(directory_ok)ctr_test_result_open(&test_result,directory,REPORT_APPLICATION,CTR_APP_VERSION,(uint64_t)session_started);
         else { test_result.failed=true;test_result.error_code=errno;test_result.error_stage="directory"; }
 #ifdef CTR_FILESYSTEM_HOMEBREW
@@ -1117,7 +1173,14 @@ int main(int argc, char **argv) {
     WHBLogPrintf("CTR2WUP native diagnostic version=%s application=%s pointer_bits=%u endian=big UDP=%u TXT_report=%u",
                   CTR_APP_VERSION,REPORT_APPLICATION,(unsigned)(8*sizeof(void *)),udp_ready,report_handler_added);
     WHBLogPrintf("BUILD source_commit=%s source_dirty=%u evidence_schema=2 result_bytes=%u",CTR_SOURCE_COMMIT,CTR_SOURCE_DIRTY,CTR_TEST_RESULT_BYTES);
-#ifdef CTR_M1_ONLY
+#ifdef CTR_INSTALL_ONLY
+    WHBLogPrintf("INSTALL_SESSION ticks=%016llx source_commit=%s version=%s protocol=install-v1 title_id=%016llx expected_title_id=%016llx title_match=%u",
+        (unsigned long long)session_started,CTR_SOURCE_COMMIT,CTR_APP_VERSION,
+        (unsigned long long)lifecycle.title_id,(unsigned long long)INSTALL_TITLE_ID,lifecycle.title_id==INSTALL_TITLE_ID);
+    if(lifecycle.title_id!=INSTALL_TITLE_ID)WHBLogPrintf("INSTALL_ROUTE FAIL expected_installed_title_not_running; homebrew launch cannot establish installed-title acceptance");
+    ctr_m1_storage_probe(INSTALL_DIRECTORY,CTR_SOURCE_COMMIT,&m1_storage);
+    char storage_line[768];m1_storage_line(storage_line,sizeof(storage_line));WHBLogPrintf("%s",storage_line);
+#elif defined(CTR_M1_ONLY)
     WHBLogPrintf("M1_SESSION ticks=%016llx source_commit=%s version=%s protocol=m1-v1",
         (unsigned long long)session_started,CTR_SOURCE_COMMIT,CTR_APP_VERSION);
     ctr_m1_storage_probe("fs:/vol/external01/ctr2wup",CTR_SOURCE_COMMIT,&m1_storage);
@@ -1130,12 +1193,18 @@ int main(int argc, char **argv) {
         report_handler_added?"SAVING":"FAILED",test_report.error_code);
     if(report_handler_added)report_commit("startup");
     result_snapshot("startup");
+#ifdef CTR_INSTALL_ONLY
+    /* Keep evidence of a wrong route visible; never accept a WUHB launch as an installed title. */
+    result_snapshot("install_route_checked");
+#endif
     /* Launch transition music is native platform sound, separate from the
        optional diagnostic tone. Even compiled guests need a fresh, silent AX
        context. Do this before the long self-tests and any guest input. */
     if(!audio_init(foreground))goto cleanup;
     result_snapshot("native_audio_ready");
-#ifdef CTR_SCENE_ONLY
+#if defined(CTR_INSTALL_ONLY)
+    /* The installed-title check has one prompt and no repeated native guide. */
+#elif defined(CTR_SCENE_ONLY)
     ctr_test_guide_init(&test_guide,CTR_GUIDE_SCENE,guide_log,NULL);
 #elif defined(CTR_PICA_HOMEBREW)
     ctr_test_guide_init(&test_guide,CTR_GUIDE_PICA,guide_log,NULL);
@@ -1162,6 +1231,9 @@ int main(int argc, char **argv) {
     if(!stream_fixtures_ready) { WHBLogPrintf("STREAM fixtures FAILED");goto cleanup; }
     bool run_guest_diagnostics=false;
     WHBLogPrintf("STREAM profile original_CSTM_to_portable_mixer_to_native_finite_PCM; guest CPU/service diagnostics skipped; guest DSP unavailable");
+#elif defined(CTR_INSTALL_ONLY)
+    bool run_guest_diagnostics=false;
+    WHBLogPrintf("INSTALL scope=installed_title_menu_launch_original_sd_recovery_fresh_reload_exit; prior_native_checks_retained=1; guest_tests_skipped=1");
 #else
     bool run_guest_diagnostics=true;
 #endif
@@ -1230,7 +1302,11 @@ int main(int argc, char **argv) {
     WHBLogPrintf("DRC surface=%ux%u viewport=%u,%u %ux%u calibrated_space=1280x720 allocation_bytes=%u pitch=%u",
                   drc_view.output_width,drc_view.output_height,drc_view.x,drc_view.y,
                   drc_view.width,drc_view.height,drc_source.imageSize,drc_source.pitch);
+#ifdef CTR_INSTALL_ONLY
+    int alloc_ok=0;
+#else
     int alloc_ok=allocation_test();
+#endif
 #ifdef CTR_COMPILED_HOMEBREW
     WHBLogPrintf("Compiled test: native AX context owned for launcher silence; tone disabled; A is guest input only; guest audio unavailable");
     WHBLogPrintf("AOT call_limit=%u variant=%s",CTR_RECOMP_CALL_LIMIT,REPORT_APPLICATION);
@@ -1295,17 +1371,21 @@ int main(int argc, char **argv) {
         if(fabsf(pad.leftStick.x)>0.15f || fabsf(pad.leftStick.y)>0.15f)left_stick_seen=true;
         if(fabsf(pad.rightStick.x)>0.15f || fabsf(pad.rightStick.y)>0.15f)right_stick_seen=true;
         if (pad.trigger&VPAD_BUTTON_MINUS) {
+#ifndef CTR_INSTALL_ONLY
             ctr_guide_input stop={0};stop.milliseconds=OSTicksToMicroseconds(OSGetTime()-session_started)/1000;stop.pressed=CTR_GUIDE_MINUS;
 #ifdef CTR_STREAM_AUDIO
             ctr_stream_app_input stream_stop_input={stop.milliseconds,CTR_GUIDE_MINUS,false,false};
             ctr_stream_app_update(&stream_app,&stream_stop_input);
-#else
+#elif !defined(CTR_INSTALL_ONLY)
             ctr_test_guide_update(&test_guide,&stop);
+#endif
 #endif
             result_snapshot("Minus_exit_requested");
             WHBLogPrintf("EXIT trigger=Minus; cleaning resources before system transition");break;
         }
+#ifndef CTR_INSTALL_ONLY
         uint64_t input_frame_serial=gsp_presented;
+#endif
 #ifdef CTR_COMPILED_HOMEBREW
 #ifndef CTR_PICA_HOMEBREW
         if(pad.trigger&(VPAD_BUTTON_A|VPAD_BUTTON_B|VPAD_BUTTON_PLUS))freeze_trace_frames=64;
@@ -1317,7 +1397,7 @@ int main(int argc, char **argv) {
         }
         freeze_checkpoint("input_read");
 #elif !defined(CTR_STREAM_AUDIO)
-        if (pad.trigger&VPAD_BUTTON_A) play_tone();
+        if (run_guest_diagnostics && (pad.trigger&VPAD_BUTTON_A)) play_tone();
 #endif
         if (run_guest_diagnostics && (pad.trigger&VPAD_BUTTON_X)) alloc_ok=allocation_test();
         if (run_guest_diagnostics && test_guide.done && test_guide.kind!=CTR_GUIDE_SCENE && test_guide.kind!=CTR_GUIDE_PICA && (pad.trigger&VPAD_BUTTON_Y)) {
@@ -1346,6 +1426,20 @@ int main(int argc, char **argv) {
         if(hid_ready)ctr_hid_fixture_snapshot(&hid_guest,hid_snapshot);
         if (!guest_mode) {
             if(run_guest_diagnostics)diagnostic_images(frame,&pad,error,inside,&touch,tx,ty,frame_us,alloc_ok);
+#ifdef CTR_INSTALL_ONLY
+            else {
+                for(unsigned y=0;y<GUEST_H;++y) {
+                    for(unsigned x=0;x<TOP_W;++x)top_image[y*TOP_W+x]=((x/40u+y/40u)&1u)?0x1a6980ff:0x224557ff;
+                    for(unsigned x=0;x<BOTTOM_W;++x)bottom_image[y*BOTTOM_W+x]=((x/40u+y/40u)&1u)?0x426b42ff:0x224557ff;
+                }
+                image_text(bottom_image,BOTTOM_W,2,"CTR2WUP INSTALL CHECK");
+                image_text(bottom_image,BOTTOM_W,4,"GAMEPAD SCREEN");
+                char counter[64];snprintf(counter,sizeof(counter),"LIVE FRAME %u",frame);
+                image_text(bottom_image,BOTTOM_W,6,counter);
+                image_text(bottom_image,BOTTOM_W,9,"CHECK BOTH SCREENS");
+                image_text(bottom_image,BOTTOM_W,11,"THEN PRESS MINUS");
+            }
+#endif
 #ifdef CTR_STREAM_AUDIO
             else {
                 for(unsigned i=0;i<TOP_W*GUEST_H;++i)top_image[i]=0x162d4fff;
@@ -1472,6 +1566,7 @@ int main(int argc, char **argv) {
             snprintf(text,sizeof(text),"Y: NATIVE / PLUS: RESET / FAULT %u",(unsigned)frame_guest.fault);
             image_text(top_image,TOP_W,3,text);
         }
+#ifndef CTR_INSTALL_ONLY
         ctr_guide_input guide_input={0};
         guide_input.milliseconds=OSTicksToMicroseconds(OSGetTime()-session_started)/1000;
         for(unsigned i=0;i<12;++i) {
@@ -1502,7 +1597,17 @@ int main(int argc, char **argv) {
         guide_input.guest_frame_serial=completed_frames;
 #endif
         guide_input.fresh_save_reload=fresh_save_reload_seen;
-#ifdef CTR_STREAM_AUDIO
+#endif
+#ifdef CTR_INSTALL_ONLY
+        char guide_rows[7][72]={{0}};
+        snprintf(guide_rows[0],72,"CTR2WUP INSTALL CHECK / TV");
+        snprintf(guide_rows[1],72,"Check both screens, then press MINUS");
+        snprintf(guide_rows[2],72,"Actual title: %016llX",(unsigned long long)lifecycle.title_id);
+        snprintf(guide_rows[3],72,"Expected:     %016llX",(unsigned long long)INSTALL_TITLE_ID);
+        snprintf(guide_rows[4],72,"%s / LIVE FRAME %u",lifecycle.title_id==INSTALL_TITLE_ID?"INSTALLED TITLE MATCH":"WRONG ROUTE - NOT INSTALLED TITLE",frame);
+        snprintf(guide_rows[5],72,"SD recovery: %s / fresh reload: %s",ctr_m1_storage_result_name(m1_storage.result),m1_storage.fresh_reload?"YES":"FIRST RUN");
+        snprintf(guide_rows[6],72,"Source %.12s / version %s",CTR_SOURCE_COMMIT,CTR_APP_VERSION);
+#elif defined(CTR_STREAM_AUDIO)
         unsigned guide_step_before=stream_app.step;
         ctr_native_pcm_status before_status=stream_native.status;
         ctr_native_pcm_snapshot(&stream_pcm,&stream_native);
@@ -1546,7 +1651,11 @@ int main(int argc, char **argv) {
         }
         for(unsigned i=0;i<7;++i)image_text(top_image,TOP_W,i,guide_rows[i]);
         for(unsigned i=TOP_W*154;i<TOP_W*184;++i)top_image[i]=0x162d4fff;
+#ifdef CTR_INSTALL_ONLY
+        image_text(top_image,TOP_W,15,test_result.ready && !test_result.failed?"RESULT SAVED / RETURN INSTALL-CHECK FOLDER":"RESULT FAILED / CHECK SD CARD");
+#else
         image_text(top_image,TOP_W,15,test_result.ready && !test_result.failed?"RESULT VERIFIED / UPLOAD SD:/CTR2WUP":"RESULT FAILED / CHECK SD CARD");
+#endif
         char report_line[100];
         if(!test_result.failed)snprintf(report_line,sizeof(report_line),"%.63s",test_result.filename);
         else snprintf(report_line,sizeof(report_line),"SD ERROR %d %s",test_result.error_code,
@@ -1612,6 +1721,11 @@ int main(int argc, char **argv) {
 #ifdef CTR_STREAM_AUDIO
             stream_log_native("periodic");
 #endif
+#ifdef CTR_INSTALL_ONLY
+            WHBLogPrintf("INSTALL heartbeat frames=%u elapsed_ms=%llu title_match=%u storage=%s fresh_reload=%u input_errors=%u",
+                completed_frames,(unsigned long long)(OSTicksToMicroseconds(OSGetTime()-session_started)/1000),
+                lifecycle.title_id==INSTALL_TITLE_ID,ctr_m1_storage_result_name(m1_storage.result),m1_storage.fresh_reload,input_errors);
+#else
             WHBLogPrintf("frame=%u frame_us=%u buttons=%08x input_error=%d left=%.3f,%.3f right=%.3f,%.3f touch=%u,%u inside=%u tone=%u",
                 frame,frame_us,(unsigned)pad.hold,(int)error,(double)pad.leftStick.x,
                 (double)pad.leftStick.y,(double)pad.rightStick.x,(double)pad.rightStick.y,
@@ -1640,13 +1754,19 @@ int main(int argc, char **argv) {
                 (unsigned long long)gsp_guest.ipc_requests,(unsigned long long)gsp_guest.ipc_failures,
                 gsp_guest.ipc_service[0]?gsp_guest.ipc_service:"none",gsp_guest.ipc_target[0]?gsp_guest.ipc_target:"none",
                 gsp_guest.ipc_header,gsp_guest.ipc_result);
+#endif
             if(!test_report.failed)report_commit("periodic");
             result_snapshot("periodic");
             log_time=OSGetTime();
         }
         ++frame;
     }
+#ifdef CTR_INSTALL_ONLY
+    result=lifecycle.title_id==INSTALL_TITLE_ID && m1_storage.result==CTR_M1_STORAGE_PASS &&
+        completed_frames>0 && !test_result.failed && !test_report.failed?0:1;
+#else
     result=0;
+#endif
 cleanup:
     {
         native_exit_context exit={result,gfx_ready,udp_ready,foreground,&tv_source,&drc_source};

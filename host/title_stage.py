@@ -58,12 +58,13 @@ def stage_title(rpx,output,*,title_id,name='CTR2WUP Prototype',version=0):
         _validate_rpx(stage/'code/ctr2wup.rpx')
         if _sha256(rpx)!=_sha256(stage/'code/ctr2wup.rpx'):
             raise HostError('input_changed','RPX changed while staging',stage='packaging')
-        app=[('version','unsignedInt',4,15),('os_version','hexBinary',8,'000500101000400a'),
+        app=[('version','unsignedInt',4,16),('os_version','hexBinary',8,'000500101000400a'),
              ('title_id','hexBinary',8,title_id),('title_version','hexBinary',2,f'{version:04x}'),
              ('sdk_version','unsignedInt',4,0),('app_type','hexBinary',4,'80000000'),
-             ('group_id','hexBinary',2,'1337'),('os_mask','hexBinary',8,'0000000000000000')]
-        cos=[('version','unsignedInt',4,18),('cmd_flags','hexBinary',4,'00000000'),
-             ('argstr','string',64,'ctr2wup.rpx'),('avail_size','hexBinary',4,'00000000'),
+             ('group_id','hexBinary',4,'00001337'),('os_mask','hexBinary',32,'0'*64),
+             ('common_id','hexBinary',8,title_id)]
+        cos=[('version','unsignedInt',4,18),('cmdFlags','hexBinary',4,'00000000'),
+             ('argstr','string',4096,'ctr2wup.rpx'),('avail_size','hexBinary',4,'00000000'),
              ('codegen_size','hexBinary',4,'00000000'),('codegen_core','hexBinary',4,'80000000'),
              ('max_size','hexBinary',4,'40000000'),('max_codesize','hexBinary',4,'03000000')]
         for core in range(3):
@@ -78,7 +79,19 @@ def stage_title(rpx,output,*,title_id,name='CTR2WUP Prototype',version=0):
             meta += [(f'longname_{language}','string',512,name),(f'shortname_{language}','string',256,name),
                      (f'publisher_{language}','string',256,'CTR2WUP contributors')]
         for relative,root,fields in [('code/app.xml','app',app),('code/cos.xml','app',cos),('meta/meta.xml','menu',meta)]:
-            data=_xml(root,fields);ET.fromstring(data);(stage/relative).write_bytes(data)
+            data=_xml(root,fields)
+            if relative == 'code/cos.xml':
+                document=ET.fromstring(data)
+                permissions=ET.SubElement(document,'permissions',{'type':'complex','access':'777'})
+                # This original app uses filesystem, title/foreground services,
+                # and standard platform APIs. No donor permission template.
+                for index,group in enumerate((1,3,11,13,18)):
+                    node=ET.SubElement(permissions,f'p{index}',{'type':'complex','access':'777'})
+                    ET.SubElement(node,'group',{'type':'unsignedInt','length':'4'}).text=str(group)
+                    ET.SubElement(node,'mask',{'type':'hexBinary','length':'8'}).text='ffffffffffffffff'
+                ET.indent(document)
+                data=ET.tostring(document,encoding='utf-8',xml_declaration=True)+b'\n'
+            ET.fromstring(data);(stage/relative).write_bytes(data)
         for filename,width,height,alpha in [('iconTex.tga',128,128,True),('bootTvTex.tga',1280,720,False),
                 ('bootDrcTex.tga',854,480,False),('bootLogoTex.tga',170,42,True)]:
             (stage/'meta'/filename).write_bytes(_tga(width,height,alpha))

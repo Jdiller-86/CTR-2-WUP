@@ -15,6 +15,26 @@ from tests.host_fixtures import ncch
 
 
 class CliTests(unittest.TestCase):
+    def test_homebrew_package_commands_accept_keyless_arguments(self):
+        from host.cli import parser
+        packed=parser().parse_args(['pack-homebrew','staged-original','--output','original-wup'])
+        self.assertEqual((packed.command,packed.path,packed.output),('pack-homebrew','staged-original','original-wup'))
+        verified=parser().parse_args(['verify-package','original-wup'])
+        self.assertIsNone(verified.common_key_file)
+        self.assertEqual(verified.path,'original-wup')
+
+    def test_install_check_rejects_guest_and_unrelated_guides_before_build(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output=Path(temporary)/'install-output'
+            for options in ({'guest_path':'owned-game.cxi'},{'backend':'upstream'},
+                            {'audio_only':True},{'scene_only':True},{'stream_audio':True},{'m1_only':True}):
+                with self.subTest(options=options),patch.object(build,'doctor') as probe:
+                    with self.assertRaises(HostError) as caught:
+                        build.prototype(output,install_only=True,**options)
+                    self.assertEqual(caught.exception.code,'invalid_profile')
+                    probe.assert_not_called()
+                    self.assertFalse(output.exists())
+
     def test_m1_check_requires_its_full_native_profile(self):
         with tempfile.TemporaryDirectory() as temporary:
             output=Path(temporary)/'m1-output'

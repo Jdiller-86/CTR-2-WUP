@@ -17,7 +17,7 @@ import re
 import stat
 import zipfile
 
-VERSION = '0.26.0'
+VERSION = '0.27.0'
 APPLICATION = 'native-audio-streams'
 MAX_FILE = 4 * 1024 * 1024
 MAX_TOTAL = 24 * 1024 * 1024

@@ -40,7 +40,7 @@ class AudioReturnTests(unittest.TestCase):
         self.folder.mkdir(parents=True)
         self.kit = {'kind': 'ctr2wup-audio-round', 'version': collector.VERSION,
                     'source_commit': COMMIT, 'source_dirty': False}
-        self.result_name = f'result-native-audio-streams-0.26.0-{SESSION}-00.txt'
+        self.result_name = f'result-native-audio-streams-0.27.0-{SESSION}-00.txt'
         self.trace_name = f'native-audio-streams-{SESSION}-00.txt'
         self.result_data = self.result()
         (self.folder/self.result_name).write_bytes(self.result_data)
