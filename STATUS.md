@@ -4,8 +4,8 @@
 v2 non-looping mono/stereo streams now expose exact channel block spans, numeric
 coefficients and SEEK histories to the existing codec. Original relocated/padded
 fixtures match 57,980 independently computed samples across 240 streams; 8,192
-mutation cases and atomic failures pass focused checks. Required full checks are
-in progress. [Contract](docs/cstm.md). Guest DSP IPC, mixing, loops and physical
+mutation cases and atomic failures pass focused checks. Required host/sanitizer, Windows, native and documentation checks gate
+delivery through PR #114. [Contract](docs/cstm.md). Guest DSP IPC, mixing, loops and physical
 Wii U playback remain open; no full gate or commercial audio is accepted.
 
 **Verified Project readback:** [PR #111](https://github.com/Jdiller-86/CTR-2-WUP/pull/111)

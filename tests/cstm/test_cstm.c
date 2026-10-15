@@ -39,10 +39,15 @@ static void failure(uint8_t *d,size_t n) {
     CtrCstmBlock block,prior;memset(&block,0x6b,sizeof(block));memcpy(&prior,&block,sizeof(block));
     CHECK(ctr_cstm_block(d,n,1,1,&block)!=CTR_CSTM_OK);CHECK(!memcmp(&block,&prior,sizeof(block)));
 }
+static void tracks(uint8_t *d) {
+    reference(d,80,0x0101,24);w32(d,96,1);reference(d,100,0x4101,272);
+    d[368]=127;d[369]=64;reference(d,372,0x0100,16);w32(d,384,2);d[388]=0;d[389]=1;
+}
 static void valid(void) {
     uint8_t d[512];fixture(d);CtrCstmInfo info;
     CHECK(ctr_cstm_info(d,sizeof(d),&info)==CTR_CSTM_OK);
     CHECK(info.samples==17 && info.channels==2 && info.sample_rate==32000 && info.blocks==2);
+    tracks(d);CHECK(ctr_cstm_info(d,sizeof(d),&info)==CTR_CSTM_OK);
     for(unsigned c=0;c<2;++c) {
         CtrDspAdpcmState sequential={0,c?-10:10,c?-9:9};int16_t pcm[17];
         for(unsigned b=0;b<2;++b) {
@@ -84,6 +89,11 @@ static void malformed(void) {
         {0,'X'},{4,0xfe},{128,1},{129,1},{130,0},{130,3},{288,0x80},{424,11},
         {448,'X'},{196,0},{224,1},{312+32,0x80}};
     for(size_t i=0;i<sizeof(bytes)/sizeof(*bytes);++i) { fixture(d);d[bytes[i].at]=(uint8_t)bytes[i].value;failure(d,512); }
+    const struct { size_t at;uint32_t value; } bad_tracks[]={
+        {96,3},{104,UINT32_MAX},{376,UINT32_MAX},{384,0},{384,3},{388,2}};
+    for(size_t i=0;i<sizeof(bad_tracks)/sizeof(*bad_tracks);++i) {
+        fixture(d);tracks(d);w32(d,bad_tracks[i].at,bad_tracks[i].value);failure(d,512);
+    }
     fixture(d);CtrCstmInfo info;CtrCstmBlock block;
     CHECK(ctr_cstm_info(NULL,512,&info)==CTR_CSTM_ARGUMENT);
     CHECK(ctr_cstm_info(d,512,NULL)==CTR_CSTM_ARGUMENT);

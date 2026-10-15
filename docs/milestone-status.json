@@ -232,7 +232,7 @@
         "Original compiled input/framebuffer/save/reload/RomFS/GX applications verified on desktop, sanitizers and selected emulated PowerPC comparisons",
         "Physical Save 0.14.6 fresh-process reload, embedded RomFS 0.14.6, SD-file RomFS 0.16.0 and GX 0.18.0 transfer/configuration guides completed with zero fallback/fault; user confirmed pictures and Minus return.",
         "Original normal-CRT PICA draw guest has host exact-pixel checks and an October 13 physical own PASS/exit with zero fallback/fault; rendered second presentation at 57.33 seconds. User separately confirms pictures and Minus return.",
-        "Scoped #103 implements a bounded integer DSP ADPCM reference. 6,144 original rational cases / 175,770 samples verify PCM/history, streamed continuation and explicit checkpoint seek; normal/sanitized bounds/late-error tests pass. Container block/SEEK parsing, guest DSP IPC/mixing and actual Wii U playback remain open; no commercial waveform/coefficients are published.",
+        "Scoped #103 implements a bounded integer DSP ADPCM reference. 6,144 original rational cases / 175,770 samples verify PCM/history, streamed continuation and explicit checkpoint seek; normal/sanitized bounds/late-error tests pass. At the codec-only PR #109 checkpoint container parsing remained open; scoped #113/PR #114 now adds CSTM block/SEEK parsing. Guest DSP IPC/mixing and actual Wii U playback remain open; no commercial waveform/coefficients are published.",
         "Scoped #113/PR #114 adds a checked LE CSTM v2 non-looping mono/stereo DSP ADPCM reader. 240 original relocated/padded streams match 57,980 rational PCM samples, block histories, continuation and SEEK. General containers/loops, guest DSP IPC/mixing and physical output remain open."
       ],
       "acceptance_remaining": [
@@ -301,7 +301,7 @@
           ],
           "state": "in_progress",
           "evidence": [
-            "Scoped #103 implements a bounded integer DSP ADPCM reference. 6,144 original rational cases / 175,770 samples verify PCM/history, streamed continuation and explicit checkpoint seek; normal/sanitized bounds/late-error tests pass. Container block/SEEK parsing, guest DSP IPC/mixing and actual Wii U playback remain open; no commercial waveform/coefficients are published.",
+            "Scoped #103 implements a bounded integer DSP ADPCM reference. 6,144 original rational cases / 175,770 samples verify PCM/history, streamed continuation and explicit checkpoint seek; normal/sanitized bounds/late-error tests pass. At the codec-only PR #109 checkpoint container parsing remained open; scoped #113/PR #114 now adds CSTM block/SEEK parsing. Guest DSP IPC/mixing and actual Wii U playback remain open; no commercial waveform/coefficients are published.",
             "Scoped #113/PR #114 adds a checked LE CSTM v2 non-looping mono/stereo DSP ADPCM reader. 240 original relocated/padded streams match 57,980 rational PCM samples, block histories, continuation and SEEK. General containers/loops, guest DSP IPC/mixing and physical output remain open."
           ]
         },
@@ -465,7 +465,7 @@
         "October 14 public source restores required hosted CI and hosts the canonical docs/dashboard. PR #100/#101 supply reviewed management, guarded legacy redirects and exact original artifact provenance; canonical/legacy HTTP checks and live label/dashboard refresh pass. Final receipts are linked in STATUS.md.",
         "Actions-secret traceability apply 38608010840 verifies 69 native parent links, 28 PR links, M1-M7 assignments and all 104 Project members; no untracked PRs or missing/archived managed members. Full milestone acceptance remains 0/7.",
         "Shared exact ADD/MUL probes in #76/PR #105 advance a static shader requirement using original data only. Remaining arithmetic/control/rounding and actual selected-entry runtime use remain unverified; no commercial shader is executed.",
-        "Scoped #103 implements a bounded integer DSP ADPCM reference. 6,144 original rational cases / 175,770 samples verify PCM/history, streamed continuation and explicit checkpoint seek; normal/sanitized bounds/late-error tests pass. Container block/SEEK parsing, guest DSP IPC/mixing and actual Wii U playback remain open; no commercial waveform/coefficients are published."
+        "Scoped #103 implements a bounded integer DSP ADPCM reference. 6,144 original rational cases / 175,770 samples verify PCM/history, streamed continuation and explicit checkpoint seek; normal/sanitized bounds/late-error tests pass. At the codec-only PR #109 checkpoint container parsing remained open; scoped #113/PR #114 now adds CSTM block/SEEK parsing. Guest DSP IPC/mixing and actual Wii U playback remain open; no commercial waveform/coefficients are published."
       ],
       "acceptance_remaining": [
         "Complete the exact-revision observed runtime/test-route matrix and any specifically required additional module/asset inspection; static resource contents are not observed execution.",
