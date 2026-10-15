@@ -92,8 +92,9 @@ arithmetic launches, correctly ordered picture confirmation, Guest Draws Plus
 repeat/all three guide passes and all five exits through `main_return`. Version 0.25.0 extends the same #87/#106 scope with exact changed-span
 scaling and row publication for that measured cost. Independent full-pixel,
 failure and original workload checks pass; new physical correctness/speed
-remain pending. Normal review
-is pending before merge; no files or reruns remain requested for this round.
+remain pending. PR #106 merged on October 15 after all required hosted checks
+passed; its completed local/remote branch is removed. No files or reruns remain
+requested for the completed 0.24.1 round.
 
 | Feature | Parent task | Acceptance focus |
 | --- | --- | --- |

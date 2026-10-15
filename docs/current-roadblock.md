@@ -9,6 +9,11 @@ Audio Check/GX Transfers 0.20.0 and Guest Draws 0.23.0 results establish scoped
 passes and user-confirmed silence, pictures and exit. Save/RomFS already have
 reviewed results. No blanket repeat is requested. See [evidence](console-evidence.md).
 
+PR #106 is merged and the owner removed branch rulesets on October 15.
+The canonical 0.25.0 publication verifies successfully; deployment verification
+is being hardened under #107. These are resolved delivery constraints, while
+required checks and the physical gates below remain.
+
 Current requirements:
 
 1. **Measured scale/publication cost:** the completed 0.24.1 round verifies two

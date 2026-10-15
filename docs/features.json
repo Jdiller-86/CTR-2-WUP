@@ -556,7 +556,7 @@
       "title": "Bound guest draw progress and cache native display publication",
       "milestone": 2,
       "parent_issue": 20,
-      "state": "active",
+      "state": "implemented",
       "pull_requests": [
         106
       ],
@@ -577,7 +577,8 @@
         "Complete 0.24.1 return for source 4eeee0ba3a839f934c6bb7d6313f5fcb657782c5 verifies five reports/five traces: two arithmetic guides, correct picture-answer order, all three Guest Draws steps including new-session Plus draw/own PASS/exit, and all five launches through main_return. The user confirms Minus/HOME return (5.5.6 U / Aroma Beta 27). The initial cancelled run is retained separately. All requested files are received; no rerun is requested for this round.",
         "Three drawn guest sessions take 91.190\u201391.613 s; mean native scale/publication is 132.218\u2013132.281 ms, about 90% of summed recorded phase times. Optimize that measured path; no speedup, GPU-timestamp, game-FPS or full Espresso/M4 acceptance is inferred.",
         "The shipped collector omitted unversioned traces. Its correction checks actual filename/app/build/source identity, partial traces, independent collision suffixes and missing pairs. The corrected collector/analyzer passes on the real five traces/five reports with no missing-pair warnings; all original bytes and receipts remain private.",
-        "0.25.0 implements the native cache with focused pixel/failure checks and six original host workloads: static images avoid 98.3% of requested publication bytes over 60 frames; small TV counters/static GamePad avoid 90.2%; full motion saves no bytes. Native cross-build passes; full required checks gate delivery and the new physical comparison remains pending."
+        "0.25.0 implements the native cache with focused pixel/failure checks and six original host workloads: static images avoid 98.3% of requested publication bytes over 60 frames; small TV counters/static GamePad avoid 90.2%; full motion saves no bytes. Native cross-build passes; full required checks gate delivery and the new physical comparison remains pending.",
+        "Owner merged tested PR #106 at abe37a95d4eb364cf08a3648ec7131d9ff03e607 on October 15. Required CI/Documentation pass; the audited 0.25.0 kit retains source 1f2d5df93ca33b925e93fe8cc24f7f063caa6a2c (tree equals head 61efb4f). The new physical comparison remains pending; no full gate is accepted."
       ]
     },
     {
@@ -774,6 +775,28 @@
         "Traceability apply 38608010840 verifies 69 native parent links, 28 PR links and all 104 Project members, with no untracked PRs, missing members or archived managed entries. The earlier incomplete read-back is retained as historical partial-operation evidence rather than reported as success.",
         "Positive and failure fixtures cover archive traversal/tampering, edited legacy articles, exact source/SDK/binary/frame identity, Project privacy/freshness, bounded membership connection reads, missing existing members, archival rollback and managed overview concurrent edits. Release manifests bind current original artifacts to their actual immutable source/version and checksums; new builds do not inherit October 13 console acceptance.",
         "Legacy checksum deployment 38608934605 and retirement 38609420311 preserve history, independently verified 131 current checksums and the original export manifest, and verify live redirects after archival. Maintained documentation and aggregates deploy only from the canonical source repository."
+      ]
+    },
+    {
+      "id": "pages-deployment-verification",
+      "title": "Harden Pages deployment verification and preserve failure reasons",
+      "milestone": 1,
+      "parent_issue": 1,
+      "state": "active",
+      "pull_requests": [
+        108
+      ],
+      "scope": [
+        "Retain exact source/privacy/freshness validation while tolerating bounded Pages propagation and transient HTTP failures.",
+        "Record public-safe failure codes and attempts; align the merged handoff without publishing raw responses or Project notes."
+      ],
+      "acceptance": [
+        "Original injected endpoint tests cover old-to-current source, transient HTTP recovery, budget exhaustion and immediate privacy/schema/authorization rejection.",
+        "Required checks pass and trusted-main canonical deployment verifies over HTTP; full gate criteria remain open."
+      ],
+      "evidence": [
+        "Publication 38743632395 deployed successfully but HTTP verification failed with an uninformative receipt; the original precise cause is unavailable.",
+        "Publication 38745496120 verifies merged source abe37a95d4eb364cf08a3648ec7131d9ff03e607 and fresh live Project data. Scoped issue #107 has native parent #1 and M1 assignment."
       ]
     }
   ],

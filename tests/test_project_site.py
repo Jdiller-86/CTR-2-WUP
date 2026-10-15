@@ -4,6 +4,7 @@ import importlib.util
 import json
 from pathlib import Path
 import unittest
+from urllib.error import HTTPError
 
 from test_github_project_export import fixture
 
@@ -58,6 +59,45 @@ class ProjectSiteTests(unittest.TestCase):
         endpoints[site.LEGACY + 'progress/progress.json'] = endpoints[path]
         with self.assertRaisesRegex(ValueError, 'independent snapshot'):
             site.verify('a' * 40, endpoints.__getitem__, legacy=True, now=NOW)
+
+    def test_old_source_and_transient_http_recover_with_full_verification(self):
+        endpoints = self.endpoints();calls = [];waits = []
+        def get(url):
+            calls.append(url)
+            if len(calls) == 1:raise HTTPError(url, 503, 'PRIVATE response reason', {}, None)
+            if len(calls) == 2:
+                return endpoints[url].replace(('a'*40).encode(), ('b'*40).encode())
+            return endpoints[url]
+        report = site.verify_until_ready('a'*40, get=get, wait=waits.append, now=NOW)
+        self.assertTrue(report['ok']);self.assertEqual(report['attempts'], 3)
+        self.assertEqual(waits, [10, 10])
+        self.assertEqual([f['code'] for f in report['retry_failures']], ['http_503', 'source_identity'])
+        self.assertNotIn('PRIVATE', json.dumps(report))
+        self.assertEqual(report['full_gates'], {'accepted': 0, 'total': 7})
+
+    def test_exhausted_budget_preserves_specific_failure(self):
+        waits = []
+        report = site.verify_until_ready('b'*40, get=self.endpoints().__getitem__, attempts=3, wait=waits.append, now=NOW)
+        self.assertFalse(report['ok']);self.assertEqual(report['error_code'], 'source_identity')
+        self.assertEqual(report['attempts'], 3);self.assertEqual(waits, [10, 10])
+
+    def test_policy_schema_and_forbidden_http_fail_without_retry(self):
+        endpoints = self.endpoints();path = site.CANONICAL+'progress/progress.json'
+        data = json.loads(endpoints[path]);data['raw_notes'] = 'PRIVATE fixture'
+        endpoints[path] = json.dumps(data).encode();waits = []
+        report = site.verify_until_ready('a'*40, get=endpoints.__getitem__, wait=waits.append, now=NOW)
+        self.assertEqual(report['error_code'], 'project_privacy');self.assertEqual(report['attempts'], 1)
+        def forbidden(url):raise HTTPError(url, 403, 'PRIVATE server reason', {}, None)
+        report = site.verify_until_ready('a'*40, get=forbidden, wait=waits.append, now=NOW)
+        self.assertEqual(report['error_code'], 'http_403');self.assertEqual(report['attempts'], 1)
+        self.assertEqual(waits, []);self.assertNotIn('PRIVATE', json.dumps(report))
+
+    def test_retry_budget_is_bounded_and_success_does_not_wait(self):
+        waits = []
+        report = site.verify_until_ready('a'*40, get=self.endpoints().__getitem__, wait=waits.append, now=NOW)
+        self.assertTrue(report['ok']);self.assertEqual(report['attempts'], 1);self.assertEqual(waits, [])
+        for args in ({'attempts': 0}, {'attempts': 13}, {'delay': -1}, {'delay': 31}):
+            with self.assertRaises(ValueError):site.verify_until_ready('a'*40, **args)
 
 
 if __name__ == '__main__':

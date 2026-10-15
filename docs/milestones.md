@@ -27,6 +27,10 @@ Full lifecycle/recovery,
 Espresso benchmarks, native GPU rendering and all seven full gates remain open;
 existing Project states and waiting resources are preserved.
 
+PR #106 is merged with all required hosted checks passing; 0.25.0 cache
+physical comparison remains pending. Pages now verifies the merged source;
+publication hardening does not complete any platform or product criterion.
+
 The existing seven GitHub milestone issues remain overview trackers. Each work
 item below is a separate implementation or evidence task feeding its milestone.
 [Project #2](https://github.com/users/Jdiller-86/projects/2) is the authority for
