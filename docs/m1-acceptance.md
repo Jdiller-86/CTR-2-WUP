@@ -13,9 +13,9 @@ accepted only after all criteria have complete reviewed physical evidence.
 
 ## Before starting
 
-1. Use the supplied **M1 acceptance** kit. Read `manifest.json` or the kit's
-   start page for its version, source commit and suite ID. The Native app's
-   displayed version must agree. Keep this kit's manifest with the return.
+1. Use the supplied **M1 acceptance** kit. Read `KIT-STATUS.md` for its version,
+   source and which tests are ready. The app's displayed version must agree.
+   Keep `manifest.json` with the return; it identifies this exact kit for review.
 2. Copy the kit's `sd-card/` contents to the SD root using FTP **binary** transfer
    mode. M1 Check goes under `sd:/wiiu/apps/`. Keep existing `sd:/ctr2wup/` files,
    saves and earlier evidence. The tests use original diagnostic data only.
@@ -26,9 +26,9 @@ accepted only after all criteria have complete reviewed physical evidence.
 4. Do not run an SD test while FTP is changing its files. Close FTP before each
    launch. Leave the SD inserted and the console powered normally throughout.
 
-The kit must declare `recovery.available: true` with protocol `scratch-v1` for
-the persistence/recovery test. A kit without that probe is explicitly blocked
-for this criterion. An ordinary successful save cannot substitute for recovery.
+This kit includes the original SD persistence/recovery probe. Its result appears
+on screen as **SD proof**, with **FIRST RUN** or **fresh reload: YES**. An ordinary
+successful report write cannot substitute for that recovery check.
 
 The kit also contains **Audio Streams 0.26.0**, a separate five-minute test of
 the new stream/mixer path. Use `AUDIO-STREAMS.md` for that optional development
@@ -108,8 +108,8 @@ route has evidence.
 a WUHB from an Aroma Menu icon still launches homebrew; it does not demonstrate
 installation of a WUP title.
 
-Check the kit manifest's package status before proceeding. If it says
-`package.available: false`, **stop this section and return the other results**.
+Check `KIT-STATUS.md` before proceeding. This kit says an installable WUP is
+**not available**: **skip this section and return the other results**.
 The reviewer reports M1's installed-title criterion as BLOCKED. The missing
 prerequisite is a real, source-matched original WUP with reviewed local packaging
 material/provenance, explicit nonreserved title identity checked against your
@@ -213,6 +213,10 @@ SD probe is original scratch data; it does not accept retail save behavior.
 | `m1-controls-audio` | All ten native named steps PASS; at least 600,000 ms measured in stability step; zero input errors; original tone initialized/requested; explicit both-screen/touch/both-output/silence/stability observations |
 | `m1-package-launch` | Independently verified real original WUP, local provenance and collision review; exact installer/environment; actual install; matching native title ID; two distinct Menu launches and observed exits |
 | `m1-platform-acceptance` | Complete versioned record of all above with exact environment and no unexplained failure; maintainer reviews and explicitly accepts the full gate |
+
+The manifest must declare `recovery.available: true` and protocol `scratch-v1`;
+otherwise recovery stays Blocked. `package.available: false` keeps installed-title
+acceptance Blocked even when every homebrew check passes.
 
 Keep the raw return and review under ignored private evidence. Convert the
 answer card to the reviewer's structured observations, preserving uncertainties

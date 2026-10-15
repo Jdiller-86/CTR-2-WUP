@@ -77,6 +77,9 @@ class M1PackageTests(unittest.TestCase):
         manifest=json.loads((self.root/'out/stage/manifest.json').read_text())
         self.assertFalse(manifest['package']['available']);self.assertEqual(manifest['native_app'],'native-m1')
         self.assertTrue(manifest['recovery']['available'])
+        status=(self.root/'out/stage/KIT-STATUS.md').read_text()
+        self.assertIn('Not available: an installable WUP',status)
+        self.assertIn('No PC command is needed',status)
         for row in manifest['files']:
             data=(self.root/'out/stage'/row['path']).read_bytes();self.assertEqual(len(data),row['size'])
             self.assertEqual(hashlib.sha256(data).hexdigest(),row['sha256'])

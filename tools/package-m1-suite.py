@@ -99,6 +99,15 @@ def package(native, audio_kit, output):
     entries['build-reports/m1-native.json'] = release.regular(native/'build-report.json').read_bytes()
     entries['START-HERE.md'] = audio.immutable_guide(release.regular(ROOT/'docs/m1-acceptance.md').read_bytes(), commit)
     entries['review-m1-results.py'] = release.regular(ROOT/'tools/review-m1-results.py').read_bytes()
+    entries['KIT-STATUS.md'] = (
+        '# M1 acceptance kit '+VERSION+'\n\nSource: `'+commit+'`\n\n'
+        '- Ready: M1 Check full native guide, ten-minute stability, SD persistence/recovery, fresh Minus/HOME runs.\n'
+        '- Included: optional Audio Streams listening/control test and reference WAVs.\n'
+        '- Not available: an installable WUP. Skip the installed-title section of START-HERE and return the other results.\n'
+        '- Full M1 remains open until a verified original WUP passes WUP Installer GX2 installation and two Menu launches/exits.\n\n'
+        'Copy sd-card/ contents by FTP binary mode; open CTR2WUP M1 Check '+VERSION+'. '
+        'Follow START-HERE.md. Keep manifest.json and both named TXT files for every launch. '
+        'No PC command is needed.\n').encode()
     m1 = dict(schema_version=1, kind='ctr2wup-m1-acceptance',
               suite_id='m1-native-'+VERSION+'-'+commit[:12], version=VERSION,
               source_commit=commit, source_dirty=False, native_app='native-m1',

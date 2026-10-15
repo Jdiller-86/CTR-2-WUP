@@ -1534,6 +1534,7 @@ int main(int argc, char **argv) {
 #ifdef CTR_M1_ONLY
         snprintf(guide_rows[6],72,"SD proof: %s / fresh reload: %s / MINUS exits",
             ctr_m1_storage_result_name(m1_storage.result),m1_storage.fresh_reload?"YES":"FIRST RUN");
+        if(test_guide.done)snprintf(guide_rows[4],72,"Run complete. Full M1 still needs installed-WUP review.");
 #endif
 #endif
         for(unsigned i=0;i<TOP_W*83;++i)top_image[i]=0x162d4fff;
