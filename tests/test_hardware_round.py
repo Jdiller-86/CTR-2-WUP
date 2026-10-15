@@ -29,7 +29,7 @@ class HardwareReturnTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name);self.sd = self.root/'sd';(self.sd/'ctr2wup').mkdir(parents=True)
         self.kit = {'kind': 'ctr2wup-hardware-round', 'version': collector.VERSION, 'source_commit': COMMIT}
-        self.name = 'result-compiled-pica-draws-0.24.1-0000000000000001-00.txt'
+        self.name = f'result-compiled-pica-draws-{collector.VERSION}-0000000000000001-00.txt'
         self.data = (f'CTR2WUP result report\nSource: {COMMIT} dirty=0 | Evidence schema: 2\n'
             'Stage: cleanup\nHost exit result: 0\nGuide: COMPLETE | passed=3 failed=0 skipped=0\n'
             '1. Guest triangle pictures: PASS | User confirmed\n').encode().ljust(8192, b' ')
@@ -60,6 +60,17 @@ class HardwareReturnTests(unittest.TestCase):
         summary=next(row for row in result['summaries'] if row['kind']=='trace')
         self.assertTrue(summary['source_identity_seen']);self.assertEqual(summary['phase_records'],1)
         self.assertEqual((self.sd/'ctr2wup'/name).read_bytes(),trace)
+
+    def test_legacy_round_remains_source_bound_after_tool_upgrade(self):
+        old = '0.24.1'
+        (self.sd/'ctr2wup'/self.name).rename(self.sd/'ctr2wup'/self.name.replace(collector.VERSION, old))
+        name = 'compiled-pica-draws-0000000000000001-00.txt'
+        (self.sd/'ctr2wup'/name).write_bytes(self.trace(version=old))
+        report = collector.collect(self.sd, self.root/'legacy.zip', {**self.kit, 'version': old})
+        self.assertEqual(report['version'], old);self.assertEqual(report['collector_version'], collector.VERSION)
+        result = analyzer.analyze(self.root/'legacy.zip', COMMIT)
+        self.assertEqual(result['version'], old);self.assertEqual(result['warnings'], [])
+        self.assertEqual(len(result['summaries']), 2)
 
     def test_partial_native_trace_without_result_is_preserved(self):
         (self.sd/'ctr2wup'/self.name).unlink()
@@ -121,7 +132,7 @@ class HardwareReturnTests(unittest.TestCase):
         self.assertFalse(result['summaries'][0]['complete_evidence'])
 
     def test_oversized_files_and_symlinks_are_never_followed(self):
-        extra = self.sd/'ctr2wup/native-software-scene-0.24.1-0000000000000002-00.txt'
+        extra = self.sd/f'ctr2wup/native-software-scene-{collector.VERSION}-0000000000000002-00.txt'
         extra.write_bytes(b'x'*(collector.MAX_FILE+1))
         result = collector.collect(self.sd, self.root/'bounded.zip', self.kit)
         self.assertEqual(len(result['files']), 1);self.assertTrue(any('exceeds 4 MiB' in w for w in result['warnings']))

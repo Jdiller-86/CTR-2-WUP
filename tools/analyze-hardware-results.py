@@ -18,13 +18,17 @@ def analyze(path, expected):
         names = archive.namelist()
         if len(names) != len(set(names)) or not 2 <= len(names) <= 65 or sum(i.file_size for i in archive.infolist()) > collector.MAX_TOTAL+1024*1024:
             raise ValueError('Return archive names/count/size exceed the contract')
+        if 'collection.json' not in names:raise ValueError('Collection receipt missing')
+        if archive.getinfo('collection.json').file_size > 1024*1024:raise ValueError('Collection receipt is oversized')
+        receipt = json.loads(archive.read('collection.json'))
+        version = receipt.get('version')
+        _, pattern = collector.patterns(version)
         for info in archive.infolist():
             if info.filename == 'collection.json':
                 if info.file_size > 1024*1024:raise ValueError('Collection receipt is oversized')
-            elif not info.filename.startswith('logs/') or not collector.PATTERN.fullmatch(info.filename[5:]) or info.file_size > collector.MAX_FILE:
+            elif not info.filename.startswith('logs/') or not pattern.fullmatch(info.filename[5:]) or info.file_size > collector.MAX_FILE:
                 raise ValueError('Return archive contains an unrequested path')
-        receipt = json.loads(archive.read('collection.json'))
-        if receipt.get('kind') != 'ctr2wup-hardware-return' or receipt.get('version') != collector.VERSION or receipt.get('source_commit') != expected:
+        if receipt.get('kind') != 'ctr2wup-hardware-return' or version not in collector.SUPPORTED_VERSIONS or receipt.get('source_commit') != expected:
             raise ValueError('Return identity differs from the tested kit')
         rows = receipt.get('files', [])
         if not isinstance(rows, list) or len(rows) != len(names)-1 or {r['path'] for r in rows} != set(names)-{'collection.json'}:
@@ -35,14 +39,14 @@ def analyze(path, expected):
             if row.get('size') != len(data) or row.get('sha256') != hashlib.sha256(data).hexdigest():
                 raise ValueError('Returned log checksum differs')
             name = row['path'][5:]
-            if not name.startswith('result-') and not collector.trace_identity_matches(name, data, expected):
+            if not name.startswith('result-') and not collector.trace_identity_matches(name, data, expected, version):
                 raise ValueError('Returned trace build/source identity differs or is incomplete')
             payload[row['path']] = data
-            summaries.append(collector.result_summary(row['path'][5:], data, expected))
+            summaries.append(collector.result_summary(row['path'][5:], data, expected, version))
         warnings = list(receipt.get('warnings', []))
-        for warning in collector.missing_trace_warnings(payload):
+        for warning in collector.missing_trace_warnings(payload, version):
             if warning not in warnings:warnings.append(warning)
-    return {'ok': True, 'transport_verified': True, 'source_commit': expected,
+    return {'ok': True, 'transport_verified': True, 'source_commit': expected, 'version': version,
             'observations': receipt.get('observations', {}), 'warnings': warnings,
             'summaries': summaries, 'full_milestone_acceptance': False}
 

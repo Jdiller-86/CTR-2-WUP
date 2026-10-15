@@ -1,7 +1,7 @@
 # CTR2WUP product development plan
 
-Updated **October 14, 2026 (America/New_York; October 15 UTC intake)** for
-**v0.24.1 hardware evidence**. The requirements remain
+Updated **October 15, 2026 (America/New_York)** for
+**v0.25.0 display-cache evaluation**. The requirements remain
 [the original brief](project-brief.md), the reviewed [GUI workflow](gui-workflow.md)
 and the user amendment allowing [optional local encrypted-input preparation](encrypted-input.md).
 Upstream feasibility scores and compatibility percentages are research context,
@@ -44,7 +44,7 @@ broader PICA state and physical renderer acceptance remain open.
 Checked generated-code integration, owned guest memory, scoped services, original
 synthetic packaging and hosted Windows foundations exist. Reviewed physical
 Save/results/assets/GX evidence is retained, and the launch-music regression has
-reviewed physical passes. Scale/publication optimization, complete platform stability,
+reviewed physical passes. Physical cache comparison, complete platform stability,
 installed-WUP acceptance, commercial conversion and final GUI are still pending.
 **0/7 full milestones are accepted.** Completed scoped features do not change that.
 
@@ -79,7 +79,11 @@ confirmation on firmware 5.5.6 U / Aroma Beta 27. Correct picture-confirmation
 order and both new-session PASS/exit events verify. Scenes take 91.190–91.613 s;
 native scale/publication averages 132.218–132.281 ms and is the next measured
 target. All files are received; no further rerun is requested for this round.
-This remains a premerge snapshot with full gates open.
+Version 0.25.0 now implements changed-span scaling and coalesced row
+publication with independent pixel/failure and six-workload host checks.
+Static/small-counter publication-byte reductions are measured on host;
+full motion saves no bytes. Physical correctness/speed need the focused new
+build. This remains a premerge snapshot with full gates open.
 
 | Priority | Concrete deliverable | Tracking and acceptance |
 | --- | --- | --- |

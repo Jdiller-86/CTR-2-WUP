@@ -14,7 +14,7 @@ SPEC = importlib.util.spec_from_file_location('hardware_release', ROOT/'tools/pa
 release = importlib.util.module_from_spec(SPEC);SPEC.loader.exec_module(release)
 SCENE = ('ctr2wup-scene-check.rpx', 'ctr2wup-scene-check.wuhb')
 DRAW = ('ctr2wup-libctru-draw.rpx', 'ctr2wup-libctru-draw.wuhb')
-VERSION = '0.24.1'
+VERSION = '0.25.0'
 
 
 def identity():

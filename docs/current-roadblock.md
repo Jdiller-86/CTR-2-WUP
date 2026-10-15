@@ -1,4 +1,4 @@
-# Remaining acceptance gates (0.24.1 hardware evaluation)
+# Remaining acceptance gates (0.25.0 display-cache evaluation)
 
 The product remains a Windows GUI that converts owned 3DS games into individual
 Wii U WUP titles. Approximately 20% implementation and 0/7 full gates accepted
@@ -16,8 +16,10 @@ Current requirements:
    draw/Plus-repeat guide, with all five traces reaching `main_return` and
    reported Minus/HOME return. All requested files are received. Scenes take
    91.190–91.613 s; native scale/publication averages 132.218–132.281 ms and
-   dominates recorded phases. Optimize that measured path next; no speedup or
-   game performance is established. No more files or reruns are needed for
+   dominates recorded phases. Version 0.25.0 implements changed-span scaling and coalesced row
+   publication with independent exact host checks. Physical freshness, restart
+   and scale+publish timing for that changed path remain pending; no Wii U
+   speedup or game performance is established. No more files or reruns are needed for
    this round. [Reviewed evidence](console-evidence.md).
 2. **Mario observed runtime requirements:** the executable, preparation/inventory
    reports and all seven requested sample payloads are verified and available.

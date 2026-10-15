@@ -250,6 +250,15 @@ static void guide_tests(void) {
     ctr_test_guide_update(&g,&in);CHECK(g.failed==1 && !g.passed);
 }
 
+static void scale_reference(const CtrViewport *v,const uint32_t *source,unsigned char *out,size_t bytes,unsigned pitch) {
+    memset(out,0,bytes);
+    for(unsigned y=0;y<v->height;++y)for(unsigned x=0;x<v->width;++x) {
+        uint32_t color=source[(size_t)((uint64_t)y*v->guest_height/v->height)*v->guest_width+
+            (uint64_t)x*v->guest_width/v->width];
+        size_t at=((size_t)(v->y+y)*pitch+v->x+x)*4;
+        for(unsigned byte=0;byte<4;++byte)out[at+byte]=(unsigned char)(color>>(24-byte*8));
+    }
+}
 static void scale_tests(void) {
     const unsigned sizes[][5]={{1920,1080,1920,400,240},{854,480,896,320,240},
         {1280,720,1280,400,240},{31,19,37,7,5},{3,2,5,320,240},{7,11,12,1,1}};
@@ -262,11 +271,7 @@ static void scale_tests(void) {
         CtrViewport v;CHECK(ctr_viewport_fit(&v,ow,oh,gw,gh));ctr_scale_plan plan={0};
         CHECK(ctr_scale_plan_init(&plan,&v));CHECK(!ctr_scale_plan_init(&plan,&v));
         CHECK(ctr_scale_rgba(&plan,source,pixels,actual,bytes,pitch));
-        for(unsigned y=0;y<v.height;++y)for(unsigned x=0;x<v.width;++x) {
-            uint32_t color=source[(size_t)((uint64_t)y*gh/v.height)*gw+(uint64_t)x*gw/v.width];
-            size_t at=((size_t)(v.y+y)*pitch+v.x+x)*4;
-            for(unsigned byte=0;byte<4;++byte)reference[at+byte]=(unsigned char)(color>>(24-byte*8));
-        }
+        scale_reference(&v,source,reference,bytes,pitch);
         CHECK(memcmp(actual,reference,bytes)==0); /* All pixels, borders, pitch padding and tail bytes. */
         CHECK(!ctr_scale_rgba(&plan,source,pixels-1,actual,bytes,pitch));
         CHECK(!ctr_scale_rgba(&plan,source,pixels,actual,(size_t)pitch*oh*4-1,pitch));
@@ -280,6 +285,96 @@ static void scale_tests(void) {
     CHECK(!ctr_scale_plan_init(&plan,&bad));bad.x=0;bad.guest_width=65536;
     CHECK(!ctr_scale_plan_init(&plan,&bad));bad.guest_width=1;bad.output_width=8193;
     CHECK(!ctr_scale_plan_init(&plan,&bad));CHECK(!ctr_scale_plan_init(NULL,&bad));
+}
+
+static void cache_damage_check(const ctr_scale_cache *c,const ctr_scale_update *u,
+                               const unsigned char *before,const unsigned char *after,size_t bytes) {
+    uint64_t total=0;size_t previous_end=0;bool bounded=true,covered=true;
+    for(size_t n=0;n<c->range_count;++n) {
+        ctr_scale_range range=c->ranges[n];
+        if(!range.bytes || range.offset>bytes || range.bytes>bytes-range.offset ||
+           (n && range.offset<=previous_end))bounded=false;
+        previous_end=range.offset+range.bytes;total+=range.bytes;
+    }
+    size_t n=0;
+    for(size_t at=0;at<bytes;++at)if(before[at]!=after[at]) {
+        while(n<c->range_count && at>=c->ranges[n].offset+c->ranges[n].bytes)++n;
+        if(n==c->range_count || at<c->ranges[n].offset) { covered=false;break; }
+    }
+    CHECK(bounded);CHECK(covered);CHECK(total==u->publish_bytes);
+    CHECK(c->range_count<=c->range_capacity);
+}
+static void scale_cache_tests(void) {
+    const unsigned sizes[][5]={{1920,1080,1920,400,240},{854,480,896,320,240},
+        {1280,720,1280,400,240},{31,19,37,7,5},{3,2,5,320,240},{7,11,12,1,1}};
+    uint32_t random=123456789;
+    for(unsigned test=0;test<6;++test) {
+        unsigned ow=sizes[test][0],oh=sizes[test][1],pitch=sizes[test][2],gw=sizes[test][3],gh=sizes[test][4];
+        size_t pixels=(size_t)gw*gh,bytes=(size_t)(pitch+2)*oh*4+17;
+        uint32_t *source=malloc(pixels*4),*history=malloc(pixels*4);
+        unsigned char *out=malloc(bytes),*other=malloc(bytes),*before=malloc(bytes),*reference=malloc(bytes);
+        CHECK(source && history && out && other && before && reference);
+        for(size_t i=0;i<pixels;++i)source[i]=(uint32_t)(i*UINT32_C(2654435761));
+        memset(out,0xa5,bytes);memset(other,0x5a,bytes);
+        CtrViewport view;ctr_scale_plan plan={0};ctr_scale_cache cache={0};ctr_scale_update update={0};
+        CHECK(ctr_viewport_fit(&view,ow,oh,gw,gh));CHECK(ctr_scale_plan_init(&plan,&view));
+        CHECK(ctr_scale_cache_init(&cache,&plan));CHECK(!ctr_scale_cache_init(&cache,&plan));
+        for(unsigned frame=0;frame<14;++frame) {
+            if(frame==12) {
+                for(size_t i=0;i<pixels;++i)source[i]^=UINT32_C(0xffffffff);
+            } else if(frame==13 && test==4) {
+                /* Neither row 1 nor column 1 is sampled by the 3x2 downscale. */
+                source[gw+1]^=UINT32_C(0x11223344);
+            } else if(frame>1 && frame<12) {
+                for(unsigned mutation=0;mutation<1+frame*3;++mutation) {
+                    random=random*1664525u+1013904223u;
+                    source[random%pixels]^=random|1u;
+                }
+                source[0]^=0x11223344u;source[pixels-1]^=0x89abcdefu;
+            }
+            memcpy(before,out,bytes);
+            CHECK(ctr_scale_cache_update(&cache,source,pixels,out,bytes,pitch,&update));
+            scale_reference(&view,source,reference,bytes,pitch);
+            CHECK(!memcmp(out,reference,bytes));cache_damage_check(&cache,&update,before,out,bytes);
+            CHECK(update.full==(frame==0));
+            if(frame==0)CHECK(cache.range_count==1 && update.publish_bytes==bytes);
+            if(frame==1)CHECK(!cache.range_count && !update.publish_bytes && !update.scaled_pixels);
+            if(frame==12)CHECK(update.scaled_pixels==(uint64_t)view.width*view.height);
+            if(frame==13)CHECK(!cache.range_count && !update.publish_bytes);
+        }
+        memcpy(history,cache.previous,pixels*4);memcpy(before,out,bytes);
+        size_t old_ranges=cache.range_count;ctr_scale_update unchanged=update;
+        CHECK(!ctr_scale_cache_update(&cache,source,pixels-1,out,bytes,pitch,&update));
+        CHECK(!ctr_scale_cache_update(&cache,source,pixels,out,(size_t)pitch*oh*4-1,pitch,&update));
+        CHECK(!ctr_scale_cache_update(&cache,source,pixels,out,bytes,ow-1,&update));
+        CHECK(!ctr_scale_cache_update(&cache,(uint32_t *)out,pixels,out,bytes,pitch,&update));
+        CHECK(!ctr_scale_cache_update(&cache,cache.previous,pixels,out,bytes,pitch,&update));
+        CHECK(!ctr_scale_cache_update(&cache,source,pixels,out,bytes,pitch,NULL));
+        CHECK(!ctr_scale_cache_update(&cache,source,pixels,(unsigned char *)(UINTPTR_MAX-8),bytes,pitch,&update));
+        plan.view.width++;
+        CHECK(!ctr_scale_cache_update(&cache,source,pixels,out,bytes,pitch,&update));plan.view.width--;
+        CHECK(!memcmp(history,cache.previous,pixels*4));CHECK(!memcmp(before,out,bytes));
+        CHECK(unchanged.full==update.full && unchanged.source_rows==update.source_rows &&
+              unchanged.output_rows==update.output_rows && unchanged.scaled_pixels==update.scaled_pixels &&
+              unchanged.publish_bytes==update.publish_bytes);CHECK(cache.range_count==old_ranges);
+        CHECK(ctr_scale_cache_update(&cache,source,pixels,out,bytes,pitch,&update));
+        CHECK(!cache.range_count && !update.publish_bytes);
+        ctr_scale_cache_invalidate(&cache);memset(out,0xa5,bytes);
+        CHECK(ctr_scale_cache_update(&cache,source,pixels,out,bytes,pitch,&update));
+        CHECK(update.full);CHECK(!memcmp(out,reference,bytes));
+        CHECK(ctr_scale_cache_update(&cache,source,pixels,other,bytes,pitch,&update));
+        CHECK(update.full);CHECK(!memcmp(other,reference,bytes));
+        CHECK(ctr_scale_cache_update(&cache,source,pixels,other,bytes,pitch+1,&update));
+        scale_reference(&view,source,reference,bytes,pitch+1);CHECK(update.full);CHECK(!memcmp(other,reference,bytes));
+        CHECK(ctr_scale_cache_update(&cache,source,pixels,other,bytes-1,pitch+1,&update));
+        scale_reference(&view,source,reference,bytes-1,pitch+1);CHECK(update.full);CHECK(!memcmp(other,reference,bytes-1));
+        ctr_scale_cache_close(&cache);ctr_scale_cache_close(&cache);
+        CHECK(!cache.previous && !cache.ranges);CHECK(!ctr_scale_cache_update(&cache,source,pixels,out,bytes,pitch,&update));
+        ctr_scale_plan bad=plan;bad.view.guest_width=1025;bad.view.guest_height=1025;
+        CHECK(!ctr_scale_cache_init(&cache,&bad));CHECK(!ctr_scale_cache_init(NULL,&plan));
+        ctr_scale_plan_close(&plan);free(source);free(history);free(out);free(other);free(before);free(reference);
+    }
+    ctr_scale_cache_close(NULL);ctr_scale_cache_invalidate(NULL);
 }
 
 static void read_file(const char *path, char *buffer, size_t size) {
@@ -534,6 +629,7 @@ int main(int argc,char **argv) {
     lifecycle_tests();
     exit_order_tests();
     scale_tests();
+    scale_cache_tests();
     char directory[384],text[4096];
     CHECK(ctr_test_temp_directory(directory,sizeof(directory),"ctr2wup-report"));
     result_tests(directory);

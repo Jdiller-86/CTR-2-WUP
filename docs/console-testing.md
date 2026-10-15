@@ -6,7 +6,8 @@ and repeat launch/exit. Its collector returns one bounded ZIP with partial and
 failure evidence. The completed report/trace follow-up verifies two arithmetic
 guides, correct picture timing and all Guest Draws/Plus-repeat steps, with all
 five traces reaching `main_return` and user-reported Minus/HOME return. All files
-are received; measured native scale/publication performance is the next target.
+are received. The 0.25.0 cache targets that measured cost; its focused new-build
+picture/restart/timing comparison remains pending.
 
 **Earlier evidence:** October 13 audio/GX/draw results are reviewed in
 [console-evidence.md](console-evidence.md). There is no request to repeat the

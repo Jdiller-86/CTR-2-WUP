@@ -6,12 +6,11 @@
 
 First visit? [Take the repository tour](docs/repository-guide.md).
 
-Testing on Wii U? The [focused 0.24.1 hardware round](docs/console-retest.md)
-contains two guided apps and a Windows collector for returning one log ZIP.
-Its [reviewed hardware results](docs/console-evidence.md) pass two arithmetic
-launches and the full Guest Draws/Plus-repeat guide, with all requested traces
-received. Native scale/publication performance is the next measured target.
-It is a tested PR snapshot awaiting merge review.
+Testing on Wii U? The [focused 0.25.0 comparison](docs/console-retest.md)
+checks the new native display cache with two guided apps and FTP log return.
+The completed [0.24.1 hardware results](docs/console-evidence.md) remain the
+baseline, with all files received. The cache's host pixel/work checks pass;
+actual Wii U picture correctness and speed remain pending. PR #106 is premerge.
 
 Contributors can [develop and manage tracking without hosted Actions](docs/direct-development.md)
 using secure API access and recorded local validation.

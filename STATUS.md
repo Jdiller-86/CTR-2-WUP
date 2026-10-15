@@ -1,5 +1,15 @@
 # CTR2WUP status
 
+**Native display optimization — 0.25.0, premerge:** [PR #106](https://github.com/Jdiller-86/CTR-2-WUP/pull/106)
+extends scoped #87/#20/M2 with exact changed-span scaling and row publication.
+Independent pixel/failure tests and six original host workloads pass. Over 60
+frames, requested publication bytes fall 98.3% for static images and 90.2% for
+small TV counter changes with a static GamePad; full motion has no byte saving.
+Both screens still receive normal GX2 copies. Logs split scale/publication and
+record cache work/memory. Full required checks gate delivery; actual Wii U
+correctness and speed require the new [focused two-app test](docs/console-retest.md).
+[Contract and limits](docs/gsp-display.md#native-display-cache). No full gate is accepted.
+
 **Focused hardware evaluation:** [PR #106](https://github.com/Jdiller-86/CTR-2-WUP/pull/106)
 under #87/#20/M2 has reviewed **0.24.1** hardware results: two native ADD/MUL
 Scene Check launches pass their analytic pixels and picture guides; Guest Draws
@@ -10,7 +20,7 @@ The user confirms Minus and optional HOME returns on firmware 5.5.6 U / Aroma
 Beta 27. All five traces and five reports are received; no files/reruns remain
 requested for this round. Drawn scenes take **91.190–91.613 s** and native
 scale/publication averages **132.218–132.281 ms**, dominating recorded phases.
-Optimize that measured path next; no speedup is established. The collector's
+It is the baseline for the 0.25.0 cache; no Wii U speedup is established. The collector's
 unversioned-trace correction passes on the actual files with no missing-pair
 warnings. [Review](docs/console-evidence.md) and [FTP guide](docs/console-retest.md).
 This remains a premerge snapshot.
@@ -20,7 +30,7 @@ implements scoped #76 under #28/M4: component-wise ADD/MUL, independent operand
 descriptors and checked integer dyadic evaluation. All 167,730 original rational
 cases, four analytic pixel scenes and 282,626 pinned encodings agree. Late errors
 preserve shader/target/guest queue state. Required host/sanitizer/native/Windows and documentation checks gate merge; receipts are linked from PR #105.
-The source version is **0.24.0 (unreleased)**; the latest published diagnostic
+Current development source is **0.25.0 (unreleased)**; the latest published diagnostic
 release remains **0.23.0**. Hardware rounding, broader arithmetic/control, native
 GX2 and commercial execution remain open. [Contract](docs/software-scenes.md#exact-add-and-mul).
 

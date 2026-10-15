@@ -19,7 +19,7 @@ AUDIO_ONLY ?= 0
 SCENE_ONLY ?= 0
 UDP_LOG ?= 0
 CALL_LIMIT ?= 64
-APP_VERSION := 0.24.1
+APP_VERSION := 0.25.0
 CTR_BUILD_SHA := $(shell git rev-parse HEAD)
 CTR_BUILD_DIRTY := $(if $(shell git status --porcelain --untracked-files=normal),1,0)
 UPSTREAM_DIR ?= ../../artifacts/generated-upstream-guest

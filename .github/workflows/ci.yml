@@ -141,6 +141,8 @@ jobs:
           git -C artifacts/nihstro-reference checkout --detach f4d8659decbfe5d234f04134b5002b82dc515a44
           python3 tools/validate-scenes.py --sanitize --nihstro-dir artifacts/nihstro-reference \
             --output artifacts/ci/scenes 2>&1 | tee artifacts/ci/native/scenes.log
+      - name: Compare display cache work and exact output
+        run: python3 tools/benchmark-display.py --cc "${{ matrix.cc }}" --output artifacts/ci/display-benchmark
       - name: Upload portable C logs
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -148,6 +150,7 @@ jobs:
           name: native-${{ matrix.cc }}-${{ github.sha }}
           path: |
             artifacts/ci/native/*.log
+            artifacts/ci/display-benchmark/report.json
             artifacts/ci/scenes/*.json
             artifacts/ci/scenes/*.png
             artifacts/ci/scenes/*.rgba

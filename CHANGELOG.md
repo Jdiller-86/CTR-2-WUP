@@ -3,6 +3,22 @@
 All releases are development increments. RPX/WUHB diagnostics and desktop passes
 do not establish commercial-game compatibility or installable WUP acceptance.
 
+## 0.25.0 — display-cache evaluation, premerge
+
+- Retain exact source history and scale only changed mapped spans; publish
+  coalesced dirty rows with the existing CPU/GX2 cache APIs. Unchanged images
+  avoid scaling/publication while both screens retain normal presentation.
+- Rebuild completely on cold use, destination changes, guest restart and
+  foreground reacquisition; reject invalid/overlapping input before writes.
+- Compare independent full outputs, borders/padding/tails, sparse/full motion,
+  downscale and failure behavior; add six original host benchmark workloads.
+  Static 60-frame workloads avoid 98.3% of requested publication bytes; small
+  TV counters/static GamePad avoid 90.2%. Full motion has no byte saving.
+- Separate scale/publication timing and log work/memory for a source-bound
+  0.25.0 two-app hardware comparison. Wii U correctness/speed remain pending.
+- Keep 0.24.1 return collection/analysis supported with its matching manifest;
+  preserve its completed physical evidence and corrected native-trace handling.
+
 ## 0.24.1 — hardware evaluation, premerge
 
 - Gate visual confirmation on a decoded and submitted drawn frame with exact

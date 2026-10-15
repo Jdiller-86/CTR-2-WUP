@@ -9,6 +9,11 @@ scale/publication is the dominant measured phase. All requested files are
 received. No general game compatibility is implied. See
 [the evidence review](console-evidence.md) and [focused test round](console-retest.md).
 
+Version 0.25.0 adds a [native display cache](gsp-display.md#native-display-cache)
+with independent exact host checks and workload reductions. Its focused physical
+picture/restart/timing comparison is pending; full motion has no publication-byte
+saving and both GX2 display copies remain. Earlier builds keep their scoped passes.
+
 | Input/workflow | Current state | Evidence and limit |
 |---|---|---|
 | Original native diagnostic | Partial console evidence; Minus exit confirmed | v0.14.1 native report records all ten guided checks/nine embedded self-tests and cleanup; v0.14.3 Minus exit now user-confirmed; full installation/compiled stability remains open |
@@ -33,7 +38,7 @@ received. No general game compatibility is implied. See
 | Main RomFS assets | Canonical full IVFC/metadata preparation and bounded sample export implemented | Private blob/manifest and explicit-file ZIP; matching reported provenance, full-blob/selected-file hashes and safe publication; original SD-provider results reviewed; seven selected payloads and container/shader/audio structures are reviewed; broader nested resources and observed runtime use remain open |
 | PICA base textures | All 14 format decoders implemented | Original C/Python/reference vectors; no texture sampling, GX2 scene rendering or commercial support |
 | Resolved vertex arrays and indices | Bounded portable decoding implemented | Explicit streams/input permutation, unsigned 8-bit/16-bit indexed gather, transactional range/float/alias checks; no PICA loaders, fixed attributes, shaders or draws |
-| Original owned software scenes | Exact desktop scenes verified; focused Wii U cross-build available | PICA-format loader/index/fixed/uniform/MOV/ADD/MUL shader and bounded opaque triangles; 512-word capacity and exact integer arithmetic have original numeric/pixel/rollback probes; required arithmetic platform checks gate delivery through PR #105; no rounding/sampling/general TEV/depth or GPU shader translation; hardware evidence pending |
+| Original owned software scenes | Exact desktop scenes verified; focused Wii U cross-build available | PICA-format loader/index/fixed/uniform/MOV/ADD/MUL shader and bounded opaque triangles; 512-word capacity and exact integer arithmetic have original numeric/pixel/rollback probes; merged PR #105 and scoped 0.24.1 arithmetic console passes; no rounding/sampling/general TEV/depth or GPU shader translation |
 | Original compiled GX transfer program | Sanitized desktop/reference and scoped console results reviewed | 0.20.0 guest PASS/exit and exact transfer pictures; 17 GX operations, scoped DMA/fill/transfer/copy/cache and no-draw configuration; full renderer acceptance remains open |
 | Original compiled guest PICA draws | Exact desktop frames and scoped 0.23.0/0.24.1 console results reviewed | 0.24.1 confirms correct picture timing and all three guide steps including a new Plus session's own draw/PASS/exit, with four triangles, 97,200 fragments and zero fallback/fault. Scenes take 91.190–91.613 s; 132.218–132.281 ms mean native scale/publication is the next measured target. General shaders/TEV/GX2 remain open |
 | `.3dsx`, update/DLC merges | Unsupported | No corresponding loader/pipeline; renamed input is not accepted as NCCH |

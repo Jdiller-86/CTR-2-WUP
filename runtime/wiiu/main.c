@@ -114,6 +114,11 @@ static ctr_test_lifecycle lifecycle;
 static atomic_uint home_exit_requested;
 static unsigned freeze_trace_frames;
 static ctr_scale_plan tv_scale,drc_scale;
+static ctr_scale_cache tv_cache,drc_cache;
+static struct {
+    uint64_t updates,full,reused,scaled_pixels,publish_bytes,publish_ranges;
+    size_t heap_bytes;
+} publication[2];
 static bool guest_green_frame;
 #ifdef CTR_COMPILED_HOMEBREW
 static OSTime a_request_time;
@@ -127,9 +132,9 @@ static unsigned guest_sessions,completed_frames,input_samples,input_errors;
 static unsigned button_presses[12],touch_samples,border_touch_samples;
 static uint32_t frame_min_us=UINT32_MAX,frame_max_us;
 static uint64_t frame_total_us;
-enum { PH_GUEST,PH_DECODE,PH_SCALE,PH_WAIT,PH_PRESENT,PH_STORAGE,PH_COUNT };
+enum { PH_GUEST,PH_DECODE,PH_SCALE,PH_PUBLISH,PH_WAIT,PH_PRESENT,PH_STORAGE,PH_COUNT };
 static struct { uint64_t calls,total_us,max_us; } phases[PH_COUNT];
-static const char *const phase_names[]={"guest","decode","scale","gpu_wait","present","storage"};
+static const char *const phase_names[]={"guest","decode","scale","publish","gpu_wait","present","storage"};
 static ctr_slice_report last_slice={.reason=CTR_SLICE_ARGUMENT};
 static uint64_t slice_stops[11],drawn_latency_ms;
 static bool drawn_frame_submitted,scene_submitted;
@@ -141,6 +146,11 @@ static void phase_add(unsigned phase,uint64_t elapsed) {
 static void phase_log(void) {
     for(unsigned i=0;i<PH_COUNT;++i)WHBLogPrintf("PHASE name=%s calls=%llu total_us=%llu max_us=%llu scope=diagnostic_host_not_game_fps",
         phase_names[i],(unsigned long long)phases[i].calls,(unsigned long long)phases[i].total_us,(unsigned long long)phases[i].max_us);
+    for(unsigned i=0;i<2;++i)WHBLogPrintf("PUBLISH display=%s policy=changed_spans_rows updates=%llu full=%llu reused=%llu scaled_pixels=%llu requested_bytes=%llu ranges=%llu heap_bytes=%u; scale_plus_publish_compares_to_v0241_scale=1",
+        i?"DRC":"TV",(unsigned long long)publication[i].updates,(unsigned long long)publication[i].full,
+        (unsigned long long)publication[i].reused,(unsigned long long)publication[i].scaled_pixels,
+        (unsigned long long)publication[i].publish_bytes,(unsigned long long)publication[i].publish_ranges,
+        (unsigned)publication[i].heap_bytes);
     WHBLogPrintf("SLICE quantum=10000 max_instructions=500000 max_us=8000 max_calls=50 last_reason=%s last_calls=%u last_instructions=%llu last_us=%llu drawn_submitted=%u ready_serial=%llu drawn_ms=%llu guest_session=%u soft_time_bound=1",
         ctr_slice_reason_name(last_slice.reason),last_slice.calls,(unsigned long long)last_slice.instructions,
         (unsigned long long)last_slice.elapsed_us,drawn_frame_submitted,(unsigned long long)draw_ready_serial,
@@ -214,13 +224,25 @@ static uint32_t home_button_exit(void *context) {
 
 static bool result_snapshot(const char *stage) {
     if(!test_result.ready || test_result.failed)return false;
-    char body[CTR_TEST_RESULT_BYTES],guide_results[1536],scene_summary[384]="",phase_summary[1024];
+    char body[CTR_TEST_RESULT_BYTES],guide_results[1536],scene_summary[384]="",phase_summary[1024],publication_summary[768];
     size_t used=0;
     for(unsigned i=0;i<PH_COUNT;++i) {
         int length=snprintf(phase_summary+used,sizeof(phase_summary)-used,"Phase %s: calls=%llu total_us=%llu max_us=%llu\n",
             phase_names[i],(unsigned long long)phases[i].calls,(unsigned long long)phases[i].total_us,(unsigned long long)phases[i].max_us);
         if(length<0 || (size_t)length>=sizeof(phase_summary)-used) {
             test_result.failed=true;test_result.error_code=EMSGSIZE;test_result.error_stage="phase_format";return false;
+        }
+        used+=(size_t)length;
+    }
+    used=0;
+    for(unsigned i=0;i<2;++i) {
+        int length=snprintf(publication_summary+used,sizeof(publication_summary)-used,
+            "Scale cache %s: updates=%llu full=%llu reused=%llu scaled_pixels=%llu publish_bytes=%llu ranges=%llu heap_bytes=%u\n",
+            i?"DRC":"TV",(unsigned long long)publication[i].updates,(unsigned long long)publication[i].full,
+            (unsigned long long)publication[i].reused,(unsigned long long)publication[i].scaled_pixels,
+            (unsigned long long)publication[i].publish_bytes,(unsigned long long)publication[i].publish_ranges,(unsigned)publication[i].heap_bytes);
+        if(length<0 || (size_t)length>=sizeof(publication_summary)-used) {
+            test_result.failed=true;test_result.error_code=EMSGSIZE;test_result.error_stage="publication_format";return false;
         }
         used+=(size_t)length;
     }
@@ -251,6 +273,7 @@ static bool result_snapshot(const char *stage) {
         "PICA: completed=%llu lists=%llu writes=%llu finalizers=%llu last_result=%u last_offset=%u last_register=%03x\n"
         "Guest software draws: draws=%llu triangles=%llu fragments=%llu shader_steps=%llu scene_error=%u vertex_error=%u shader_error=%u; no GPU shader translation\n"
         "Host frame us: min=%u mean=%llu max=%u (diagnostic overhead, not game performance)\n"
+        "%s"
         "%s"
         "Draw submitted: %u serial=%llu latency_ms=%llu | Slice: reason=%s calls=%u instructions=%llu us=%llu; soft 8000us / 500000 instructions\n"
         "Latest guest message: %s\nSave: load_status=%d persist_errno=%d\n"
@@ -297,7 +320,7 @@ static bool result_snapshot(const char *stage) {
         final_guest.captured?final_guest.gx.last_vertex_result:gsp_guest.gsp.last_vertex_result,
         final_guest.captured?final_guest.gx.last_shader_result:gsp_guest.gsp.last_shader_result,
         completed_frames?frame_min_us:0,(unsigned long long)(completed_frames?frame_total_us/completed_frames:0),frame_max_us,
-        phase_summary,drawn_frame_submitted,(unsigned long long)draw_ready_serial,(unsigned long long)drawn_latency_ms,
+        phase_summary,publication_summary,drawn_frame_submitted,(unsigned long long)draw_ready_serial,(unsigned long long)drawn_latency_ms,
         ctr_slice_reason_name(last_slice.reason),last_slice.calls,(unsigned long long)last_slice.instructions,(unsigned long long)last_slice.elapsed_us,
         latest_guest_message[0]?latest_guest_message:"none",snapshot_load_result,snapshot_errno,
         report_handler_added && !test_report.failed?"SAVING":"FAILED",test_report.filename,test_report.error_code,
@@ -386,6 +409,8 @@ static void restart_guest(void) {
         if(frame_guest.state==CTR_GUEST_FAULTED || gsp_guest.state==CTR_GUEST_FAULTED)guest_fault_seen=true;
     }
     ++guest_sessions;
+    WHBLogPrintf("SCALE CACHE invalidate=guest_restart next_update=full");
+    ctr_scale_cache_invalidate(&tv_cache);ctr_scale_cache_invalidate(&drc_cache);
     gsp_pass_seen=false;
     latest_guest_message[0]=0;
     WHBLogPrintf("Guest session %u starting",guest_sessions);
@@ -575,11 +600,21 @@ static int surface_create(GX2Surface *s, const GX2Surface *target) {
 
 /* A CPU diagnostic image copied to GX2 is intentionally separate from any
  * guest PICA emulation. No proprietary shader compiler or assets are used. */
-static bool scale_image(GX2Surface *s,const ctr_scale_plan *plan,const uint32_t *image,size_t pixels) {
-    if(!ctr_scale_rgba(plan,image,pixels,s->image,s->imageSize,s->pitch))return false;
-    DCFlushRange(s->image, s->imageSize);
-    GX2Invalidate(GX2_INVALIDATE_MODE_CPU_TEXTURE, s->image, s->imageSize);
+static bool update_image(GX2Surface *s,ctr_scale_cache *cache,const uint32_t *image,size_t pixels,unsigned display) {
+    ctr_scale_update update;
+    if(!ctr_scale_cache_update(cache,image,pixels,s->image,s->imageSize,s->pitch,&update))return false;
+    ++publication[display].updates;publication[display].full+=update.full;
+    publication[display].reused+=cache->range_count==0;publication[display].scaled_pixels+=update.scaled_pixels;
     return true;
+}
+static void publish_image(GX2Surface *s,const ctr_scale_cache *cache,unsigned display) {
+    for(size_t i=0;i<cache->range_count;++i) {
+        const ctr_scale_range *range=&cache->ranges[i];
+        void *start=(unsigned char *)s->image+range->offset;
+        DCFlushRange(start,(uint32_t)range->bytes);
+        GX2Invalidate(GX2_INVALIDATE_MODE_CPU_TEXTURE,start,(uint32_t)range->bytes);
+        publication[display].publish_bytes+=range->bytes;++publication[display].publish_ranges;
+    }
 }
 
 static int allocation_test(void) {
@@ -822,6 +857,7 @@ static void cleanup_resources(void *context) {
     WHBLogPrintf("EXIT stage=audio_cleanup_done");
     WHBLogPrintf("EXIT stage=graphics_cleanup_begin");
     if (exit->gfx_ready && exit->foreground) GX2DrawDone();
+    ctr_scale_cache_close(&tv_cache);ctr_scale_cache_close(&drc_cache);
     if (exit->tv->image) MEMFreeToDefaultHeap(exit->tv->image);
     if (exit->drc->image) MEMFreeToDefaultHeap(exit->drc->image);
     if (exit->gfx_ready) WHBGfxShutdown();
@@ -988,9 +1024,12 @@ int main(int argc, char **argv) {
     if (!surface_create(&tv_source,tv_target) || !surface_create(&drc_source,drc_target) ||
         !ctr_viewport_fit(&tv_view,tv_target->width,tv_target->height,TOP_W,GUEST_H) ||
         !ctr_viewport_fit(&drc_view,drc_target->width,drc_target->height,BOTTOM_W,GUEST_H) ||
-        !ctr_scale_plan_init(&tv_scale,&tv_view) || !ctr_scale_plan_init(&drc_scale,&drc_view)) {
+        !ctr_scale_plan_init(&tv_scale,&tv_view) || !ctr_scale_plan_init(&drc_scale,&drc_view) ||
+        !ctr_scale_cache_init(&tv_cache,&tv_scale) || !ctr_scale_cache_init(&drc_cache,&drc_scale)) {
         WHBLogPrintf("FAIL native surface allocation or viewport"); goto cleanup;
     }
+    publication[0].heap_bytes=tv_cache.source_pixels*4+tv_cache.range_capacity*sizeof(*tv_cache.ranges);
+    publication[1].heap_bytes=drc_cache.source_pixels*4+drc_cache.range_capacity*sizeof(*drc_cache.ranges);
     WHBLogPrintf("TV surface=%ux%u viewport=%u,%u %ux%u allocation_bytes=%u pitch=%u",
                   tv_view.output_width,tv_view.output_height,tv_view.x,tv_view.y,
                   tv_view.width,tv_view.height,tv_source.imageSize,tv_source.pitch);
@@ -1035,7 +1074,11 @@ int main(int argc, char **argv) {
         }
         bool reacquired=!foreground;
         foreground=true;
-        if(reacquired && !audio_init(foreground))goto cleanup;
+        if(reacquired) {
+            WHBLogPrintf("SCALE CACHE invalidate=foreground_reacquire next_update=full");
+            ctr_scale_cache_invalidate(&tv_cache);ctr_scale_cache_invalidate(&drc_cache);
+            if(!audio_init(foreground))goto cleanup;
+        }
         OSTime frame_start=OSGetTime();
         bool draw_candidate=false;
         VPADStatus sample={0};
@@ -1285,11 +1328,14 @@ int main(int argc, char **argv) {
         phase_add(PH_WAIT,OSTicksToMicroseconds(OSGetTime()-wait_start));
         freeze_checkpoint("scale_begin");
         OSTime scale_start=OSGetTime();
-        if(!scale_image(&tv_source,&tv_scale,top_image,TOP_W*GUEST_H) ||
-           !scale_image(&drc_source,&drc_scale,bottom_image,BOTTOM_W*GUEST_H)) {
+        if(!update_image(&tv_source,&tv_cache,top_image,TOP_W*GUEST_H,0) ||
+           !update_image(&drc_source,&drc_cache,bottom_image,BOTTOM_W*GUEST_H,1)) {
             WHBLogPrintf("FAIL cached image scale bounds");result=1;goto cleanup;
         }
         phase_add(PH_SCALE,OSTicksToMicroseconds(OSGetTime()-scale_start));
+        OSTime publish_start=OSGetTime();
+        publish_image(&tv_source,&tv_cache,0);publish_image(&drc_source,&drc_cache,1);
+        phase_add(PH_PUBLISH,OSTicksToMicroseconds(OSGetTime()-publish_start));
         freeze_checkpoint("render_begin");
         OSTime present_start=OSGetTime();
         WHBGfxBeginRender();

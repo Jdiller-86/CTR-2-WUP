@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "0.24.1",
+  "version": "0.25.0",
   "updated": "2026-10-15",
   "approximate_implementation_percent": 20,
   "full_milestones_accepted": 0,
@@ -18,7 +18,8 @@
         "Older native/control reports, confirmed Minus exit and user-reported Native/Guarded/Compiled v0.14.5 completion retained as scoped evidence",
         "October 12 physical round: five completed named TXT reports, valid visit-2 snapshot, fresh-launch Save 0.14.6 RELOAD PASS and user-confirmed correct pictures/Minus return; looping launch music recorded separately",
         "October 13 Audio Check 0.20.0 full trace and GX Transfers 0.20.0 result/trace record named passes; user confirms silence and correct exit. Native audio result TXT was not included.",
-        "Completed 0.24.1 hardware round (October 14 evening / October 15 UTC): five source-matched traces and five reports verify two arithmetic guides, the full Guest Draws/Plus-repeat guide and all five launches through main_return. The user confirms Minus/HOME return on firmware 5.5.6 U / Aroma Beta 27. All files are received and the corrected collector/analyzer passes on them; full stability/recovery and installed-WUP acceptance remain open."
+        "Completed 0.24.1 hardware round (October 14 evening / October 15 UTC): five source-matched traces and five reports verify two arithmetic guides, the full Guest Draws/Plus-repeat guide and all five launches through main_return. The user confirms Minus/HOME return on firmware 5.5.6 U / Aroma Beta 27. All files are received and the corrected collector/analyzer passes on them; full stability/recovery and installed-WUP acceptance remain open.",
+        "0.25.0 native display cache has independent exact-output/failure checks and original host workload reductions, retaining both GX2 copies and cache APIs. Split scale/publish and work/memory logs support a new source-bound two-app physical comparison; Wii U freshness/restart/speed remain pending. Host publication-byte savings do not accept performance or any full milestone."
       ],
       "acceptance_remaining": [
         "Verify documented SD publication recovery and repeat launch/Home/APT lifecycle acceptance",
@@ -60,7 +61,8 @@
           ],
           "state": "awaiting_evidence",
           "evidence": [
-            "Completed 0.24.1 hardware round (October 14 evening / October 15 UTC): five source-matched traces and five reports verify two arithmetic guides, the full Guest Draws/Plus-repeat guide and all five launches through main_return. The user confirms Minus/HOME return on firmware 5.5.6 U / Aroma Beta 27. All files are received and the corrected collector/analyzer passes on them; full stability/recovery and installed-WUP acceptance remain open."
+            "Completed 0.24.1 hardware round (October 14 evening / October 15 UTC): five source-matched traces and five reports verify two arithmetic guides, the full Guest Draws/Plus-repeat guide and all five launches through main_return. The user confirms Minus/HOME return on firmware 5.5.6 U / Aroma Beta 27. All files are received and the corrected collector/analyzer passes on them; full stability/recovery and installed-WUP acceptance remain open.",
+            "0.25.0 native display cache has independent exact-output/failure checks and original host workload reductions, retaining both GX2 copies and cache APIs. Split scale/publish and work/memory logs support a new source-bound two-app physical comparison; Wii U freshness/restart/speed remain pending. Host publication-byte savings do not accept performance or any full milestone."
           ]
         },
         {
@@ -125,7 +127,8 @@
       "verified_foundations": [
         "Original interpreter/AOT/reference suites and checked little-endian memory across host and emulated big-endian PowerPC",
         "Eight single-core CPU/TLS/VFP contexts, scoped instruction/fault/synchronization semantics and external generated-code integration",
-        "Completed 0.24.1 traces verify three drawn guest sessions at 91.190\u201391.613 s, mean host refresh 146.527\u2013146.579 ms and mean native scale/publication 132.218\u2013132.281 ms, about 90% of summed phase times. The completed Plus launch has 1168 soft-time, 4 new-frame, 7 waiting and 440 stopped slices; guest/HLE maximum phase is 48.636 ms. All files are received. Optimize measured native scaling; no speedup, GPU timestamp, game-FPS or full Espresso acceptance is inferred."
+        "Completed 0.24.1 traces verify three drawn guest sessions at 91.190\u201391.613 s, mean host refresh 146.527\u2013146.579 ms and mean native scale/publication 132.218\u2013132.281 ms, about 90% of summed phase times. The completed Plus launch has 1168 soft-time, 4 new-frame, 7 waiting and 440 stopped slices; guest/HLE maximum phase is 48.636 ms. All files are received. Optimize measured native scaling; no speedup, GPU timestamp, game-FPS or full Espresso acceptance is inferred.",
+        "0.25.0 native display cache has independent exact-output/failure checks and original host workload reductions, retaining both GX2 copies and cache APIs. Split scale/publish and work/memory logs support a new source-bound two-app physical comparison; Wii U freshness/restart/speed remain pending. Host publication-byte savings do not accept performance or any full milestone."
       ],
       "acceptance_remaining": [
         "Complete exercised instruction/exception/exclusive/VFP and generated-code ABI correctness",
@@ -334,7 +337,8 @@
         "Merged scoped #97/PR #98 expands vertex code storage to 512 words with original entry/upload/rollback probes and native storage/stack measurements. Required hosted platform checks and native/Project reconciliation 38608010840 pass; #28/M4 acceptance remains open.",
         "Scoped #76/PR #105 adds exact component-wise ADD/MUL using integer dyadic arithmetic, independent rational numeric/encoding/pixel references and late shader/target/queue rollback. Rounding, underflow/overflow and unsupported state reject explicitly; required host/native/Windows/docs checks gate delivery through PR #105. No hardware or full task acceptance.",
         "October 15 source-matched 0.24.1 Scene Check results pass exact ADD/MUL analytic pixels in both index formats and both picture prompts on two launches. The user confirms normal Minus returns. This scoped CPU software raster/GX2-copy pass does not accept hardware rounding, general shaders or native GPU translation.",
-        "Complete 0.24.1 reports/traces verify two arithmetic guides, correct picture-confirmation order and all three Guest Draws/Plus-repeat steps with new-session own PASS/exit, unchanged draw counters and zero fallback/fault. All five launches reach main_return; the user confirms Minus/HOME return. All files are received and the corrected collector/analyzer accepts all ten payloads without missing-pair warnings. Native scale/publication averages 132.218\u2013132.281 ms; scene latency is 91.190\u201391.613 s. Performance, native GPU and full M4 acceptance remain open."
+        "Complete 0.24.1 reports/traces verify two arithmetic guides, correct picture-confirmation order and all three Guest Draws/Plus-repeat steps with new-session own PASS/exit, unchanged draw counters and zero fallback/fault. All five launches reach main_return; the user confirms Minus/HOME return. All files are received and the corrected collector/analyzer accepts all ten payloads without missing-pair warnings. Native scale/publication averages 132.218\u2013132.281 ms; scene latency is 91.190\u201391.613 s. Performance, native GPU and full M4 acceptance remain open.",
+        "0.25.0 native display cache has independent exact-output/failure checks and original host workload reductions, retaining both GX2 copies and cache APIs. Split scale/publish and work/memory logs support a new source-bound two-app physical comparison; Wii U freshness/restart/speed remain pending. Host publication-byte savings do not accept performance or any full milestone."
       ],
       "acceptance_remaining": [
         "Implement real PICA command/state, vertex/shader, texture/sampler/TEV and raster behavior",
