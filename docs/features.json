@@ -827,6 +827,26 @@
         "GitHub documents projectItems(includeArchived:true) on Issue and PullRequest. Focused reference/identity/privacy tests pass; full required checks and live verification gate delivery.",
         "PR #111 merged at 150aa5caf62ad2d13cf6256e3224d1239c4a3e85 after Required CI/Documentation passed. Reviewed dry-run 38752356368 then apply 38752814566 verify 71 native parents, 33 PR links and all 111 expected members at that checkpoint. Exact reverse links verify new PR #109/#111 while the connection still omits them. Owner settings/notes remain preserved; final documentation tracking follows separately."
       ]
+    },
+    {
+      "id": "cstm-block-reader",
+      "title": "Read checked CSTM DSP ADPCM blocks and seek histories",
+      "milestone": 3,
+      "parent_issue": 25,
+      "state": "planned",
+      "pull_requests": [],
+      "scope": [
+        "Parse a bounded little-endian CSTM v2 non-looping mono/stereo DSP ADPCM subset using section-relative references.",
+        "Expose exact per-channel full/final block bytes, numeric coefficients and block SEEK histories for the existing decoder without guest playback."
+      ],
+      "acceptance": [
+        "Original relocated mono/stereo fixtures independently verify metadata, padded channel block addressing, initial/history order and sequential versus checkpoint PCM.",
+        "Truncation, overflow, conflicting sizes, invalid references and unsupported formats fail explicitly without publishing output; normal/sanitizer, Windows, native and documentation checks pass."
+      ],
+      "evidence": [
+        "Follows merged codec #103/PR #109 under #25/M3; no commercial waveform, coefficients or files are fixtures.",
+        "Guest DSP IPC, tracks/mixing, loops, general SEEK intervals, big-endian streams, CSAR and physical audio acceptance remain open."
+      ]
     }
   ],
   "reviewed_statuses": {
