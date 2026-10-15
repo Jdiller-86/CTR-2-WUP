@@ -6,7 +6,11 @@
 
 First visit? [Take the repository tour](docs/repository-guide.md).
 
-Testing on Wii U? The [focused 0.25.0 comparison](docs/console-retest.md)
+Testing audio on Wii U? The [Audio Streams 0.26.0 guide](docs/audio-stream-testing.md)
+covers the new checked stream/mixer/native path with eight listening/control steps
+and FTP result return. Actual hardware acceptance remains pending.
+
+The separate [focused 0.25.0 comparison](docs/console-retest.md)
 checks the new native display cache with two guided apps and FTP log return.
 The completed [0.24.1 hardware results](docs/console-evidence.md) remain the
 baseline, with all files received. The cache's host pixel/work checks pass;
@@ -31,9 +35,9 @@ matching verified provenance. M5 analysis is active; shader/container/audio
 formats are identified, while runtime requirements and gameplay support remain
 unfinished.
 
-The shared audio foundation now includes a checked [CSTM block/SEEK reader](docs/cstm.md)
-for the original DSP ADPCM codec. Guest DSP services, mixing and Wii U audio
-playback remain under development.
+The [shared audio engine](docs/audio-streams.md) now connects checked CSTM/ADPCM
+voices to stereo mixing and finite native playback. Guest DSP firmware/services,
+real-time synchronization and physical audio acceptance remain under development.
 
 ## Approach
 

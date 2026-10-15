@@ -49,7 +49,9 @@ Current requirements:
    adds exact ADD/MUL original rational/scene/rollback probes; required host/native/Windows/docs checks gate delivery;
    receipts are linked from PR #105. The DSP ADPCM reference now has exact original sample/history/seek
    evidence; scoped #113/PR #114 now adds original CSTM block/SEEK checks. Broader
-   containers, guest DSP/mixing/output remain open. Hardware
+   containers and guest DSP firmware/IPC remain open. Scoped #115/PR #116 adds
+   a checked stream/mixer/native-clip path and guided audio tests; real-time
+   synchronization and physical audible acceptance remain pending. Hardware
    rounding, remaining arithmetic/control and shared runtime development continue
    independently of the new display-cache physical comparison.
 5. **Conversion/GUI:** prove the full native Windows conversion and WUP

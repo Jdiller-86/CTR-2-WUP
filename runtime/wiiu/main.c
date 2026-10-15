@@ -34,6 +34,24 @@
 #include "test_guide.h"
 #include "test_lifecycle.h"
 #include "diagnostic_audio.h"
+#ifdef CTR_STREAM_AUDIO
+#include "audio_stream_app.h"
+#include "audio_stream_diagnostic.h"
+#include "ctr_audio.h"
+#include "ctr_audio_fixture.h"
+static ctr_stream_app stream_app;
+static ctr_native_pcm stream_pcm;
+static ctr_native_pcm_report stream_native;
+static CtrAudioFixture stream_fixtures[3];
+static CtrAudioEngine stream_engine;
+static int16_t stream_samples[72000u*2u];
+static bool stream_fixtures_ready;
+static uint32_t stream_render_frames,stream_render_us,stream_render_pulls;
+static uint64_t stream_decoded_frames;
+static CtrAudioResult stream_render_result;
+static uint32_t stream_golden_expected,stream_golden_observed;
+static bool stream_golden_checked,stream_golden_match;
+#endif
 #include "image_scale.h"
 #include "guest_slice.h"
 #include "ctr_cpu.h"
@@ -87,7 +105,7 @@ static bool read_romfs(void *context,uint64_t offset,void *output,uint32_t size)
 
 enum { TOP_W=400, BOTTOM_W=320, GUEST_H=240, AUDIO_SAMPLES=12000 };
 static uint32_t top_image[TOP_W*GUEST_H], bottom_image[BOTTOM_W*GUEST_H];
-#ifndef CTR_COMPILED_HOMEBREW
+#if !defined(CTR_COMPILED_HOMEBREW) && !defined(CTR_STREAM_AUDIO)
 static int16_t audio_samples[AUDIO_SAMPLES] __attribute__((aligned(64)));
 #endif
 static ctr_test_report test_report;
@@ -181,7 +199,9 @@ static uint16_t touch_min_x=UINT16_MAX,touch_min_y=UINT16_MAX,touch_max_x,touch_
 #elif CTR_GUEST_DEFAULT == 1
 #define REPORT_APPLICATION "original-guest"
 #else
-#ifdef CTR_AUDIO_ONLY
+#ifdef CTR_STREAM_AUDIO
+#define REPORT_APPLICATION "native-audio-streams"
+#elif defined(CTR_AUDIO_ONLY)
 #define REPORT_APPLICATION "native-audio"
 #elif defined(CTR_SCENE_ONLY)
 #define REPORT_APPLICATION "native-software-scene"
@@ -193,7 +213,7 @@ static const uint32_t input_masks[]={VPAD_BUTTON_A,VPAD_BUTTON_B,VPAD_BUTTON_MIN
     VPAD_BUTTON_RIGHT,VPAD_BUTTON_LEFT,VPAD_BUTTON_UP,VPAD_BUTTON_DOWN,VPAD_BUTTON_R,VPAD_BUTTON_L,
     VPAD_BUTTON_X,VPAD_BUTTON_Y};
 static const char *const input_names[]={"A","B","Minus","Plus","Right","Left","Up","Down","R","L","X","Y"};
-#ifndef CTR_COMPILED_HOMEBREW
+#if !defined(CTR_COMPILED_HOMEBREW) && !defined(CTR_STREAM_AUDIO)
 static AXVoice *tone_voice;
 #endif
 static unsigned tone_count;
@@ -222,8 +242,65 @@ static uint32_t home_button_exit(void *context) {
     (void)context;atomic_store(&home_exit_requested,1);return 0;
 }
 
+#ifdef CTR_STREAM_AUDIO
+static void stream_log_native(const char *stage) {
+    ctr_native_pcm_snapshot(&stream_pcm,&stream_native);
+    WHBLogPrintf("STREAM NATIVE stage=%s status=%s result=%s prepared=%u running=%u/%u cursor=%u/%u frames=%u pcm_fnv1a=%08x prepares=%u plays=%u pauses=%u resumes=%u stops=%u releases=%u completions=%u failures=%u ownership_losses=%u",
+        stage,ctr_native_pcm_status_name(stream_native.status),ctr_native_pcm_result_name(stream_native.result),
+        stream_native.prepared,stream_native.running[0],stream_native.running[1],stream_native.cursor[0],stream_native.cursor[1],
+        stream_native.frames,stream_native.pcm_fnv1a,stream_native.prepares,stream_native.plays,stream_native.pauses,
+        stream_native.resumes,stream_native.stops,stream_native.releases,stream_native.completions,stream_native.failures,stream_native.ownership_losses);
+}
+static bool stream_result_snapshot(const char *stage) {
+    char body[CTR_TEST_RESULT_BYTES],results[1536];
+    ctr_native_pcm_snapshot(&stream_pcm,&stream_native);
+    if(!ctr_stream_app_results(&stream_app,results,sizeof(results)))return false;
+    int n=snprintf(body,sizeof(body),
+        "Source: %s dirty=%u | Evidence schema: 2\n"
+        "Stage: %s\nHost exit result: %d (-1 means still running)\n"
+        "Guide: %s | passed=%u failed=%u skipped=%u current_step=%u\n"
+        "Audio sessions: %u | attempts=%u foreground_losses=%u\n"
+        "Native audio context: result=%s owned=%u inherited=%u attempts=%u successes=%u failures=%u resets=%u releases=%u\n"
+        "Stream native: status=%s result=%s prepared=%u running=%u/%u cursor=%u/%u frames=%u pcm_fnv1a=%08x\n"
+        "Stream counters: prepares=%u plays=%u pauses=%u resumes=%u stops=%u releases=%u completions=%u failures=%u ownership_losses=%u\n"
+        "Portable render: fixtures_ready=%u pulls=%u frames=%u output_rate=48000 render_us=%u decoded_frames=%llu clipped_samples=%llu; fixed finite prerender, no callback mixing\n"
+        "PCM golden: checked=%u expected_fnv1a=%08x observed_fnv1a=%08x match=%u portable_result=%s\n"
+        "Input: samples=%u errors=%u A_presses=%u Minus_presses=%u\n"
+        "Frames: host=%u | frame_us min=%u mean=%llu max=%u; diagnostic overhead, not game FPS\n"
+        "Full trace: %s | file=%s errno=%d operation=%s FSA=%d commits=%llu\n"
+        "Previous result writes verified: %llu\nNamed guide results:\n%s"
+        "Human confirmations describe TV/GamePad hearing; native completion is not proof of audible output.\n"
+        "Original CSTM/portable mixer/native finite PCM diagnostic only; guest DSP IPC, guest execution, continuous streaming and game compatibility unavailable.\n"
+        "User must separately report launcher silence/return. No full milestone PASS is established.\n",
+        CTR_SOURCE_COMMIT,CTR_SOURCE_DIRTY,stage,app_exit_result,
+        !stream_app.started?"NOT_STARTED":stream_app.done?"COMPLETE":stream_app.cancelled?"CANCELLED":"RUNNING",
+        stream_app.passed,stream_app.failed,stream_app.skipped,stream_app.step+1,
+        stream_app.session,stream_app.attempts,stream_app.foreground_losses,
+        ctr_diagnostic_audio_result_name(diagnostic_audio.result),diagnostic_audio.owned,diagnostic_audio.last_inherited,
+        diagnostic_audio.attempts,diagnostic_audio.successes,diagnostic_audio.failures,diagnostic_audio.inherited_resets,diagnostic_audio.releases,
+        ctr_native_pcm_status_name(stream_native.status),ctr_native_pcm_result_name(stream_native.result),stream_native.prepared,
+        stream_native.running[0],stream_native.running[1],stream_native.cursor[0],stream_native.cursor[1],stream_native.frames,stream_native.pcm_fnv1a,
+        stream_native.prepares,stream_native.plays,stream_native.pauses,stream_native.resumes,stream_native.stops,stream_native.releases,
+        stream_native.completions,stream_native.failures,stream_native.ownership_losses,
+        stream_fixtures_ready,stream_render_pulls,stream_render_frames,stream_render_us,(unsigned long long)stream_decoded_frames,
+        (unsigned long long)stream_engine.clipped_samples,stream_golden_checked,stream_golden_expected,stream_golden_observed,
+        stream_golden_match,ctr_audio_result_name(stream_render_result),input_samples,input_errors,button_presses[0],button_presses[2],
+        completed_frames,completed_frames?frame_min_us:0,(unsigned long long)(completed_frames?frame_total_us/completed_frames:0),frame_max_us,
+        report_handler_added&&!test_report.failed?"SAVING":"FAILED",test_report.filename,test_report.error_code,
+        test_report.error_stage?test_report.error_stage:"none",report_storage.last_status,(unsigned long long)test_report.commits,
+        (unsigned long long)test_result.verified_writes,results);
+    if(n<0 || (size_t)n>=sizeof(body)) {
+        test_result.failed=true;test_result.error_code=EMSGSIZE;test_result.error_stage="stream_format";return false;
+    }
+    return ctr_test_result_update(&test_result,body);
+}
+#endif
+
 static bool result_snapshot(const char *stage) {
     if(!test_result.ready || test_result.failed)return false;
+#ifdef CTR_STREAM_AUDIO
+    return stream_result_snapshot(stage);
+#endif
     char body[CTR_TEST_RESULT_BYTES],guide_results[1536],scene_summary[384]="",phase_summary[1024],publication_summary[768];
     size_t used=0;
     for(unsigned i=0;i<PH_COUNT;++i) {
@@ -540,12 +617,80 @@ static void guide_log(void *context,const char *message) {
     (void)context;WHBLogPrintf("%s",message);
 }
 
+#ifdef CTR_STREAM_AUDIO
+static bool stream_start(void *context,unsigned step,unsigned session) {
+    (void)context;
+    if(!stream_fixtures_ready || !diagnostic_audio.owned)return false;
+    ctr_native_pcm_release(&stream_pcm);
+    stream_golden_checked=stream_golden_match=false;stream_golden_expected=stream_golden_observed=0;
+    CtrAudioResult result=ctr_audio_init(&stream_engine);
+    unsigned fixture=step==2?1u:step==4?2u:0u;
+    unsigned voices=(step==3 || step==7)?2u:1u;
+    uint32_t seek=step==6?16000u:0u;
+    for(unsigned voice=0;voice<voices && result==CTR_AUDIO_OK;++voice) {
+        unsigned selected=voices==2?voice:fixture;
+        result=ctr_audio_bind(&stream_engine,voice,stream_fixtures[selected].data,stream_fixtures[selected].bytes);
+        uint32_t left=step==2?0u:CTR_AUDIO_GAIN_ONE;
+        uint32_t right=step==1 || step==4 || step==6?0u:CTR_AUDIO_GAIN_ONE;
+        if(voices==2)left=right=CTR_AUDIO_GAIN_ONE/2u;
+        if(result==CTR_AUDIO_OK)result=ctr_audio_gain(&stream_engine,voice,left,right);
+        if(result==CTR_AUDIO_OK && seek)result=ctr_audio_seek(&stream_engine,voice,seek);
+        if(result==CTR_AUDIO_OK)result=ctr_audio_play(&stream_engine,voice,true);
+    }
+    stream_render_frames=step==4?48000u:step==6?48000u:72000u;
+    stream_render_pulls=0;OSTime started=OSGetTime();
+    for(uint32_t at=0;at<stream_render_frames && result==CTR_AUDIO_OK;) {
+        uint32_t frames=stream_render_frames-at;
+        if(frames>CTR_AUDIO_MAX_FRAMES)frames=CTR_AUDIO_MAX_FRAMES;
+        result=ctr_audio_render(&stream_engine,stream_samples+(size_t)at*2u,stream_render_frames-at,frames);
+        at+=frames;++stream_render_pulls;
+    }
+    stream_render_us=(uint32_t)OSTicksToMicroseconds(OSGetTime()-started);stream_render_result=result;
+    stream_decoded_frames=stream_engine.voices[0].decoded_frames+stream_engine.voices[1].decoded_frames;
+    WHBLogPrintf("STREAM RENDER step=%u session=%u source_rate=%u seek_sample=%u voices=%u result=%s output_rate=48000 frames=%u pulls=%u render_us=%u source_decoded_frames=%llu clipped_samples=%llu; original finite prerender no callback mixing",
+        step+1,session,step==4?48000u:32000u,seek,voices,ctr_audio_result_name(result),stream_render_frames,
+        stream_render_pulls,stream_render_us,(unsigned long long)stream_decoded_frames,(unsigned long long)stream_engine.clipped_samples);
+    /* Independently derived exact PCM goldens include resampling, channel
+       routing, gain, mixing and the seek checkpoint. Numeric PCM is hashed in
+       little-endian byte order on every host, including this big-endian PPC. */
+    static const uint32_t expected[CTR_STREAM_APP_STEPS]={0,UINT32_C(0x103a2d65),UINT32_C(0x45023c95),
+        UINT32_C(0x9b614705),UINT32_C(0x488615e5),UINT32_C(0x912406f5),UINT32_C(0x4348ffc1),UINT32_C(0x9b614705)};
+    bool ok=result==CTR_AUDIO_OK && ctr_native_pcm_prepare(&stream_pcm,stream_samples,stream_render_frames);
+    if(ok) {
+        stream_golden_checked=true;stream_golden_expected=expected[step];stream_golden_observed=stream_pcm.report.pcm_fnv1a;
+        bool match=stream_golden_match=stream_golden_observed==stream_golden_expected;
+        WHBLogPrintf("STREAM GOLDEN step=%u expected_pcm_fnv1a=%08x observed_pcm_fnv1a=%08x match=%u scope=original_PCM_not_audibility",
+            step+1,expected[step],stream_pcm.report.pcm_fnv1a,match);
+        if(!match) { ctr_native_pcm_release(&stream_pcm);ok=false; }
+    }
+    if(ok)ok=ctr_native_pcm_play(&stream_pcm);
+    stream_log_native("explicit_play");return ok;
+}
+static bool stream_pause(void *context,bool paused) {
+    (void)context;
+    bool ok=paused?ctr_native_pcm_pause(&stream_pcm):ctr_native_pcm_resume(&stream_pcm);
+    stream_log_native(paused?"pause":"resume");return ok;
+}
+static void stream_stop(void *context) {
+    (void)context;
+    if(stream_pcm.report.prepared)ctr_native_pcm_stop(&stream_pcm);
+    stream_log_native("guide_stop");
+}
+#endif
+
 static void session_summary(int result) {
     phase_log();
     WHBLogPrintf("===== SESSION SUMMARY =====");
     WHBLogPrintf("SD commits=%llu maximum_sync_us=%llu policy=file_sync_close_volume_sync; crash_recovery_requires_console_evidence",
         (unsigned long long)test_report.commits,(unsigned long long)report_sync_max_us);
+#ifdef CTR_STREAM_AUDIO
+    ctr_stream_app_summary(&stream_app);stream_log_native("session_summary");
+    WHBLogPrintf("Application: %s | Build: %s | Entering cleanup: result=%d | Audio sessions: %u | Human hearing remains external evidence",
+        REPORT_APPLICATION,CTR_APP_VERSION,result,stream_app.session);
+    return;
+#else
     ctr_test_guide_summary(&test_guide);
+#endif
     WHBLogPrintf("Application: %s | Build: %s | Entering cleanup: result=%d",REPORT_APPLICATION,CTR_APP_VERSION,result);
     WHBLogPrintf("Elapsed milliseconds: %llu | Completed display frames: %u | Guest sessions: %u",
         (unsigned long long)(OSTicksToMicroseconds(OSGetTime()-session_started)/1000),completed_frames,guest_sessions);
@@ -634,7 +779,7 @@ static int allocation_test(void) {
     return ok;
 }
 
-#ifndef CTR_COMPILED_HOMEBREW
+#if !defined(CTR_COMPILED_HOMEBREW) && !defined(CTR_STREAM_AUDIO)
 static void tone_shutdown(void *context) {
     (void)context;
     if(tone_voice && AXIsInit()) {
@@ -689,7 +834,7 @@ static bool audio_init(bool foreground) {
     WHBLogPrintf("Native audio begin: result=%s owned=%u inherited=%u attempts=%u failures=%u resets=%u; launcher silence requires human check",
         ctr_diagnostic_audio_result_name(diagnostic_audio.result),diagnostic_audio.owned,diagnostic_audio.last_inherited,
         diagnostic_audio.attempts,diagnostic_audio.failures,diagnostic_audio.inherited_resets);
-#ifndef CTR_COMPILED_HOMEBREW
+#if !defined(CTR_COMPILED_HOMEBREW) && !defined(CTR_STREAM_AUDIO)
     if(ready && !already_owned)tone_init();
 #else
     (void)already_owned;
@@ -698,12 +843,16 @@ static bool audio_init(bool foreground) {
 }
 static bool audio_shutdown(void) {
     bool released=ctr_diagnostic_audio_end(&diagnostic_audio,
-#ifndef CTR_COMPILED_HOMEBREW
-        tone_shutdown,
+#ifdef CTR_STREAM_AUDIO
+        ctr_native_pcm_release,&stream_pcm);
+#elif !defined(CTR_COMPILED_HOMEBREW)
+        tone_shutdown,NULL);
 #else
-        NULL,
+        NULL,NULL);
 #endif
-        NULL);
+#ifdef CTR_STREAM_AUDIO
+    stream_log_native("AX_context_release");
+#endif
     WHBLogPrintf("Native audio end: result=%s owned=%u releases=%u failures=%u",
         ctr_diagnostic_audio_result_name(diagnostic_audio.result),diagnostic_audio.owned,
         diagnostic_audio.releases,diagnostic_audio.failures);
@@ -973,6 +1122,20 @@ int main(int argc, char **argv) {
 #else
     ctr_test_guide_init(&test_guide,CTR_GUIDE_NATIVE,guide_log,NULL);
 #endif
+#ifdef CTR_STREAM_AUDIO
+    const ctr_stream_app_ops stream_ops={stream_start,stream_pause,stream_stop,guide_log,NULL};
+    ctr_stream_app_init(&stream_app,&stream_ops);
+    stream_fixtures_ready=ctr_audio_fixture_build_mono(&stream_fixtures[0],32000u,0) &&
+        ctr_audio_fixture_build_mono(&stream_fixtures[1],32000u,1) &&
+        ctr_audio_fixture_build_mono(&stream_fixtures[2],48000u,0);
+    audio_ready=stream_fixtures_ready;
+    if(!stream_fixtures_ready) { WHBLogPrintf("STREAM fixtures FAILED");goto cleanup; }
+    bool run_guest_diagnostics=false;
+    WHBLogPrintf("STREAM profile original_CSTM_to_portable_mixer_to_native_finite_PCM; guest CPU/service diagnostics skipped; guest DSP unavailable");
+#else
+    bool run_guest_diagnostics=true;
+#endif
+    if(run_guest_diagnostics) {
     OSTime cpu_start=OSGetTime();
     thread_test_result=ctr_thread_selftest();
     WHBLogPrintf("thread_selftest %s result=%d fixture=original_arm_three_threads context_switches=8 instructions_per_path=345 console_result_required=1",
@@ -1017,6 +1180,7 @@ int main(int argc, char **argv) {
     }
 #endif
     selftests_done=true;result_snapshot("selftests_done");
+    }
     if (!WHBGfxInit()) { WHBLogPrintf("FAIL WHBGfxInit"); goto cleanup; }
     gfx_ready=1;
     GX2Surface *tv_target=&WHBGfxGetTVColourBuffer()->surface;
@@ -1041,7 +1205,7 @@ int main(int argc, char **argv) {
     WHBLogPrintf("Compiled test: native AX context owned for launcher silence; tone disabled; A is guest input only; guest audio unavailable");
     WHBLogPrintf("AOT call_limit=%u variant=%s",CTR_RECOMP_CALL_LIMIT,REPORT_APPLICATION);
 #endif
-    restart_guest();
+    if(run_guest_diagnostics)restart_guest();
 #ifndef CTR_COMPILED_HOMEBREW
     guest_mode=0;
 #endif
@@ -1065,6 +1229,9 @@ int main(int argc, char **argv) {
             WHBLogPrintf("EXIT trigger=HBL_home_button");break;
         }
         if(status==CTR_PROC_RELEASE) {
+#ifdef CTR_STREAM_AUDIO
+            ctr_stream_app_suspend(&stream_app);result_snapshot("foreground_release");report_commit("foreground_release");
+#endif
             ctr_report_storage_close(&report_storage);
             if(!audio_shutdown())goto cleanup;
             foreground=false;ProcUIDrawDoneRelease();continue;
@@ -1078,6 +1245,10 @@ int main(int argc, char **argv) {
             WHBLogPrintf("SCALE CACHE invalidate=foreground_reacquire next_update=full");
             ctr_scale_cache_invalidate(&tv_cache);ctr_scale_cache_invalidate(&drc_cache);
             if(!audio_init(foreground))goto cleanup;
+#ifdef CTR_STREAM_AUDIO
+            WHBLogPrintf("STREAM foreground reacquired; native context fresh; A/Plus replay required");
+            result_snapshot("foreground_reacquired");
+#endif
         }
         OSTime frame_start=OSGetTime();
         bool draw_candidate=false;
@@ -1095,7 +1266,12 @@ int main(int argc, char **argv) {
         if(fabsf(pad.rightStick.x)>0.15f || fabsf(pad.rightStick.y)>0.15f)right_stick_seen=true;
         if (pad.trigger&VPAD_BUTTON_MINUS) {
             ctr_guide_input stop={0};stop.milliseconds=OSTicksToMicroseconds(OSGetTime()-session_started)/1000;stop.pressed=CTR_GUIDE_MINUS;
+#ifdef CTR_STREAM_AUDIO
+            ctr_stream_app_input stream_stop_input={stop.milliseconds,CTR_GUIDE_MINUS,false,false};
+            ctr_stream_app_update(&stream_app,&stream_stop_input);
+#else
             ctr_test_guide_update(&test_guide,&stop);
+#endif
             result_snapshot("Minus_exit_requested");
             WHBLogPrintf("EXIT trigger=Minus; cleaning resources before system transition");break;
         }
@@ -1110,11 +1286,11 @@ int main(int argc, char **argv) {
                 (unsigned long long)gsp_presented,(unsigned long long)gsp_guest.cpu.instructions);
         }
         freeze_checkpoint("input_read");
-#else
+#elif !defined(CTR_STREAM_AUDIO)
         if (pad.trigger&VPAD_BUTTON_A) play_tone();
 #endif
-        if (pad.trigger&VPAD_BUTTON_X) alloc_ok=allocation_test();
-        if (test_guide.done && test_guide.kind!=CTR_GUIDE_SCENE && test_guide.kind!=CTR_GUIDE_PICA && (pad.trigger&VPAD_BUTTON_Y)) {
+        if (run_guest_diagnostics && (pad.trigger&VPAD_BUTTON_X)) alloc_ok=allocation_test();
+        if (run_guest_diagnostics && test_guide.done && test_guide.kind!=CTR_GUIDE_SCENE && test_guide.kind!=CTR_GUIDE_PICA && (pad.trigger&VPAD_BUTTON_Y)) {
 #ifdef CTR_COMPILED_HOMEBREW
             guest_mode=guest_mode==2?0:2;
 #else
@@ -1122,7 +1298,7 @@ int main(int argc, char **argv) {
 #endif
             WHBLogPrintf("display_mode=%s",guest_mode==2?"standard-hid-gsp":guest_mode==1?"guest-fixture":"native");
         }
-        if (test_guide.done && test_guide.kind!=CTR_GUIDE_SCENE && test_guide.kind!=CTR_GUIDE_PICA && (pad.trigger&VPAD_BUTTON_PLUS)) restart_guest();
+        if (run_guest_diagnostics && test_guide.done && test_guide.kind!=CTR_GUIDE_SCENE && test_guide.kind!=CTR_GUIDE_PICA && (pad.trigger&VPAD_BUTTON_PLUS)) restart_guest();
         VPADTouchData touch={0}; uint16_t tx=0, ty=0;
         VPADGetTPCalibratedPointEx(VPAD_CHAN_0,VPAD_TP_1280X720,&touch,&pad.tpNormal);
         int inside=touch.touched && touch.validity==VPAD_VALID &&
@@ -1139,7 +1315,15 @@ int main(int argc, char **argv) {
         freeze_checkpoint("hid_guest_done");
         if(hid_ready)ctr_hid_fixture_snapshot(&hid_guest,hid_snapshot);
         if (!guest_mode) {
-            diagnostic_images(frame,&pad,error,inside,&touch,tx,ty,frame_us,alloc_ok);
+            if(run_guest_diagnostics)diagnostic_images(frame,&pad,error,inside,&touch,tx,ty,frame_us,alloc_ok);
+#ifdef CTR_STREAM_AUDIO
+            else {
+                for(unsigned i=0;i<TOP_W*GUEST_H;++i)top_image[i]=0x162d4fff;
+                image_text(top_image,TOP_W,9,"ORIGINAL CSTM / TWO PORTABLE MIXER VOICES");
+                image_text(top_image,TOP_W,10,"FINITE NATIVE PCM / NO GUEST DSP IPC");
+                image_text(top_image,TOP_W,11,"NATIVE COMPLETION DOES NOT PROVE HEARING");
+            }
+#endif
 #ifdef CTR_SCENE_ONLY
             scene_images();
 #endif
@@ -1288,6 +1472,28 @@ int main(int argc, char **argv) {
         guide_input.guest_frame_serial=completed_frames;
 #endif
         guide_input.fresh_save_reload=fresh_save_reload_seen;
+#ifdef CTR_STREAM_AUDIO
+        unsigned guide_step_before=stream_app.step;
+        ctr_native_pcm_status before_status=stream_native.status;
+        ctr_native_pcm_snapshot(&stream_pcm,&stream_native);
+        if(before_status!=stream_native.status)stream_log_native("status_change");
+        if(!test_result.failed) {
+            ctr_stream_app_input stream_input={guide_input.milliseconds,guide_input.pressed,
+                stream_native.status==CTR_NATIVE_PCM_COMPLETE,stream_app.played && stream_native.status==CTR_NATIVE_PCM_FAILED};
+            ctr_stream_app_update(&stream_app,&stream_input);
+            if(stream_app.step!=guide_step_before || guide_input.pressed || before_status!=stream_native.status) {
+                result_snapshot("stream_guide_update");report_commit("stream_guide_update");
+            }
+        } else if(stream_native.status==CTR_NATIVE_PCM_PLAYING || stream_native.status==CTR_NATIVE_PCM_PAUSED)stream_stop(NULL);
+        char guide_rows[7][72];ctr_stream_app_view(&stream_app,guide_rows);
+        for(unsigned i=0;i<BOTTOM_W*GUEST_H;++i)bottom_image[i]=0x162d4fff;
+        image_text(bottom_image,BOTTOM_W,0,"AUDIO STREAMS / ORIGINAL CLIPS");
+        for(unsigned i=1;i<7;++i)image_text(bottom_image,BOTTOM_W,i,guide_rows[i]);
+        char stream_status_line[72];
+        snprintf(stream_status_line,sizeof(stream_status_line),"NATIVE %s CURSOR %u/%u",ctr_native_pcm_status_name(stream_native.status),stream_native.cursor[0],stream_native.cursor[1]);
+        image_text(bottom_image,BOTTOM_W,9,stream_status_line);
+        image_text(bottom_image,BOTTOM_W,11,"TV GUIDE HAS FULL INSTRUCTIONS");
+#else
         unsigned guide_step_before=test_guide.step;
         if(!test_result.failed) {
             ctr_test_guide_update(&test_guide,&guide_input);
@@ -1295,9 +1501,10 @@ int main(int argc, char **argv) {
             if(ctr_test_guide_take_restart(&test_guide))restart_guest();
         }
         char guide_rows[7][72];ctr_test_guide_view(&test_guide,guide_input.milliseconds,guide_rows);
+#endif
         for(unsigned i=0;i<TOP_W*83;++i)top_image[i]=0x162d4fff;
         if(test_result.failed) {
-            snprintf(guide_rows[0],72,"RESULT STORAGE FAILED / GUEST INPUT PAUSED");
+            snprintf(guide_rows[0],72,"RESULT STORAGE FAILED / TEST PAUSED");
             snprintf(guide_rows[1],72,"MINUS: EXIT. Do not continue this test.");
             snprintf(guide_rows[3],72,"SD file may be missing/partial after reboot.");
             snprintf(guide_rows[4],72,"Send the error below and any available TXT.");
@@ -1367,6 +1574,9 @@ int main(int argc, char **argv) {
         if(frame_guest.state==CTR_GUEST_FAULTED || hid_guest.state==CTR_GUEST_FAULTED || gsp_guest.state==CTR_GUEST_FAULTED)guest_fault_seen=true;
         if ((uint64_t)(OSGetTime()-log_time)>=OSSecondsToTicks(1)) {
             phase_log();
+#ifdef CTR_STREAM_AUDIO
+            stream_log_native("periodic");
+#endif
             WHBLogPrintf("frame=%u frame_us=%u buttons=%08x input_error=%d left=%.3f,%.3f right=%.3f,%.3f touch=%u,%u inside=%u tone=%u",
                 frame,frame_us,(unsigned)pad.hold,(int)error,(double)pad.leftStick.x,
                 (double)pad.leftStick.y,(double)pad.rightStick.x,(double)pad.rightStick.y,

@@ -3,7 +3,18 @@
 All releases are development increments. RPX/WUHB diagnostics and desktop passes
 do not establish commercial-game compatibility or installable WUP acceptance.
 
-## 0.25.0 — unreleased
+## 0.26.0 — unreleased
+
+- Connect checked CSTM/ADPCM to two bounded voices, integer linear 48 kHz stereo
+  conversion, independent Q15 gains, saturation, pause, seek and EOF. Preserve
+  complete output/state on late failures; compare original rational PCM and controls.
+- Add finite owned stereo AX playback with checked routing, pause/resume, replay,
+  rollback and release before AXQuit. No callback accesses guest or render buffers.
+- Deliver Audio Streams with eight explicitly confirmed listening/control steps,
+  runtime independent PCM hashes, source-bound reference WAVs, reports and an
+  FTP-ready kit. Physical audio, guest DSP firmware/IPC and full gates remain open.
+
+## 0.25.0 — development checkpoint (unreleased)
 
 - Read a checked non-looping mono/stereo CSTM v2 DSP ADPCM subset, including
   relative metadata, per-channel regular/final padded blocks and SEEK histories.

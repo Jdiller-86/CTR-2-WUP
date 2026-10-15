@@ -28,7 +28,7 @@ for secure tracking updates and exact-commit local validation.
 | --- | --- |
 | `host/` | Shared CLI, intake, build stages, package checks and diagnostic workflows |
 | `translator/` | Original translation fixtures and the checked external lifter adapter |
-| `runtime/core/` | Portable checked guest memory, CPU, kernel, services, software renderer, DSP ADPCM reference and checked CSTM blocks |
+| `runtime/core/` | Portable checked guest memory, CPU, kernel, services, software renderer, DSP ADPCM, checked CSTM blocks and bounded audio voices/mixing |
 | `runtime/recomp/` | Generated-code ABI, dispatch and observable execution boundary |
 | `runtime/wiiu/` | WUT platform, GX2 display copies, VPAD/AX and original native diagnostics |
 | `tests/` | Original host/C fixtures; `tests/homebrew/` contains normal-CRT ARM programs |

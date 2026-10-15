@@ -115,6 +115,8 @@ nav:
       - Filesystem and saves: docs/filesystem.md
       - DSP ADPCM reference: docs/dsp-adpcm.md
       - CSTM blocks and seek: docs/cstm.md
+      - Audio stream engine: docs/audio-streams.md
+      - Audio Streams hardware test: docs/audio-stream-testing.md
   - Project:
       - Development tracking: docs/development-tracking.md
       - Project tracking policy: docs/github-project-overview.md

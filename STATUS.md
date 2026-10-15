@@ -1,11 +1,20 @@
 # CTR2WUP status
 
+**Audio stream-to-output checkpoint — #115/PR #116, v0.26.0:** two checked
+CSTM voices now feed a bounded 48 kHz stereo mixer and finite owned AX clips.
+Original references agree on 252 cases / 1,884,081 output frames and 9,589
+control/state snapshots. The new Audio Streams app has eight guided listening,
+pause, seek and restart steps, source-bound reference WAVs and FTP log return.
+Required full checks gate delivery. [Contract](docs/audio-streams.md) and
+[hardware guide](docs/audio-stream-testing.md). Guest DSP firmware/IPC, real-time
+streaming/synchronization and physical audible acceptance remain open.
+
 **CSTM block/SEEK reader — #113/PR #114 under #25/M3:** checked little-endian
 v2 non-looping mono/stereo streams now expose exact channel block spans, numeric
 coefficients and SEEK histories to the existing codec. Original relocated/padded
 fixtures match 57,980 independently computed samples across 240 streams; 8,192
-mutation cases and atomic failures pass focused checks. Required host/sanitizer, Windows, native and documentation checks gate
-delivery through PR #114. [Contract](docs/cstm.md). Guest DSP IPC, mixing, loops and physical
+mutation cases and atomic failures pass focused checks. PR #114 merged at `6d70340`
+after all required platform/documentation checks passed. [Contract](docs/cstm.md). Guest DSP IPC, mixing, loops and physical
 Wii U playback remain open; no full gate or commercial audio is accepted.
 
 **Verified Project readback:** [PR #111](https://github.com/Jdiller-86/CTR-2-WUP/pull/111)
@@ -69,7 +78,7 @@ implements scoped #76 under #28/M4: component-wise ADD/MUL, independent operand
 descriptors and checked integer dyadic evaluation. All 167,730 original rational
 cases, four analytic pixel scenes and 282,626 pinned encodings agree. Late errors
 preserve shader/target/guest queue state. Required host/sanitizer/native/Windows and documentation checks gate merge; receipts are linked from PR #105.
-Current development source is **0.25.0 (unreleased)**; the latest published diagnostic
+Current development source is **0.26.0 (unreleased)**; the latest published diagnostic
 release remains **0.23.0**. Hardware rounding, broader arithmetic/control, native
 GX2 and commercial execution remain open. [Contract](docs/software-scenes.md#exact-add-and-mul).
 
