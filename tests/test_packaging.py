@@ -120,7 +120,7 @@ class PackageTests(unittest.TestCase):
     def test_unsupported_content(self):
         path = self.pkg / "title.tmd"
         tmd = bytearray(path.read_bytes())
-        struct.pack_into(">H", tmd, CONTENT_START + 6, 0x2000)
+        struct.pack_into(">H", tmd, CONTENT_START + 6, 0x2004)
         repair_tmd(tmd)
         path.write_bytes(tmd)
         self.rejected("unsupported_content_type")

@@ -1,15 +1,25 @@
 # CTR2WUP status
 
-**Full M1 acceptance suite — #117/PR #118:** the new M1 Check app runs the full
-native ten-step guide, adds a source-bound persistent SD sentinel and deterministic
-backup/pending/error-retry probe, and binds each trace to its own process session.
-One full run plus short fresh Minus/HOME runs collect the missing platform evidence.
-The strict reviewer maps every M1 criterion and never accepts a gate automatically.
-[User guide](docs/m1-acceptance.md). WUP Installer GX2 is the selected installer;
-the installed-title segment is explicitly **BLOCKED** until a real verified original
-WUP and local packaging/provenance prerequisites exist. RPX/WUHB Menu icons cannot
-substitute for installation. Prior scoped result collection remains Done; full M1
-physical acceptance remains open.
+**Original installed-title development — #119 under #37/M6, v0.27.0:** the
+new plaintext `0x2000` WUP profile uses original self-generated signing material.
+It needs no common key, production certificate, donor title or game input.
+Independent verification checks its content and test-signature chain; this does
+not establish Nintendo authenticity or physical installer acceptance. The new
+`native-install` app exposes its title identity and runs the remaining automatic
+SD recovery probe in `sd:/ctr2wup/install-check/`. The explicit test title ID is
+`0005000043543257`; check for a collision before installation. **Aroma signature
+patches (`01_sigpatches.rpx`) are required and are not assumed installed.**
+[Packaging boundary](docs/packaging.md) · [One short install guide](docs/m1-acceptance.md).
+
+**M1 evidence correction:** [the reviewed ledger](docs/m1-evidence.json) preserves
+#12 result collection and the #14 native controls/touch/tone/ten-minute baseline
+as Done. The earlier Minus/HOME returns and fresh-process save reload remain
+accepted within their recorded scope. Do not repeat those guides. #13 only needs
+the automatic SD recovery result, combined with the new installed-title run.
+#15/#16 await the focused installer/Menu/SD evidence; **0/7 full gates are accepted**.
+New display-cache and Audio Streams behavior remains physically unverified.
+The install kit has one `START-HERE.md`, one FTP deployment tree and one whole
+return folder; source, receipts and notices are under `support/` with no tester steps.
 
 **Audio stream-to-output checkpoint — #115/PR #116, v0.26.0:** two checked
 CSTM voices now feed a bounded 48 kHz stereo mixer and finite owned AX clips.
@@ -90,7 +100,7 @@ implements scoped #76 under #28/M4: component-wise ADD/MUL, independent operand
 descriptors and checked integer dyadic evaluation. All 167,730 original rational
 cases, four analytic pixel scenes and 282,626 pinned encodings agree. Late errors
 preserve shader/target/guest queue state. Required host/sanitizer/native/Windows and documentation checks gate merge; receipts are linked from PR #105.
-Current development source is **0.26.0 (unreleased)**; the latest published diagnostic
+Current development source is **0.27.0 (unreleased)**; the latest published diagnostic
 release remains **0.23.0**. Hardware rounding, broader arithmetic/control, native
 GX2 and commercial execution remain open. [Contract](docs/software-scenes.md#exact-add-and-mul).
 
@@ -139,7 +149,7 @@ live Project review replace the resolved input blocker. Actual runtime use,
 broader modules and all full
 milestones remain open. [Evidence review](docs/console-evidence.md).
 
-Updated **October 15, 2026 (America/New_York)** · **v0.25.0 display-cache evaluation**.
+Updated **October 15, 2026 (America/New_York)** · **v0.27.0 original installed-title development**.
 The target remains an UWUVCI-style Windows GUI: select an owned 3DS game, configure
 title/artwork, click Inject, install its individual WUP and play from Wii U Menu.
 [Requirements](docs/project-brief.md), [product plan](docs/development-plan.md),
@@ -158,7 +168,7 @@ is enabled. Current binaries are original homebrew diagnostics.
 | CPU/runtime | Checked ARM/Thumb/VFP/AOT subsets, owned memory, eight single-core contexts and scoped services | Complete exercised CPU/HLE coverage, modules, guest audio and retail saves |
 | Homebrew | Nine normal-CRT/libctru applications: boot, threads, graphics, input, interactive, filesystem, RomFS, GX transfer and PICA draws | Broader guest services/audio and game integration |
 | Graphics | Direct/shared framebuffer presentation, five display formats, 14 base textures, scoped GX transfers and original guest/software draws with exact MOV/ADD/MUL | rounding/control, broader shaders/TEV/sampling, GPU resources/coherency and measured console performance |
-| Packaging/GUI | Original synthetic packing/decryption verification and conversion foundations; GUI workflow specified | Commercial conversion, actual WUP install/Menu gameplay, clean Windows and final GUI |
+| Packaging/GUI | Original encrypted fixtures and keyless plaintext/self-signed WUP candidate with independent verification; GUI workflow specified | Physical installer/Menu acceptance, commercial conversion, clean Windows and final GUI |
 
 ## Executable intake follow-up
 
@@ -194,7 +204,8 @@ PR #98 merged at `926cf8cf23d17a091bea69ad1e2ee850b1374045` with owner approval
 after passing hosted Required CI and Documentation. Its original probes do not
 establish commercial shader semantics or physical renderer acceptance.
 
-This test snapshot is **0.25.0**; main's earlier arithmetic checkpoint is 0.24.0.
+The current development checkpoint is **0.27.0**. Earlier 0.25.0 cache and
+0.26.0 Audio Streams kits retain their original source/version identities.
 The latest tagged diagnostic release remains 0.23.0. [Development releases](https://github.com/Jdiller-86/CTR-2-WUP/releases)
 identify immutable source commits and matching original diagnostic kits, developer
 wheel and offline documentation. The release workflow verifies source/version,
@@ -204,13 +215,13 @@ publication identity. Older tags/assets and their console evidence are preserved
 
 ## Remaining acceptance
 
-- Compare the new 0.25.0 cache on Wii U for picture freshness, restart and
-  scale+publish timing while retaining completed 0.24.1 evidence. No files or
-  reruns remain requested for that completed baseline; broader performance,
-  stability/recovery and installed-WUP acceptance remain open.
+- Retain completed 0.24.1 and native baseline evidence. The immutable 0.25.0
+  cache and 0.26.0 Audio Streams scopes remain physically unverified; this
+  checkpoint does not request those older rounds again.
 - Extend shader rounding/remaining arithmetic/control, TEV/sampling, coherency, modules, guest audio
   and retail saves using original references and actual observed requirements.
-- Record full platform stability/recovery and original WUP installation/Menu launch.
+- Record the new original WUP installation and two brief Menu launches, including
+  the automatic SD recovery probe. Reuse the reviewed controls/stability baseline.
 - Demonstrate the selected game's gameplay/audio/save/performance and full clean
   Windows conversion, then implement and accept the final GUI.
 

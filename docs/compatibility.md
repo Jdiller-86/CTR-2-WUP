@@ -16,7 +16,7 @@ saving and both GX2 display copies remain. Earlier builds keep their scoped pass
 
 | Input/workflow | Current state | Evidence and limit |
 |---|---|---|
-| Original native diagnostic | Partial console evidence; Minus exit confirmed | v0.14.1 native report records all ten guided checks/nine embedded self-tests and cleanup; v0.14.3 Minus exit now user-confirmed; full installation/compiled stability remains open |
+| Original native diagnostic | Reviewed controls/audio/stability baseline retained | Native 0.14.1 ten-step/ten-minute guide and nine self-tests, later focused silence/tone and 0.24.1 Minus/HOME returns remain accepted in scope; automatic SD recovery and installed-title evidence remain open |
 | Synthetic ARM/Thumb fixture | Desktop verified bounded subset | Interpreter/generated-C state matches; linked into diagnostic RPX, console run pending |
 | Original framebuffer NCCH fixture | Desktop execution verified; awaiting Wii U | Checked loader, sleep/event SVC runtime, ARM-written frames/input/exit, AOT/interpreter matches; console RPX/WUHB built; explicit harness I/O, not HID/GSP/PICA |
 | Original TLS/SRV/CFG ARM startup probe | Desktop verified; awaiting Wii U | Standard TLS and restricted service commands; interpreter/original/external AOT match; original self-test embedded in diagnostics |
@@ -44,10 +44,10 @@ saving and both GX2 display copies remain. Earlier builds keep their scoped pass
 | DSP ADPCM codec reference | Merged PR #109; desktop/rational/sanitizer/Windows/PPC checks pass | Explicit coefficients/history, signed PCM16, partial frames, continuation/seek and atomic failure. Scoped CSTM v2 block/SEEK reader exists; CSAR, guest DSP IPC/mixing and physical audio acceptance remain open |
 | CSTM block/SEEK reader | Scoped #113 / PR #114; original desktop/reference checks | LE v2 non-looping mono/stereo DSP ADPCM; checked payload/padded channel addressing, coefficients and block histories. General SEEK intervals/loops, track mixing, guest DSP and console playback remain open |
 | Original audio streams | Scoped #115 / PR #116 host/reference/native checks | Two CSTM voices, 48 kHz stereo integer conversion/mix, gains, pause/seek/EOF; original finite AX diagnostic and guided listening. No guest DSP firmware/IPC, continuous callback streaming or physical audio acceptance |
-| Full M1 evidence suite | Scoped #117 / PR #118; host/native checks | Full native guide, original SD persistence/recovery and source/session-bound review. Actual hardware is pending; real installed-WUP prerequisite stays blocked and cannot be replaced by homebrew Menu icons |
+| Original installed-title check | Scoped #119 under #37/M6; physical acceptance pending | Keyless plaintext/self-signed WUP candidate and standalone native-install app; two brief Menu launches include the automatic SD probe. Prior controls/stability/results/lifecycle evidence is reused, without another full guide |
 | `.3dsx`, update/DLC merges | Unsupported | No corresponding loader/pipeline; renamed input is not accepted as NCCH |
 | Any commercial revision | Unsupported; active M5 analysis | USA Mario executable and seven selected payloads have verified provenance; selected container/shader/audio structures are identified, with 512-word code capacity implemented and shader semantics/DSP ADPCM gaps recorded; broader modules, actual HLE/GPU/audio/save use and Wii U gameplay remain unverified |
-| WUP installation | Unverified/unavailable | Original encrypted writer and independent verification pass synthetic-input checks; installer acceptance and actual installable output remain pending |
+| WUP installation | Original candidate; physical acceptance unverified | Plaintext 0x2000/self-generated test signatures need no common key, production certificate or donor. Aroma 01_sigpatches.rpx is required and not assumed installed. Explicit identity/collision and independent integrity checks do not establish Nintendo authenticity or GX2/Menu success |
 
 Stable inspection identity uses the 3DS program ID for save identity. Executable
 revision includes code and extended-header hashes, separate from stable identity.

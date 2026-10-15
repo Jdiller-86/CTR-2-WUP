@@ -1,4 +1,4 @@
-# Remaining acceptance gates (0.25.0 display-cache evaluation)
+# Remaining acceptance gates (0.27.0 installed-title development)
 
 The product remains a Windows GUI that converts owned 3DS games into individual
 Wii U WUP titles. Approximately 20% implementation and 0/7 full gates accepted
@@ -38,14 +38,17 @@ Current requirements:
    required additional nested resources and actual runtime use; static code,
    filenames and declared services are not gameplay proof. No repeat upload of
    the received samples is requested. [First-title findings](first-title.md).
-3. **Platform acceptance:** use the [full M1 suite](m1-acceptance.md) for the
-   native guide, timed stability, safe original SD recovery and short fresh Minus/HOME
-   runs. Installed WUP launch remains Blocked on real local packaging material,
-   provenance and verified collision-checked original output; WUP Installer GX2 is
-   the chosen installer. Complete documented repeat launch, Home/APT,
-   stability, SD recovery and original WUP install/Menu-launch checks with exact
-   environment/build identity. Scoped arithmetic/first-draw/Minus/HOME results
-   do not complete those full criteria.
+3. **New installed-title path:** #119 develops original plaintext/self-signed WUP
+   output without common keys, production certificates, donors or game inputs.
+   Independent integrity/test-signature checks cannot prove actual installation;
+   signature-patched Aroma and WUP Installer GX2 observations remain required.
+   [The install guide](m1-acceptance.md) requests only two brief new Menu launches,
+   combining the remaining automatic SD recovery probe. [The evidence ledger](m1-evidence.json)
+   preserves the native controls/touch/tone/ten-minute baseline, ordinary
+   Minus/HOME exits, results and successful save reload. Do not repeat them.
+   New cache/Audio Streams behavior keeps its separate physical limits. No full
+   M1 acceptance is inferred from a built or independently verified package.
+
 4. **Renderer/runtime implementation:** broader shaders, TEV/sampling, native
    GX2 translation, coherency, dynamic modules, guest audio and retail saves
    remain open. Merged PR #98 supplies original 512-word shader storage/upload/

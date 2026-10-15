@@ -1,12 +1,17 @@
 # Guided Wii U tests and TXT results (0.14.6)
 
-For the current **0.26.0** checkpoint, use [the full M1 acceptance suite](m1-acceptance.md)
-or the separate [Audio Streams guide](audio-stream-testing.md). Both use FTP-friendly
-source-bound 8 KiB results and paired full traces. Installed-title acceptance
-requires an actual verified WUP and is explicitly Blocked in the current M1 kit.
+For the current **0.27.0** checkpoint, use [the short install check](m1-acceptance.md).
+It targets new WUP installation/Menu execution with two brief launches and the
+automatic SD recovery probe. Keep one `START-HERE.md`, copy one FTP tree and return
+one whole log folder. Developer receipts/source/notices live under `support/`.
+The earlier native controls/touch/tone/ten-minute, results, ordinary Minus/HOME
+and successful save reload remain accepted within [their reviewed scope](m1-evidence.json).
+**No full native guide or timed stability repeat is requested.** Signature-patched
+Aroma is required for the original WUP candidate; physical acceptance is pending.
 
-The source-bound **0.25.0 display-cache comparison** remains pending under
-[its focused hardware guide](console-retest.md). Its earlier 0.24.1 FTP return is
+The immutable **0.25.0 display-cache comparison** and **0.26.0 Audio Streams**
+kits retain their pending changed-feature scopes; this checkpoint does not ask
+you to run them again. Their guides remain available for those specific paths. Its earlier 0.24.1 FTP return is
 complete; no more trace files are requested for that completed round. The older
 4 KiB controls/reporting contract below is retained as historical reference.
 

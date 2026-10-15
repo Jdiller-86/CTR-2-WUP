@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "0.26.0",
+  "version": "0.27.0",
   "updated": "2026-10-15",
   "approximate_implementation_percent": 20,
   "full_milestones_accepted": 0,
@@ -12,7 +12,7 @@
       "waiting_labels": [
         "needs-console"
       ],
-      "summary": "Reviewed TXT, saves, assets, pictures, silence/native tone and Minus exit evidence exists. Platform recovery, complete lifecycle/stability and installed-original-WUP acceptance remain open.",
+      "summary": "Reviewed native controls/touch/tone/ten-minute baseline, result collection, Minus/HOME returns and fresh-save reload are retained. Only automatic SD recovery and new installed-WUP evidence remain; no blanket retest.",
       "verified_foundations": [
         "Versioned native/guest RPX/WUHB builds and read-back-checked test-report/save publication lifecycle",
         "Older native/control reports, confirmed Minus exit and user-reported Native/Guarded/Compiled v0.14.5 completion retained as scoped evidence",
@@ -23,12 +23,12 @@
         "Owner merged PR #106 after all required checks and removed branch rulesets October 15. Canonical publication 38745496120 verifies merged source and fresh Project data over HTTP. Scoped #107 hardens verification; physical cache/lifecycle/WUP criteria remain open.",
         "Scoped #110 adds independent exact issue/PR Project membership reads after PR #108 addition was acknowledged but connection readback omitted it. Public receipts preserve both views; archived/ambiguous/missing membership still fails and owner settings remain unchanged. Trusted-main apply 38752814566 verifies 71 parent links, 33 PR links and all 111 expected Project members at that checkpoint, using exact independent links when the connection lags. Publication 38752341776 verifies source 150aa5c and fresh available Project data.",
         "The v0.26.0 Audio Streams diagnostic adds original finite stereo clips and guided channel/rate/pause/seek/repeat evidence collection. Host math and AX mocks do not establish physical sound, full lifecycle/stability or installed-WUP acceptance.",
-        "Scoped #117/PR #118 adds a full native ten-step/600-second guide, persistent source-bound original SD sentinel, closed-write/reload/backup/pending/error-retry probes, separate fresh Minus/HOME sessions and strict source/session/criterion review. Host checks do not establish physical acceptance. WUP Installer GX2 is selected; installed-title criteria remain Blocked without real local packaging material/provenance and a verified collision-checked original WUP."
+        "Scoped #117/PR #118 adds a full native ten-step/600-second guide, persistent source-bound original SD sentinel, closed-write/reload/backup/pending/error-retry probes, separate fresh Minus/HOME sessions and strict source/session/criterion review. Host checks do not establish physical acceptance. WUP Installer GX2 is selected; installed-title criteria remain Blocked without real local packaging material/provenance and a verified collision-checked original WUP.",
+        "Reviewed docs/m1-evidence.json reuses Native 0.14.1 ten-step/600000 ms controls/stability, Audio Check 0.20.0 silence/both-output tone, Save 0.14.6 fresh-process persistence and source 4eeee0ba3a839f934c6bb7d6313f5fcb657782c5 Minus/HOME evidence. Changed display cache and Audio Streams do not inherit physical acceptance. #119 adds a keyless original plaintext/self-signed WUP candidate for signature-patched Aroma; actual installation remains unverified."
       ],
       "acceptance_remaining": [
-        "Verify documented SD publication recovery and repeat launch/Home/APT lifecycle acceptance",
-        "Complete documented native controls/audio/lifecycle/stability evidence",
-        "Install an original diagnostic WUP and prove Menu launch/exit"
+        "Review the automatic SD interrupted-publication/error-recovery probe during the new installed-title runs.",
+        "Record WUP Installer GX2 installation and two brief Wii U Menu launch/exit observations for the original diagnostic, then review the combined platform record."
       ],
       "state": "awaiting_evidence",
       "work_items": [
@@ -47,12 +47,13 @@
           "state": "awaiting_evidence",
           "verified_foundations": [
             "Five completed named read-back reports and the full fresh-launch Save trace were privately reviewed; no failure or skip in their guides."
-          ]
+          ],
+          "reviewed_status": "Done"
         },
         {
           "id": "m1-lifecycle",
           "title": "Verify repeat launch, exit and SD publication recovery",
-          "summary": "Exercise the native application lifecycle and result/save persistence without discarding the earlier Minus-exit confirmation.",
+          "summary": "Minus/HOME returns, repeated normal launches and exact fresh-process save reload already have reviewed physical evidence. Only the automatic SD recovery/error probe remains; combine it with the new installed-title runs.",
           "acceptance_criteria": [
             "A documented repeat-launch and Minus/Home/APT exit sequence returns to the Wii U Menu without a hang; record exact firmware, Aroma, launch route and build.",
             "Save/relaunch retains the expected bytes, and any observed publication/recovery failure preserves readable previous data or reports an actionable error; record SD files while retaining the original failure evidence."
@@ -67,30 +68,31 @@
           "evidence": [
             "Completed 0.24.1 hardware round (October 14 evening / October 15 UTC): five source-matched traces and five reports verify two arithmetic guides, the full Guest Draws/Plus-repeat guide and all five launches through main_return. The user confirms Minus/HOME return on firmware 5.5.6 U / Aroma Beta 27. All files are received and the corrected collector/analyzer passes on them; full stability/recovery and installed-WUP acceptance remain open.",
             "0.25.0 native display cache has independent exact-output/failure checks and original host workload reductions, retaining both GX2 copies and cache APIs. Split scale/publish and work/memory logs support a new source-bound two-app physical comparison; Wii U freshness/restart/speed remain pending. Host publication-byte savings do not accept performance or any full milestone.",
-            "Scoped #117/PR #118 adds a full native ten-step/600-second guide, persistent source-bound original SD sentinel, closed-write/reload/backup/pending/error-retry probes, separate fresh Minus/HOME sessions and strict source/session/criterion review. Host checks do not establish physical acceptance. WUP Installer GX2 is selected; installed-title criteria remain Blocked without real local packaging material/provenance and a verified collision-checked original WUP."
+            "Scoped #117/PR #118 adds a full native ten-step/600-second guide, persistent source-bound original SD sentinel, closed-write/reload/backup/pending/error-retry probes, separate fresh Minus/HOME sessions and strict source/session/criterion review. Host checks do not establish physical acceptance. WUP Installer GX2 is selected; installed-title criteria remain Blocked without real local packaging material/provenance and a verified collision-checked original WUP.",
+            "docs/m1-evidence.json separates already accepted normal lifecycle/persistence from the remaining automatic SD recovery probe. No separate repeat of those completed routes is requested."
           ]
         },
         {
           "id": "m1-controls-audio",
           "title": "Record native display, controls and audio acceptance",
-          "summary": "Retain older native/control evidence and fill only the missing checks needed for current platform acceptance.",
+          "summary": "Reviewed baseline Done: native TV/GamePad, buttons/sticks/touch, tone and timed stability plus the later silence/tone regression. New display-cache/Audio Streams scopes remain physically unverified and do not reopen the full guide.",
           "acceptance_criteria": [
-            "The native guide records TV/GamePad mapping, buttons, sticks, touch and the original native tone with observed results and build identity.",
-            "Any changed display, input, audio or lifecycle path has a focused console regression result; earlier successful checks are cited instead of repeating a long guide solely for a version bump."
+            "The reviewed native guide identifies TV/GamePad pictures, buttons, both sticks, touch, original native tone, ten-minute stability and observed results with build identity.",
+            "The focused launch-silence/both-output tone regression has reviewed physical evidence. Preserve later changed-feature checks separately without repeating the completed native baseline solely for a version bump."
           ],
           "depends_on": [],
-          "waiting_labels": [
-            "needs-console"
-          ],
+          "waiting_labels": [],
           "state": "awaiting_evidence",
           "evidence": [
-            "Scoped #117/PR #118 adds a full native ten-step/600-second guide, persistent source-bound original SD sentinel, closed-write/reload/backup/pending/error-retry probes, separate fresh Minus/HOME sessions and strict source/session/criterion review. Host checks do not establish physical acceptance. WUP Installer GX2 is selected; installed-title criteria remain Blocked without real local packaging material/provenance and a verified collision-checked original WUP."
-          ]
+            "Scoped #117/PR #118 adds a full native ten-step/600-second guide, persistent source-bound original SD sentinel, closed-write/reload/backup/pending/error-retry probes, separate fresh Minus/HOME sessions and strict source/session/criterion review. Host checks do not establish physical acceptance. WUP Installer GX2 is selected; installed-title criteria remain Blocked without real local packaging material/provenance and a verified collision-checked original WUP.",
+            "docs/m1-evidence.json reviews the ten PASS Native 0.14.1 steps, unchanged native guide/600000 ms definition and Audio Check 0.20.0 silence/both-output tone. Reuse the baseline; no full native or timed stability repeat."
+          ],
+          "reviewed_status": "Done"
         },
         {
           "id": "m1-package-launch",
           "title": "Verify an original diagnostic as an installed Wii U title",
-          "summary": "Blocked on a real source-matched original WUP with reviewed local packaging material/provenance and collision-checked identity. WUP Installer GX2 installation, two Menu launches/exits and exact environment still need physical evidence; RPX/WUHB icons do not qualify.",
+          "summary": "An original 0x2000 plaintext/self-signed WUP candidate removes the common-key/production-certificate/donor prerequisite. Signature-patched Aroma is required; WUP Installer GX2 installation and two brief Menu launch/exits remain unverified.",
           "acceptance_criteria": [
             "The original diagnostic installs with the recorded homebrew/installer environment and launches from the Wii U Menu with its expected title identity and screens.",
             "The installed diagnostic exits normally and can be relaunched; retain the versioned build/package report and installation observations without exposing local packaging material."
@@ -101,12 +103,15 @@
           "waiting_labels": [
             "needs-console"
           ],
-          "state": "blocked"
+          "state": "awaiting_evidence",
+          "evidence": [
+            "#119 under #37/M6 develops and independently verifies the original candidate. Explicit title ID 0005000043543257 must be checked against installed titles. No Nintendo authenticity or installer success is claimed; native-install records the actual title identity and runs the automatic SD probe."
+          ]
         },
         {
           "id": "m1-platform-acceptance",
           "title": "Review and accept the native Wii U platform gate",
-          "summary": "Collect the scoped native platform results into one reproducible acceptance record.",
+          "summary": "Reuse the reviewed cross-version native baseline; await only the installed-title/automatic-SD-probe return and an explicit combined gate review. No full milestone is accepted automatically.",
           "acceptance_criteria": [
             "The current result, lifecycle, controls/audio and installed-diagnostic tasks have reviewable evidence and no unexplained hang or persistence failure.",
             "A versioned platform report states the tested firmware/Aroma/installer, supported launch routes and stability session; M1 remains open until this evidence is reviewed."
@@ -120,9 +125,10 @@
           "waiting_labels": [
             "needs-console"
           ],
-          "state": "blocked",
+          "state": "awaiting_evidence",
           "evidence": [
-            "Scoped #117/PR #118 adds a full native ten-step/600-second guide, persistent source-bound original SD sentinel, closed-write/reload/backup/pending/error-retry probes, separate fresh Minus/HOME sessions and strict source/session/criterion review. Host checks do not establish physical acceptance. WUP Installer GX2 is selected; installed-title criteria remain Blocked without real local packaging material/provenance and a verified collision-checked original WUP."
+            "Scoped #117/PR #118 adds a full native ten-step/600-second guide, persistent source-bound original SD sentinel, closed-write/reload/backup/pending/error-retry probes, separate fresh Minus/HOME sessions and strict source/session/criterion review. Host checks do not establish physical acceptance. WUP Installer GX2 is selected; installed-title criteria remain Blocked without real local packaging material/provenance and a verified collision-checked original WUP.",
+            "docs/m1-evidence.json preserves completed criteria and source boundaries. The 0.27.0 install check replaces the redundant long native sequence with two brief new Menu launches; final physical acceptance remains open."
           ]
         }
       ]
@@ -577,14 +583,15 @@
         "needs-input",
         "needs-windows"
       ],
-      "summary": "Original intake/decryption, AOT builds and synthetic package verification exist. Full clean-Windows commercial conversion, installer/Menu launch and rebuild/save acceptance remain open.",
+      "summary": "Original intake/decryption, AOT builds, encrypted fixture verification and keyless plaintext/self-signed original WUP candidates exist. Actual installer/Menu evidence, full Windows commercial conversion and rebuild/save acceptance remain open.",
       "verified_foundations": [
         "Local key/seed import, bounded decryption/intake/RomFS preparation and original encrypted-input to external AOT/RPX/WUHB proof",
         "Original synthetic encrypted packing plus independent decrypt/FST/hash/file verification and atomic output",
-        "Passed hosted native Windows host/portable-C, real external AOT/Unicode execution and .NET 10 WPF tooling checks"
+        "Passed hosted native Windows host/portable-C, real external AOT/Unicode execution and .NET 10 WPF tooling checks",
+        "#119 adds original plaintext 0x2000 content and self-generated signing material, independently verified without common keys, production certificates or donor titles. Aroma signature patches are required; this is a physical install-test candidate, not Nintendo authentication or a console pass."
       ],
       "acceptance_remaining": [
-        "Establish actual local packaging provenance and original diagnostic installer acceptance",
+        "Record original diagnostic WUP Installer GX2 acceptance and installed Wii U Menu launch/exit under the documented signature-patched environment.",
         "Complete selected-game stage orchestration, cancellation/caches/traces/rebuild and safe stable title identities",
         "Verify clean native Windows commercial conversion and WUP Menu launch/save continuity/uninstall"
       ],
@@ -593,19 +600,19 @@
         {
           "id": "m6-original-wup",
           "title": "Validate original-homebrew WUP packaging and installer prerequisites",
-          "summary": "Take the original scoped writer/verifier beyond synthetic structure checks using documented local material and a smoke-test diagnostic.",
+          "summary": "Develop the original keyless plaintext/self-signed diagnostic candidate and independently check integrity/signatures. No owned game or Wii U common key is required; actual GX2 installation/Menu behavior remains pending.",
           "acceptance_criteria": [
-            "The original diagnostic WUP has consistent collision-checked nonreserved identity, original metadata/artwork, verified content integrity and documented local packaging provenance/installer requirements.",
+            "The original diagnostic WUP has explicit collision-checked identity, original metadata/artwork, independently verified content/test-signature integrity and documented signature-patched environment requirements; no key/donor is needed for the plaintext profile.",
             "The supported installer accepts the actual package on Wii U; retain the package/build report and observations privately where needed, distinguishing integrity from signature policy and install success."
           ],
           "depends_on": [],
           "waiting_labels": [
-            "needs-input",
             "needs-console"
           ],
-          "state": "blocked",
+          "state": "in_progress",
           "evidence": [
-            "The M1 suite exposes the missing real original WUP/local packaging and provenance prerequisite as Blocked; synthetic key/certificate integrity fixtures and RPX/WUHB launches cannot satisfy WUP Installer GX2/Menu acceptance."
+            "The M1 suite exposes the missing real original WUP/local packaging and provenance prerequisite as Blocked; synthetic key/certificate integrity fixtures and RPX/WUHB launches cannot satisfy WUP Installer GX2/Menu acceptance.",
+            "#119 removes the developer packaging prerequisite through original plaintext/self-signed output. WUP Installer GX2 and Aroma 01_sigpatches.rpx are the intended route, without assuming the module is installed. The focused native-install app makes its own title ID and automatic SD probe observable in one dedicated FTP return folder."
           ]
         },
         {

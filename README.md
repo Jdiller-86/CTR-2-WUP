@@ -6,20 +6,17 @@
 
 First visit? [Take the repository tour](docs/repository-guide.md).
 
-Testing the full native platform? The [M1 acceptance suite](docs/m1-acceptance.md)
-provides one guided full run, short fresh-launch/HOME checks, safe SD recovery
-fixtures and FTP return. Actual installed-WUP acceptance has an explicit package
-prerequisite and remains blocked; homebrew launches do not complete that gate.
+Testing on Wii U? The [install check](docs/m1-acceptance.md) targets the **new
+installed-WUP path**: install with WUP Installer GX2, launch twice from Menu,
+then return one FTP folder. It needs signature-patched Aroma. Original plaintext
+packaging needs no common key, production certificate or donor; actual installer
+acceptance remains unverified. See [packaging requirements](docs/packaging.md).
 
-Testing audio on Wii U? The [Audio Streams 0.26.0 guide](docs/audio-stream-testing.md)
-covers the new checked stream/mixer/native path with eight listening/control steps
-and FTP result return. Actual hardware acceptance remains pending.
-
-The separate [focused 0.25.0 comparison](docs/console-retest.md)
-checks the new native display cache with two guided apps and FTP log return.
-The completed [0.24.1 hardware results](docs/console-evidence.md) remain the
-baseline, with all files received. The cache's host pixel/work checks pass;
-actual Wii U picture correctness and speed remain pending. PR #106 is merged; the kit retains its exact source identity.
+Your earlier [controls, stability, audio, save and lifecycle results](docs/console-evidence.md)
+remain valid within their reviewed scope. **No full native or ten-minute repeat
+is requested.** Existing 0.25.0 display-cache and 0.26.0 Audio Streams kits retain
+their immutable source identities and pending changed-feature evidence; this
+checkpoint does not request those older rounds again.
 
 Contributors can [develop and manage tracking without hosted Actions](docs/direct-development.md)
 using secure API access and recorded local validation.
@@ -75,8 +72,9 @@ for the supported subsets and current limits.
 - Exact component-wise ADD/MUL software shaders use checked integer arithmetic,
   independent rational references and transactional rejection of rounding or
   unsupported state. See [the arithmetic boundary](docs/software-scenes.md#exact-add-and-mul).
-- Reproducible RPX/WUHB diagnostics and original packaging fixtures. Actual
-  WUP installation and full Windows conversion still require acceptance.
+- Reproducible RPX/WUHB diagnostics, original encrypted packaging fixtures and
+  keyless plaintext/self-signed original WUP candidates. Physical installation
+  under signature-patched Aroma and full Windows conversion remain unverified.
 
 ## Progress
 

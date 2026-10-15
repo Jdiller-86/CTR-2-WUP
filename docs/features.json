@@ -896,6 +896,31 @@
         "Installed original WUP still requires real local packaging material/provenance, collision-checked title identity and physical installer/Menu evidence. Current suite exposes this prerequisite as BLOCKED.",
         "Scoped #117/PR #118 adds a full native ten-step/600-second guide, persistent source-bound original SD sentinel, closed-write/reload/backup/pending/error-retry probes, separate fresh Minus/HOME sessions and strict source/session/criterion review. Host checks do not establish physical acceptance. WUP Installer GX2 is selected; installed-title criteria remain Blocked without real local packaging material/provenance and a verified collision-checked original WUP."
       ]
+    },
+    {
+      "id": "original-homebrew-install-candidate",
+      "title": "Deliver a keyless original WUP and focused installed-title check",
+      "milestone": 6,
+      "parent_issue": 37,
+      "state": "active",
+      "pull_requests": [
+        120
+      ],
+      "scope": [
+        "Write original plaintext 0x2000 WUP contents and a generated test-signing chain without common keys, production certificates or donor titles; independently verify content, identity and test signatures.",
+        "Deliver native-install with observable title identity and automatic safe SD recovery in sd:/ctr2wup/install-check/, one short guide, one FTP deployment tree and a whole-folder return.",
+        "Reuse reviewed native controls/stability/audio/result/lifecycle evidence and restrict future hardware prompts to changed paths or genuinely missing criteria."
+      ],
+      "acceptance": [
+        "Original positive/adversarial fixtures verify plaintext package structure, content/FST/XML/test-signature integrity and atomic publication; the real native-install RPX packages and passes independent verification.",
+        "A source-bound candidate names title ID 0005000043543257 and the required Aroma signature-patch module, preserves collision checks and clearly records physical installer/Menu evidence as pending.",
+        "No full native controls/tone/ten-minute or ordinary homebrew Minus/HOME retest is requested; two brief new installed launches include the remaining automatic SD probe. Developer receipts/source/notices stay under support/."
+      ],
+      "evidence": [
+        "Scoped issue #119 under #37/M6. docs/m1-evidence.json retains the old build identities and accepted scopes; no version-based hardware retest.",
+        "Original plaintext/self-signed packages require signature-patched Aroma, including 01_sigpatches.rpx; its presence is not assumed. The existing encrypted profile remains separate and supported.",
+        "No Nintendo authenticity, physical installation, commercial compatibility or full milestone completion is claimed. Required host/native/platform/documentation checks gate delivery."
+      ]
     }
   ],
   "reviewed_statuses": {
