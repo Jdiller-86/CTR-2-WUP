@@ -339,6 +339,8 @@ jobs:
           include-hidden-files: true
           retention-days: 30
           if-no-files-found: error
+      - name: Install the declared original-package signing dependency
+        run: python -m pip install '.[packaging]'
       - name: Build the new installed-title path and focused FTP handoff
         run: |
           set -euo pipefail
