@@ -782,8 +782,10 @@
       "title": "Harden Pages deployment verification and preserve failure reasons",
       "milestone": 1,
       "parent_issue": 1,
-      "state": "planned",
-      "pull_requests": [],
+      "state": "active",
+      "pull_requests": [
+        108
+      ],
       "scope": [
         "Retain exact source/privacy/freshness validation while tolerating bounded Pages propagation and transient HTTP failures.",
         "Record public-safe failure codes and attempts; align the merged handoff without publishing raw responses or Project notes."
