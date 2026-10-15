@@ -1,5 +1,13 @@
 # CTR2WUP status
 
+**DSP ADPCM foundation — scoped #103/#25/M3:** the portable decoder now has
+bounded frames, explicit history/cursor, partial-frame continuation/seek,
+integer rounding/clipping and atomic failures. A separate rational reference
+agrees on 6,144 original cases / 175,770 samples; focused normal/sanitizer checks
+pass. Full required checks gate merge. [Contract](docs/dsp-adpcm.md).
+Guest DSP IPC, container/seek-table parsing, mixing and audible Wii U playback
+remain open; this does not accept M3 or commercial audio.
+
 **Merged native display optimization — 0.25.0:** [PR #106](https://github.com/Jdiller-86/CTR-2-WUP/pull/106)
 extends scoped #87/#20/M2 with exact changed-span scaling and row publication.
 Independent pixel/failure tests and six original host workloads pass. Over 60
@@ -15,8 +23,10 @@ rulesets on October 15. Required checks remain part of the contributor workflow.
 [Publication 38745496120](https://github.com/Jdiller-86/CTR-2-WUP/actions/runs/38745496120)
 verifies canonical source `abe37a9` and fresh live Project data over HTTP.
 An earlier deployment succeeded but its HTTP verification failed without a
-specific reason. Scoped #107 adds bounded propagation/HTTP retries and safe
-failure codes; privacy/schema violations continue to fail immediately.
+specific reason. Merged PR #108 adds bounded propagation/HTTP retries and safe failure codes;
+privacy/schema violations fail immediately. Publication 38747514158 verifies
+merged source 9175168 on its first attempt. Project membership reconciliation
+follows the new catalog; unavailable data is explicit until refreshed.
 
 **Focused hardware evaluation:** [PR #106](https://github.com/Jdiller-86/CTR-2-WUP/pull/106)
 under #87/#20/M2 has reviewed **0.24.1** hardware results: two native ADD/MUL

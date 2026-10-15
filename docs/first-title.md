@@ -47,7 +47,7 @@ full original CCI/RomFS hash and IVFC verification remain reported local evidenc
 | CGFX shader resource | Its DATA block fits the file; three embedded DVLB regions have valid bounded code/tables and twelve vertex entries | CGFX dictionary/resource binding remains to be validated; code sizes 472, 428 and 264 exceed the former 256-word limit; the merged 512-word capacity increment has original probes and passing required hosted platform checks |
 | System class table | Little-endian BYML version 1 header and table/root offsets fit the member | Validate typed nodes and bounds when consumed; class names do not establish service use |
 | Sound archive | CSAR version 2 STRG/INFO/FILE blocks fit the supplied file | Resolve archive references/banks/sequences/waves; nested signature candidates are not a validated complete inventory |
-| Two short streams | CSTM version 2 INFO/SEEK/DATA blocks; both declare non-looping, stereo DSP ADPCM at 32 kHz | Original codec/block/history/seek probes and guest DSP/audio integration; no decoded-audio or playback acceptance yet |
+| Two short streams | CSTM version 2 INFO/SEEK/DATA blocks; both declare non-looping, stereo DSP ADPCM at 32 kHz | Original DSP ADPCM reference has exact sample/history/checkpoint probes; CSTM block/SEEK parsing and guest DSP/audio integration remain. No commercial decoded-audio/playback acceptance |
 
 The raw shader code includes ADD, DP3/DP4, MUL, floor/max/reciprocal, address moves,
 comparisons, conditional/loop/jump control, multiply-add and geometry emit families.
@@ -63,7 +63,7 @@ than proof that every instruction executes on the proposed gameplay route.
 | Exact revision/input | Independently verified executable and selected bytes; complete local inventory reports | Retain private provenance; broader modules/assets and original full-container integrity remain bounded by available bytes |
 | Shader runtime | Merged 512-word storage covers the static size gap; #76/PR #105 adds original exact ADD/MUL numeric/scene/rollback probes | Required arithmetic platform receipts in PR #105, rounding/remaining arithmetic/control and selected-entry traces before claiming support; no commercial shader has executed and no profile is enabled |
 | Fragment/rendering | Original canonical software draws pass their scoped routes | Capture actual required TEV/texture/depth/blend/coherency state; implement shared features and native GX2 translation |
-| Guest audio | Two sampled streams declare DSP ADPCM; archive structure exists | Verify codec/history/seek behavior with originals, required DSP protocol/mixing and later physical game audio |
+| Guest audio | Two sampled streams declare DSP ADPCM; archive structure exists | Retain exact original codec/history/checkpoint evidence; validate container block/SEEK semantics, DSP protocol/mixing and later physical game audio |
 | Services/modules/saves | Declared DSP/loader capabilities and static executable analysis | Trace actual IPC/module/save demands; do not implement all declarations as silent successful stubs |
 | Gameplay/conversion | Proposed private route and Windows product contract | Boot/menu/course/input/audio/save/reload, useful Wii U costs and complete WUP/GUI acceptance |
 

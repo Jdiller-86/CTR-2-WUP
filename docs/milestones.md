@@ -339,9 +339,11 @@ Acceptance:
 
 #### m3-guest-audio: Build the guest DSP/audio path with original probes
 
-Separate native diagnostic tone evidence from the unimplemented guest audio protocol and Wii U output pipeline.
+The DSP ADPCM reference has bounded frame/history/seek and independent exact
+rational evidence. Guest DSP protocol, containers, mixing and Wii U output remain
+unimplemented; native tone evidence stays separate.
 
-State: **Planned** · Needs: `needs-console`.
+State: **In progress** · Needs: `needs-console`.
 
 Depends on: [m3-service-contracts](#m3-service-contracts).
 

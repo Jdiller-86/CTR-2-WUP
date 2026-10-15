@@ -11,7 +11,7 @@ reviewed results. No blanket repeat is requested. See [evidence](console-evidenc
 
 PR #106 is merged and the owner removed branch rulesets on October 15.
 The canonical 0.25.0 publication verifies successfully; deployment verification
-is being hardened under #107. These are resolved delivery constraints, while
+is hardened by merged #107/PR #108. These are resolved delivery constraints, while
 required checks and the physical gates below remain.
 
 Current requirements:
@@ -43,8 +43,10 @@ Current requirements:
    remain open. Merged PR #98 supplies original 512-word shader storage/upload/
    entry/rollback probes and passing required hosted platform checks. PR #105
    adds exact ADD/MUL original rational/scene/rollback probes; required host/native/Windows/docs checks gate delivery;
-   receipts are linked from PR #105. Hardware rounding, remaining arithmetic/control and DSP reference
-   development can continue independently of console evidence.
+   receipts are linked from PR #105. The DSP ADPCM reference now has exact original sample/history/seek
+   evidence; container parsing and guest DSP/mixing/output remain open. Hardware
+   rounding, remaining arithmetic/control and shared runtime development continue
+   independently of the new display-cache physical comparison.
 5. **Conversion/GUI:** prove the full native Windows conversion and WUP
    install/rebuild/save continuity, then complete GUI acceptance.
 

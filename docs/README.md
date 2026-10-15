@@ -41,6 +41,8 @@ for the canonical project site, live dashboard and build receipts.
   captures, owned resources and transactional completion.
 - [First software scenes](software-scenes.md): checked loader/MOV/ADD/MUL shader/raster
   boundary, independent exact images and focused Scene Check console guide.
+- [DSP ADPCM reference](dsp-adpcm.md): exact original codec/history/seek and failure
+  checks; guest DSP/mixing/playback remains open.
 - [Filesystem/saves](filesystem.md), [RomFS assets](romfs-assets.md) and [application lifecycle](compiled-homebrew.md).
 - [Private asset samples](private-asset-samples.md): standalone checked ZIP export
   from existing local reports, without a host wheel update.
@@ -52,7 +54,7 @@ for the canonical project site, live dashboard and build receipts.
 [Compatibility](compatibility.md) describes supported boundaries.
 [Console evidence](console-evidence.md) separates supplied logs from verbal
 reports. Original fresh-launch save/results/assets are verified; the focused
-[launch-audio regression](launch-audio.md) remains open.
+[launch-audio regression](launch-audio.md) has reviewed scoped passes.
 [Development history](development-history.md) preserves earlier implementation
 notes and receipts; its old pending statements are historical.
 

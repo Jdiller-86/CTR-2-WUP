@@ -230,7 +230,8 @@
         "Owned memory, eight single-core contexts and scoped kernel/IPC/SRV/CFG/HID/GSP/APT/FS contracts",
         "Original compiled input/framebuffer/save/reload/RomFS/GX applications verified on desktop, sanitizers and selected emulated PowerPC comparisons",
         "Physical Save 0.14.6 fresh-process reload, embedded RomFS 0.14.6, SD-file RomFS 0.16.0 and GX 0.18.0 transfer/configuration guides completed with zero fallback/fault; user confirmed pictures and Minus return.",
-        "Original normal-CRT PICA draw guest has host exact-pixel checks and an October 13 physical own PASS/exit with zero fallback/fault; rendered second presentation at 57.33 seconds. User separately confirms pictures and Minus return."
+        "Original normal-CRT PICA draw guest has host exact-pixel checks and an October 13 physical own PASS/exit with zero fallback/fault; rendered second presentation at 57.33 seconds. User separately confirms pictures and Minus return.",
+        "Scoped #103 implements a bounded integer DSP ADPCM reference. 6,144 original rational cases / 175,770 samples verify PCM/history, streamed continuation and explicit checkpoint seek; normal/sanitized bounds/late-error tests pass. Container block/SEEK parsing, guest DSP IPC/mixing and actual Wii U playback remain open; no commercial waveform/coefficients are published."
       ],
       "acceptance_remaining": [
         "Prove current compiled guest display/input/exit/save/assets on Wii U",
@@ -285,7 +286,7 @@
         {
           "id": "m3-guest-audio",
           "title": "Build the guest DSP/audio path with original probes",
-          "summary": "Separate native diagnostic tone evidence from the unimplemented guest audio protocol and Wii U output pipeline.",
+          "summary": "Original checked DSP ADPCM reference has exact numeric/history/seek evidence. Guest DSP IPC, container metadata, mixing and Wii U output still require implementation and physical acceptance.",
           "acceptance_criteria": [
             "Original guest audio fixtures exercise the implemented DSP/service path with checked buffers/voices and independently verified sample/timing results.",
             "Wii U output, synchronization, pause/exit and resource cleanup have focused console observations; unsupported audio commands fail visibly."
@@ -296,7 +297,10 @@
           "waiting_labels": [
             "needs-console"
           ],
-          "state": "planned"
+          "state": "in_progress",
+          "evidence": [
+            "Scoped #103 implements a bounded integer DSP ADPCM reference. 6,144 original rational cases / 175,770 samples verify PCM/history, streamed continuation and explicit checkpoint seek; normal/sanitized bounds/late-error tests pass. Container block/SEEK parsing, guest DSP IPC/mixing and actual Wii U playback remain open; no commercial waveform/coefficients are published."
+          ]
         },
         {
           "id": "m3-runtime-acceptance",
@@ -457,7 +461,8 @@
         "At the PR #96 checkpoint, the environment binding could not read Project #2. October 14 Actions-secret review 38605081338 subsequently verifies read/write access, M5/intake/requirements In progress and removal of the resolved input wait from six targets; console waits and owner notes remain preserved. No full gate is accepted.",
         "October 14 public source restores required hosted CI and hosts the canonical docs/dashboard. PR #100/#101 supply reviewed management, guarded legacy redirects and exact original artifact provenance; canonical/legacy HTTP checks and live label/dashboard refresh pass. Final receipts are linked in STATUS.md.",
         "Actions-secret traceability apply 38608010840 verifies 69 native parent links, 28 PR links, M1-M7 assignments and all 104 Project members; no untracked PRs or missing/archived managed members. Full milestone acceptance remains 0/7.",
-        "Shared exact ADD/MUL probes in #76/PR #105 advance a static shader requirement using original data only. Remaining arithmetic/control/rounding and actual selected-entry runtime use remain unverified; no commercial shader is executed."
+        "Shared exact ADD/MUL probes in #76/PR #105 advance a static shader requirement using original data only. Remaining arithmetic/control/rounding and actual selected-entry runtime use remain unverified; no commercial shader is executed.",
+        "Scoped #103 implements a bounded integer DSP ADPCM reference. 6,144 original rational cases / 175,770 samples verify PCM/history, streamed continuation and explicit checkpoint seek; normal/sanitized bounds/late-error tests pass. Container block/SEEK parsing, guest DSP IPC/mixing and actual Wii U playback remain open; no commercial waveform/coefficients are published."
       ],
       "acceptance_remaining": [
         "Complete the exact-revision observed runtime/test-route matrix and any specifically required additional module/asset inspection; static resource contents are not observed execution.",
