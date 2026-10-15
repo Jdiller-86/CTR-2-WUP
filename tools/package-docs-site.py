@@ -102,7 +102,7 @@ def static_files(site: Path) -> tuple[dict[str, bytes], list[str]]:
             continue
         if path.suffix.lower() not in STATIC_SUFFIXES and not (relative.startswith("docs/licenses/") and path.name in TEXT_LICENSES):
             raise ValueError("Unexpected static documentation asset: " + relative)
-        if path.suffix.lower() == ".json" and relative not in {"search/search_index.json", "docs/milestone-status.json"}:
+        if path.suffix.lower() == ".json" and relative not in {"search/search_index.json", "docs/milestone-status.json", "docs/m1-evidence.json"}:
             raise ValueError("Unexpected documentation JSON payload")
         data = read_file(path)
         if path.suffix in {".js", ".css"}:
