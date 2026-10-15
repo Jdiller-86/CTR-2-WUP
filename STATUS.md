@@ -5,7 +5,8 @@ under #87/#20/M2 prepares source **0.24.1** for a two-app hardware round:
 native exact ADD/MUL scenes and correctly gated compiled guest draws with
 cooperative execution slices, phase/progress metrics and a Windows return-log
 collector. [The package guide](docs/console-retest.md) names the required physical
-observations. This is a premerge test snapshot; new picture, speed and launcher
+observations and supports FTP upload/download with a raw-log ZIP; the Windows
+collector and SD reader are optional. This is a premerge test snapshot; new picture, speed and launcher
 evidence is pending the user's run. Earlier scoped passes are preserved.
 
 **Exact shader arithmetic:** [PR #105](https://github.com/Jdiller-86/CTR-2-WUP/pull/105)

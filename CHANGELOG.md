@@ -16,6 +16,8 @@ do not establish commercial-game compatibility or installable WUP acceptance.
   8 KiB results; preserve per-launch traces and visible storage failures.
 - Stage a source/SDK/binary/checksum-checked two-app kit and a Windows collector
   that includes partial evidence while excluding saves, keys and unrelated files.
+- Document binary-mode FTP deployment and raw-log ZIP return without Python or
+  an SD reader; the existing kit's collector can also read a local FTP mirror.
 - Actual hardware speed, picture and launcher observations are pending.
 
 ## 0.24.0 — unreleased

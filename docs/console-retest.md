@@ -15,6 +15,11 @@ remain valid for their builds. Do not repeat those guides for this round.
    on-screen build is **0.24.1**. These are homebrew launch files, not WUPs; they
    do not need a ROM, keys or an installer.
 
+You can upload those same two WUHB files by FTP to `sd:/wiiu/apps/` instead of
+removing the SD card. Use **binary transfer mode**. The FTP server may expose the
+SD under a different root name; select its SD-card mount. Let uploads finish
+before launching the apps. The existing 0.24.1 kit works with this route.
+
 The first run creates unique result/trace files. **RESULT VERIFIED** means its
 current 8 KiB result was closed, reopened and compared byte for byte. It does not
 prove power-loss durability. If storage fails, guest input pauses; use Minus
@@ -76,13 +81,40 @@ results are already written, but successful launcher return needs your observati
 
 ## Return one ZIP
 
-1. After closing the apps, remove the SD normally and insert it in Windows.
-2. In the extracted kit, double-click **`collect-hardware-results.cmd`**. It uses
-   your installed Python 3 launcher. Enter the SD drive/root, such as **E:**.
-3. Answer the short launcher/problem questions. Environment versions are optional;
-   a blank answer is recorded as not reported. No screenshots are needed unless
-   a visual failure needs explanation.
-4. Send the generated **`CTR2WUP-results-0.24.1-<time>.zip`** back in this chat.
+### FTP, without running the collector
+
+1. Finish the tests and close the diagnostic apps before downloading logs. Then
+   open your FTP server and browse to the SD card's `ctr2wup/` directory.
+2. In **binary transfer mode**, download **all** files matching
+   `*native-software-scene-0.24.1-*.txt` or `*compiled-pica-draws-0.24.1-*.txt`.
+   Include both `result-` reports and traces, and both Scene Check launches.
+3. Keep the original filenames. Wait until the FTP queue finishes, then select
+   the downloaded TXT files in Windows and **Compress to ZIP file**. Send that
+   ZIP in this chat. The `.cmd` and Python are optional for this route.
+4. In your message, report whether Minus returned to the launcher after **both
+   Scene Check launches** and after **Guest Draws**, plus any visual, freeze or
+   storage problem. Include the optional HOME outcome only if you tried it.
+   Firmware/Aroma/launcher versions are useful if known.
+
+Return incomplete/failure logs too. Do not delete the originals on the Wii U,
+and do not include saves, ROMs, keys or unrelated files. The raw-log ZIP can be
+processed using the tested kit's source identity; a collector receipt is not
+required. No screenshots are needed unless a visual failure needs explanation.
+
+### Optional collector, from FTP downloads or an SD reader
+
+The collector also works on an ordinary local folder. If you prefer its
+checksummed receipt and observation prompts, download the matching files into
+`C:\CTR2WUP-return\ctr2wup\`, then run **`collect-hardware-results.cmd`** from
+the extracted kit. At its SD-root prompt enter **`C:\CTR2WUP-return`** (the
+parent of `ctr2wup`), even though the files came over FTP. Keep the kit's
+`manifest.json` beside the collector. Use the collector from the kit you tested.
+
+With an SD reader, close the apps, remove the SD normally and enter its drive
+root instead, such as **E:**. The collector uses your installed Python 3 launcher.
+Answer the short launcher/problem questions, then send its generated
+**`CTR2WUP-results-0.24.1-<time>.zip`** back in this chat. A blank observation is
+recorded as not reported.
 
 The collector reads only this version's `native-software-scene` and
 `compiled-pica-draws` TXT files under `sd:/ctr2wup/`. It includes incomplete/failure
