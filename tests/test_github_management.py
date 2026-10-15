@@ -156,6 +156,24 @@ class ManagementTests(unittest.TestCase):
                 self.apply(client)
             self.assertEqual(client.writes, [])
 
+    def test_reviewed_native_baseline_can_complete_only_its_named_scoped_task(self):
+        client = Client()
+        client.plan['reviews'] = [{'id':'m1-evidence-reuse-v027','overview':'m1',
+            'reason':'Carry forward the already reviewed ten-step native baseline.',
+            'changes':[{'role':'work-item','id':'m1-controls-audio',
+                'from_status':['Awaiting evidence','Done'],'to_status':'Done',
+                'remove_resources':['Wii U console results']}]}]
+        row=client.target('m1-controls-audio');set_status(row,'Awaiting evidence')
+        row['waiting']={'__typename':'ProjectV2ItemFieldTextValue','text':'Wii U console results; preserve manual note'}
+        result=review.review(client,client.source,client.plan,'m1-evidence-reuse-v027',True)
+        self.assertEqual(row['status']['name'],'Done')
+        self.assertEqual(row['waiting']['text'],' preserve manual note')
+        self.assertFalse(result['full_gate_accepted'])
+        change=client.plan['reviews'][0]['changes'][0]
+        change.update(role='milestone',id='m1')
+        with self.assertRaises(review.tracking.TrackingError):
+            review.validate(client.plan,client.source,'m1-evidence-reuse-v027')
+
     def test_race_changes_raw_notes_without_changing_category(self):
         client = Client()
         client.race = lambda row: row['waiting'].update(text=row['waiting']['text'] + 'owner addition')

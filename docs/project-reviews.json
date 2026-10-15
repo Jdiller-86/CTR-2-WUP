@@ -127,6 +127,65 @@
           "remove_resources": []
         }
       ]
+    },
+    {
+      "id": "m1-evidence-reuse-v027",
+      "overview": "m1",
+      "reason": "The user rejects redundant hardware rounds. docs/m1-evidence.json reviews the already passed native ten-step/600000 ms baseline and focused silence/tone evidence; complete only #14 and remove its resolved console wait. Preserve #12 Done and #13 automatic SD recovery wait. #119 supplies an original keyless plaintext/self-signed WUP candidate, so #15/#16 await the new installer/Menu/SD-probe evidence rather than external packaging material. Preserve owner notes, all other waits and 0/7 full gates.",
+      "changes": [
+        {
+          "role": "work-item",
+          "id": "m1-controls-audio",
+          "from_status": [
+            "Awaiting evidence",
+            "Done"
+          ],
+          "to_status": "Done",
+          "remove_resources": [
+            "Wii U console results"
+          ]
+        },
+        {
+          "role": "work-item",
+          "id": "m1-package-launch",
+          "from_status": [
+            "Blocked",
+            "Awaiting evidence"
+          ],
+          "to_status": "Awaiting evidence",
+          "remove_resources": []
+        },
+        {
+          "role": "work-item",
+          "id": "m1-platform-acceptance",
+          "from_status": [
+            "Blocked",
+            "Awaiting evidence"
+          ],
+          "to_status": "Awaiting evidence",
+          "remove_resources": []
+        }
+      ]
+    },
+    {
+      "id": "m6-original-homebrew-v027",
+      "overview": "m6",
+      "reason": "#119 develops a keyless original plaintext 0x2000/self-signed WUP candidate with independent integrity/signature checks. The original diagnostic does not need an owned game, common key, production certificate or donor. Activate only #37 and remove only its resolved owned-input resource. Preserve the console wait, owner notes, all commercial/Windows requirements and full gates.",
+      "changes": [
+        {
+          "role": "work-item",
+          "id": "m6-original-wup",
+          "from_status": [
+            "Awaiting evidence",
+            "Blocked",
+            "In progress"
+          ],
+          "to_status": "In progress",
+          "remove_resources": [
+            "Owned decrypted executable and assets"
+          ]
+        }
+      ]
     }
   ]
 }

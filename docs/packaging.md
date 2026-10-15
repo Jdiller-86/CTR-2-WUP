@@ -1,9 +1,39 @@
-# Original encrypted homebrew packaging
+# Original homebrew WUP packaging
+
+## Current original install-test profile (0.27.0)
+
+`host.package_homebrew` adds original plaintext **`0x2000`** contents and a
+self-generated test-signing chain for a signature-patched homebrew environment.
+It requires **no common key, production certificate, donor title or game input**.
+The independent verifier checks content/FST/XML/identity and the generated
+signature chain. This establishes package integrity and test-signature
+consistency; it does not establish Nintendo authenticity or physical installation.
+
+The candidate targets **WUP Installer GX2 under Aroma with signature patches**,
+including `wiiu/environments/aroma/modules/setup/01_sigpatches.rpx`. The module
+is not bundled and its presence is not assumed. Installer acceptance and actual
+Wii U Menu launch/exit/relaunch remain unverified until a physical return.
+The explicit diagnostic ID **`0005000043543257`** is not a reserved safe range:
+check the console for an unrelated title with that ID before installation.
+
+The focused `native-install` diagnostic checks its actual title identity and
+runs safe original SD recovery probes in `sd:/ctr2wup/install-check/`.
+[One short guide](m1-acceptance.md) covers two brief new installed-title launches;
+prior native controls/tone/ten-minute, ordinary exits and save reload are reused.
+The kit exposes one `START-HERE.md` and one `sd-card/` deployment tree. Source,
+checksums, receipts and notices belong under `support/`, with no extra tester steps.
+
+## Existing encrypted research profile
+
+The encrypted `0x2001` writer remains supported with its separately configured
+local inputs. Those inputs are unnecessary for the new original plaintext test.
 
 Version 0.4.0 implements an original, scoped encrypted writer and a separate
 decrypting verifier. **No package has been installed or launched on a physical
-Wii U.** The offline test uses invented test certificates and a synthetic key;
-it cannot produce an installable title. Commercial conversion remains disabled.
+Wii U.** That encrypted offline fixture uses invented test certificates and a
+synthetic key; its pass does not establish installer acceptance. Commercial
+conversion remains disabled. The original plaintext candidate above is a separate
+new physical install-test route.
 
 ## Implemented profile
 
@@ -121,8 +151,8 @@ no source, binary, XML template, certificate or key from those packers is adopte
 This is a scoped research profile, not a full Wii U package-format implementation.
 
 The MIT-root makefst candidate bundles GPLv2-or-later PolarSSL, MIT ezxml and
-Unlicense miniz. Its plaintext `0x2000` route, test signing and production
-certificate output did not supply the required encrypted profile or certificate
-provenance; it was not incorporated or executed. The nuspacker/CNUS_Packer
+Unlicense miniz. Its code was not incorporated or executed. Earlier research
+focused on the encrypted profile; the new plaintext/test-signing route above is
+an original implementation and supplies no makefst production certificate. The nuspacker/CNUS_Packer
 checkouts have no identified license grant and remain research references only.
 See `foundation-audit.md` for pins and licensing constraints.

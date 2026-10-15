@@ -57,11 +57,15 @@ def validate(data, source, identifier):
             if key not in identities or identities[key] != review['overview'] or key in targets:
                 raise tracking.TrackingError('Project review contains an unknown, unrelated or duplicate target.')
             targets.add(key)
+            # This named review carries forward an already reviewed physical
+            # native baseline. It cannot complete any other task or full gate.
+            scoped_baseline = (review['id'], *key) == ('m1-evidence-reuse-v027', 'work-item', 'm1-controls-audio')
+            allowed = (*ACTIVE, 'Done') if scoped_baseline else ACTIVE
             if (not isinstance(change['from_status'], list) or not change['from_status']
                     or any(not isinstance(status, str) for status in change['from_status'])
                     or len(set(change['from_status'])) != len(change['from_status'])
-                    or any(status not in ACTIVE for status in change['from_status'])
-                    or change['to_status'] not in (*ACTIVE, None)
+                    or any(status not in allowed for status in change['from_status'])
+                    or change['to_status'] not in (*allowed, None)
                     or change['to_status'] is not None and change['to_status'] not in change['from_status']
                     or not isinstance(change['remove_resources'], list)
                     or any(not isinstance(resource, str) for resource in change['remove_resources'])

@@ -1,7 +1,7 @@
 # Milestones and remaining work
 
 Updated **October 15, 2026 (America/New_York)** for
-**v0.25.0 display-cache evaluation**. The product is an UWUVCI-style
+**v0.27.0 original installed-title development**. The product is an UWUVCI-style
 Windows GUI: **Select owned 3DS ROM → configure title/artwork → Inject →
 install its WUP → play from the Wii U Menu**. The CLI is the shared engine.
 The USA Super Mario 3D Land executable/revision is privately verified; reported local asset inventory is matched; selected byte formats,
@@ -23,7 +23,7 @@ The [completed physical review](console-evidence.md) advances scoped M1/M2/M4
 evidence: two 0.24.1 arithmetic guides and all Guest Draws/Plus-repeat steps pass;
 all five traces reach `main_return`, with reported Minus/HOME return. All files
 are received; 0.25.0 implements a host-verified cache for the measured native cost; its new physical comparison remains pending.
-Full lifecycle/recovery,
+The automatic SD recovery/installed-title checks,
 Espresso benchmarks, native GPU rendering and all seven full gates remain open;
 existing Project states and waiting resources are preserved.
 
@@ -64,7 +64,7 @@ passes establish their stated boundaries, not physical-console execution.
 
 | Milestone | State | Remaining acceptance |
 |---|---|---|
-| [M1: Native Wii U platform](#m1) | Awaiting evidence | Platform lifecycle/recovery, stability and installed original WUP evidence |
+| [M1: Native Wii U platform](#m1) | Awaiting evidence | Automatic SD recovery and installed original WUP evidence; reviewed native baseline retained |
 | [M2: CPU translation and performance](#m2) | In progress | Exercised CPU/ABI/fallback coverage and actual Espresso timing |
 | [M3: Homebrew execution runtime](#m3) | In progress | Stable physical compiled guest plus broader services/modules/audio |
 | [M4: PICA to GX2 rendering](#m4) | In progress | Real PICA/GX2 draws/shaders/TEV/coherency and measured scenes |
@@ -90,18 +90,28 @@ so independent work can overlap without claiming downstream completion.
 
 **Exit criteria:** Physical evidence establishes both screens, required controls/touch, native audio, reliable launch/exit, SD persistence/recovery and a documented stability session. An original WUP installs and launches/exits from the Wii U Menu.
 
-**Verified desktop/earlier evidence:** Older native reports and the confirmed Minus exit are retained. The user reports Native/Guarded/Compiled completed without errors on v0.14.5; supplied text logs have older headers. A valid visit-1 snapshot proves initial persistence, while a later Save update failed and no new reports appeared. Current independent TXT read-back and save publication/recovery have desktop/sanitizer checks, not new console acceptance.
+**Reviewed physical baseline:** [The M1 ledger](m1-evidence.json) retains Native
+0.14.1 all ten guide steps, including controls/touch/tone and the timed ten-minute
+observation; Audio Check 0.20.0 later verifies silence and both-output tone.
+Named result collection, Save 0.14.6 exact fresh-process reload and source-matched
+0.24.1 repeated Minus/HOME returns are reviewed. No full native, ten-minute,
+ordinary exit or successful-save repetition is requested. Historical failures
+remain recorded; new display-cache/Audio Streams behavior keeps separate physical limits.
 
-**Reviewed physical follow-up:** Named TXT collection, original fresh-launch save reload, embedded/SD assets and GX transfers pass their scoped checks; pictures and Minus return have user confirmation. October 13 Audio Check/GX reports and user confirmation verify the launch-music regression; full lifecycle/recovery and installed-title acceptance remain open.
+**Current development:** #119 under #37/M6 supplies original plaintext `0x2000`
+WUP output and a self-generated test-signing chain, independently checked without
+common keys, production certificates, donors or game input. Aroma signature
+patches are required and not assumed present. Explicit title ID
+`0005000043543257` needs a local collision check.
 
-**Still needs external evidence/input:** Focused audio regression, exact firmware/Aroma/installer versions and native/installed lifecycle/recovery evidence require the Wii U. No game dump is needed for the original diagnostics.
+**Remaining physical evidence:** [The short install check](m1-acceptance.md)
+requests actual WUP Installer GX2 installation and two brief new Wii U Menu
+launch/exits, combining the automatic SD interrupted-publication/error-recovery
+probe. Host package verification cannot establish installation or Menu execution.
+One guide, one FTP deployment tree and one whole log folder replace the broad
+retest. No full milestone is accepted by packaging or host checks.
 
-References: [Console evidence](console-evidence.md) · [Short follow-up](console-retest.md) · [Guided tests](guided-testing.md) · [Console guide](console-testing.md).
-
-The [source-bound M1 acceptance suite](m1-acceptance.md) now provides the full
-guided native run, short fresh lifecycle runs and original SD recovery probe.
-Its strict reviewer keeps installed-title acceptance Blocked without a real WUP.
-The suite itself is host/native-build evidence, not physical gate completion.
+References: [Reviewed evidence](console-evidence.md) · [Packaging boundary](packaging.md).
 
 ### Actionable work items
 
@@ -111,20 +121,20 @@ The suite itself is host/native-build evidence, not physical gate completion.
 
 Current Save/RomFS/SD-asset/GX named reports are physically verified, including fresh-launch save reload. Retain older failed/missing reports separately; their exact original cause remains unknown. Project review records this scoped collection task independently of M1 acceptance.
 
-State: **Done — reviewed scoped result collection** · Needs: `needs-console`.
+State: **Done — reviewed scoped result collection** · Needs: none for this completed scope.
 
 Depends on: none.
 
 Acceptance:
 
-- [ ] A fresh launch creates a uniquely named, closed-file read-back-verified TXT report in the documented SD results directory; its header identifies the tested build and diagnostic.
-- [ ] Upload the requested TXT files and preserved snapshot/siblings through the private intake route; retain automatic observations, user confirmations, failures and skips separately.
+- [x] A fresh launch creates a uniquely named, closed-file read-back-verified TXT report in the documented SD results directory; its header identifies the tested build and diagnostic.
+- [x] Upload the requested TXT files and preserved snapshot/siblings through the private intake route; retain automatic observations, user confirmations, failures and skips separately.
 
 <a id="m1-lifecycle"></a>
 
 #### m1-lifecycle: Verify repeat launch, exit and SD publication recovery
 
-Exercise the native application lifecycle and result/save persistence without discarding the earlier Minus-exit confirmation.
+Normal repeated launches, observed Minus/HOME returns and exact fresh-process save persistence already have reviewed evidence. Only the automatic SD recovery/error probe remains; combine it with the new installed-title run.
 
 State: **Awaiting evidence** · Needs: `needs-console`.
 
@@ -132,31 +142,32 @@ Depends on: [m1-results](#m1-results).
 
 Acceptance:
 
-- [ ] A documented repeat-launch and Minus/Home/APT exit sequence returns to the Wii U Menu without a hang; record exact firmware, Aroma, launch route and build.
-- [ ] Save/relaunch retains the expected bytes, and any observed publication/recovery failure preserves readable previous data or reports an actionable error; record SD files while retaining the original failure evidence.
+- [x] Reviewed repeated launches and Minus/HOME return observations identify firmware 5.5.6 U / Aroma Beta 27 and the tested 0.24.1 source.
+- [x] Reviewed Save 0.14.6 fresh-process reload retains the expected original bytes and valid CRC.
+- [ ] Review the automatic SD interrupted-publication/error-recovery probe during the installed-title launches, preserving earlier failure evidence.
 
 <a id="m1-controls-audio"></a>
 
 #### m1-controls-audio: Record native display, controls and audio acceptance
 
-Retain older native/control evidence and fill only the missing checks needed for current platform acceptance.
+Reviewed baseline controls/touch/tone/ten-minute stability and the focused silence/tone regression are complete. Later display-cache and Audio Streams behavior has its own physical evidence scope; it does not reset this baseline.
 
-State: **Awaiting evidence** · Needs: `needs-console`.
+State: **Done — reviewed native baseline** · Needs: none for this completed scope.
 
 Depends on: none.
 
 Acceptance:
 
-- [ ] The native guide records TV/GamePad mapping, buttons, sticks, touch and the original native tone with observed results and build identity.
-- [ ] Any changed display, input, audio or lifecycle path has a focused console regression result; earlier successful checks are cited instead of repeating a long guide solely for a version bump.
+- [x] Native 0.14.1 records TV/GamePad pictures, buttons, both sticks, touch, original tone and ten-minute stability; its ten native step definitions and timed threshold are unchanged.
+- [x] Audio Check 0.20.0 records the focused launch-silence/both-output tone regression. Keep later changed-feature evidence separate and cite the existing baseline instead of repeating a long guide for a version bump.
 
 <a id="m1-package-launch"></a>
 
 #### m1-package-launch: Verify an original diagnostic as an installed Wii U title
 
-Use the validated original-homebrew WUP smoke package to prove installation and Wii U Menu launch rather than inferring them from RPX/WUHB launch.
+Use the independently verified original plaintext/self-signed WUP candidate to establish actual installation and Wii U Menu launch. It needs signature-patched Aroma, no common key/production certificate/donor, and a collision check for explicit ID 0005000043543257.
 
-State: **Blocked** · Needs: `needs-console`.
+State: **Awaiting evidence** · Needs: `needs-console`.
 
 Depends on: [m6-original-wup](#m6-original-wup).
 
@@ -169,9 +180,9 @@ Acceptance:
 
 #### m1-platform-acceptance: Review and accept the native Wii U platform gate
 
-Collect the scoped native platform results into one reproducible acceptance record.
+Combine the retained native baseline with the new installed-title/automatic-SD-probe evidence in one versioned acceptance review. Do not request already completed guides again.
 
-State: **Blocked** · Needs: `needs-console`.
+State: **Awaiting evidence** · Needs: `needs-console`.
 
 Depends on: [m1-results](#m1-results), [m1-lifecycle](#m1-lifecycle), [m1-controls-audio](#m1-controls-audio), [m1-package-launch](#m1-package-launch).
 
@@ -631,7 +642,7 @@ Acceptance:
 
 **Verified desktop/earlier evidence:** Original encrypted input reaches actual external AOT and native cross-built diagnostics. The scoped writer and independent decrypt/FST/hash/file verifier pass with synthetic credentials. Hosted Windows host/portable-C and deep real AOT/Unicode/.NET 10 WPF tooling checks passed. They do not prove actual local credential provenance, installer acceptance or full commercial native Windows conversion.
 
-**Still needs external evidence/input:** Real locally managed packaging prerequisites and console installation are still required. Commercial stage integration needs M5 code/assets; clean native Windows full-conversion and continuity checks are separate from the already passed tooling CI.
+**Still needs external evidence/input:** Actual signature-patched console installation/Menu behavior remains unverified. The original plaintext/self-signed candidate needs no common key, production certificate, donor or game input. Commercial stage integration needs M5 code/assets; clean native Windows full-conversion and continuity checks remain separate from passed tooling CI.
 
 References: [Packaging boundaries](packaging.md) · [Windows build](build-windows.md) · [Encrypted preparation](encrypted-input.md) · [Host architecture](architecture.md).
 
@@ -641,15 +652,15 @@ References: [Packaging boundaries](packaging.md) · [Windows build](build-window
 
 #### m6-original-wup: Validate original-homebrew WUP packaging and installer prerequisites
 
-Take the original scoped writer/verifier beyond synthetic structure checks using documented local material and a smoke-test diagnostic.
+Deliver the original plaintext 0x2000/self-generated test-signing candidate and independent content/signature verification without common keys, production certificates or donors. The standalone native-install diagnostic provides the focused physical route.
 
-State: **Blocked** · Needs: `needs-input`, `needs-console`.
+State: **In progress** · Needs: `needs-console`.
 
 Depends on: none.
 
 Acceptance:
 
-- [ ] The original diagnostic WUP has consistent collision-checked nonreserved identity, original metadata/artwork, verified content integrity and documented local packaging provenance/installer requirements.
+- [ ] The original diagnostic candidate has explicit collision-checked identity, original metadata/artwork, independently verified content/test-signature integrity and documented Aroma signature-patch requirements. Original plaintext output needs no key or donor.
 - [ ] The supported installer accepts the actual package on Wii U; retain the package/build report and observations privately where needed, distinguishing integrity from signature policy and install success.
 
 <a id="m6-conversion-pipeline"></a>

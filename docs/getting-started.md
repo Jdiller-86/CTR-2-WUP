@@ -13,12 +13,18 @@ instructions together. CI builds are available from each successful
 [Actions run](https://github.com/Jdiller-86/CTR-2-WUP/actions), with the source
 commit in their artifact names. Hosted builds are structural/test evidence.
 
-For the unreleased **0.26.0** testing checkpoint, download the successful run's
-`wiiu-m1-acceptance` artifact and start with `KIT-STATUS.md` and
-[the full M1 guide](m1-acceptance.md). It includes M1 Check and the separate
-[Audio Streams test](audio-stream-testing.md), exact source, reference WAVs and
-FTP return instructions. The kit has no installable WUP; that M1 segment stays
-Blocked. The prior source-bound 0.25.0 display-cache comparison remains separate.
+For the unreleased **0.27.0** checkpoint, the successful run's
+`wiiu-m1-acceptance` artifact is a focused **install check**, not another native
+controls/stability round. Read its sole `START-HERE.md`, FTP `sd-card/` to the SD
+root, use WUP Installer GX2 under signature-patched Aroma, then return the whole
+`sd:/ctr2wup/install-check/` folder. [The short guide](m1-acceptance.md) names the
+new installer/Menu path and remaining automatic SD recovery check. No keys or
+certificates need to be supplied. Developer material is under `support/`.
+
+Earlier reviewed native controls/touch/tone/ten-minute, results, ordinary exits
+and save reload are carried forward. The immutable 0.25.0 cache and 0.26.0 Audio
+Streams kits retain separate pending changed-feature scopes; no repeat of those
+older rounds is requested by the install check.
 
 Release manifests identify separate **Native/GX**, **Audio Check/GX** and
 **Guest Draws** kits, together with matching source, a developer wheel, offline
@@ -35,11 +41,13 @@ path or a specific remaining acceptance check. Preserve save snapshots and old r
 
 The diagnostic launch route targets a homebrew Wii U with **Aroma** and an SD
 card. The tester previously confirmed firmware **5.5.6 U / Aroma Beta 27** and now
-selects **WUP Installer GX2**. Confirm the versions again for the new run and
-record the installer version/build when an installable package is available. This is a reported
+selects **WUP Installer GX2**. Report versions as unchanged or correct them for
+the new install path; record the installer version/build if displayed. This is a reported
 environment, not a promise for every setup. Follow your homebrew environment's
 own installation instructions; CTR2WUP does not install or update console firmware.
-WUP Installer is not needed to launch the diagnostic WUHB files.
+WUP Installer is not needed to launch diagnostic WUHB files. The new original
+WUP candidate requires Aroma signature patches (`01_sigpatches.rpx`); their
+presence is not assumed. Installer/Menu behavior remains physically unverified.
 
 1. Extract the kit and copy the **contents of `sd-card/`** to the SD root.
 2. WUHBs go under **`sd:/wiiu/apps/`**. Launch the named app from Aroma.

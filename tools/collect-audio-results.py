@@ -17,13 +17,13 @@ import re
 import stat
 import zipfile
 
-VERSION = '0.26.0'
+VERSION = '0.27.0'
 APPLICATION = 'native-audio-streams'
 MAX_FILE = 4 * 1024 * 1024
 MAX_TOTAL = 24 * 1024 * 1024
 MAX_FILES = 64
 RESULT_BYTES = 8192
-RESULT_PATTERN = re.compile(r'^result-native-audio-streams-0\.26\.0-(?P<session>[0-9a-f]{16})-(?P<attempt>[0-9]{2})\.txt$')
+RESULT_PATTERN = re.compile(r'^result-native-audio-streams-'+re.escape(VERSION)+r'-(?P<session>[0-9a-f]{16})-(?P<attempt>[0-9]{2})\.txt$')
 TRACE_PATTERN = re.compile(r'^native-audio-streams-(?P<session>[0-9a-f]{16})-(?P<attempt>[0-9]{2})\.txt$')
 
 

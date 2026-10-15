@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Review original M1 console evidence; produce a candidate, never accept a gate.
+"""Historical v0.26 native-suite reviewer; never request that guide again.
+
+New installed-title returns use review-install-results.py and the reviewed
+baseline in docs/m1-evidence.json. This reader remains for old archived returns.
 
 Reads only allowlisted TXT reports/traces from a completed local FTP copy. It
 does not read keys, saves, packages, or contact a console/GitHub. Observations

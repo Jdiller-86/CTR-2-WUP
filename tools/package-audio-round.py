@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location('audio_round_release', ROOT/'tools/package-development-release.py')
 release = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(release)
-VERSION = '0.26.0'
+VERSION = '0.27.0'
 APPLICATION = 'native-audio-streams'
 NAMES = ('ctr2wup-audio-stream-check.rpx', 'ctr2wup-audio-stream-check.wuhb')
 MAX_TOTAL = 24 * 1024 * 1024

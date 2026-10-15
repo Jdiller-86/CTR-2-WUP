@@ -1,8 +1,8 @@
 # CTR2WUP product development plan
 
 Updated **October 15, 2026 (America/New_York)** for
-**v0.26.0 audio-stream evaluation** (the source-bound v0.25.0 display-cache
-comparison remains pending). The requirements remain
+**v0.27.0 original installed-title development**. The immutable prior display-cache
+and Audio Streams kits retain their recorded pending physical scopes. The requirements remain
 [the original brief](project-brief.md), the reviewed [GUI workflow](gui-workflow.md)
 and the user amendment allowing [optional local encrypted-input preparation](encrypted-input.md).
 Upstream feasibility scores and compatibility percentages are research context,
@@ -43,10 +43,11 @@ software rendering and existing presentation; native GX2 shader translation,
 broader PICA state and physical renderer acceptance remain open.
 
 Checked generated-code integration, owned guest memory, scoped services, original
-synthetic packaging and hosted Windows foundations exist. Reviewed physical
-Save/results/assets/GX evidence is retained, and the launch-music regression has
-reviewed physical passes. Physical cache comparison, complete platform stability,
-installed-WUP acceptance, commercial conversion and final GUI are still pending.
+encrypted fixture packaging, keyless plaintext/self-signed original WUP candidates
+and hosted Windows foundations exist. Reviewed native controls/stability,
+Save/results/assets/GX, silence/tone and Minus/HOME evidence is retained. Physical
+cache/Audio Streams, automatic SD recovery and installed-WUP acceptance, commercial
+conversion and final GUI remain pending.
 **0/7 full milestones are accepted.** Completed scoped features do not change that.
 
 ## Development continuity
@@ -81,15 +82,24 @@ containers/loops, guest DSP firmware/services, real-time synchronization and phy
 audio acceptance remain open. The reviewed Project transition activates only the guest-audio task,
 preserving its console wait and all full gates.
 
-## M1 acceptance evidence route
+## M1 development and evidence reuse
 
-Scoped #117/PR #118 supplies the [full guided M1 suite](m1-acceptance.md): one
-full native controls/touch/tone/ten-minute run, safe original SD recovery probes,
-two short fresh lifecycle runs and a fail-closed review of all criteria. Reviewed
-result collection is already Done. Installed-title testing needs a real verified
-original WUP and WUP Installer GX2 observations, so that segment is Blocked. Native
-RPX/WUHB evidence cannot accept the installed-title gate. No full milestone changes
-state merely because the suite builds.
+[The reviewed ledger](m1-evidence.json) preserves the native ten-step controls,
+tone and ten-minute stability baseline, result collection, normal Minus/HOME
+returns and fresh-save reload. No full guide repeats are requested. #119 under
+#37/M6 develops the missing original installed-title path with plaintext `0x2000`
+content and a self-generated test-signing chain; no common key, production
+certificate, donor or game is needed. The existing encrypted profile remains
+separate. Signature-patched Aroma is required, without assuming it is installed.
+
+The [focused install check](m1-acceptance.md) uses two brief new Menu launches,
+which also run the remaining automatic SD recovery probe. Installation and actual
+Menu execution cannot be proven by host verification, so those narrowly scoped
+observations remain pending. The kit has one guide, one FTP tree and one return
+folder; developer evidence lives under `support/`. No full milestone is accepted.
+Every future hardware request must name the changed path or missing criterion,
+explain why existing evidence/host checks cannot cover it, and request the
+smallest useful action.
 
 ## Now, next and later
 
@@ -111,7 +121,7 @@ build. PR #106 is merged with passing hosted checks; full gates remain open.
 | Delivered checkpoint | Bounded compiled guest draws, transactional targets/completion, exact frames and checked 512-word shader storage | Scoped M4 command and capacity increments in PR #48/#57/#98; broader #28/#30 and full M4 acceptance remain open |
 | Next independent renderer work | Extend shader/control or bounded TEV and texture sampling using original references | M4 #28/#29; separate scoped features with numeric/pixel and rollback criteria |
 | Resource/native renderer work | Version resource caches, prove invalidation/readback, define native shader ABI and translate the proven subset into GX2 | M4 #28/#30; retain software reference and explicit shader/cache misses |
-| Physical evidence and performance | Retain completed 0.24.1 arithmetic, picture-gating, repeat-draw and launcher evidence; compare the host-verified 0.25.0 cache on Wii U | #87/#20, M1 #13–#16, M3 #22/#26 and M4 #31; broader Espresso, stability/recovery and full renderer criteria remain open |
+| Original installed-title development | Deliver the keyless original WUP candidate and two brief new Menu launches with automatic SD recovery | #119/#37, M1 #13/#15/#16; reuse baseline #12/#14 evidence; physical installer/Menu acceptance remains pending |
 | Title intake and analysis | Retain verified executable/report/sample provenance; validate required nested resources and refine the observed runtime/test-route matrix | M5 #32/#33 are active analysis; selected Yaz0/NARC/DVLB/CGFX/BYML/CSAR/CSTM structures are inspected; actual runtime selection/use remains pending |
 | Asset-informed shared work | Retain checked CSTM/ADPCM, bounded voice/mixer and finite native playback evidence; next implement exercised guest DSP firmware/service interfaces and streaming synchronization alongside shader/control work | M4 #28 and M3 #25; static sampled resources justify scoped implementation, while runtime/console use needs separate evidence |
 | Required game runtime | Implement observed CPU, services, dynamic modules, DSP/audio, saves and rendering requirements | M2/M3/M4 and M5 #34–#36; original probes support shared interfaces, then real title evidence |
@@ -130,8 +140,8 @@ or measured bottlenecks become available.
 ## Execution order and gates
 
 1. **P1 — Translation and packaging foundations:** extend exercised CPU/ABI/
-   fallback correctness and measure PowerPC costs. Resolve original-homebrew WUP
-   installer/metadata/certificate prerequisites and prove Menu launch/exit.
+   fallback correctness and measure PowerPC costs. Use the original plaintext/self-signed
+   WUP candidate and prove signature-patched installer/Menu launch/exit.
    Host/emulated proofs already exist; physical acceptance remains open.
 2. **P2 — Exact title analysis:** identify the owned revision, code/assets/modules,
    observed service/GPU demands and a repeatable gameplay/save route. Enable a

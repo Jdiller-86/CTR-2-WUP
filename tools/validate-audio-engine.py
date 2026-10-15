@@ -283,7 +283,7 @@ def main():
                            native_pause_or_console_verified=False))
     identity = dict(source_commit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
                     source_dirty=bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT, text=True)))
-    (output/'guided-scenes.json').write_text(json.dumps(dict(version='0.26.0', output_rate=RATE,
+    (output/'guided-scenes.json').write_text(json.dumps(dict(version='0.27.0', output_rate=RATE,
                                                            original_inputs_only=True, independent_reference=True,
                                                            scenes=scenes, **identity), indent=2)+'\n')
     vector = bytearray(b'AEM1'+struct.pack('<I', len(rows)))
@@ -312,7 +312,7 @@ def main():
         if actual != expected:
             mismatch = next((i for i, (a, b) in enumerate(zip(actual, expected)) if a != b), min(len(actual), len(expected)))
             raise ValueError(f'PCM/control/counter differs from independent rational reference at byte {mismatch}; got {actual[mismatch:mismatch+16].hex()}, expected {expected[mismatch:mismatch+16].hex()}')
-    report = dict(ok=True, version='0.26.0', original_inputs_only=True, independent_reference=True,
+    report = dict(ok=True, version='0.27.0', original_inputs_only=True, independent_reference=True,
                   exact_rational_adpcm=True, exact_linear_resample_q15_mix=True,
                   exact_voice_position_phase_controls_counters=True, cases=len(rows), output_frames=frames,
                   pcm_samples=frames*2, state_checks=state_checks,

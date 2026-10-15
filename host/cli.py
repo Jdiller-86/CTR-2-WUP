@@ -55,7 +55,7 @@ def parser():
     key_import.add_argument("--decrypted-titlekeys",help="Locally obtained decTitleKeys-format database declared to contain plaintext title keys")
     compile_command = commands.add_parser("build", help="Compile the native diagnostic RPX or check a ROM support gate")
     compile_command.add_argument("path", nargs="?")
-    compile_command.add_argument("--target", choices=("prototype", "audio-check", "audio-stream-check", "m1-check", "scene-check", "guest-fixture", "commercial"), default="commercial")
+    compile_command.add_argument("--target", choices=("prototype", "audio-check", "audio-stream-check", "m1-check", "install-check", "scene-check", "guest-fixture", "commercial"), default="commercial")
     compile_command.add_argument("--output", required=True)
     compile_command.add_argument("--backend",choices=("original","upstream"),default="original")
     package = commands.add_parser("validate-package", help="Validate a WUP directory; reports structural limits")
@@ -66,8 +66,10 @@ def parser():
     staging.add_argument("--name",default="CTR2WUP Prototype");staging.add_argument("--title-version",type=int,default=0)
     packing=commands.add_parser("pack-title",help="Encrypt original staged homebrew using local inputs; installer acceptance remains unverified")
     packing.add_argument("path");packing.add_argument("--output",required=True);packing.add_argument("--config",required=True)
-    integrity=commands.add_parser("verify-package",help="Decrypt and verify the original four-content package profile with a local key")
-    integrity.add_argument("path");integrity.add_argument("--common-key-file",required=True);integrity.add_argument("--expected-staging")
+    homebrew=commands.add_parser("pack-homebrew",help="Package original staged homebrew for a CFW-patched Wii U; no common key required")
+    homebrew.add_argument("path");homebrew.add_argument("--output",required=True)
+    integrity=commands.add_parser("verify-package",help="Verify plaintext or locally keyed encrypted original four-content packages")
+    integrity.add_argument("path");integrity.add_argument("--common-key-file");integrity.add_argument("--expected-staging")
     return result
 
 
@@ -92,6 +94,9 @@ def execute(args):
     if args.command == "pack-title":
         from .package_writer import pack_title
         return pack_title(args.path,args.output,args.config)
+    if args.command == "pack-homebrew":
+        from .package_homebrew import pack_homebrew
+        return pack_homebrew(args.path,args.output)
     if args.command == "verify-package":
         from .package_integrity import verify_package
         return verify_package(args.path,args.common_key_file,expected_staging=args.expected_staging)
@@ -111,10 +116,10 @@ def execute(args):
         from .rom_key_import import import_keys
         return import_keys(args.output,aeskeydb=args.aeskeydb,seeddb=args.seeddb,decrypted_titlekeys=args.decrypted_titlekeys)
     if args.command == "build":
-        if args.target in ("prototype", "audio-check", "audio-stream-check", "m1-check", "scene-check"):
+        if args.target in ("prototype", "audio-check", "audio-stream-check", "m1-check", "install-check", "scene-check"):
             if args.path:
                 raise HostError("usage", "A native prototype build does not take a ROM", stage="arguments")
-            return build.prototype(args.output,backend=args.backend,audio_only=args.target=="audio-check",scene_only=args.target=="scene-check",stream_audio=args.target=="audio-stream-check",m1_only=args.target=="m1-check")
+            return build.prototype(args.output,backend=args.backend,audio_only=args.target=="audio-check",scene_only=args.target=="scene-check",stream_audio=args.target=="audio-stream-check",m1_only=args.target=="m1-check",install_only=args.target=="install-check")
         if args.target == "guest-fixture":
             if not args.path:
                 raise HostError("usage", "Guest fixture build requires the original fixture .cxi", stage="arguments")

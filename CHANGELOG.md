@@ -3,6 +3,20 @@
 All releases are development increments. RPX/WUHB diagnostics and desktop passes
 do not establish commercial-game compatibility or installable WUP acceptance.
 
+## 0.27.0 — unreleased
+
+- Add original plaintext `0x2000` WUP packaging with a generated test-signing
+  chain and independent integrity/signature verification. No common key,
+  production certificate, donor or owned game is needed for this profile.
+  Aroma signature patches are required; actual installer/Menu behavior remains
+  unverified and no Nintendo authenticity is claimed.
+- Replace the broad M1 retest with a standalone installed-title check: two brief
+  new Menu launches include automatic SD recovery, with one guide, one FTP copy
+  tree and one whole-folder return. Developer material moves under `support/`.
+- Reuse reviewed native controls, tone, ten-minute stability, results, ordinary
+  Minus/HOME returns and fresh-save reload. Preserve earlier failures and changed
+  display-cache/Audio Streams limits. No version-based hardware retesting.
+
 ## 0.26.0 — unreleased
 
 - Deliver a full M1 Check profile, guided platform/600-second stability run and

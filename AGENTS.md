@@ -63,6 +63,15 @@ never accepts a full gate without its complete reviewed exit criteria.
   because one feature passed. Project fields own live status.
 - Continue independent work when physical testing is deferred. Record the exact
   pending console/input/Windows evidence instead of making it a blanket blocker.
+- Reuse reviewed hardware evidence within its recorded scope. Never request a
+  repeat solely for a version bump or missing new report fields. Every hardware
+  prompt must name the changed path or genuinely missing criterion, explain why
+  existing evidence and host checks cannot cover it, and request the smallest
+  useful action. Combine automatic checks into an already needed run.
+- Keep testing delivery simple: one short guide, one FTP deployment tree and one
+  whole return folder. Put developer receipts, source, checksums and notices under
+  `support/`; they are not extra tester tasks. Prefer development that removes a
+  concrete blocker over additional broad acceptance harnesses.
 - Keep shared CPU/services/renderer contracts reusable. Avoid title-specific
   patches or silent successful stubs. Unsupported CPU/services/GPU state must
   fail visibly and preserve the documented atomicity boundaries.
@@ -79,6 +88,11 @@ never accepts a full gate without its complete reviewed exit criteria.
 Run focused checks during implementation, then required `make check` (Python and
 all normal/ASan/UBSan C suites) and `make prototype` (RPX/WUHB) before merge.
 Automatic **Required CI** and **Documentation build** normally must pass.
+Run the full required runtime suite for the final runtime change; do not repeat
+it after documentation-only follow-ups when the tested runtime tree is unchanged.
+For those follow-ups, retain the recorded runtime receipt and run the affected
+documentation/catalog checks. New code changes, failures or unresolved concerns
+require appropriate new validation. Test counts never substitute for development.
 When hosted jobs are refused before starting, the owner-authorized maintenance
 exception in `docs/direct-development.md` permits an exact-head local receipt
 for Python management tools/tests and documentation. Run `tools/validate-local.py`

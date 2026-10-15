@@ -1,5 +1,36 @@
 # Console evidence review
 
+## October 15 correction: reuse the native platform evidence
+
+The new M1 suite incorrectly described the full native controls and timed
+stability checks as missing. The reviewed Native 0.14.1 report already has all
+ten guided steps PASS, nine software checks PASS and zero input errors/faults.
+The original guide includes both screens, buttons, both sticks, touch
+positions/border/alignment, both-output tone, the ten-minute interval and final
+observation. Its native step definitions and 600,000 ms threshold match the
+current guide. The later user-reported 0.14.5 successes also explicitly
+superseded the request to repeat long input guides. **No full native guide or
+ten-minute repeat is requested.**
+
+The [reviewed M1 evidence ledger](m1-evidence.json) preserves #12 result
+collection as Done and records #14 controls/audio as Done for that native
+baseline, including the later 0.20.0 silence/tone regression. The 0.24.1 return
+already covers repeated Minus/HOME exits with observed returns; Save 0.14.6
+already establishes exact fresh-process persistence. For #13, only the
+automatic SD interrupted-publication/error-recovery probe remains physically
+unverified; combine it with the eventual installed-title run.
+
+The original Minus hang and older save failures remain in the history; their
+existence does not erase the later scoped successes. New display-cache behavior
+and Audio Streams still have no physical acceptance. The 0.27.0 original
+plaintext/self-signed WUP candidate now removes the common-key, production-
+certificate and donor prerequisite. Signature-patched Aroma is required; actual
+installation and Menu launch/exit/relaunch still need the new focused evidence.
+This ledger does not accept the full milestone or apply
+live Project changes automatically. Earlier blanket statements below about
+missing controls, timed stability or normal Minus/HOME evidence are superseded
+by this correction.
+
 ## October 14 evening: arithmetic, repeated guest draws and measured scaling
 
 Received October 15 UTC (October 14 in America/New_York). The later complete

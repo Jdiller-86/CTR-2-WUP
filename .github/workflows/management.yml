@@ -15,7 +15,7 @@ on:
       review:
         description: Explicit reviewed status/resource plan
         type: choice
-        options: [none, mario-input-received-v023, dsp-adpcm-foundation-v025, m1-install-prerequisite-v026]
+        options: [none, mario-input-received-v023, dsp-adpcm-foundation-v025, m1-install-prerequisite-v026, m1-evidence-reuse-v027, m6-original-homebrew-v027]
         default: none
 
 permissions:

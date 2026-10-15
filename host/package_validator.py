@@ -109,9 +109,9 @@ def _registry(path):
 def validate_package(path, registry=None):
     """Return structure evidence or raise ValidatorError; never mutate a package.
 
-    The optional registry is checked without changing it. Unencrypted content
-    profiles and signed-header variants outside RSA-2048/SHA-256 are rejected
-    explicitly rather than guessed.
+    The optional registry is checked without changing it. Plaintext 0x2000
+    contents have their hashes checked here; encrypted contents need the
+    independent integrity reader and a local key.
     """
     directory = Path(path)
     if directory.is_symlink() or not directory.is_dir():
@@ -187,8 +187,8 @@ def validate_package(path, registry=None):
             _fail("duplicate_content", "Content IDs and indices must each be unique", record=position)
         seen_ids.add(content_id)
         seen_indices.add(index)
-        if flags not in (0x2001, 0x2003):
-            _fail("unsupported_content_type", "Supported content types are encrypted 0x2001 and encrypted/hashed 0x2003", record=position, content_type=f"{flags:04x}")
+        if flags not in (0x2000, 0x2001, 0x2003):
+            _fail("unsupported_content_type", "Supported content types are plaintext 0x2000, encrypted 0x2001 and encrypted/hashed 0x2003", record=position, content_type=f"{flags:04x}")
         if not size or size % 16:
             _fail("invalid_content_size", "Encrypted content must have a positive AES-block-aligned size", record=position)
         key = (content_id, "app")
@@ -200,8 +200,12 @@ def validate_package(path, registry=None):
             _fail("content_size_mismatch", "Content size differs from the TMD", file=app.name, expected=size, actual=app.stat().st_size)
         hashed = bool(flags & 2)
         item = {"content_id": f"{content_id:08x}", "index": index, "size": size,
-                "encrypted": True, "hashed": hashed,
+                "encrypted": bool(flags & 1), "hashed": hashed,
                 "plaintext_integrity": "unverified_requires_local_key"}
+        if flags == 0x2000:
+            if record[36:] != bytes(12) or _digest_file(app, "sha1") != record[16:36]:
+                _fail("content_digest_mismatch", "Plaintext content SHA-1 does not match its TMD record", file=app.name)
+            item["plaintext_integrity"] = "padded_sha1_matches_tmd"
         if hashed:
             if size % 0x10000:
                 _fail("invalid_hashed_content_size", "Hashed content size must be aligned to 0x10000-byte blocks", file=app.name)
@@ -237,7 +241,7 @@ def validate_package(path, registry=None):
         else:
             collision.update(status="matches_registered_package", owner=reservation["owner"])
     return {"ok": True, "stage": "packaging", "validation": "structure_only",
-            "profile": "wiiu_application_rsa2048_sha256_encrypted",
+            "profile": "wiiu_application_rsa2048_sha256_plaintext" if all(not item["encrypted"] for item in results) else "wiiu_application_rsa2048_sha256_encrypted",
             "title_id": title, "tmd_sha256": tmd_digest, "content_count": count,
             "metadata_integrity": "sha256_tables_verified", "contents": results,
             "title_id_registry": collision,

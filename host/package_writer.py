@@ -118,7 +118,7 @@ def _inventory(source):
     return nodes, groups, [0] + [max(BLOCK, _align(n, BLOCK)) for n in sizes[1:]]
 
 
-def _fst(nodes, sizes, title, group):
+def _fst(nodes, sizes, title, group, *, plaintext=False):
     strings = bytearray(b"\0")
     entries = bytearray()
     for number, node in enumerate(nodes):
@@ -129,16 +129,19 @@ def _fst(nodes, sizes, title, group):
             fail("staging_limit", "FST name table exceeds 24-bit addressing")
         first = node["parent"] if node["directory"] else node["offset"] // 32
         second = node["end"] if node["directory"] else node["size"]
-        entries += struct.pack(">IIIHH", offset | (int(node["directory"]) << 24), first, second, 0, node["content"])
+        entries += struct.pack(">IIIHH", offset | (int(node["directory"]) << 24), first, second,
+                               0x666 if plaintext and number else 0, node["content"])
     length = _align(0x20 + 4 * 0x20 + len(entries) + len(strings), BLOCK)
     if length > MAX_FST:
         fail("staging_limit", "FST exceeds the supported 16 MiB bound")
     sizes[0] = length
     header = bytearray(struct.pack(">4sII20x", b"FST\0", 32, 4))
+    if plaintext:
+        header[12] = 1  # No hash tree: original nonhashed homebrew contents.
     # Logical cluster placement follows the documented research profile. Actual
     # filesystem/installer acceptance remains a physical-console check.
-    header += struct.pack(">IIQI B11x", 0, length // BLOCK, 0, 0, 0)
-    sector = 2 + (length // BLOCK if length > BLOCK else 0)
+    header += struct.pack(">IIQI B11x", 0, 0 if plaintext else length // BLOCK, 0, 0, 0)
+    sector = max(2, length // BLOCK) if plaintext else 2 + (length // BLOCK if length > BLOCK else 0)
     for number in range(1, 4):
         owner = int(title, 16) if number == 2 else 0
         gid = group if number == 2 else 0x400 if number == 3 else 0
@@ -148,15 +151,15 @@ def _fst(nodes, sizes, title, group):
     return bytes(result) + bytes(length - len(result))
 
 
-def _encrypt_group(source, files, size, output, key, index, *, fst=None):
-    engine = cipher(key, index.to_bytes(2, "big") + bytes(14)).encryptor()
+def _encrypt_group(source, files, size, output, key, index, *, fst=None, plaintext=False):
+    engine = None if plaintext else cipher(key, index.to_bytes(2, "big") + bytes(14)).encryptor()
     digest = hashlib.sha1()
     position = 0
     with output.open("xb") as target:
         def write(data):
             nonlocal position
             digest.update(data)
-            target.write(engine.update(data))
+            target.write(engine.update(data) if engine is not None else data)
             position += len(data)
 
         if fst is not None:
@@ -184,7 +187,8 @@ def _encrypt_group(source, files, size, output, key, index, *, fst=None):
                 write(bytes((-position) % 32))
         while position < size:
             write(bytes(min(CHUNK, size - position)))
-        target.write(engine.finalize())
+        if engine is not None:
+            target.write(engine.finalize())
     return digest.digest() + bytes(12)
 
 
