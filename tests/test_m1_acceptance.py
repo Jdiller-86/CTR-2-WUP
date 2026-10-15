@@ -90,7 +90,7 @@ class M1AcceptanceTests(unittest.TestCase):
             if stage == 'report_close_done':
                 trace_text += '===== END OF REPORT: application resource cleanup reached; result=0 =====\n'
             trace_text += f'EXIT stage={stage}' + ('; SD mount cleanup belongs to WUT' if stage == 'report_close_done' else '') + '\n'
-        (self.folder/trace).write_text(trace_text)
+        (self.folder/trace).write_bytes(trace_text.encode())
         return name, trace
 
     def result(self):
@@ -117,6 +117,15 @@ class M1AcceptanceTests(unittest.TestCase):
         self.assertEqual({row['status'] for row in report['criteria']}, {'PASS'})
         self.assertNotIn('trace_text', json.dumps(report))
         self.assertNotIn('tone request=', reviewer.checklist(report))
+
+    def test_ftp_reports_with_crlf_line_endings_keep_the_same_evidence(self):
+        for path in self.folder.glob('*.txt'):
+            data = path.read_bytes().rstrip(b' ').replace(b'\n', b'\r\n')
+            path.write_bytes(data.ljust(8192, b' ') if path.name.startswith('result-') else data)
+        report = self.result()
+        self.assertEqual(report['status'], 'PASS')
+        self.assertTrue(report['candidate_complete'])
+        self.assertFalse(report['full_milestone_acceptance'])
 
     def test_no_actual_wup_blocks_full_gate_while_platform_evidence_passes(self):
         self.manifest['package'] = {'available': False, 'blockers': ['real packaging material unavailable']}

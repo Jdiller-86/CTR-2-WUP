@@ -94,7 +94,7 @@ def validate_manifest(manifest, expected_source):
 
 def parse_run(folder, path, match, manifest):
     data = read_regular(path)
-    text = data.decode('utf-8', errors='strict')
+    text = data.decode('utf-8', errors='strict').replace('\r\n', '\n')
     source, version, app, session = manifest['source_commit'], manifest['version'], match['app'], match['session']
     result = {'result': path.name, 'application': app, 'session': session,
               'sha256': hashlib.sha256(data).hexdigest(), 'bytes': len(data), 'errors': [],
@@ -157,7 +157,7 @@ def parse_run(folder, path, match, manifest):
         result['incomplete'].append('paired full trace missing: ' + trace_name)
         return result
     trace_data = read_regular(trace_path)
-    trace = trace_data.decode('utf-8', errors='strict')
+    trace = trace_data.decode('utf-8', errors='strict').replace('\r\n', '\n')
     result['trace'], result['trace_text'] = trace_name, trace
     result['trace_sha256'] = hashlib.sha256(trace_data).hexdigest()
     result['trace_bytes'] = len(trace_data)
