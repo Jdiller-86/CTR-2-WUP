@@ -5,6 +5,10 @@ do not establish commercial-game compatibility or installable WUP acceptance.
 
 ## 0.25.0 — unreleased
 
+- Independently verify a small set of missing Project members through exact
+  issue/PR reverse links before adding again or counting success. Preserve
+  archived/ambiguous failures, owner settings and both public-safe readbacks.
+
 - Add a portable checked DSP ADPCM reference with explicit coefficients/history,
   integer rounding/clipping, partial frames, continuation and checkpoint seek.
   Validate all requested headers/bounds before publishing PCM or state.

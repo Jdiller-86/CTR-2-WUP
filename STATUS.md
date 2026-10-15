@@ -1,10 +1,17 @@
 # CTR2WUP status
 
-**DSP ADPCM foundation — scoped #103/#25/M3:** the portable decoder now has
+**Live Project readback follow-up — #110:** GitHub acknowledged adding PR #108,
+but five connection reads and a later dry-run still omit it. The owner confirms
+no Project settings changed. Independent issue/PR `projectItems` reads now check
+exact active content/Project identity before counting membership or adding again;
+archived/ambiguous/genuine absence remains a failure. Receipts retain both views
+without private Project IDs/notes. Trusted-main live verification follows merge.
+
+**Merged DSP ADPCM foundation — #103/PR #109 under #25/M3:** the portable decoder now has
 bounded frames, explicit history/cursor, partial-frame continuation/seek,
 integer rounding/clipping and atomic failures. A separate rational reference
 agrees on 6,144 original cases / 175,770 samples; focused normal/sanitizer checks
-pass. Full required checks gate merge. [Contract](docs/dsp-adpcm.md).
+pass. All required hosted checks pass; merge is `103363d73b636efb904720992477cf43de6d7b8b`. [Contract](docs/dsp-adpcm.md).
 Guest DSP IPC, container/seek-table parsing, mixing and audible Wii U playback
 remain open; this does not accept M3 or commercial audio.
 

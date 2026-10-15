@@ -105,6 +105,64 @@ MEMBER_SELECTION = '''nodes { id isArchived content { __typename
   ... on ProjectV2ItemFieldSingleSelectValue { name }
 } } pageInfo { hasNextPage endCursor }'''
 
+# GitHub documents this edge (including archived items) on both Issue and PR:
+# https://docs.github.com/en/graphql/reference/pulls#pullrequest
+CONTENT_ITEM_FIELDS = '''nodes { id isArchived project { id } content { __typename
+  ... on Issue { id number } ... on PullRequest { id number }
+} status:fieldValueByName(name:"Status") {
+  ... on ProjectV2ItemFieldSingleSelectValue { name }
+} } pageInfo { hasNextPage }'''
+CONTENT_MEMBERSHIPS = '''query($id:ID!) { node(id:$id) { id __typename
+  ... on Issue { projectItems(first:100,includeArchived:true) { ''' + CONTENT_ITEM_FIELDS + ''' } }
+  ... on PullRequest { projectItems(first:100,includeArchived:true) { ''' + CONTENT_ITEM_FIELDS + ''' } }
+} }'''
+
+
+def complete_membership_read(client, project_id, expected, observed, report, label):
+    """Confirm a small missing set independently; never infer membership from writes.
+
+    Large inventory loss keeps the ordinary failure path. No Project settings,
+    archived flags or memberships are mutated here. Public receipts contain
+    only repository references and booleans, never private Project/item IDs.
+    """
+    present = {(row.get('content') or {}).get('id') for row in observed}
+    missing = sorted(set(expected)-present)
+    if not missing or len(missing)>8:
+        return observed
+    added, diagnostics = [], []
+    report[label] = diagnostics
+    for node in missing:
+        reference = expected[node]
+        detail = client.graphql(CONTENT_MEMBERSHIPS, {'id': node}).get('node')
+        kind = 'PullRequest' if reference['kind']=='pull_request' else 'Issue'
+        connection = detail.get('projectItems') if isinstance(detail, dict) else None
+        page = connection.get('pageInfo') if isinstance(connection, dict) else None
+        if (not isinstance(detail, dict) or detail.get('id')!=node or detail.get('__typename')!=kind
+                or not isinstance(connection, dict) or not isinstance(connection.get('nodes'), list)
+                or len(connection['nodes'])>100 or not isinstance(page, dict) or page.get('hasNextPage') is not False):
+            raise tracking.TrackingError('Independent Project membership identity or budget did not verify.')
+        matches = []
+        for row in connection['nodes']:
+            if not isinstance(row, dict) or not isinstance(row.get('project'), dict):
+                raise tracking.TrackingError('Independent Project membership schema did not verify.')
+            if row['project'].get('id')==project_id:
+                matches.append(row)
+        diagnostics.append(dict(reference, selected_project_links=len(matches),
+                                archived=any(row.get('isArchived') is True for row in matches)))
+        if len(matches)>1:
+            raise tracking.TrackingError('Managed content has ambiguous selected Project memberships; preserve and review.')
+        if matches:
+            row=matches[0];content=row.get('content');status=row.get('status')
+            if (not isinstance(row.get('id'), str) or type(row.get('isArchived')) is not bool
+                    or not isinstance(content, dict) or content.get('id')!=node
+                    or content.get('__typename')!=kind or content.get('number')!=reference['number']
+                    or status is not None and (not isinstance(status, dict) or not isinstance(status.get('name'), str))):
+                raise tracking.TrackingError('Independent Project content identity did not verify.')
+            if row['isArchived']:
+                raise tracking.TrackingError('Managed content is archived in the selected Project; preserve and review.')
+            added.append(row)
+    return [*observed, *added]
+
 
 def membership_report(expected, observed):
     """Expose only repository-public references, never Project notes or identities."""
@@ -139,6 +197,13 @@ def verify_membership(client, project_id, expected, added, report):
             break
         if attempt < 4:
             time.sleep(0.5 * (2 ** attempt))
+    # Connection indexing may lag an acknowledged addition. An independent
+    # reverse edge must prove exact active membership before it is counted.
+    report['membership_connection_readback'] = report['membership_readback']
+    complete = complete_membership_read(client, project_id, expected, fresh, report, 'membership_readback_direct')
+    report['membership_readback'] = membership_report(expected, complete)
+    if not report['membership_readback']['missing']:
+        return {row['content']['id'] for row in complete if (row.get('content') or {}).get('id')}
     raise tracking.TrackingError('Project membership did not verify for every managed issue and PR.')
 
 
@@ -222,8 +287,9 @@ def reconcile(client, data, apply, report):
     expected_members.update({features[row['id']]['node_id']: {'kind': 'issue', 'number': features[row['id']]['number']}
                              for row in rows if row['id'] in features})
     expected_members.update({pr['node_id']: {'kind': 'pull_request', 'number': number} for number, pr in prs.items()})
-    report['membership_preflight'] = membership_report(expected_members,
-        client.connection(project['id'], 'items', MEMBER_SELECTION))
+    inventory = complete_membership_read(client, project['id'], expected_members,
+        client.connection(project['id'], 'items', MEMBER_SELECTION), report, 'membership_preflight_direct')
+    report['membership_preflight'] = membership_report(expected_members, inventory)
     if not apply:
         return
     report["changes_possible"] = True
@@ -274,7 +340,9 @@ def reconcile(client, data, apply, report):
     project = client.project()
     # Include PR content explicitly: the public aggregate reader deliberately omits it.
     selection = MEMBER_SELECTION
-    items = {i["content"]["id"]: i for i in client.connection(project["id"], "items", selection) if i.get("content") and i["content"].get("id")}
+    inventory = complete_membership_read(client, project['id'], expected_members,
+        client.connection(project['id'], 'items', selection), report, 'membership_before_mutation_direct')
+    items = {i["content"]["id"]: i for i in inventory if i.get("content") and i["content"].get("id")}
     desired = []
     if review_commands:
         issue = client.api(f"repos/{REPO}/issues/27")

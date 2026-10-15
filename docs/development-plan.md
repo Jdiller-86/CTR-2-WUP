@@ -72,7 +72,7 @@ transaction probes pass; required full/platform checks gate delivery through PR 
 
 Scoped #103/#25/M3 now implements the [DSP ADPCM reference](dsp-adpcm.md).
 Independent original PCM/history and seek/continuation checks pass; full platform
-checks gate delivery. Container metadata, guest DSP/mixing and physical playback
+checks pass and PR #109 is merged. Container metadata, guest DSP/mixing and physical playback
 remain open. The reviewed Project transition activates only the guest-audio task,
 preserving its console wait and all full gates.
 

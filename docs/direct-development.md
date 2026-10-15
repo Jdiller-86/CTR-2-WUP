@@ -137,3 +137,13 @@ while validation is collected locally or on an available runner.
 Local tests and cross-builds do not accept physical Wii U gates. After merge,
 delete/verify both topic branches and update every surface listed in
 [AGENTS.md](../AGENTS.md#update-after-each-meaningful-change).
+
+## Independent membership readback
+
+A successful add mutation is insufficient proof of Project membership. A small
+missing set can be verified through the issue/PR's independent `projectItems`
+edge with exact content and selected Project identities. Public receipts expose
+only repository references/counts/booleans and retain the original connection
+readback separately. Archived entries and ambiguous/invalid identities fail;
+no Project archive/settings change is inferred from a missing connection row.
+See [GitHub's PullRequest schema](https://docs.github.com/en/graphql/reference/pulls#pullrequest).

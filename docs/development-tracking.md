@@ -124,3 +124,11 @@ Scoped #103 under #25/M3 implements the original DSP ADPCM decoding foundation.
 Its codec/rational/seek/failure checks do not close broad #25. The reviewed
 `dsp-adpcm-foundation-v025` transition activates only `m3-guest-audio`, preserving
 the console wait and owner notes. It cannot accept a full gate.
+
+Scoped #110 hardens membership readback after an acknowledged PR #108 addition
+remained absent from the paginated connection. For at most eight missing public
+references, the reconciler checks the issue/PR's independent `projectItems`
+edge, including archived state, exact content and selected Project identities.
+It counts only independently confirmed active members, preserves both readbacks
+and never unarchives or changes Project settings. Archived/ambiguous identities,
+genuine absence, permission errors and read budgets still fail visibly.
