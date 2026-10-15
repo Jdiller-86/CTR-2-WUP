@@ -811,7 +811,8 @@
       "parent_issue": 1,
       "state": "active",
       "pull_requests": [
-        111
+        111,
+        112
       ],
       "scope": [
         "For a bounded missing set, independently read issue/PR projectItems with exact content/Project identity and archived-state checks.",
