@@ -78,7 +78,7 @@ static ctr_scene_result render(bool short_indices,bool arithmetic,void *rgba,siz
     ctr_scene_fixture *f=malloc(sizeof(*f));ctr_scene_state *state=malloc(sizeof(*state));
     if(!f || !state) { free(f);free(state);return CTR_SCENE_NO_MEMORY; }
     make(f,short_indices,arithmetic);ctr_scene_init(state);
-    ctr_scene_resources resources={UINT32_C(0x18000000),f->resources,f->resource_bytes};
+    ctr_scene_resources resources={UINT32_C(0x18000000),f->resources,f->resource_bytes,NULL,0};
     ctr_scene_surface surface={rgba,CTR_SCENE_FIXTURE_BYTES,64,64,256};
     ctr_scene_result result=ctr_scene_execute(state,f->commands,f->command_bytes,&resources,&surface,report);
     free(f);free(state);return result;

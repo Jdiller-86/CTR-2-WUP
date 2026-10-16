@@ -1,22 +1,61 @@
-# Base texture decoding
+# Textures
 
-The original portable base-texture decoder is
-`runtime/core/ctr_texture.c`, with a Python reference in `renderer/texture.py`.
-All 14 PICA format IDs are implemented, including RGBA/RGB packed formats,
-luminance/alpha, RG8/HILO, ETC1 and ETC1A4. Base dimensions are powers of two
-in 8..1024; 8×8 Morton tiles decode into explicit row-major RGBA bytes without
-an implicit display-origin flip. Little-endian source words do not depend on
-host byte order. Compressed differential blocks and buffer ranges are validated
-before output changes; invalid ETC2-style modes, truncation and overlap fail.
-Mip tails, texture filtering/wrapping, caches, GPU allocation and draw submission
-remain unfinished. No PICA renderer or commercial compatibility is enabled.
+`runtime/core/ctr_texture.c` decodes all 14 PICA base formats: RGBA/RGB packed
+formats, luminance/alpha, RG8/HILO, ETC1 and ETC1A4. Power-of-two dimensions are
+8..1024; 8×8 Morton storage becomes explicit row-major RGBA bytes. Source words
+are little-endian on every host. Bounds, overlap and compressed differential
+blocks are validated before output changes; mip tails and ETC2 modes are rejected.
 
-Golden layouts/selectors/alpha/clamping and failure atomicity have C normal/
-sanitizer and Python checks. `tools/validate-textures.py` compares 42 original
-images with the independent Python decoder and 39 with the clean audited
-Zakuro texture module at `76f17bf76cd9ea238a94f37d389fe701ab05a673`.
-Format 6 follows Azahar's RG8 convention `[byte1, byte0,0,255]`; Zakuro's
-`[0, byte1, byte0,255]` differs and is explicitly excluded from that comparison.
-External emulator code is test-only in separate checkouts, never copied into or
-linked with the runtime/delivery. Actual PICA sampling/render scenes and GX2
-resource/coherency/performance checks still need Wii U/reference evidence.
+## Sampling contract
+
+The [scene renderer](software-scenes.md) and optional native GX2 backend accept:
+
+| State | Supported boundary |
+| --- | --- |
+| Texture | Texture0, one base level, all 14 decoded formats, 8..1024 per dimension |
+| Coordinates | Vertex semantics 12/13, exact Q16 UV in −16..16, affine interpolation with W=1 |
+| Sampler | Nearest min/mag, LOD/bias zero; clamp-to-edge, repeat or mirrored repeat independently on S/T |
+| Combiner | TEV0 replaces with Texture0 or multiplies it by constant binary primary color; later stages pass Previous |
+| Fragment policy | Zero TEV operands/scales, opaque primary color, full writes, copy logic, no lighting/depth/stencil/blending |
+
+PICA wrap IDs are 0/2/3 for clamp/repeat/mirror; parameters store T at bits 8–10,
+S at 12–14, with bit 5 set only for ETC1/ETC1A4. Other sampler modes fail.
+Nearest sampling floors the interpolated coordinate times the texture extent,
+then wraps or clamps. PICA V=0 addresses the last raw storage row. This origin
+follows pinned [tex3ds image/UV packing](https://github.com/devkitPro/tex3ds/blob/6d5e8681027d59a13fba95b8ee223e324125704e/source/tex3ds.cpp#L350)
+and [atlas coordinates](https://github.com/devkitPro/tex3ds/blob/6d5e8681027d59a13fba95b8ee223e324125704e/source/atlas.cpp#L74).
+The decoder preserves raw row order; sampling performs the origin conversion.
+
+Textures resolve entirely inside the stable geometry snapshot or one of at most
+32 separate owned snapshots, with 4 MiB total additional source bytes. External
+spans cannot overlap geometry or each other; partial geometry aliases and target
+feedback fail. The [guest adapter](guest-pica-draws.md#resource-and-transaction-contract)
+checks allocation identity and permissions before snapshotting.
+
+## Native GX2 path
+
+The native adapter uploads decoded RGBA to an owned pitched GX2 texture, reversing
+rows so the original guest UV needs no CPU rewrite. Its Latte pixel program uses
+base-level normalized sampling and optional primary-color multiplication.
+CPU cache flushes and texture invalidation precede drawing; retirement precedes
+reuse/free. Failed waits quarantine GPU allocations until graphics shutdown.
+Complete software preflight and exact GPU readback precede guest commit.
+
+Bilinear filtering, mipmaps, projective/perspective coordinates, general TEV,
+resource caching and depth/blend remain unsupported. Physical sampling parity
+and useful GPU performance remain unverified.
+
+## Validation
+
+```sh
+python tools/validate-textures.py --output artifacts/texture-reference-NEW
+python tools/validate-textured-scenes.py --sanitize --output artifacts/textured-scene-reference-NEW
+```
+
+Independent original reference checks cover format decoding, exact scene pixels,
+wrap/origin rules, modulation and transactional failures. The native API model
+also captures actual submitted pixel-program bytes for independent decoding;
+it does not emulate GPU execution. The optional clean Zakuro decoder comparison
+uses pin `76f17bf76cd9ea238a94f37d389fe701ab05a673`. Format 6 follows RG8
+`[byte1, byte0, 0, 255]`; Zakuro's differing channel convention is excluded.
+External reference implementations remain test-only, outside delivered runtime code.

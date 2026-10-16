@@ -18,6 +18,7 @@ typedef struct {
     ctr_gx2_shader_result shader_result;
     uint64_t begins, draws, submissions, readbacks, shader_instructions;
     uint64_t waits, wait_failures, allocations, releases;
+    uint64_t texture_uploads,texture_bytes;
     bool quarantined;
     /* Optional borrowed CPU evidence observer. Called after a retired GPU copy
      * has populated readback, including before any later context-restore
@@ -29,7 +30,9 @@ typedef struct {
 
 /* The caller supplies the native renderer's active WHB context. This backend
  * restores it before returning from every callback. Inputs remain PICA shader
- * inputs: the CPU reference never supplies transformed positions or colors. */
+ * inputs: the CPU reference never supplies transformed positions, colors or UV.
+ * Texture callbacks borrow checked decoded RGBA storage only for the call; the
+ * backend owns its pitched GPU upload until all references have retired. */
 void ctr_wiiu_gx2_scene_init(ctr_wiiu_gx2_scene *scene,GX2ContextState *restore_context);
 ctr_scene_backend ctr_wiiu_gx2_scene_backend(ctr_wiiu_gx2_scene *scene);
 void ctr_wiiu_gx2_scene_abort(ctr_wiiu_gx2_scene *scene);

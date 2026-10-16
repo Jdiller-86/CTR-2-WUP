@@ -29,7 +29,7 @@ Open the graph for interactive task details and dependencies.
 - Bounded container inspection, optional local decryption and verified asset preparation.
 - ARM/Thumb/VFP translation foundations and checked guest memory/services.
 - Original compiled guests with dual screens, input, SD saves and assets.
-- Checked GSP/PICA processing, experimental GX2 vertex translation and CSTM/ADPCM mixing.
+- Checked GSP/PICA processing, experimental GX2 shaders/textures and CSTM/ADPCM mixing.
 - Reproducible RPX/WUHB diagnostics and independently verified original WUP candidates.
 
 See [compatibility](docs/compatibility.md) for supported inputs, runtime limits

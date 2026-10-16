@@ -13,7 +13,9 @@ VERSION = '0.27.0'
 SUPPORTED_VERSIONS = {'0.24.1', '0.25.0', VERSION}
 SOFTWARE_APPS = ('native-software-scene', 'compiled-pica-draws')
 GX2_APP = 'compiled-pica-gx2'
-APPS = SOFTWARE_APPS + (GX2_APP,)
+TEXTURED_APP = 'compiled-pica-textured'
+GPU_APPS = (GX2_APP, TEXTURED_APP)
+APPS = SOFTWARE_APPS + GPU_APPS
 MAX_FILE = 4 * 1024 * 1024
 MAX_TOTAL = 24 * 1024 * 1024
 SESSION_PATTERN = r'[0-9a-f]{16}-[0-9]{2}\.txt'
@@ -33,7 +35,7 @@ RESULT_PATTERN, PATTERN = patterns(VERSION)
 def trace_identity_matches(name, data, commit, version=VERSION):
     app = next((app for app in APPS if name.startswith(app+'-')), None)
     text = data.decode('utf-8', errors='replace')
-    return (app is not None and (app != GX2_APP or version == VERSION) and text.startswith('CTR2WUP Wii U test report\n')
+    return (app is not None and (app not in GPU_APPS or version == VERSION) and text.startswith('CTR2WUP Wii U test report\n')
         and re.search(r'^Application: '+re.escape(app)+r' \| Build: '+re.escape(version)+r'\r?$', text, re.MULTILINE) is not None
         and re.search(r'^BUILD source_commit='+re.escape(commit)+r' source_dirty=0(?: |\r?$)', text, re.MULTILINE) is not None)
 
@@ -58,16 +60,23 @@ def missing_trace_warnings(entries, version=VERSION):
     return warnings
 
 
-def gx2_evidence(text):
+def gx2_evidence(text, textured=False):
     """Keep GPU execution counters distinct from the CPU parity reference."""
     lines = re.findall(r'GX2 backend: ([^\r\n;]+); CPU preflight and full GPU readback parity', text)
     backend = {}
     if lines:
-        fields = dict(re.findall(r'([a-z_]+)=([a-z0-9_-]+)', lines[-1]))
+        pairs = re.findall(r'([a-z_]+)=([a-z0-9_-]+)', lines[-1])
+        fields = dict(pairs)
         counters = ('begins', 'draws', 'submissions', 'readbacks', 'shader_ops', 'waits',
                     'wait_failures', 'allocations', 'releases', 'quarantine', 'backend_stage')
-        if set(fields) == {'result', 'shader', *counters} and all(fields[k].isdigit() for k in counters):
-            backend = {k: int(v) if k in counters else v for k, v in fields.items()}
+        texture_counters = ('texture_uploads', 'texture_bytes')
+        required = {'result', 'shader', *counters}
+        # Older source-bound GX2 reports predate texture counters. A partial
+        # pair cannot establish either the old or the new native contract.
+        numeric = counters + tuple(k for k in texture_counters if k in fields)
+        if (len(pairs) == len(fields) and set(fields) in (required, required | set(texture_counters))
+                and all(fields[k].isdigit() for k in numeric)):
+            backend = {k: int(v) if k in numeric else v for k, v in fields.items()}
     references = re.findall(r'Guest GX2 draws \(CPU parity reference\): draws=(\d+) triangles=(\d+) '
                           r'reference_fragments=(\d+) reference_shader_steps=(\d+) '
                           r'scene_error=(\d+) vertex_error=(\d+) shader_error=(\d+); '
@@ -85,6 +94,7 @@ def gx2_evidence(text):
         and backend['readbacks'] > 0 and backend['begins'] >= backend['readbacks']
         and backend['waits'] >= backend['readbacks'] and backend['shader_ops'] > 0
         and backend['allocations'] == backend['releases'] and backend['allocations'] > 0
+        and (not textured or (backend.get('texture_uploads', 0) > 0 and backend.get('texture_bytes', 0) > 0))
         and reference_counters['draws'] >= 4 and reference_counters['triangles'] >= 4
         and reference_counters['reference_fragments'] > 0 and reference_counters['reference_shader_steps'] > 0)
     stage = backend.get('backend_stage', -1)
@@ -99,8 +109,9 @@ def result_summary(name, data, commit, version=VERSION):
     summary = {'file': name, 'kind': 'result' if name.startswith('result-') else 'trace'}
     app = next((app for app in APPS if name.startswith(app+'-') or name.startswith('result-'+app+'-')), None)
     summary['application'] = app
-    summary['render_backend'] = 'gx2' if app == GX2_APP else 'software'
-    if app == GX2_APP:summary.update(gx2_evidence(text))
+    summary['render_backend'] = 'gx2' if app in GPU_APPS else 'software'
+    summary['textured'] = app == TEXTURED_APP
+    if app in GPU_APPS:summary.update(gx2_evidence(text, app == TEXTURED_APP))
     if summary['kind'] == 'trace':
         summary['source_identity_seen'] = trace_identity_matches(name, data, commit, version)
         summary['draw_submissions'] = re.findall(r'DRAWN FRAME SUBMITTED[^\r\n]*', text)
@@ -119,14 +130,16 @@ def result_summary(name, data, commit, version=VERSION):
     summary['complete_evidence'] = (len(data) == 8192 and summary['source_identity_matches']
         and summary['guide'] is not None and summary['guide'].startswith('COMPLETE')
         and summary['host_exit'] == '0')
-    if app == GX2_APP:
+    if app in GPU_APPS:
         identity = (text.startswith('CTR2WUP result report\n')
             and re.search(r'^Application: '+re.escape(app)+r' \| Build: '+re.escape(version)+r'\r?$', text, re.MULTILINE) is not None
             and re.search(r'^File: '+re.escape(name)+r'\r?$', text, re.MULTILINE) is not None
             and re.search(r'^Source: '+re.escape(commit)+r' dirty=0 \| Evidence schema: 2\r?$', text, re.MULTILINE) is not None)
         summary['source_identity_matches'] = identity
         guide = re.fullmatch(r'COMPLETE \| passed=2 failed=0 skipped=0(?: current_step=\d+)?', summary['guide'] or '')
-        expected_results = ('1. GX2 guest triangle pictures: PASS | ', '2. GPU readback and guest exit: PASS | ')
+        expected_results = (('1. Textured guest pictures: PASS | ', '2. Texture readback and guest exit: PASS | ')
+                            if app == TEXTURED_APP else
+                            ('1. GX2 guest triangle pictures: PASS | ', '2. GPU readback and guest exit: PASS | '))
         named = summary['named_results']
         guest = re.search(r'^Guest: state=exited [^\r\n]* fallback=0 fault=ok(?: |\r?$)', text, re.MULTILINE) is not None
         draw = re.match(r'1 serial=[1-9]\d* ', summary['draw'] or '') is not None

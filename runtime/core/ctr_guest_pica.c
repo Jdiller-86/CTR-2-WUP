@@ -1,6 +1,7 @@
 /* Original bounded Old-family linear-resource PICA draw adapter. */
 #include "ctr_guest_pica.h"
 #include "ctr_heap.h"
+#include "ctr_texture.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -82,6 +83,20 @@ static void diagnostic(ctr_guest *g,const ctr_scene_report *r) {
     g->gsp.last_pica_offset=(uint32_t)r->byte_offset;g->gsp.last_pica_register=r->reg;
     g->gsp.last_pica_result=r->result==CTR_SCENE_OK?CTR_PICA_OK:CTR_PICA_UNSUPPORTED;
 }
+static bool texture_range(ctr_scene_resource_span *spans,unsigned *count,uint32_t address,size_t size) {
+    uint64_t first=address,last=first+size;
+    for(unsigned i=0;i<*count;) {
+        uint64_t a=spans[i].base_address,b=a+spans[i].size;
+        if(first<b && a<last) {
+            if(a<first)first=a;
+            if(b>last)last=b;
+            spans[i]=spans[--*count];i=0;
+        } else ++i;
+    }
+    if(*count==CTR_SCENE_MAX_TEXTURE_SPANS || last-first>CTR_SCENE_MAX_TEXTURE_SOURCE_BYTES)return false;
+    spans[(*count)++]=(ctr_scene_resource_span){(uint32_t)first,NULL,(size_t)(last-first)};
+    return true;
+}
 ctr_gx_result ctr_guest_pica_execute(ctr_guest *g,const void *commands,size_t size,
                                     uint32_t command_address,ctr_gx_completion *c) {
     if(!g || !commands || !c)return CTR_GX_UNSUPPORTED;
@@ -89,6 +104,7 @@ ctr_gx_result ctr_guest_pica_execute(ctr_guest *g,const void *commands,size_t si
     ctr_gx_result result=CTR_GX_UNSUPPORTED;
     ctr_pica_write *writes=NULL;ctr_scene_state *trial=NULL;
     uint8_t *source=NULL,*raw=NULL,*pixels=NULL;
+    ctr_scene_resource_span textures[CTR_SCENE_MAX_TEXTURE_SPANS]={0};unsigned texture_count=0;
     ctr_pica_result inspected=ctr_pica_inspect(commands,size,CTR_PICA_MAX_WRITES,NULL,0,&wire);
     if(inspected!=CTR_PICA_OK || !size || (size&15u)) {
         report.result=CTR_SCENE_WIRE;report.byte_offset=wire.parameter_offset;report.reg=wire.reg;goto done;
@@ -104,11 +120,16 @@ ctr_gx_result ctr_guest_pica_execute(ctr_guest *g,const void *commands,size_t si
      * final state. Later draws must match; post-draw setup may prepare a next list. */
     const unsigned ids[]={0x200,0x11d,0x11e,0x117};uint32_t values[4],bound[4]={0};uint8_t defined[4];
     for(unsigned i=0;i<4;++i) { values[i]=trial->registers[ids[i]];defined[i]=trial->register_defined[ids[i]]; }
+    const unsigned texture_ids[]={0x080,0x082,0x085,0x08e};uint32_t texture_values[4];uint8_t texture_defined[4];
+    for(unsigned i=0;i<4;++i) { texture_values[i]=trial->registers[texture_ids[i]];texture_defined[i]=trial->register_defined[texture_ids[i]]; }
     bool draws=false;size_t markers=0,first_draw=0;unsigned draw_register=0;
     for(size_t i=0;i<wire.writes;++i) {
         const ctr_pica_write *w=&writes[i];report.byte_offset=w->byte_offset;report.reg=w->reg;
         for(unsigned k=0;k<4;++k)if(w->reg==ids[k]) {
             values[k]=ctr_pica_merge(values[k],w->value,w->byte_mask);defined[k]|=w->byte_mask;
+        }
+        for(unsigned k=0;k<4;++k)if(w->reg==texture_ids[k]) {
+            texture_values[k]=ctr_pica_merge(texture_values[k],w->value,w->byte_mask);texture_defined[k]|=w->byte_mask;
         }
         if(w->reg==CTR_PICA_FINALIZE)++markers;
         if(w->reg==0x22eu || w->reg==0x22fu) {
@@ -117,13 +138,26 @@ ctr_gx_result ctr_guest_pica_execute(ctr_guest *g,const void *commands,size_t si
             if(draws && memcmp(values,bound,sizeof(bound))) { report.result=CTR_SCENE_LAYOUT;goto done; }
             if(!draws) { first_draw=w->byte_offset;draw_register=w->reg; }
             memcpy(bound,values,sizeof(bound));draws=true;
+            if(texture_values[0]&1u) {
+                for(unsigned k=0;k<4;++k)if(texture_defined[k]!=15u) { report.result=CTR_SCENE_LAYOUT;goto done; }
+                if(texture_values[0]!=1u || (texture_values[1]&~UINT32_C(0x07ff07ff)) ||
+                   (texture_values[2]&UINT32_C(0xf0000000)) || (texture_values[3]&~15u)) {
+                    report.result=CTR_SCENE_UNSUPPORTED;goto done;
+                }
+                size_t texture_bytes;
+                if(ctr_texture_size(texture_values[3],(texture_values[1]>>16)&2047u,
+                    texture_values[1]&2047u,&texture_bytes)!=CTR_TEXTURE_OK) { report.result=CTR_SCENE_LAYOUT;goto done; }
+                if(!texture_range(textures,&texture_count,texture_values[2]*8u,texture_bytes)) {
+                    report.result=CTR_SCENE_LIMIT;goto done;
+                }
+            }
         }
     }
     if(g->gsp.pica.committed_lists==UINT64_MAX || wire.writes>UINT64_MAX-g->gsp.pica.register_writes ||
        markers>UINT64_MAX-g->gsp.pica.finalizations) { report.result=CTR_SCENE_OVERFLOW;goto done; }
     uint32_t resource_address=0,resource_bytes=0,target_address=0,target_bytes=4,color_address=0;
     unsigned width=1,height=1;uint8_t empty[4]={0};
-    ctr_scene_resources resources={0,NULL,0};ctr_scene_surface surface={empty,4,1,1,4};
+    ctr_scene_resources resources={0};ctr_scene_surface surface={empty,4,1,1,4};
     if(draws) {
         report.byte_offset=first_draw;report.reg=draw_register;
         if((bound[0]&UINT32_C(0xe0000001)) || (bound[1]&UINT32_C(0xf0000000)) || bound[3] ||
@@ -159,7 +193,33 @@ ctr_gx_result ctr_guest_pica_execute(ctr_guest *g,const void *commands,size_t si
         if(c->memory==CTR_MEM_OK)c->memory=ctr_memory_read_bytes(&g->memory,target_address,raw,target_bytes);
         if(c->memory!=CTR_MEM_OK) { result=CTR_GX_MEMORY;report.result=CTR_SCENE_LAYOUT;goto done; }
         layout(pixels,raw,width,height,false);
-        resources=(ctr_scene_resources){(uint32_t)base,source,resource_bytes};
+        size_t total_texture_bytes=0;
+        for(unsigned i=0;i<texture_count;) {
+            uint64_t first=textures[i].base_address,last=first+textures[i].size;
+            if(first>=base && last<=base+resource_bytes) { textures[i]=textures[--texture_count];continue; }
+            /* A partially overlapping external descriptor is ambiguous to the
+             * owned-span API. Contained descriptors use the geometry snapshot. */
+            if(first<base+resource_bytes && base<last) {
+                result=CTR_GX_UNSUPPORTED;report.result=CTR_SCENE_ALIAS;goto done;
+            }
+            uint32_t texture_address;
+            if(textures[i].size>CTR_SCENE_MAX_TEXTURE_SOURCE_BYTES-total_texture_bytes) {
+                result=CTR_GX_UNSUPPORTED;report.result=CTR_SCENE_LIMIT;goto done;
+            }
+            total_texture_bytes+=textures[i].size;
+            result=linear(g,(uint32_t)first,(uint32_t)textures[i].size,CTR_MEM_READ,&texture_address,NULL,c);
+            if(result!=CTR_GX_OK) { report.result=CTR_SCENE_LAYOUT;goto done; }
+            if(command_alias(g,target_address,target_bytes,texture_address,(uint32_t)textures[i].size)) {
+                result=CTR_GX_MEMORY;c->memory=CTR_MEM_OVERLAP;report.result=CTR_SCENE_ALIAS;goto done;
+            }
+            uint8_t *snapshot=malloc(textures[i].size);
+            if(!snapshot) { result=CTR_GX_NO_MEMORY;report.result=CTR_SCENE_NO_MEMORY;goto done; }
+            textures[i].bytes=snapshot;
+            c->memory=ctr_memory_read_bytes(&g->memory,texture_address,snapshot,textures[i].size);
+            if(c->memory!=CTR_MEM_OK) { result=CTR_GX_MEMORY;report.result=CTR_SCENE_LAYOUT;goto done; }
+            ++i;
+        }
+        resources=(ctr_scene_resources){(uint32_t)base,source,resource_bytes,textures,texture_count};
         surface=(ctr_scene_surface){pixels,target_bytes,width,height,width*4u};
     }
     ctr_scene_result rendered=ctr_scene_execute_target_backend(trial,commands,size,&resources,&surface,
@@ -182,6 +242,7 @@ ctr_gx_result ctr_guest_pica_execute(ctr_guest *g,const void *commands,size_t si
 done:
     diagnostic(g,&report);
     if(result==CTR_GX_UNSUPPORTED)c->detail=command_address+(report.byte_offset<size?(uint32_t)report.byte_offset:0u);
+    for(unsigned i=0;i<texture_count;++i)free((void *)textures[i].bytes);
     free(writes);free(trial);free(source);free(raw);free(pixels);return result;
 }
 void ctr_guest_set_scene_backend(ctr_guest *g,const ctr_scene_backend *backend) {

@@ -52,6 +52,7 @@ int main(void) {
             printf("\",\"uniform_used\":[");
             for(unsigned i=0;i<96;++i)printf("%s%u",i?",":"",compiled.uniform_used[i]);
             printf("]");
+            printf(",\"texcoord0\":%s",compiled.texcoord0?"true":"false");
         }
         if(cpu==CTR_SHADER_OK) {
             printf(",\"written\":[");

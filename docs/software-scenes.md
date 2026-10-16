@@ -7,8 +7,8 @@ retain the same narrow scene contract; general PICA rendering remains unsupporte
 
 ## Execution boundary
 
-`runtime/core/ctr_scene.c` accepts an explicit stable resource span, matching
-PICA physical base and an explicit owned linear RGBA8 surface. Row zero is the
+`runtime/core/ctr_scene.c` accepts an explicit stable geometry span, optional
+owned texture spans, matching PICA physical bases and an owned linear RGBA8 surface. Row zero is the
 bottom. It never dereferences a guest/physical address. Every command list
 stages the state and entire target before committing; late errors preserve
 previous registers, counters and pixels. Failure reports describe an attempted
@@ -29,14 +29,19 @@ The bounded path supports:
   include/exclude scissor, degenerate triangles and integer edge evaluation.
   Each triangle has a constant opaque endpoint color: RGBA lanes are 0 or 1,
   alpha 1. Fragments replace the target with depth and blend disabled.
+- Optional Texture0 UV outputs (semantics 12/13), exact Q16 in −16..16 with W=1;
+  affine nearest sampling of all 14 base formats with independent clamp/repeat/
+  mirror S/T. TEV0 replaces with the sample or multiplies by primary color;
+  later stages pass Previous. See [texture state and origin rules](textures.md).
 
 Limits are 256 vertices per draw, 32 draws per list, 512 vertex shader code words,
-128 descriptors, 96 float uniforms, 12 attributes/loaders, a 4 MiB resource span
-and a 1 MiB target with dimensions at most 512×512. No primitive is carried
-across lists. Unknown pipeline/framebuffer/texture/TEV/depth registers,
-inexact arithmetic, other arithmetic opcodes, relative addressing, geometry, clipping, perspective, varying color,
-interpolation, sampling and blending fail visibly. This is not a general PICA
-renderer.
+128 descriptors, 96 float uniforms, 12 attributes/loaders, a 4 MiB geometry span,
+32 separate texture spans with 4 MiB total source bytes, and a 1 MiB target no
+larger than 512×512. Separate texture spans cannot overlap geometry or each
+other. No primitive is carried across lists. Unknown state, inexact shader
+arithmetic, other opcodes, relative addressing, geometry, clipping, perspective,
+varying primary color, bilinear filtering, mipmaps, general TEV and blending
+fail visibly. This is not a general PICA renderer.
 
 `runtime/core/ctr_shader.c` accepts only finite normal values exactly
 representable as PICA float24, plus signed zero. NaN/infinity, denormals,
@@ -119,7 +124,7 @@ PICA shader into a Latte shader.
 program as explicit little-endian Latte instruction bytes, preserving operand
 and output-map semantics. Source lanes are captured before writes. Storage is
 padded to 256 bytes; the native adapter uses aligned shader memory and reserves
-a vertex budget above the encoder's **53 GPRs**.
+a vertex budget above the encoder's **53 GPRs**, or **54** when UV is exported.
 
 | Vertex ABI | Registers or upload |
 | --- | --- |
@@ -128,20 +133,26 @@ a vertex budget above the encoder's **53 GPRs**.
 | PICA outputs `o0`–`o15` | GPR 33–48 |
 | Captured source vectors | GPR 49–50 |
 | Position and primary-color exports | GPR 51 and 52 |
+| Optional Texture0 UV | GPR 53.xy; PARAM1 exports xy01 |
 | Float uniforms `c0`–`c95` | Constant-file vectors 0–95 in UniformRegister mode; `GX2SetVertexUniformReg(index * 4, 4, bits)` |
 
 `ctr_scene_execute_target_backend` preflights every actual vertex with the exact
 float24 evaluator, then passes original inputs and state to synchronous
 `begin`/`draw`/`end` callbacks. Compilation does not expand the numeric domain.
+PARAM0 exports primary color; PARAM1 is present only with complete UV semantics.
 Readback must match the entire staged target, including padding and trailing
 bytes, before commit. Callback failures and mismatches report
 `CTR_SCENE_BACKEND` and abort without fallback.
 
 `runtime/wiiu/gx2_scene.c` implements GX2 surfaces, shaders, uniforms,
-viewport/cull/scissor and readback for opaque untextured draws. It restores the
-presentation context after each callback and retires GPU references before
-freeing resources; failed retirement quarantines allocations until graphics
-shutdown. Physical parity remains unverified, with preflight and readback enabled.
+viewport/cull/scissor and readback. Textured draws bind an owned RGBA8 texture
+and point sampler; an original Latte pixel program samples base level zero and
+optionally multiplies primary color. Reversed upload rows preserve PICA V origin
+without changing guest UV. CPU flush/texture invalidation precede drawing.
+The adapter restores the presentation context after each callback and retires
+GPU references before reuse/free; failed retirement quarantines allocations
+until graphics shutdown. Physical parity remains unverified, with preflight and
+readback enabled; this path makes no performance claim.
 
 The independent validator decodes emitted GPU bytes and compares original
 programs against arbitrary-precision rational expectations and the CPU evaluator:

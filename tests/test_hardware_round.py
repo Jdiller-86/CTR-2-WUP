@@ -272,3 +272,95 @@ class Gx2HardwareReturnTests(unittest.TestCase):
             self.assertIsNone(log_pattern.fullmatch(self.trace_name))
             self.assertFalse(collector.trace_identity_matches(self.trace_name,
                 self.trace(app='compiled-pica-gx2', version=version), COMMIT, version))
+
+    def test_new_optional_texture_counters_preserve_older_gx2_evidence(self):
+        for suffix in ('', ' texture_uploads=0 texture_bytes=0', ' texture_uploads=4 texture_bytes=1024'):
+            with self.subTest(suffix=suffix):
+                data = self.raw.replace('backend_stage=0;', 'backend_stage=0'+suffix+';').encode().ljust(8192, b' ')
+                result = collector.result_summary(self.name, data, COMMIT)
+                self.assertTrue(result['complete_evidence'])
+                self.assertFalse(result['textured'])
+
+
+class TexturedHardwareReturnTests(unittest.TestCase):
+    trace = HardwareReturnTests.trace
+
+    def setUp(self):
+        Gx2HardwareReturnTests.setUp(self)
+        old_name = self.name
+        self.name = self.name.replace('compiled-pica-gx2', 'compiled-pica-textured')
+        self.trace_name = self.trace_name.replace('compiled-pica-gx2', 'compiled-pica-textured')
+        self.backend = self.backend.replace('backend_stage=0;', 'backend_stage=0 texture_uploads=4 texture_bytes=1024;')
+        self.raw = (self.raw.replace('compiled-pica-gx2', 'compiled-pica-textured')
+                    .replace('backend_stage=0;', 'backend_stage=0 texture_uploads=4 texture_bytes=1024;')
+                    .replace('GX2 guest triangle pictures', 'Textured guest pictures')
+                    .replace('GPU readback and guest exit', 'Texture readback and guest exit'))
+        self.data = self.raw.encode().ljust(8192, b' ')
+        (self.sd/'ctr2wup'/old_name).unlink()
+        (self.sd/'ctr2wup'/self.name).write_bytes(self.data)
+
+    def test_textured_two_step_result_and_trace_preserve_native_route_and_source(self):
+        trace = self.trace(app='compiled-pica-textured')+self.backend.encode()+self.reference.encode()
+        (self.sd/'ctr2wup'/self.trace_name).write_bytes(trace)
+        result = collector.collect(self.sd, self.root/'textured.zip', self.kit)
+        self.assertEqual(result['warnings'], [])
+        parsed = analyzer.analyze(self.root/'textured.zip', COMMIT)
+        summary = next(row for row in parsed['summaries'] if row['kind'] == 'result')
+        self.assertEqual(summary['application'], 'compiled-pica-textured')
+        self.assertEqual(summary['render_backend'], 'gx2')
+        self.assertTrue(summary['textured'])
+        self.assertTrue(summary['complete_evidence'])
+        self.assertEqual(summary['gpu_readback_evidence'], 'passed')
+        self.assertEqual(summary['gx2_backend']['texture_uploads'], 4)
+        self.assertEqual(summary['gx2_backend']['texture_bytes'], 1024)
+        self.assertFalse(parsed['full_milestone_acceptance'])
+        with zipfile.ZipFile(self.root/'textured.zip') as archive:
+            self.assertEqual(archive.read('logs/'+self.name), self.data)
+            self.assertEqual(archive.read('logs/'+self.trace_name), trace)
+
+    def test_old_gpu_counters_or_renamed_guest_cannot_prove_texture_execution(self):
+        changes = (
+            (' texture_uploads=4 texture_bytes=1024', ''),
+            ('texture_uploads=4', 'texture_uploads=0'),
+            ('texture_bytes=1024', 'texture_bytes=0'),
+            (' texture_bytes=1024', ''),
+            ('texture_uploads=4', 'texture_uploads=bad'),
+            ('texture_uploads=4', 'texture_uploads=4 texture_uploads=0'),
+            ('Application: compiled-pica-textured', 'Application: compiled-pica-gx2'),
+            ('Textured guest pictures', 'GX2 guest triangle pictures'),
+            ('Texture readback and guest exit', 'GPU readback and guest exit'),
+            (f'Source: {COMMIT}', 'Source: '+'b'*40),
+            ('dirty=0', 'dirty=1'),
+            ('fallback=0', 'fallback=1'),
+        )
+        for old, new in changes:
+            with self.subTest(change=new):
+                data = self.raw.replace(old, new).encode().ljust(8192, b' ')
+                summary = collector.result_summary(self.name, data, COMMIT)
+                self.assertFalse(summary['complete_evidence'])
+        self.assertFalse(collector.trace_identity_matches(self.trace_name,
+            self.trace(app='compiled-pica-gx2'), COMMIT))
+
+    def test_partial_texture_failures_are_returned_without_acceptance(self):
+        changes = (('backend_stage=0', 'backend_stage=4'), ('wait_failures=0', 'wait_failures=1'),
+                   ('result=ok', 'result=texture'), ('quarantine=0', 'quarantine=1'))
+        for index, (old, new) in enumerate(changes):
+            with self.subTest(change=new):
+                data = self.raw.replace(old, new).encode().ljust(8192, b' ')
+                (self.sd/'ctr2wup'/self.name).write_bytes(data)
+                output = self.root/f'texture-failure-{index}.zip'
+                collector.collect(self.sd, output, self.kit)
+                parsed = analyzer.analyze(output, COMMIT)
+                summary = parsed['summaries'][0]
+                self.assertTrue(summary['gpu_failure'])
+                self.assertFalse(summary['complete_evidence'])
+                self.assertEqual(summary['gpu_readback_evidence'], 'failed')
+                with zipfile.ZipFile(output) as archive:self.assertEqual(archive.read('logs/'+self.name), data)
+
+    def test_textured_route_is_not_accepted_as_an_older_software_round(self):
+        for version in ('0.24.1', '0.25.0'):
+            result_pattern, log_pattern = collector.patterns(version)
+            self.assertIsNone(result_pattern.fullmatch(self.name.replace(collector.VERSION, version)))
+            self.assertIsNone(log_pattern.fullmatch(self.trace_name))
+            self.assertFalse(collector.trace_identity_matches(self.trace_name,
+                self.trace(app='compiled-pica-textured', version=version), COMMIT, version))

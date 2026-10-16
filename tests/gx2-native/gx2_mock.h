@@ -9,16 +9,22 @@ void ctr_gx2_test_free(void *bytes);
 /* API model for resource lifetime and byte flow only; it does not emulate a
  * shader, rasterizer, GX2 driver, cache coherency or physical Wii U execution. */
 typedef unsigned GX2TileMode;
+typedef unsigned GX2TexClampMode;
 struct GX2ContextState { uint32_t marker; };
 typedef struct {
     unsigned dim,width,height,depth,mipLevels,format,aa,use,imageSize;
     void *image;unsigned mipmapSize,tileMode,alignment,pitch;
 } GX2Surface;
 typedef struct { GX2Surface surface;unsigned viewNumSlices; } GX2ColorBuffer;
+typedef struct {
+    GX2Surface surface;
+    unsigned viewFirstMip,viewNumMips,viewFirstSlice,viewNumSlices,compMap,regs[5];
+} GX2Texture;
+typedef struct { unsigned clamp[3],filter,z_filter,mip_filter;float lod[3]; } GX2Sampler;
 typedef struct { unsigned unused; } GX2FetchShader;
 typedef struct {
     struct {
-        unsigned sq_pgm_resources_vs,num_spi_vs_out_id,spi_vs_out_id[10];
+        unsigned sq_pgm_resources_vs,spi_vs_out_config,num_spi_vs_out_id,spi_vs_out_id[10];
         unsigned sq_vtx_semantic_clear,num_sq_vtx_semantic,sq_vtx_semantic[32];
         unsigned vgt_vertex_reuse_block_cntl,vgt_hos_reuse_depth;
     } regs;
@@ -48,9 +54,12 @@ enum {
     GX2_ENDIAN_SWAP_8_IN_32=2,GX2_SHADER_MODE_UNIFORM_REGISTER=0,
     GX2_PRIMITIVE_MODE_TRIANGLES=4,GX2_RENDER_TARGET_0=0,GX2_LOGIC_OP_COPY=0xcc,
     GX2_CHANNEL_MASK_RGBA=15,GX2_COMPARE_FUNC_ALWAYS=7,GX2_STENCIL_FUNCTION_KEEP=0,
-    GX2_ALPHA_TO_MASK_MODE_NON_DITHERED=0,GX2_FRONT_FACE_CCW=0
+    GX2_ALPHA_TO_MASK_MODE_NON_DITHERED=0,GX2_FRONT_FACE_CCW=0,
+    GX2_TEX_CLAMP_MODE_WRAP=0,GX2_TEX_CLAMP_MODE_MIRROR=1,GX2_TEX_CLAMP_MODE_CLAMP=2,
+    GX2_TEX_XY_FILTER_MODE_POINT=0,GX2_TEX_Z_FILTER_MODE_NONE=0,GX2_TEX_MIP_FILTER_MODE_NONE=0
 };
 #define GX2_SEL_MASK(x,y,z,w) (((x)<<24)|((y)<<16)|((z)<<8)|(w))
+#define GX2_COMP_MAP(x,y,z,w) GX2_SEL_MASK(x,y,z,w)
 void GX2SetContextState(GX2ContextState *context);
 bool GX2DrawDone(void);
 void GX2CalcSurfaceSizeAndAlignment(GX2Surface *surface);
@@ -69,6 +78,13 @@ void GX2SetColorBuffer(const GX2ColorBuffer *target,unsigned index);
 void GX2SetShaderModeEx(unsigned mode,unsigned vs,unsigned vsstack,unsigned gs,unsigned gsstack,unsigned ps,unsigned psstack);
 void GX2SetVertexShader(const GX2VertexShader *shader);
 void GX2SetPixelShader(const GX2PixelShader *shader);
+void GX2InitTextureRegs(GX2Texture *texture);
+void GX2SetPixelTexture(const GX2Texture *texture,unsigned unit);
+void GX2InitSampler(GX2Sampler *sampler,GX2TexClampMode clamp,unsigned filter);
+void GX2InitSamplerClamping(GX2Sampler *sampler,GX2TexClampMode x,GX2TexClampMode y,GX2TexClampMode z);
+void GX2InitSamplerLOD(GX2Sampler *sampler,float min,float max,float bias);
+void GX2InitSamplerZMFilter(GX2Sampler *sampler,unsigned z,unsigned mip);
+void GX2SetPixelSampler(const GX2Sampler *sampler,unsigned unit);
 void GX2SetAttribBuffer(unsigned index,unsigned size,unsigned stride,const void *bytes);
 void GX2SetVertexUniformReg(unsigned offset,unsigned count,const void *bytes);
 void GX2SetCullOnlyControl(unsigned front,bool cullfront,bool cullback);

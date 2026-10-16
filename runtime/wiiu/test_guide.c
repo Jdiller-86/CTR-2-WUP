@@ -58,8 +58,13 @@ static const step gx_steps[]={
     {VIEW_GUEST,"GX transfer picture","TV: GREEN / RED / GREEN. GamePad: BLUE.","R: observed correctly   L: wrong/missing picture"},
     {GUEST_EXIT,"GX operations and exit","Wait for fill/copy/conversion checks and exit.","The original guest's own PASS and exit are checked."}
 };
+static const step textured_steps[]={
+    {VIEW_GUEST,"Textured guest pictures","BOTH: colored texture and color-masked triangle.","R: correct on BOTH   L: wrong or missing picture"},
+    {GUEST_EXIT,"Texture readback and guest exit","Checking texture, TEV and GPU pixels automatically.","Wait for automatic guest PASS, then MINUS to exit."}
+};
 
 static const step *steps(const ctr_test_guide *g, unsigned *count) {
+    if(g->kind==CTR_GUIDE_TEXTURED) { *count=sizeof(textured_steps)/sizeof(*textured_steps);return textured_steps; }
     if(g->kind==CTR_GUIDE_GX2) { *count=sizeof(gx2_steps)/sizeof(*gx2_steps);return gx2_steps; }
     if(g->kind==CTR_GUIDE_SCENE) { *count=sizeof(scene_steps)/sizeof(*scene_steps);return scene_steps; }
     if(g->kind==CTR_GUIDE_PICA) { *count=sizeof(pica_steps)/sizeof(*pica_steps);return pica_steps; }
@@ -152,11 +157,11 @@ void ctr_test_guide_update(ctr_test_guide *g,const ctr_guide_input *in) {
             g->restart_requested=true;g->restart_waiting=true;g->expected_session=in->guest_sessions+1;
             log_line(g,"GUIDE restart requested; waiting for guest session %u",g->expected_session);
         } else if(g->restart_waiting && in->guest_sessions>=g->expected_session && in->guest_exited &&
-                  ((g->kind!=CTR_GUIDE_PICA && g->kind!=CTR_GUIDE_GX2) || in->guest_drawn_frame_available)) {
+                  ((g->kind!=CTR_GUIDE_PICA && g->kind!=CTR_GUIDE_GX2 && g->kind!=CTR_GUIDE_TEXTURED) || in->guest_drawn_frame_available)) {
             finish_step(g,in->guest_pass?"PASS":"FAIL",in->guest_pass?"New guest session PASS and exited state observed":"New guest exited without PASS");
         }
     } else {
-        bool frame_ready=(g->kind==CTR_GUIDE_PICA || g->kind==CTR_GUIDE_GX2)?in->guest_drawn_frame_available:in->guest_frame_available;
+        bool frame_ready=(g->kind==CTR_GUIDE_PICA || g->kind==CTR_GUIDE_GX2 || g->kind==CTR_GUIDE_TEXTURED)?in->guest_drawn_frame_available:in->guest_frame_available;
         if(type==VIEW_GUEST && frame_ready && !g->observed) {
             g->observed=1;
             log_line(g,"GUIDE visual frame ready: kind=%u serial=%llu elapsed_ms=%llu; fresh R press required",
@@ -240,7 +245,7 @@ void ctr_test_guide_view(const ctr_test_guide *g,uint64_t milliseconds,char rows
         snprintf(rows[4],72,g->restart_waiting?"Restart recorded. Waiting for new guest PASS.":"Waiting for your PLUS press.");
     } else if(list[g->step].type==VIEW_GUEST) {
         snprintf(rows[4],72,g->observed?"Drawn picture ready. Confirm with R or L.":
-            (g->kind==CTR_GUIDE_PICA || g->kind==CTR_GUIDE_GX2)?"WAIT: startup image is NOT the drawn scene.":"Waiting for the first displayed scene.");
+            (g->kind==CTR_GUIDE_PICA || g->kind==CTR_GUIDE_GX2 || g->kind==CTR_GUIDE_TEXTURED)?"WAIT: startup image is NOT the drawn scene.":"Waiting for the first displayed scene.");
     } else snprintf(rows[4],72,"Your result will be written to the TXT report.");
     snprintf(rows[5],72,"ZL: skip this step   ZR: report a problem");
     snprintf(rows[6],72,"MINUS: finish early and preserve the report");

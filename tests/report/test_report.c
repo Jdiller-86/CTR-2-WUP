@@ -219,8 +219,9 @@ static void guide_tests(void) {
     CHECK(ctr_test_guide_results(&g,results,sizeof(results)));
     CHECK(strstr(results,"Guest triangle pictures: PASS") && strstr(results,"Guest draws / readback / exit: PASS"));
 
+    for(unsigned kind=CTR_GUIDE_GX2;kind<=CTR_GUIDE_TEXTURED;++kind) {
     guide_log_text[0]=0;memset(&in,0,sizeof(in));
-    ctr_test_guide_init(&g,CTR_GUIDE_GX2,capture,NULL);
+    ctr_test_guide_init(&g,(ctr_guide_kind)kind,capture,NULL);
     in.pressed=CTR_GUIDE_R;in.guest_frame_available=true;
     ctr_test_guide_update(&g,&in);CHECK(g.step==0); /* Startup is not GPU evidence. */
     in.guest_drawn_frame_available=true;
@@ -229,11 +230,14 @@ static void guide_tests(void) {
     ctr_test_guide_update(&g,&in);CHECK(g.done && g.passed==2 && !g.failed);
     CHECK(!ctr_test_guide_take_restart(&g));
     CHECK(ctr_test_guide_results(&g,results,sizeof(results)));
-    CHECK(strstr(results,"GX2 guest triangle pictures: PASS") && strstr(results,"GPU readback and guest exit: PASS"));
-    ctr_test_guide_init(&g,CTR_GUIDE_GX2,capture,NULL);
+    CHECK(strstr(results,kind==CTR_GUIDE_GX2?"GX2 guest triangle pictures: PASS":"Textured guest pictures: PASS"));
+    CHECK(strstr(results,kind==CTR_GUIDE_GX2?"GPU readback and guest exit: PASS":"Texture readback and guest exit: PASS"));
+    ctr_test_guide_init(&g,(ctr_guide_kind)kind,capture,NULL);
     in.pressed=CTR_GUIDE_R;ctr_test_guide_update(&g,&in);
     in.pressed=0;in.guest_pass=false;ctr_test_guide_update(&g,&in);
     CHECK(g.done && g.failed==1 && g.passed==1 && !ctr_test_guide_take_restart(&g));
+
+    }
 
     guide_log_text[0]=0;memset(&in,0,sizeof(in));
     ctr_test_guide_init(&g,CTR_GUIDE_SAVE,capture,NULL);

@@ -4,9 +4,10 @@ The adapter connects a bounded PICA draw subset to the standard guest GSP
 queue. An original normal-CRT ARM application uses unmodified pinned libctru to
 submit two command lists, retain uploaded shader/state between them, render
 indexed triangles into owned linear allocations and display both screens.
-The default profile uses CPU software rendering. An optional GX2 profile
-translates the bounded vertex shader and draws into an owned GPU surface before
-the same guest display transfers. General PICA behavior remains unsupported.
+The default `draw` profile uses CPU software rendering. Optional GX2 profiles
+translate the bounded vertex shader, sample Texture0 when enabled and draw into
+an owned GPU surface before the same guest display transfers. General PICA
+behavior remains unsupported.
 
 ## Build and run the original program
 
@@ -51,8 +52,9 @@ python3 tools/validate-libctru.py --application draw --wiiu --gx2 --sanitize \
 
 The native adapter receives decoded original vertex inputs, index order, uniforms
 and retained PICA state. It compiles MOV/ADD/MUL/NOP/END into Latte vertex code,
-then uses GX2 fetch, shader and triangle draw commands with an untextured
-primary-color pixel shader. CPU-transformed positions and colors are never
+then uses GX2 fetch, shader and triangle draw commands. The original `draw`
+application binds an untextured primary-color pixel shader; `textured` uses the
+bounded sampler/TEV path below. CPU-transformed positions, colors and UV are never
 substituted for shader inputs. The [shader ABI](software-scenes.md#gx2-shader-and-backend-contract)
 defines the supported translation.
 
@@ -71,6 +73,26 @@ independent shader validation and native cross-compilation. Physical GPU
 execution and raster parity remain unverified; retained CPU preflight and
 readback costs preclude a performance claim.
 
+### Textured Guest
+
+```sh
+python3 tools/validate-libctru.py --application textured --wiiu --gx2 --sanitize \
+  --output artifacts/reports/compiled-textured-local
+```
+
+This distinct original application submits retained shader/texture state and
+tests sample replacement and primary-color modulation. Its patterned top/bottom
+frames receive independent exact host comparison. The native build is named
+`CTR2WUP Textured Guest`, with `ctr2wup-textured-guest.rpx`/`.wuhb` in CI artifact
+`wiiu-textured-guest-<source commit>`. Source identity, checked reference images,
+notices and one two-step `START-HERE.md` guide accompany the binaries.
+
+The [texture contract](textures.md) covers all 14 base formats, 8..1024 dimensions,
+nearest clamp/repeat/mirror, exact Q16 UV with W=1, and replace/binary-primary
+modulation. Decoded texture storage has explicit ownership; native pitched upload
+reverses rows for PICA V origin, flushes caches and retires GPU references before
+reuse/free. Physical sampling parity and performance remain unverified.
+
 ## Resource and transaction contract
 
 - Commands arrive through the existing standard GSP/GX command-list operation;
@@ -79,18 +101,23 @@ readback costs preclude a performance claim.
   linear allocations: guest VA `0x14000000` maps to PA `0x20000000`. Static guest
   mappings, VRAM and unowned physical addresses are rejected.
 - Permission splits must retain allocation identity. Source spans need read
-  permission; tiled targets need read/write permission. Snapshots are bounded to
-  4 MiB. Relay memory, command-list/target aliases and source/target feedback fail.
+  permission; tiled targets need read/write permission. Geometry snapshots are
+  bounded to 4 MiB. Texture data must fit wholly in geometry or one of at most
+  32 separate snapshots with 4 MiB total additional source bytes. Separate spans
+  cannot overlap geometry or each other; partial geometry aliases fail. Relay
+  memory, command-list/target aliases and source/target feedback fail.
 - One resource base and one target binding are supported per command list.
   Changing either between draws fails transactionally. State writes after the
   last draw may prepare the next list; shader/configuration-only uploads persist.
+  Texture bindings may change between draws within the checked snapshots.
 - Targets are 8×8 Morton tiled RGBA8/ABGR storage, with dimensions that are multiples
   of eight and no larger than 512. The adapter converts to the renderer's linear
   RGBA view, then writes the complete target through checked guest memory once.
-- Supported fragment state is explicitly defined: primary-color/pass-through TEV,
-  disabled textures/lighting/depth/stencil/blending, copy logic operation and full
-  color writes. Required registers need fully defined byte masks. Unsupported or
-  incomplete state fails before publishing pixels, shader state or completion.
+- Supported fragment state is explicitly defined: primary-color replacement or
+  bounded Texture0 replace/modulate TEV, disabled lighting/depth/stencil/blending,
+  copy logic and full color writes. TEV operands/scales are zero; later stages
+  pass Previous. Required registers need fully defined byte masks. Unsupported
+  or incomplete state fails before publishing pixels, shader state or completion.
 - Successful commit updates memory generations, invalidates affected code aliases
   and exclusive state, commits shader/register/counter state and publishes P3D
   completion. A failed list preserves its target and scene state. Earlier successful
@@ -100,8 +127,9 @@ The [scene contract](software-scenes.md) defines the bounded loader, fixed
 attribute, uniform and MOV/ADD/MUL/NOP/END shader subset. ADD/MUL
 accept only exact normal float24/signed-zero results with integer evaluation and
 transactional numeric rejection; [original arithmetic checks](software-scenes.md#exact-add-and-mul)
-validate the exact numeric subset separately from this MOV fixture. Broader arithmetic,
-sampling, general TEV, clipping and depth/blend/stencil remain unsupported.
+validate the exact numeric subset separately from this MOV fixture. Broader
+arithmetic/filtering, mipmaps, perspective, general TEV, clipping and
+depth/blend/stencil remain unsupported.
 A raw VFP push/pop guard fix supports exact bit transfers
 under CRT FPSCR controls; it does not enable unsupported arithmetic modes.
 

@@ -61,7 +61,13 @@ The applications test:
   GX2 Guest binaries; host frame validation remains a software reference, with
   physical GPU execution unverified.
 
-The validator runs all nine applications by default. Each must produce its own
+- `textured`: retained guest texture/shader state, sampled pattern, replace and
+  binary primary-color modulation through standard GX/PICA submission. Build
+  with `--application textured --wiiu --gx2` for the distinct Textured Guest
+  RPX/WUHB; see [textures](textures.md) for the supported sampling contract.
+
+The validator runs the original nine applications by default; select `textured`
+explicitly. Each must produce its own
 PASS, ExitProcess and zero fallback. Pixel checks inspect every pixel; input
 uses the public HID producer rather than writing a private app result.
 

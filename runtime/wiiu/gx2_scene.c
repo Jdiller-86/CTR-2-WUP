@@ -1,6 +1,8 @@
 /* Original bounded PICA -> GX2 offscreen submission. ISA export facts and shader
  * register metadata were checked against devkitPro/wut commit
- * 937f0d6901f5e2a72672154a674ec47b63e2f417, samples/cmake/content/pos_col_shader.
+ * 937f0d6901f5e2a72672154a674ec47b63e2f417, samples/cmake/content/pos_col_shader;
+ * TEX/ALU/CF fields against decaf-emu/decaf-emu
+ * e6c528a20a41c34e0f9eb91dd3da40f119db2dee, src/libgpu/latte definitions.
  * No pretransformed reference vertices or software raster pixels are submitted. */
 #include "gx2_scene.h"
 #ifdef CTR_GX2_SCENE_MOCK
@@ -12,8 +14,10 @@
 #include <gx2/event.h>
 #include <gx2/mem.h>
 #include <gx2/registers.h>
+#include <gx2/sampler.h>
 #include <gx2/shaders.h>
 #include <gx2/surface.h>
+#include <gx2/texture.h>
 #include <gx2/utils.h>
 #endif
 #include <malloc.h>
@@ -21,6 +25,7 @@
 #include <string.h>
 
 #define MAX_IMAGE_BYTES (2u*1024u*1024u)
+#define MAX_TEXTURE_BYTES (8u*1024u*1024u)
 #define VERTEX_STRIDE (16u*4u*sizeof(float))
 #define MAX_FETCH_BYTES 4096u
 
@@ -31,6 +36,8 @@ typedef struct {
     GX2FetchShader fetch;
     GX2VertexShader vertex;
     GX2PixelShader pixel;
+    GX2Texture texture;
+    GX2Sampler sampler;
     ctr_gx2_shader *compiled;
     void *vertex_program,*pixel_program,*fetch_program,*vertices;
     unsigned width,height,stride;
@@ -72,6 +79,7 @@ static bool retire(ctr_wiiu_gx2_scene *s,scene_private *p) {
     p->pending=false;s->quarantined=false;return true;
 }
 static void release(ctr_wiiu_gx2_scene *s,scene_private *p) {
+    dispose(s,p->texture.surface.image);
     dispose(s,p->vertices);dispose(s,p->fetch_program);
     dispose(s,p->pixel_program);dispose(s,p->vertex_program);
     dispose(s,p->compiled);dispose(s,p->linear.image);
@@ -106,6 +114,103 @@ static bool layout(GX2Surface *surface,unsigned width,unsigned height,GX2TileMod
         surface->imageSize && surface->imageSize<=MAX_IMAGE_BYTES &&
         surface->alignment && !(surface->alignment&(surface->alignment-1u)) &&
         surface->alignment<=65536u && !surface->mipmapSize;
+}
+static void put32(uint8_t *p,uint32_t value) {
+    for(unsigned i=0;i<4;++i)p[i]=(uint8_t)(value>>(8u*i));
+}
+/* Original encoder from the pinned Latte TEX/CF/ALU field definitions. R0 is
+ * primary color and R1 is original interpolated guest UV. A base-level sample
+ * goes to R2; the optional exact binary-primary TEV mode multiplies it by R0.
+ * Program and clause addresses are explicitly little endian on PowerPC. */
+static void pixel_shader(scene_private *p,const ctr_scene_texture *texture) {
+    uint8_t *program=p->pixel_program;memset(program,0,256);
+    memset(&p->pixel,0,sizeof(p->pixel));
+    p->pixel.size=256;p->pixel.program=program;p->pixel.mode=GX2_SHADER_MODE_UNIFORM_REGISTER;
+    p->pixel.regs.sq_pgm_resources_ps=texture?3u:1u;
+    p->pixel.regs.sq_pgm_exports_ps=2;
+    p->pixel.regs.spi_ps_in_control_0=UINT32_C(0x14000000)|(texture?2u:1u);
+    p->pixel.regs.num_spi_ps_input_cntl=texture?2u:1u;
+    p->pixel.regs.spi_ps_input_cntls[0]=UINT32_C(0x100);
+    if(texture)p->pixel.regs.spi_ps_input_cntls[1]=UINT32_C(0x101);
+    p->pixel.regs.cb_shader_mask=15;p->pixel.regs.cb_shader_control=1;
+    p->pixel.regs.db_shader_control=UINT32_C(0x10);
+    unsigned export_at=0;
+    if(texture) {
+        /* TEX clause at byte 32; one SAMPLE_LZ, resource/sampler zero,
+         * normalized coordinates R1.xy01 and result R2.xyzw. */
+        put32(program,4);put32(program+4,UINT32_C(0x80800000));
+        put32(program+32,UINT32_C(0x00010013));
+        put32(program+36,UINT32_C(0xf00d1002));
+        put32(program+40,UINT32_C(0xb0800000));
+        export_at=8;
+        if(texture->tev_mode==1u) {
+            /* Four scalar, independent LAST groups avoid a bank scheduler. */
+            put32(program+8,6);put32(program+12,UINT32_C(0xa00c0000));
+            for(unsigned lane=0;lane<4;++lane) {
+                put32(program+48u+lane*8u,UINT32_C(0x80000002)|(lane<<10)|(lane<<23));
+                put32(program+52u+lane*8u,UINT32_C(0x00400110)|(lane<<29));
+            }
+            export_at=16;
+        }
+        put32(program+export_at,2u<<15);
+    }
+    /* EXP_DONE PIX0, R0 or R2.xyzw, END_OF_PROGRAM. */
+    put32(program+export_at+4u,UINT32_C(0x94200688));
+    GX2Invalidate(GX2_INVALIDATE_MODE_CPU_SHADER,program,256);
+}
+static bool upload_texture(ctr_wiiu_gx2_scene *s,scene_private *p,
+                           const ctr_scene_texture *source) {
+    if(!source)return true;
+    unsigned wrap_t=(source->params>>8)&7u,wrap_s=(source->params>>12)&7u;
+    uint32_t expected_params=(wrap_t<<8)|(wrap_s<<12)|(source->format>=12u?0x20u:0u);
+    if(!source->rgba || source->width<8u || source->height<8u ||
+       source->width>1024u || source->height>1024u ||
+       (source->width&(source->width-1u)) || (source->height&(source->height-1u)) ||
+       source->format>=14u || source->tev_mode>1u || source->params!=expected_params ||
+       (wrap_t!=0u && wrap_t!=2u && wrap_t!=3u) ||
+       (wrap_s!=0u && wrap_s!=2u && wrap_s!=3u) ||
+       (size_t)source->width*source->height*4u>UINTPTR_MAX-(uintptr_t)source->rgba)
+        return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
+    /* Every previous submission and context-state reference must retire before
+     * an image or its CPU cache lines can be overwritten or released. */
+    if(!retire(s,p))return false;
+    if(p->texture.surface.width!=source->width || p->texture.surface.height!=source->height) {
+        GX2Texture next;memset(&next,0,sizeof(next));
+        next.surface.dim=GX2_SURFACE_DIM_TEXTURE_2D;
+        next.surface.width=source->width;next.surface.height=source->height;
+        next.surface.depth=1;next.surface.mipLevels=1;
+        next.surface.format=GX2_SURFACE_FORMAT_UNORM_R8_G8_B8_A8;
+        next.surface.aa=GX2_AA_MODE1X;next.surface.use=GX2_SURFACE_USE_TEXTURE;
+        next.surface.tileMode=GX2_TILE_MODE_LINEAR_ALIGNED;
+        GX2CalcSurfaceSizeAndAlignment(&next.surface);
+        if(next.surface.tileMode!=GX2_TILE_MODE_LINEAR_ALIGNED || next.surface.pitch<source->width ||
+           !next.surface.imageSize || next.surface.imageSize>MAX_TEXTURE_BYTES ||
+           (uint64_t)next.surface.pitch*source->height*4u>next.surface.imageSize ||
+           !next.surface.alignment || (next.surface.alignment&(next.surface.alignment-1u)) ||
+           next.surface.alignment>65536u || next.surface.mipmapSize)
+            return fail(s,CTR_WIIU_GX2_SCENE_LAYOUT);
+        next.surface.image=allocate(s,next.surface.alignment,next.surface.imageSize);
+        if(!next.surface.image)return fail(s,CTR_WIIU_GX2_SCENE_ALLOCATION);
+        next.viewNumMips=1;next.viewNumSlices=1;
+        next.compMap=GX2_COMP_MAP(GX2_SQ_SEL_X,GX2_SQ_SEL_Y,GX2_SQ_SEL_Z,GX2_SQ_SEL_W);
+        GX2InitTextureRegs(&next);
+        dispose(s,p->texture.surface.image);p->texture=next;
+    }
+    /* PICA normalized V=0 addresses the last raw Morton-storage row. Reverse
+     * the decoded upload rows while preserving the actual guest UV exports. */
+    for(unsigned y=0;y<source->height;++y)
+        memcpy((uint8_t *)p->texture.surface.image+(size_t)y*p->texture.surface.pitch*4u,
+               source->rgba+(size_t)(source->height-1u-y)*source->width*4u,source->width*4u);
+    DCFlushRange(p->texture.surface.image,p->texture.surface.imageSize);
+    GX2Invalidate(GX2_INVALIDATE_MODE_CPU_TEXTURE,p->texture.surface.image,p->texture.surface.imageSize);
+    GX2TexClampMode clamps[4]={GX2_TEX_CLAMP_MODE_CLAMP,GX2_TEX_CLAMP_MODE_CLAMP,
+                             GX2_TEX_CLAMP_MODE_WRAP,GX2_TEX_CLAMP_MODE_MIRROR};
+    GX2InitSampler(&p->sampler,GX2_TEX_CLAMP_MODE_CLAMP,GX2_TEX_XY_FILTER_MODE_POINT);
+    GX2InitSamplerClamping(&p->sampler,clamps[wrap_s],clamps[wrap_t],GX2_TEX_CLAMP_MODE_CLAMP);
+    GX2InitSamplerLOD(&p->sampler,0.0f,0.0f,0.0f);
+    GX2InitSamplerZMFilter(&p->sampler,GX2_TEX_Z_FILTER_MODE_NONE,GX2_TEX_MIP_FILTER_MODE_NONE);
+    ++s->texture_uploads;s->texture_bytes+=(uint64_t)source->width*source->height*4u;
+    return true;
 }
 static bool begin(void *context,const ctr_scene_surface *initial) {
     ctr_wiiu_gx2_scene *s=context;
@@ -164,17 +269,7 @@ static bool begin(void *context,const ctr_scene_surface *initial) {
     GX2InitFetchShaderEx(&p->fetch,p->fetch_program,16,attributes,
                         GX2_FETCH_SHADER_TESSELLATION_NONE,GX2_TESSELLATION_MODE_DISCRETE);
     GX2Invalidate(GX2_INVALIDATE_MODE_CPU_SHADER,p->fetch_program,fetch_size);
-    /* One ISA instruction: EXP_DONE PIX0, R0.xyzw, END_OF_PROGRAM. Stored as
-     * explicit little-endian bytes, independently of the PowerPC host endian. */
-    const uint8_t pixel_export[8]={0,0,0,0,0x88,0x06,0x20,0x94};
-    memcpy(p->pixel_program,pixel_export,sizeof(pixel_export));
-    p->pixel.size=256;p->pixel.program=p->pixel_program;p->pixel.mode=GX2_SHADER_MODE_UNIFORM_REGISTER;
-    p->pixel.regs.sq_pgm_resources_ps=1;p->pixel.regs.sq_pgm_exports_ps=2;
-    p->pixel.regs.spi_ps_in_control_0=UINT32_C(0x14000001);
-    p->pixel.regs.num_spi_ps_input_cntl=1;p->pixel.regs.spi_ps_input_cntls[0]=UINT32_C(0x100);
-    p->pixel.regs.cb_shader_mask=15;p->pixel.regs.cb_shader_control=1;
-    p->pixel.regs.db_shader_control=UINT32_C(0x10);
-    GX2Invalidate(GX2_INVALIDATE_MODE_CPU_SHADER,p->pixel_program,256);
+    pixel_shader(p,NULL);
     if(!restore(s))return false;
     ++s->begins;return true;
 error:
@@ -208,7 +303,8 @@ static void rectangle(ctr_wiiu_gx2_scene *s,unsigned x,unsigned y,unsigned w,uns
     scene_private *p=s->private_state;GX2SetScissor(x,y,w,h);
     GX2DrawEx(GX2_PRIMITIVE_MODE_TRIANGLES,count,0,1);p->pending=true;++s->submissions;
 }
-static bool draw(void *context,const ctr_scene_state *state,const ctr_vertex *vertices,unsigned count) {
+static bool draw(void *context,const ctr_scene_state *state,const ctr_vertex *vertices,unsigned count,
+                 const ctr_scene_texture *texture) {
     ctr_wiiu_gx2_scene *s=context;scene_private *p=s?s->private_state:NULL;
     if(!p || !state || !vertices || !count || count>CTR_SCENE_MAX_VERTICES || count%3u)
         return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
@@ -217,7 +313,9 @@ static bool draw(void *context,const ctr_scene_state *state,const ctr_vertex *ve
         &state->registers[0x050u],state->registers[0x04fu],p->compiled);
     if(s->shader_result!=CTR_GX2_SHADER_OK)return fail(s,CTR_WIIU_GX2_SCENE_SHADER);
     if(!p->compiled->size || p->compiled->size>sizeof(p->compiled->program) ||
-       p->compiled->gprs>64u)return fail(s,CTR_WIIU_GX2_SCENE_SHADER);
+       p->compiled->gprs>64u || (texture && !p->compiled->texcoord0))
+        return fail(s,CTR_WIIU_GX2_SCENE_SHADER);
+    if(!upload_texture(s,p,texture))return false;
     for(unsigned vertex=0;vertex<count;++vertex) {
         if((vertices[vertex].enabled&p->compiled->input_mask)!=p->compiled->input_mask)
             return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
@@ -230,17 +328,21 @@ static bool draw(void *context,const ctr_scene_state *state,const ctr_vertex *ve
     memset(&p->vertex,0,sizeof(p->vertex));p->vertex.size=p->compiled->size;
     p->vertex.program=p->vertex_program;p->vertex.mode=GX2_SHADER_MODE_UNIFORM_REGISTER;
     p->vertex.regs.sq_pgm_resources_vs=p->compiled->gprs|UINT32_C(0x100);
-    p->vertex.regs.num_spi_vs_out_id=1;p->vertex.regs.spi_vs_out_id[0]=UINT32_C(0xffffff00);
+    p->vertex.regs.spi_vs_out_config=p->compiled->texcoord0?2u:0u;
+    p->vertex.regs.num_spi_vs_out_id=1;
+    p->vertex.regs.spi_vs_out_id[0]=p->compiled->texcoord0?UINT32_C(0xffff0100):UINT32_C(0xffffff00);
     for(unsigned index=1;index<10;++index)p->vertex.regs.spi_vs_out_id[index]=UINT32_MAX;
     p->vertex.regs.sq_vtx_semantic_clear=UINT32_C(0xffff0000);
     p->vertex.regs.num_sq_vtx_semantic=16;
     for(unsigned index=0;index<16;++index)p->vertex.regs.sq_vtx_semantic[index]=index;
     p->vertex.regs.vgt_vertex_reuse_block_cntl=14;p->vertex.regs.vgt_hos_reuse_depth=16;
+    pixel_shader(p,texture);
     GX2SetContextState(p->context);
     if(!viewport(p,state))return fail(s,CTR_WIIU_GX2_SCENE_LAYOUT);
     GX2SetColorBuffer(&p->target,GX2_RENDER_TARGET_0);
     GX2SetShaderModeEx(GX2_SHADER_MODE_UNIFORM_REGISTER,64,64,0,0,184,192);
     GX2SetFetchShader(&p->fetch);GX2SetVertexShader(&p->vertex);GX2SetPixelShader(&p->pixel);
+    if(texture) { GX2SetPixelTexture(&p->texture,0);GX2SetPixelSampler(&p->sampler,0); }
     GX2SetAttribBuffer(0,count*VERTEX_STRIDE,VERTEX_STRIDE,p->vertices);
     for(unsigned uniform=0;uniform<CTR_SHADER_UNIFORMS;++uniform)if(p->compiled->uniform_used[uniform])
         GX2SetVertexUniformReg(uniform*4u,4,state->shader.uniforms[uniform]);

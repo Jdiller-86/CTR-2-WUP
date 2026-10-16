@@ -17,7 +17,7 @@ int main(int argc,char **argv) {
     if(arithmetic)ctr_scene_fixture_make_arithmetic(&fixture,shorts);
     else ctr_scene_fixture_make(&fixture,shorts);
     ctr_scene_init(&state);ctr_scene_fixture_background(pixels,CTR_SCENE_FIXTURE_BYTES);
-    ctr_scene_resources resources={UINT32_C(0x18000000),fixture.resources,fixture.resource_bytes};
+    ctr_scene_resources resources={UINT32_C(0x18000000),fixture.resources,fixture.resource_bytes,NULL,0};
     ctr_scene_surface surface={pixels,CTR_SCENE_FIXTURE_BYTES,64,64,256};
     clock_t start=clock();
     ctr_scene_result result=ctr_scene_execute(&state,fixture.commands,fixture.command_bytes,&resources,&surface,&report);
