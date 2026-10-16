@@ -6,7 +6,7 @@ Commercial games and the GUI are not supported yet.
 
 ## Current work
 
-1. **Extend GX2 guest rendering** ([#80](https://github.com/Jdiller-86/CTR-2-WUP/issues/80)).
+1. **Extend GX2 guest rendering** ([#29](https://github.com/Jdiller-86/CTR-2-WUP/issues/29)).
    The bounded vertex translator and transactional GPU backend are implemented;
    physical shader/raster parity remains unverified. Extend texture and fragment
    state from original scene fixtures, then implement requirements observed in
