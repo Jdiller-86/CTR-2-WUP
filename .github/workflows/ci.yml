@@ -368,10 +368,10 @@ jobs:
             --installed artifacts/ci/install-candidate \
             --sdk-receipt "$DEVKITPRO/ctr2wup-image-digest.txt" \
             --sdk-licenses "$DEVKITPRO/licenses" --output artifacts/ci/m1-suite
-      - name: Upload the guided M1 acceptance suite
+      - name: Upload the focused installed-title check
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: wiiu-m1-acceptance-${{ github.sha }}
+          name: wiiu-install-check-${{ github.sha }}
           path: artifacts/ci/m1-suite/stage/
           include-hidden-files: true
           retention-days: 30

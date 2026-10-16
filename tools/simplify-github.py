@@ -149,19 +149,34 @@ def gate_body(number):
             'Earlier issue revisions and comments retain the detailed history.\n')
 
 
+def select_options(field, required, description):
+    """Match existing options without renaming them or replacing their IDs."""
+    options = (field or {}).get('options', [])
+    observed = [re.sub(r'[^A-Za-z0-9 _-]', '?', str(o.get('name', '')))[:64] for o in options[:20]]
+    message = f'Expected Project {description} options are missing or ambiguous. Observed options: ' + json.dumps(observed)
+    indexed = {}
+    for option in options:
+        name = option.get('name')
+        if not isinstance(name, str) or not option.get('id') or name.casefold() in indexed:
+            raise CleanupError(message)
+        indexed[name.casefold()] = option
+    if not {name.casefold() for name in required} <= indexed.keys():
+        raise CleanupError(message)
+    return indexed
+
+
 def plan(issues, project):
     if not KEEP <= issues.keys() or any(issues[n]['state'] != 'open' for n in KEEP):
         raise CleanupError('Expected open milestone gates/active tasks are missing; preserve the current state.')
     field = next((f for f in project['fields']['nodes'] if f.get('name') == 'Status'), None)
-    if not field or not {'Planned', 'In progress', 'Awaiting evidence'} <= {o['name'] for o in field['options']}:
-        raise CleanupError('Expected Project status options are missing.')
+    status_options = select_options(field, ('Planned', 'In progress', 'Awaiting evidence'), 'status')
     waiting_field = next((f for f in project['fields']['nodes'] if f.get('name') == 'Waiting resource'), None)
     type_field = next((f for f in project['fields']['nodes'] if f.get('name') == 'Work type'), None)
     if waiting_field and waiting_field.get('dataType') != 'TEXT':
         raise CleanupError('Waiting resource field type changed; preserve and review.')
-    if type_field and (type_field.get('dataType') != 'SINGLE_SELECT'
-            or not {'Milestone', 'Task'} <= {o['name'] for o in type_field.get('options', [])}):
-        raise CleanupError('Work type field options changed; preserve and review.')
+    if type_field and type_field.get('dataType') != 'SINGLE_SELECT':
+        raise CleanupError('Work type field type changed; preserve and review.')
+    type_options = select_options(type_field, ('Milestone', 'Task'), 'work type') if type_field else {}
     operations = []
     milestones = {}
     for row in project['milestones']:
@@ -206,7 +221,8 @@ def plan(issues, project):
             operations.append({'kind': 'issue', 'number': n, 'payload': change})
     for n in SUPERSEDED:
         if n in issues and issues[n]['state'] == 'open':
-            b = issues[n].get('body') or ''
+            b = (issues[n].get('body') or '').replace(BASE + 'docs/',
+                'https://github.com/' + REPO + '/blob/8da7a4a2cde0e6f80f7df5c6ec263efb4c98b702/docs/')
             banner = ('Consolidated into the milestone overview and [development plan](' + BASE + 'plans.md). '
                       'Closing this planning checklist as superseded, not as completed or accepted. '
                       'The original scope and evidence remain below.\n\n---\n\n')
@@ -233,9 +249,10 @@ def plan(issues, project):
         item = active.get(n)
         if item is None:
             operations.append({'kind': 'add', 'number': n, 'content': issues[n]['node_id']})
-        if item is None or (item.get('status') or {}).get('name') != status:
+        selected_status = status_options[status.casefold()]
+        if item is None or (item.get('status') or {}).get('name', '').casefold() != status.casefold():
             operations.append({'kind': 'status', 'number': n, 'item': item['id'] if item else None,
-                               'field': field['id'], 'option': next(o['id'] for o in field['options'] if o['name'] == status)})
+                               'field': field['id'], 'option': selected_status['id']})
         # Correct only the ten active items; archived metadata remains historical.
         if waiting_field:
             waiting = 'Wii U console results' if n in (1, 37) else None
@@ -245,8 +262,8 @@ def plan(issues, project):
                                    'field': waiting_field['id'], 'value': {'text': waiting} if waiting else None})
         if type_field:
             label = 'Milestone' if n in GATES else 'Task'
-            if item is None or (item.get('workType') or {}).get('name') != label:
-                option = next(o['id'] for o in type_field['options'] if o['name'] == label)
+            if item is None or (item.get('workType') or {}).get('name', '').casefold() != label.casefold():
+                option = type_options[label.casefold()]['id']
                 operations.append({'kind': 'field', 'number': n, 'item': item['id'] if item else None,
                                    'field': type_field['id'], 'value': {'singleSelectOptionId': option}})
     desired_project = {'projectId': project['id'], 'title': 'CTR2WUP',

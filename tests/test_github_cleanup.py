@@ -140,5 +140,42 @@ class GitHubCleanupTests(unittest.TestCase):
         self.assertEqual(api.project_row['hierarchy']['t80']['parent']['number'], 4)
 
 
+    def test_existing_option_capitalization_preserves_ids_names_and_readback(self):
+        api = FakeGitHub()
+        status = api.project_row['fields']['nodes'][0]
+        status['options'][1]['name'] = 'In Progress'
+        status['options'][2]['name'] = 'Awaiting Evidence'
+        worktype = next(f for f in api.project_row['fields']['nodes'] if f['name'] == 'Work type')
+        worktype['options'][0]['name'] = 'milestone'
+        worktype['options'][1]['name'] = 'TASK'
+        original_options = copy.deepcopy((status['options'], worktype['options']))
+        dry = cleanup.cleanup(api)
+        with patch.object(cleanup, 'trusted_source', return_value='a' * 40):
+            result = cleanup.cleanup(api, True, dry['plan_sha256'])
+        self.assertTrue(result['readback_verified'])
+        self.assertEqual((status['options'], worktype['options']), original_options)
+        self.assertEqual(cleanup.cleanup(api)['operation_count'], 0)
+        native_statuses = {item.get('status', {}).get('name') for item in api.project_row['items']}
+        self.assertIn('In Progress', native_statuses)
+        self.assertIn('Awaiting Evidence', native_statuses)
+
+    def test_missing_and_ambiguous_options_fail_before_writes_with_bounded_names(self):
+        api = FakeGitHub()
+        status = api.project_row['fields']['nodes'][0]
+        status['options'][1]['name'] = 'Custom\n<option>' + 'x' * 100
+        with self.assertRaises(cleanup.CleanupError) as raised:
+            cleanup.cleanup(api)
+        self.assertIn('Observed options:', str(raised.exception))
+        self.assertIn('Custom??option?', str(raised.exception))
+        self.assertNotIn('\n', str(raised.exception))
+        self.assertLess(len(str(raised.exception)), 250)
+        self.assertEqual(api.writes, [])
+        status['options'][1]['name'] = 'In Progress'
+        status['options'].append({'id': 'other', 'name': 'IN PROGRESS'})
+        with self.assertRaisesRegex(cleanup.CleanupError, 'ambiguous'):
+            cleanup.cleanup(api)
+        self.assertEqual(api.writes, [])
+
+
 if __name__ == '__main__':
     unittest.main()
