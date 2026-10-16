@@ -24,7 +24,7 @@ MAX_FILE = 4 * 1024 * 1024
 MAX_TOTAL = 24 * 1024 * 1024
 MAX_FILES = 64
 RESULT_BYTES = 8192
-RESULT_PATTERN = re.compile(r'^result-native-audio-streams-'+re.escape(VERSION)+r'-(?P<session>[0-9a-f]{16})-(?P<attempt>[0-9]{2})\.txt$')
+RESULT_PATTERN = re.compile(r'^result-native-audio-streams-(?P<version>[0-9]+\.[0-9]+\.[0-9]+)-(?P<session>[0-9a-f]{16})-(?P<attempt>[0-9]{2})\.txt$')
 TRACE_PATTERN = re.compile(r'^native-audio-streams-(?P<session>[0-9a-f]{16})-(?P<attempt>[0-9]{2})\.txt$')
 
 
@@ -68,16 +68,16 @@ def unique_line(text: str, expression: str) -> bool:
     return len(re.findall(expression, text, re.MULTILINE)) == 1
 
 
-def identity_matches(name: str, data: bytes, commit: str) -> bool:
+def identity_matches(name: str, data: bytes, commit: str, version: str = VERSION) -> bool:
     match = RESULT_PATTERN.fullmatch(name) or TRACE_PATTERN.fullmatch(name)
-    if not match:
+    if not match or (name.startswith('result-') and match['version'] != version):
         return False
     try:
         text = data.decode('utf-8')
     except UnicodeDecodeError:
         return False
     if ('\x00' in text or not unique_line(text, r'^Application: [^\r\n]*')
-            or not unique_line(text, r'^Application: '+APPLICATION+r' \| Build: '+re.escape(VERSION)+r'\r?$')):
+            or not unique_line(text, r'^Application: '+APPLICATION+r' \| Build: '+re.escape(version)+r'\r?$')):
         return False
     if name.startswith('result-'):
         return (len(data) == RESULT_BYTES and text.startswith('CTR2WUP result report\n')
@@ -138,12 +138,20 @@ def pair_warnings(entries: dict[str, bytes]) -> list[str]:
     return warnings
 
 
-def collect(sd_root: Path, output: Path, kit: dict, observations: dict | None = None) -> dict:
-    commit = kit.get('source_commit', '')
-    if (kit.get('kind') != 'ctr2wup-audio-round' or kit.get('version') != VERSION
+def kit_identity(kit: dict) -> tuple[str, str]:
+    if not isinstance(kit, dict):
+        raise ValueError('Use the clean matching Audio Streams manifest.json supplied with the kit')
+    commit, version = kit.get('source_commit', ''), kit.get('version', '')
+    if (kit.get('kind') != 'ctr2wup-audio-round' or not isinstance(version, str)
+            or len(version) > 32 or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version)
             or not isinstance(commit, str) or not re.fullmatch('[0-9a-f]{40}', commit)
             or kit.get('source_dirty') is not False):
-        raise ValueError('Use the clean matching Audio Streams manifest.json supplied with this collector')
+        raise ValueError('Use the clean matching Audio Streams manifest.json supplied with the kit')
+    return commit, version
+
+
+def collect(sd_root: Path, output: Path, kit: dict, observations: dict | None = None) -> dict:
+    commit, version = kit_identity(kit)
     folder = real_path(sd_root) / 'ctr2wup'
     real_path(folder)
     if not folder.is_dir():
@@ -163,7 +171,8 @@ def collect(sd_root: Path, output: Path, kit: dict, observations: dict | None = 
         for path in location.iterdir():
             if path == results:
                 continue
-            if RESULT_PATTERN.fullmatch(path.name) or TRACE_PATTERN.fullmatch(path.name):
+            result = RESULT_PATTERN.fullmatch(path.name)
+            if (result and result['version'] == version) or TRACE_PATTERN.fullmatch(path.name):
                 if path.name in names:
                     raise ValueError('Duplicate log filename across legacy/results directories; preserve both originals')
                 names.add(path.name)
@@ -180,7 +189,7 @@ def collect(sd_root: Path, output: Path, kit: dict, observations: dict | None = 
         except ValueError as error:
             warnings.append(path.name+': '+str(error))
             continue
-        if not identity_matches(path.name, data, commit):
+        if not identity_matches(path.name, data, commit, version):
             warnings.append(path.name+': filename/header/build/source identity differs or result is not 8192 bytes; excluded (keep it separately)')
             continue
         total += len(data)
@@ -199,7 +208,7 @@ def collect(sd_root: Path, output: Path, kit: dict, observations: dict | None = 
         raise ValueError('Observations must be at most eight short text fields')
     records = [{'path': 'logs/'+name, 'size': len(data), 'sha256': hashlib.sha256(data).hexdigest()}
                for name, data in sorted(entries.items())]
-    report = {'schema_version': 1, 'kind': 'ctr2wup-audio-return', 'version': VERSION,
+    report = {'schema_version': 1, 'kind': 'ctr2wup-audio-return', 'version': version,
               'source_commit': commit, 'source_dirty': False, 'collector_version': VERSION,
               'collected_at': datetime.now(timezone.utc).isoformat(), 'files': records,
               'summaries': summaries, 'observations': observations, 'warnings': warnings,
@@ -224,7 +233,8 @@ def main() -> None:
     parser.add_argument('--manifest', type=Path, default=Path(__file__).resolve().with_name('manifest.json'))
     args = parser.parse_args()
     kit = json.loads(args.manifest.read_text(encoding='utf-8'))
-    output = args.output or Path.cwd()/('CTR2WUP-audio-results-'+VERSION+'-'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')+'.zip')
+    _, version = kit_identity(kit)
+    output = args.output or Path.cwd()/('CTR2WUP-audio-results-'+version+'-'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')+'.zip')
     report = collect(args.sd_root, output, kit)
     print(f'Created and verified {output}: {len(report["files"])} source-matched TXT files. Original files preserved.')
     for warning in report['warnings']:

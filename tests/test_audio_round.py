@@ -92,6 +92,38 @@ class AudioReturnTests(unittest.TestCase):
                 self.assertEqual(hashlib.sha256(data).hexdigest(), row['sha256'])
         self.assertEqual((self.folder/self.result_name).read_bytes(), self.result_data)
 
+    def test_original_audio_streams_kit_remains_collectable_after_collector_upgrade(self):
+        version = '0.26.0'
+        name = self.result_name.replace(collector.VERSION, version)
+        (self.folder/self.result_name).unlink()
+        result = self.result(version=version, filename=name)
+        trace = self.trace(version=version)
+        (self.folder/name).write_bytes(result)
+        (self.folder/self.trace_name).write_bytes(trace)
+        kit = {**self.kit, 'version': version}
+        report = collector.collect(self.sd, self.root/'legacy.zip', kit)
+        self.assertEqual(report['version'], version)
+        self.assertEqual(report['collector_version'], collector.VERSION)
+        self.assertEqual(report['warnings'], [])
+        self.assertEqual({row['kind'] for row in report['summaries']}, {'result', 'trace'})
+        with zipfile.ZipFile(self.root/'legacy.zip') as archive:
+            self.assertEqual(archive.read('logs/'+name), result)
+            self.assertEqual(archive.read('logs/'+self.trace_name), trace)
+
+    def test_older_kit_still_rejects_result_or_trace_from_another_build(self):
+        version = '0.26.0'
+        name = self.result_name.replace(collector.VERSION, version)
+        (self.folder/self.result_name).unlink()
+        kit = {**self.kit, 'version': version}
+        for wrong in ('result', 'trace'):
+            with self.subTest(wrong=wrong):
+                (self.folder/name).write_bytes(self.result(filename=name, version=collector.VERSION if wrong == 'result' else version))
+                (self.folder/self.trace_name).write_bytes(self.trace(version=collector.VERSION if wrong == 'trace' else version))
+                report = collector.collect(self.sd, self.root/(wrong+'-build.zip'), kit)
+                self.assertEqual(len(report['files']), 1)
+                self.assertEqual(report['summaries'][0]['kind'], 'trace' if wrong == 'result' else 'result')
+                self.assertTrue(any('identity differs' in warning for warning in report['warnings']))
+
     def test_unknown_private_files_are_not_read_and_every_drop_warns(self):
         for name in ('game.cia', 'private.keys', 'filesystem-test.snapshot', 'result-native-audio-streams-0.25.0-'+SESSION+'-00.txt'):
             (self.folder/name).write_bytes(b'never publish this private negative fixture')
@@ -228,7 +260,7 @@ class AudioReturnTests(unittest.TestCase):
                 self.collect('count.zip')
 
     def test_wrong_kit_or_no_matches_never_creates_return(self):
-        for field, value in [('kind', 'other'), ('version', '0.25.0'), ('source_commit', '../private'), ('source_dirty', True)]:
+        for field, value in [('kind', 'other'), ('version', '../0.26.0'), ('source_commit', '../private'), ('source_dirty', True)]:
             with self.subTest(field=field), self.assertRaises(ValueError):
                 collector.collect(self.sd, self.root/(field+'.zip'), {**self.kit, field: value})
         (self.folder/self.result_name).unlink()
