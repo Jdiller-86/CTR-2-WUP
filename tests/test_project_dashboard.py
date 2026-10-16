@@ -110,7 +110,7 @@ class ProjectDashboardTests(unittest.TestCase):
         self.assertEqual((output / 'index.html').read_text(), 'Original documentation')
         self.assertIn('Project progress', (output / 'progress/index.html').read_text())
         self.assertEqual(json.loads((output / 'progress/progress.json').read_text())['source_commit'], COMMIT)
-        self.assertEqual((output / 'progress/gates.svg').read_text(),
+        self.assertEqual((output / 'progress/gates.svg').read_text(encoding='utf-8'),
                          hosting.project_graph_svg(hosting.public_project_snapshot(self.path, COMMIT)))
 
     def test_embedded_image_counts_work_without_inferring_milestone_acceptance(self):
