@@ -38,7 +38,12 @@ Each diagnostic package contains a deployment guide, an SD-card tree and a
 result folder with build identity and full logging.
 Ordinary diagnostic logs are isolated under `sd:/ctr2wup/results/`; the installed
 candidate uses `sd:/ctr2wup/install-check/`. Saves and asset blobs stay outside
-these return folders.
+these return folders except the install diagnostic's isolated original recovery
+fixtures. Installed-title completion uses two Menu launches and automatic
+production snapshot recovery; reviewed baseline controls, tone, stability and
+save/reload evidence retain their scope. Return the entire install-check folder;
+the reviewer selects the source-bound child and checks every current-source
+attempt, including partial failures.
 
 Automatic checks, human observations, failures, skips and unrun steps stay
 separate. A saved report does not prove Menu return; unit tests do not prove
