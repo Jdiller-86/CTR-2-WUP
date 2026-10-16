@@ -1,6 +1,10 @@
 #ifndef CTR_GX2_NATIVE_MOCK_H
 #define CTR_GX2_NATIVE_MOCK_H
 #include <stdint.h>
+#include <stddef.h>
+
+void *ctr_gx2_test_memalign(size_t alignment,size_t bytes);
+void ctr_gx2_test_free(void *bytes);
 #include <stdbool.h>
 /* API model for resource lifetime and byte flow only; it does not emulate a
  * shader, rasterizer, GX2 driver, cache coherency or physical Wii U execution. */
