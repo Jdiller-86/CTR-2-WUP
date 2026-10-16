@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Verify the deployed documentation matches this checkout; retry Pages propagation."""
 import argparse
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 import subprocess
@@ -28,7 +29,7 @@ def fetch(url):
     return data
 
 
-def verify(commit, get=fetch):
+def verify(commit, get=fetch, *, with_project=False):
     provenance = json.loads(get(CANONICAL + 'documentation-provenance.json'))
     if (not isinstance(provenance, dict) or provenance.get('ok') is not True
             or provenance.get('public_repository') != 'Jdiller-86/CTR-2-WUP'
@@ -40,16 +41,37 @@ def verify(commit, get=fetch):
     for route in ('', 'docs/getting-started/'):
         if b'<html' not in get(CANONICAL + route).lower():
             raise VerificationError('article_missing', 'Documentation page is missing', True)
-    return {'ok': True, 'source_commit': commit, 'canonical_url': CANONICAL}
+    result = {'ok': True, 'source_commit': commit, 'canonical_url': CANONICAL}
+    if with_project:
+        if b'Project progress' not in get(CANONICAL + 'progress/'):
+            raise VerificationError('project_page', 'Project graph page is missing', True)
+        project = json.loads(get(CANONICAL + 'progress/progress.json'))
+        if (not isinstance(project, dict) or project.get('schema_version') != 2
+                or project.get('repository') != 'Jdiller-86/CTR-2-WUP'
+                or project.get('project_url') != 'https://github.com/users/Jdiller-86/projects/2'
+                or project.get('state') not in ('available', 'unavailable')
+                or project.get('stale_after_seconds') != 7200):
+            raise VerificationError('project_policy', 'Published Project snapshot identity is invalid')
+        if project.get('source_commit') != commit:
+            raise VerificationError('project_source', 'Published Project snapshot does not match this source commit', True)
+        generated = datetime.fromisoformat(project['generated_at'].replace('Z', '+00:00'))
+        if generated.tzinfo is None:
+            raise VerificationError('project_timestamp', 'Published Project snapshot timestamp lacks a timezone')
+        age = (datetime.now(timezone.utc) - generated).total_seconds()
+        if age < -300:
+            raise VerificationError('project_timestamp', 'Published Project snapshot timestamp is in the future')
+        result.update(project_snapshot_state=project['state'], project_generated_at=project['generated_at'],
+                      project_snapshot_stale=age > project['stale_after_seconds'])
+    return result
 
 
-def verify_until_ready(commit, *, attempts=6, delay=10, get=fetch, wait=time.sleep):
+def verify_until_ready(commit, *, attempts=6, delay=10, get=fetch, wait=time.sleep, with_project=False):
     if not 1 <= attempts <= 12 or not 0 <= delay <= 30:
         raise ValueError('Verification retry budget is outside the supported bounds')
     failures = []
     for attempt in range(1, attempts + 1):
         try:
-            return dict(verify(commit, get), attempts=attempt, retry_failures=failures)
+            return dict(verify(commit, get, with_project=with_project), attempts=attempt, retry_failures=failures)
         except VerificationError as error:
             code, message, retryable = error.code, str(error), error.retryable
         except HTTPError as error:
@@ -69,9 +91,10 @@ def verify_until_ready(commit, *, attempts=6, delay=10, get=fetch, wait=time.sle
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--with-project', action='store_true', help='Verify the online graph; unavailable tracking is permitted')
     args = parser.parse_args()
     commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
-    report = verify_until_ready(commit)
+    report = verify_until_ready(commit, with_project=args.with_project)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report))

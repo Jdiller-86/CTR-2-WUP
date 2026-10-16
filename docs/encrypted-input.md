@@ -4,7 +4,7 @@ CTR2WUP accepts already-decrypted input or supported encrypted containers with
 locally supplied material. Preparation validates recovered bytes before the
 loader/translator; it does not enable unsupported game profiles.
 
-## What is implemented
+## Supported inputs
 
 The shared Python engine supplies **prepare-rom** and **import-rom-keys**.
 They are developer commands; the Windows GUI and on-console extraction helper
@@ -35,7 +35,7 @@ checked before preparation is published. Unsupported layouts fail explicitly;
 commercial asset/runtime integration remains unfinished. A derived CXI is not
 a playable Wii U game or a complete reconstruction of every cartridge/CIA content.
 
-## A key set, rather than one personal master key
+## Key requirements
 
 CIA wrapping and NCCH encryption are different layers. The necessary material
 can include platform KeyX components, a CIA common/title key and a title-specific
@@ -71,7 +71,7 @@ storage. The import output is a key store and must remain on the user's PC;
 **do not upload it**. Only file paths are accepted as key configuration; reports,
 repr and commands never contain key values. Keys are read in-process and are not
 passed to compilers or included in Wii U output. The current private store uses
-local files; Windows protected credential storage is a later GUI requirement.
+local files without Windows credential-store integration.
 
 ```sh
 python -m pip install '.[decryption]'
@@ -90,7 +90,7 @@ ncch_key_x_files, cia_common_key_files, cia_title_key_files and title_seed_files
 map slot/index/title identity to a local **16-byte binary file path**. A decrypted
 input can go directly through prepare-rom without --keys-config.
 
-## Verification and remaining acceptance
+## Verification
 
 Original synthetic fixtures cover all four NCCH methods, seed/no-seed, both CIA
 layers, mixed ExeFS keys, padding, compressed code, Unicode paths, chunk boundaries,
@@ -108,13 +108,12 @@ python3 tools/validate-rom-preparation.py --wiiu \
   --output artifacts/reports/my-encrypted-pipeline
 ```
 
-Binary-format facts were reviewed in GodMode9 commit
+Format references include GodMode9 commit
 f3b9ec7a50b8c8459f62b87bfd7b7214b6f6bda2 (ncch, keydb, ticket, ticketdb and seedsave
-sources) and the existing audited loader sources. No GodMode9 code, bundled key
-database or executable was incorporated. An actual locally exported key set and
-owned encrypted dump, clean Windows execution and broader integrity profiles
-remain acceptance work. PICA, guest audio, retail saves and installable commercial
-WUP conversion remain outside this preparation contract.
+sources) and the pinned loader sources. GodMode9 code, key databases and
+executables are not dependencies. Synthetic fixture coverage does not establish
+compatibility with every exported key set or encrypted dump. PICA, guest audio,
+retail saves and commercial WUP conversion are outside this preparation contract.
 
 Use `prepare-assets` on the recovered CXI to prepare a private checked Level-3
 blob and manifest. Guest filenames remain virtual; no archive filenames are

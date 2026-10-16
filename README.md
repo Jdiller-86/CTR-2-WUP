@@ -12,11 +12,12 @@ diagnostics. Super Mario 3D Land is the first planned compatibility target.
 
 [Documentation](https://jdiller-86.github.io/CTR-2-WUP/) ·
 [Downloads](https://github.com/Jdiller-86/CTR-2-WUP/releases) ·
+[Project graph](https://jdiller-86.github.io/CTR-2-WUP/progress/) ·
 [Development plan](plans.md) ·
 [Issues](https://github.com/Jdiller-86/CTR-2-WUP/issues) ·
 [Contributing](CONTRIBUTING.md)
 
-## What works today
+## Capabilities
 
 - Bounded container inspection, optional local decryption and verified asset preparation.
 - ARM/Thumb/VFP translation foundations and checked guest memory/services.
@@ -24,9 +25,8 @@ diagnostics. Super Mario 3D Land is the first planned compatibility target.
 - GSP/PICA processing, bounded software scenes and CSTM/ADPCM stream mixing.
 - Reproducible RPX/WUHB diagnostics and independently verified original WUP candidates.
 
-See [current limits](docs/compatibility.md) before interpreting a build as game
-support. The native runtime has reviewed Wii U evidence; installed-title and
-new runtime paths have separate acceptance requirements.
+See [compatibility](docs/compatibility.md) for supported inputs, runtime limits
+and hardware validation scope.
 
 ## Use or build
 
@@ -56,7 +56,7 @@ make check
 | `renderer/` | Host graphics preparation |
 | `runtime/core/` | Portable guest CPU, services, graphics and audio |
 | `runtime/wiiu/` | Native Wii U platform and adapters |
-| `tests/` | Original fixtures, references and reviewed hardware evidence |
+| `tests/` | Original fixtures, reference checks and hardware records |
 | `tools/` | Build, validation and package generators |
 | `docs/` | Usage and technical contracts |
 | [plans.md](plans.md) | Next development steps and milestone links |

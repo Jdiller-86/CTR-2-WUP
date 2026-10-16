@@ -70,7 +70,8 @@ the Windows baseline is not evidence that those optional comparisons ran there.
 
 The `CTR2WUP-CIA-Intake` console utility has a separate self-contained
 Windows x64 bundle. It needs no Python/SDK/runtime installation and exports
-private analysis data. See [CIA intake](cia-intake.md) for controls, build pins and build pins. It is separate from the planned injector GUI.
+private analysis data. See [CIA intake](cia-intake.md) for controls and build pins.
+It is separate from the planned injector GUI.
 
 ## Product boundary
 

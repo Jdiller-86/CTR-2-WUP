@@ -2,6 +2,8 @@ name: Publish documentation
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '23 * * * *'
   push:
     branches: [main]
     paths:
@@ -15,6 +17,8 @@ on:
       - 'mkdocs.yml'
       - 'docs-requirements.txt'
       - 'tools/*docs*.py'
+      - 'tools/project.py'
+      - 'tools/project-dashboard.html'
       - '.github/workflows/publish-docs.yml'
 
 permissions:
@@ -53,7 +57,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
-      - name: Build, package and stage checked documentation
+      - name: Build and package checked documentation
         env:
           CTR_SOURCE_COMMIT: ${{ steps.trusted.outputs.sha }}
         run: |
@@ -62,8 +66,20 @@ jobs:
           python -m pip check
           python tools/build-docs-site.py
           python tools/package-docs-site.py
+      - name: Read public Project and issue tracking
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.CTR2WUP_GITHUB_MANAGEMENT_TOKEN || github.token }}
+          CTR_SOURCE_COMMIT: ${{ steps.trusted.outputs.sha }}
+        run: python tools/project.py snapshot --output artifacts/project.json --source-commit "$CTR_SOURCE_COMMIT"
+      - name: Stage documentation and online project graph
+        env:
+          CTR_SOURCE_COMMIT: ${{ steps.trusted.outputs.sha }}
+        run: |
+          set -euo pipefail
           python tools/publish-docs-site.py --input artifacts/docs-publication \
-            --source-commit "$CTR_SOURCE_COMMIT" --stage artifacts/pages-site
+            --source-commit "$CTR_SOURCE_COMMIT" --stage artifacts/pages-site \
+            --project-snapshot artifacts/project.json
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
         with:
           enablement: false
@@ -74,7 +90,7 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
       - name: Verify deployed documentation over HTTP
-        run: python tools/verify-docs-site.py --output artifacts/pages-verification.json
+        run: python tools/verify-docs-site.py --with-project --output artifacts/pages-verification.json
       - name: Retain documentation receipts
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -84,5 +100,6 @@ jobs:
             artifacts/docs-publication/
             artifacts/docs-site/build-report.json
             artifacts/pages-verification.json
+            artifacts/project.json
           retention-days: 14
           if-no-files-found: warn

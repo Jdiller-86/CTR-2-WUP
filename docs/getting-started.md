@@ -11,10 +11,8 @@ packages or a successful [Actions run](https://github.com/Jdiller-86/CTR-2-WUP/a
 for development artifacts. Keep the binaries, source identity and instructions
 from the same package. Check its checksum manifest when supplied.
 
-Begin with the kit's single `START-HERE.md` and the `sd-card/` tree to copy.
-Source, notices and build receipts are supporting material. The short guide
-identifies the app, required environment and result folder. Building a binary
-does not establish a physical-console pass.
+Each package includes `START-HERE.md`, an `sd-card/` deployment tree and source/
+license material. The guide identifies the app, prerequisites and result folder.
 
 ## Copy and launch
 
@@ -31,17 +29,15 @@ Aroma alone does not supply that prerequisite. CTR2WUP does not install or updat
 the console environment.
 
 Diagnostics show their controls on screen. Minus saves the current result and
-requests exit. Preserve existing saves and reports. If a requested test fails,
-return the files already written and describe the last action; a repeated run
-is unnecessary solely to obtain another log. See [troubleshooting](troubleshooting.md).
+requests exit. See [troubleshooting](troubleshooting.md) for launch and storage
+problems.
 
-## Return a requested result
+## Diagnostic reports
 
 Copy the **whole result folder named by the package guide** back over FTP and ZIP
-it. Attach that ZIP to the development conversation or a console-result issue.
-The folder includes the build identity and full diagnostic traces; no PC intake
-command is needed. A written result and successful Menu return are separate
-observations.
+it for attachment to a console-result issue. The folder includes build identity
+and full traces; no PC intake command is needed. Preserve existing saves and
+reports when collecting diagnostics.
 
 ## Build or prepare input locally
 

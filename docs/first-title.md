@@ -13,13 +13,12 @@ private. The source filename's version is not a verified CIA title version.
 The extended-header allowlist declares 27 services including `dsp::DSP` and
 `ldr:ro`; declarations do not prove executed IPC or module loading.
 
-Matching local preparation and asset reports describe 1,756 files in 19 directories
+The reported asset inventory contains 1,756 files in 19 directories
 and a 298,080,796-byte Level-3 RomFS blob: 1,666 `.szs`, 88 `.bcstm`, one `.bcsar`
-and one `.bsm`. Full source/blob integrity is reported local evidence; the complete
-container was not independently transferred. Seven selected payloads total
-15,304,637 bytes and independently match the private manifest and revision binding.
-These samples are sufficient for their stated structural findings; no repeat
-upload is needed.
+and one `.bsm`. Full source/blob integrity is recorded by local preparation
+reports. Structural analysis covers seven selected payloads totaling 15,304,637
+bytes, verified against the private manifest and executable revision. These
+findings apply to the selected resources, not the complete container.
 
 ## Resource findings
 

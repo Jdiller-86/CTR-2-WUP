@@ -1,8 +1,8 @@
 # Documentation
 
-CTR2WUP is developing a Windows injector that converts a supported, owned 3DS
-game into a per-game Wii U WUP. Current builds provide original diagnostics and
-developer tools. Commercial game conversion and the injector GUI are unfinished.
+CTR2WUP is an experimental 3DS-to-Wii U static recompilation project. Current
+builds provide original diagnostics and developer tools; commercial game
+conversion and the Windows injector GUI are unavailable.
 
 ## Use the tools
 
@@ -13,16 +13,17 @@ developer tools. Commercial game conversion and the injector GUI are unfinished.
 - [Packaging](packaging.md): staging, WUP construction and verification.
 - [Troubleshooting](troubleshooting.md): build, storage and launch problems.
 
-Each diagnostic package includes its own short instructions. Follow those
-instructions for that package; the documentation describes stable usage and
-technical interfaces.
+Diagnostic packages include deployment instructions and result-folder details.
 
 ## Develop
 
 Start with [Contributing](../CONTRIBUTING.md), [Windows builds](build-windows.md)
 and [Testing](testing.md). [Architecture](architecture.md) maps the source and
-execution pipeline. The root [plans.md](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/plans.md)
-contains current development priorities; GitHub issues hold work discussions.
+execution pipeline.
+
+[Project graph](https://jdiller-86.github.io/CTR-2-WUP/progress/) ·
+[Issues](https://github.com/Jdiller-86/CTR-2-WUP/issues) ·
+[Development plan](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/plans.md)
 
 The runtime references describe [CPU execution](cpu.md), [memory](guest-memory.md),
 [services and input](services.md), [display and transfers](graphics-transport.md),

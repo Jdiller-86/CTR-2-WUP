@@ -6,8 +6,8 @@ source map. Read the affected technical contract in `docs/` before changing it.
 - Build the shared execution/conversion engine toward a playable per-game WUP;
   the Windows GUI follows a working pipeline. Original diagnostics prove only
   their exercised behavior.
-- Use focused branches and PRs. Run relevant tests; implementation changes need
-  `make check` and, when native code/build inputs change, `make prototype`.
+- Use focused branches and PRs. Run relevant tests; runtime changes need
+  `make check` and native code/build changes also need `make prototype`.
   Documentation changes need the strict docs build. Keep sanitizer, signature,
   checksum and TLS checks enabled.
 - Guest ARM memory is little-endian; Wii U PowerPC is big-endian. Use checked
@@ -19,9 +19,12 @@ source map. Read the affected technical contract in `docs/` before changing it.
   to retest. Request hardware work only for a specific changed path or unresolved
   criterion; explain why existing evidence cannot answer it. Put one short guide
   in the generated package and accept one FTP return folder.
-- Update only documentation affected by behavior. `plans.md` holds the current
-  implementation sequence; native GitHub issues/milestones hold work history.
-  Do not add status mirrors, feature catalogs, per-version test pages or process
-  reports. Git history retains removed material.
+- Keep README and documentation concise, factual and professional: purpose,
+  usage and technical contracts. Exclude prompts, personal work history and
+  progress discussion. User-facing instructions fit a few short paragraphs.
+- Keep detailed scope, acceptance criteria, dependencies, evidence and progress
+  in native issues and the Project. `plans.md` identifies the next implementation
+  priorities; the dynamic graph reads live tracking data. Do not duplicate it in
+  editable status catalogs or per-version documentation.
 - Use `git codex-commit` for Codex attribution. Merge tested changes, verify
   publication when affected, and remove completed topic branches.

@@ -65,7 +65,7 @@ class DocsPackageTests(unittest.TestCase):
             for line in archive.read('SHA256SUMS.txt').decode().splitlines():
                 expected,name=line.split('  ',1)
                 self.assertEqual(DOCS.digest(archive.read(name)),expected)
-            self.assertIn(b'no premium plan',archive.read('README.md'))
+            self.assertIn(('site/'+result['standalone_html']).encode(),archive.read('README.md'))
         receipt=json.loads((self.options.output/'publication-report.json').read_text())
         self.assertTrue(receipt['archive_contains_documentation_only'])
         for row in receipt['artifacts']:
@@ -81,6 +81,18 @@ class DocsPackageTests(unittest.TestCase):
         self.assertNotIn('<svg', reader)
         self.assertNotIn('https://github.com/users/Jdiller-86/projects/2', reader)
         self.assertFalse(result['external_runtime_dependencies'])
+
+    def test_live_graph_link_stays_online_without_entering_offline_reader(self):
+        graph_url = SITE_URL + 'progress/'
+        self.page('index.html', '<h1>Windows GUI</h1><h2 id="shared">Overview</h2><a href="' + graph_url + '">Project graph</a>')
+        result = DOCS.package(self.options)
+        reader = (self.options.output / result['standalone_html']).read_text()
+        self.assertIn('href="' + graph_url + '"', reader)
+        self.assertNotIn('fetch(', reader.replace(DOCS.SCRIPT, ''))
+        with zipfile.ZipFile(self.options.output / result['public_bundle']) as archive:
+            self.assertFalse(any(name.startswith('site/progress/') for name in archive.namelist()))
+        with self.assertRaises(ValueError):
+            DOCS.local_target(self.site, self.site / 'index.html', SITE_URL + 'missing/', SITE_URL)
 
     def test_missing_page_or_fragment_is_rejected(self):
         for href in ['missing/','#missing']:

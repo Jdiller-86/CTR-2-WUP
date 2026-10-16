@@ -1,0 +1,1181 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="referrer" content="no-referrer" />
+  <title>CTR2WUP project progress</title>
+  <style>
+    :root {
+      font:
+        15px/1.55 system-ui,
+        sans-serif;
+      color: #202b36;
+      background: #f4f7fa;
+      --panel: #fff;
+      --border: #d8e0e8;
+      --muted: #576573;
+      --link: #0969da;
+      --edge: #b7c4d0;
+      --planned: #657a91;
+      --progress: #0969da;
+      --waiting: #a36a00;
+      --blocked: #c74343;
+      --done: #208555;
+      --accepted: #7e42bc;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      max-width: 1460px;
+      margin: auto;
+      padding: clamp(16px, 3vw, 38px);
+    }
+    a {
+      color: var(--link);
+    }
+    h1 {
+      font-size: clamp(1.9rem, 4vw, 2.7rem);
+      line-height: 1.2;
+      margin: 8px 0;
+    }
+    h2 {
+      font-size: 1.25rem;
+      margin: 0 0 12px;
+    }
+    p {
+      margin: 8px 0;
+    }
+    .eyebrow,
+    .muted {
+      color: var(--muted);
+    }
+    .eyebrow {
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-size: 0.8rem;
+    }
+    header nav {
+      margin: 16px 0 24px;
+      display: flex;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+    .intro {
+      max-width: 850px;
+    }
+    .notice {
+      padding: 12px 16px;
+      border-left: 4px solid var(--progress);
+      background: color-mix(in srgb, var(--progress) 9%, var(--panel));
+      border-radius: 4px;
+    }
+    .warning {
+      border-color: var(--waiting);
+      background: color-mix(in srgb, var(--waiting) 10%, var(--panel));
+    }
+    .metrics {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin: 20px 0;
+    }
+    .metric {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 20px;
+      min-width: 150px;
+    }
+    .metric strong {
+      font-size: 1.65rem;
+      display: block;
+    }
+    .metric span {
+      color: var(--muted);
+    }
+    button,
+    select,
+    input {
+      font: inherit;
+      color: inherit;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 7px 10px;
+    }
+    button {
+      cursor: pointer;
+    }
+    button:disabled {
+      cursor: wait;
+      opacity: 0.6;
+    }
+    input {
+      min-width: 180px;
+      flex: 1;
+    }
+    button:focus-visible,
+    select:focus-visible,
+    input:focus-visible,
+    a:focus-visible,
+    summary:focus-visible {
+      outline: 3px solid var(--link);
+      outline-offset: 3px;
+    }
+    .controls {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin: 16px 0;
+    }
+    .controls label {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .controls .search {
+      flex: 1;
+      min-width: 220px;
+    }
+    .controls .check input {
+      min-width: 0;
+      flex: none;
+    }
+    .graph-wrap {
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: var(--panel);
+      max-height: 690px;
+    }
+    .graph-wrap svg {
+      display: block;
+      min-width: 100%;
+      width: 100%;
+      height: auto;
+    }
+    .graph-node {
+      cursor: pointer;
+    }
+    .graph-node rect {
+      fill: var(--panel);
+      stroke: var(--border);
+      stroke-width: 1.5;
+    }
+    .graph-node:hover rect,
+    .graph-node:focus rect,
+    .graph-node.selected rect {
+      stroke: var(--link);
+      stroke-width: 2.5;
+    }
+    .graph-node text {
+      fill: currentColor;
+      font-size: 13px;
+    }
+    .graph-node .sub {
+      fill: var(--muted);
+      font-size: 11px;
+    }
+    .graph-node .gate {
+      font-weight: 700;
+      font-size: 14px;
+    }
+    .graph-node .stripe {
+      fill: var(--node-color);
+      stroke: none;
+    }
+    .edge {
+      fill: none;
+      stroke: var(--edge);
+      stroke-width: 1.5;
+    }
+    .block-edge {
+      stroke: var(--blocked);
+      stroke-dasharray: 5 4;
+      stroke-width: 2;
+    }
+    .legend {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin: 12px 0 20px;
+    }
+    .legend span {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .line {
+      width: 25px;
+      border-top: 2px solid var(--edge);
+    }
+    .line.block {
+      border-color: var(--blocked);
+      border-top-style: dashed;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(260px, 350px);
+      gap: 20px;
+      margin-top: 22px;
+      align-items: start;
+    }
+    .panel {
+      padding: 20px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 9px;
+    }
+    .issue-list {
+      display: grid;
+      gap: 10px;
+    }
+    .issue {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 5px 14px;
+      border-bottom: 1px solid var(--border);
+      padding: 10px 0;
+    }
+    .issue:last-child {
+      border: 0;
+    }
+    .issue a {
+      font-weight: 600;
+    }
+    .issue .context {
+      font-size: 0.85rem;
+      color: var(--muted);
+      grid-column: 1/-1;
+    }
+    .pill {
+      font-size: 0.8rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .details {
+      position: sticky;
+      top: 20px;
+    }
+    .details p {
+      margin: 12px 0;
+    }
+    .details ul {
+      padding-left: 20px;
+    }
+    .details li {
+      margin: 6px 0;
+    }
+    .tags {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .tag {
+      font-size: 0.75rem;
+      background: color-mix(in srgb, var(--planned) 10%, var(--panel));
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 2px 6px;
+    }
+    footer {
+      margin-top: 28px;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    [hidden] {
+      display: none !important;
+    }
+    @media (max-width: 999px) {
+      .graph-wrap svg {
+        width: var(--graph-width);
+      }
+    }
+    @media (max-width: 760px) {
+      .details {
+        position: static;
+        grid-row: 1;
+      }
+      .layout > section {
+        grid-row: 2;
+      }
+      .layout {
+        grid-template-columns: 1fr;
+      }
+      .issue {
+        grid-template-columns: 1fr;
+      }
+      .controls label {
+        flex-wrap: wrap;
+      }
+      .metric {
+        min-width: 130px;
+      }
+      .graph-wrap {
+        max-height: 520px;
+      }
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        color: #e6edf3;
+        background: #0d1117;
+        --panel: #161b22;
+        --border: #384454;
+        --muted: #aab8c6;
+        --link: #79c0ff;
+        --edge: #48596a;
+        --planned: #8599b0;
+        --progress: #58a6ff;
+        --waiting: #d6a641;
+        --blocked: #f08181;
+        --done: #56b782;
+        --accepted: #bc8ff0;
+      }
+    }
+  </style>
+  <body>
+    <header>
+      <p class="eyebrow">CTR2WUP development</p>
+      <h1>Project progress</h1>
+      <p class="intro">
+        Seven milestone gates track the execution engine, Wii U platform, game
+        compatibility and packaging pipeline. Select a gate or task to inspect
+        its scope, dependencies and evidence.
+      </p>
+      <nav aria-label="Project links">
+        <a href="../">Documentation</a
+        ><a href="https://github.com/users/Jdiller-86/projects/2"
+          >GitHub Project</a
+        ><a href="https://github.com/Jdiller-86/CTR-2-WUP/issues">Issues</a
+        ><a href="progress.json">Snapshot JSON</a>
+      </nav>
+    </header>
+    <main>
+      <p id="message" class="notice" role="status" aria-live="polite">
+        Loading the latest published Project snapshot…
+      </p>
+      <p id="timestamp" class="muted"></p>
+      <div
+        id="metrics"
+        class="metrics"
+        aria-label="Project totals"
+        hidden
+      ></div>
+      <div class="controls">
+        <button id="refresh" type="button">Refresh</button
+        ><label for="milestone"
+          >Milestone
+          <select id="milestone">
+            <option value="all">All milestones</option>
+          </select></label
+        ><label for="status"
+          >Status
+          <select id="status">
+            <option value="all">All statuses</option>
+          </select></label
+        ><label for="type"
+          >Work
+          <select id="type">
+            <option value="all">All work</option>
+            <option value="Task">Core tasks</option>
+            <option value="Feature">Features</option>
+          </select></label
+        ><label class="search" for="search"
+          >Search
+          <input
+            id="search"
+            type="search"
+            placeholder="Title, issue number or label"
+            maxlength="120" /></label
+        ><label class="check"
+          ><input id="closed" type="checkbox" />Show completed</label
+        ><button id="reset" type="button">Reset filters</button>
+      </div>
+      <section id="content" hidden>
+        <div
+          class="graph-wrap"
+          tabindex="0"
+          role="region"
+          aria-label="Milestone and task graph; scroll to explore"
+        >
+          <svg
+            id="graph"
+            xmlns="http://www.w3.org/2000/svg"
+            role="img"
+            aria-label="Project milestone and task graph"
+          ></svg>
+        </div>
+        <div class="legend" aria-label="Graph legend">
+          <span
+            ><i class="dot" style="background: var(--progress)"></i>In
+            progress</span
+          ><span
+            ><i class="dot" style="background: var(--waiting)"></i>Awaiting
+            evidence</span
+          ><span
+            ><i class="dot" style="background: var(--blocked)"></i>Blocked</span
+          ><span><i class="dot" style="background: var(--done)"></i>Done</span
+          ><span><i class="line"></i>Milestone / parent</span
+          ><span><i class="line block"></i>Blocked by</span>
+        </div>
+        <div class="layout">
+          <section class="panel">
+            <h2 id="list-title">Work items</h2>
+            <p id="empty" class="muted" hidden>
+              No work items match these filters.
+            </p>
+            <div id="issues" class="issue-list"></div>
+          </section>
+          <aside id="details" class="panel details" aria-live="polite">
+            <h2>Task details</h2>
+            <p class="muted">
+              Select a graph node to inspect its acceptance criteria and
+              evidence.
+            </p>
+          </aside>
+        </div>
+        <p class="muted">
+          Task completion counts reflect issue tracking. A milestone is complete
+          only when its gate is explicitly accepted; counts do not establish
+          game compatibility.
+        </p>
+      </section>
+      <noscript
+        ><p class="notice">
+          Open the
+          <a href="https://github.com/users/Jdiller-86/projects/2"
+            >GitHub Project</a
+          >
+          or <a href="progress.json">snapshot JSON</a> for milestone and issue
+          details.
+        </p></noscript
+      >
+    </main>
+    <footer>
+      GitHub issues and Project fields are the source of truth. Snapshots
+      refresh hourly and on documentation publication; this page checks for
+      updates each minute. Snapshots older than two hours are marked stale.
+    </footer>
+    <script>
+      "use strict";
+      const PROJECT = "https://github.com/users/Jdiller-86/projects/2",
+        REPO = "Jdiller-86/CTR-2-WUP";
+      const STATUSES = [
+        "Planned",
+        "In progress",
+        "Awaiting evidence",
+        "Blocked",
+        "Ready for review",
+        "Done",
+        "Closed",
+        "Accepted",
+        "Unassigned",
+        "Other",
+      ];
+      const SVG = "http://www.w3.org/2000/svg",
+        el = (id) => document.getElementById(id);
+      let snapshot = null,
+        loading = false,
+        refreshFailed = false,
+        selected = null;
+      function element(tag, text, cls) {
+        const n = document.createElement(tag);
+        if (text !== undefined) n.textContent = text;
+        if (cls) n.className = cls;
+        return n;
+      }
+      function svg(tag, attributes = {}, text) {
+        const n = document.createElementNS(SVG, tag);
+        for (const [key, value] of Object.entries(attributes))
+          n.setAttribute(key, String(value));
+        if (text !== undefined) n.textContent = text;
+        return n;
+      }
+      function integer(value, max = 1000000) {
+        if (!Number.isSafeInteger(value) || value < 0 || value > max)
+          throw Error("Invalid number");
+        return value;
+      }
+      function text(value, max = 1000) {
+        if (typeof value !== "string" || value.length > max)
+          throw Error("Invalid text");
+        return value;
+      }
+      function safeURL(value) {
+        const url = new URL(text(value, 2000));
+        if (
+          url.protocol !== "https:" ||
+          !["github.com", "jdiller-86.github.io"].includes(url.hostname) ||
+          url.username ||
+          url.password
+        )
+          throw Error("Invalid public link");
+        return url.href;
+      }
+      function validStatus(value) {
+        if (!STATUSES.includes(value)) throw Error("Invalid status");
+      }
+      function validate(data) {
+        if (
+          !data ||
+          data.schema_version !== 2 ||
+          data.project_url !== PROJECT ||
+          data.repository !== REPO ||
+          !["available", "unavailable"].includes(data.state) ||
+          !/^[0-9a-f]{40}$/.test(data.source_commit) ||
+          data.stale_after_seconds !== 7200
+        )
+          throw Error("Invalid snapshot identity");
+        const generated = Date.parse(data.generated_at);
+        if (!Number.isFinite(generated) || generated > Date.now() + 300000)
+          throw Error("Invalid timestamp");
+        if (data.state === "unavailable") return data;
+        if (
+          !Array.isArray(data.milestones) ||
+          data.milestones.length !== 7 ||
+          !Array.isArray(data.items) ||
+          data.items.length > 2000
+        )
+          throw Error("Invalid project");
+        const ids = new Set();
+        for (const m of data.milestones) {
+          integer(m.number, 7);
+          if (m.number === 0 || ids.has(m.number))
+            throw Error("Invalid milestone");
+          ids.add(m.number);
+          text(m.title, 180);
+          safeURL(m.url);
+          validStatus(m.status);
+          if (
+            typeof m.accepted !== "boolean" ||
+            (m.accepted && m.status !== "Accepted")
+          )
+            throw Error("Invalid gate acceptance");
+        }
+        const issueIds = new Set();
+        for (const i of data.items) {
+          integer(i.number);
+          if (i.number === 0 || issueIds.has(i.number))
+            throw Error("Invalid issue");
+          issueIds.add(i.number);
+          text(i.title, 300);
+          if (i.url !== "https://github.com/" + REPO + "/issues/" + i.number)
+            throw Error("Invalid issue link");
+          validStatus(i.status);
+          if (
+            !["OPEN", "CLOSED"].includes(i.state) ||
+            (i.milestone !== null && !ids.has(i.milestone))
+          )
+            throw Error("Invalid issue scope");
+          if (i.parent !== null) integer(i.parent);
+          if (!Array.isArray(i.labels) || i.labels.length > 100)
+            throw Error("Invalid labels");
+          i.labels.forEach((l) => text(l, 100));
+          if (!Array.isArray(i.blocked_by) || i.blocked_by.length > 1000)
+            throw Error("Invalid dependencies");
+          i.blocked_by.forEach((n) => integer(n));
+          if (i.summary !== undefined) text(i.summary, 3000);
+          if (i.acceptance) {
+            integer(i.acceptance.done, 10000);
+            integer(i.acceptance.total, 10000);
+            if (i.acceptance.done > i.acceptance.total)
+              throw Error("Invalid acceptance counts");
+          }
+          if (i.evidence) {
+            if (!Array.isArray(i.evidence) || i.evidence.length > 100)
+              throw Error("Invalid evidence");
+            for (const e of i.evidence) {
+              text(e.text, 300);
+              safeURL(e.url);
+            }
+          }
+        }
+        return data;
+      }
+      function color(status) {
+        return (
+          {
+            "In progress": "progress",
+            "Awaiting evidence": "waiting",
+            Blocked: "blocked",
+            Done: "done",
+            Closed: "done",
+            Accepted: "accepted",
+          }[status] || "planned"
+        );
+      }
+      function statusPill(status) {
+        const n = element("span", status, "pill");
+        n.style.color = "var(--" + color(status) + ")";
+        return n;
+      }
+      function link(title, url) {
+        const a = element("a", title);
+        a.href = safeURL(url);
+        return a;
+      }
+      function workItems() {
+        return snapshot.items.filter(
+          (i) => i.number > 7 && i.work_type !== "Milestone",
+        );
+      }
+      function visibleItems() {
+        const query = el("search").value.trim().toLowerCase();
+        return workItems().filter(
+          (i) =>
+            (el("type").value === "all" || i.work_type === el("type").value) &&
+            (el("milestone").value === "all" ||
+              String(i.milestone) === el("milestone").value) &&
+            (el("status").value === "all" || i.status === el("status").value) &&
+            (el("closed").checked || i.state !== "CLOSED") &&
+            (!query ||
+              [i.title, String(i.number), ...i.labels]
+                .join(" ")
+                .toLowerCase()
+                .includes(query)),
+        );
+      }
+      function wrapTitle(value, width = 27, lines = 2) {
+        const words = value.split(/\s+/),
+          out = [];
+        let line = "";
+        for (const word of words) {
+          if (line && line.length + word.length + 1 > width) {
+            out.push(line);
+            line = word;
+          } else line += (line ? " " : "") + word;
+        }
+        if (line) out.push(line);
+        if (out.length > lines) {
+          out.length = lines;
+          out[lines - 1] = out[lines - 1].slice(0, width - 1) + "…";
+        }
+        return out;
+      }
+      function activate(kind, id) {
+        selected = { kind, id };
+        renderGraph(visibleItems());
+        renderDetails();
+        if (window.innerWidth < 760)
+          el("details").scrollIntoView({
+            behavior: "smooth",
+            block: "nearest",
+          });
+      }
+      function graphNode(
+        kind,
+        id,
+        x,
+        y,
+        width,
+        height,
+        title,
+        subtitle,
+        status,
+      ) {
+        const group = svg("g", {
+          class:
+            "graph-node" +
+            (selected && selected.kind === kind && selected.id === id
+              ? " selected"
+              : ""),
+          transform: `translate(${x} ${y})`,
+          style: "--node-color:var(--" + color(status) + ")",
+          tabindex: "0",
+          role: "button",
+          "aria-label": title + "; " + status,
+        });
+        group.append(
+          svg("title", {}, title + " · " + subtitle),
+          svg("rect", { width, height, rx: 7 }),
+          svg("rect", {
+            width: 4,
+            height,
+            rx: 2,
+            class: "stripe",
+            fill: "var(--" + color(status) + ")",
+          }),
+        );
+        const lines = wrapTitle(title, kind === "milestone" ? 25 : 27, 2);
+        lines.forEach((line, index) =>
+          group.append(
+            svg(
+              "text",
+              {
+                x: 13,
+                y: 23 + index * 17,
+                class: kind === "milestone" ? "gate" : "",
+              },
+              line,
+            ),
+          ),
+        );
+        group.append(
+          svg("text", { x: 13, y: height - 11, class: "sub" }, subtitle),
+        );
+        group.addEventListener("click", () => activate(kind, id));
+        group.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            activate(kind, id);
+          }
+        });
+        return group;
+      }
+      function renderGraph(items) {
+        const graph = el("graph");
+        graph.replaceChildren();
+        const chosen = el("milestone").value;
+        const milestones = snapshot.milestones.filter(
+          (m) => chosen === "all" || String(m.number) === chosen,
+        );
+        const unassigned = items.filter((i) => i.milestone === null);
+        const columns = milestones.map((m) => ({
+          milestone: m,
+          items: items.filter((i) => i.milestone === m.number),
+        }));
+        if (unassigned.length)
+          columns.push({ milestone: null, items: unassigned });
+        const width = Math.max(1, columns.length) * 238 + 24,
+          height = Math.max(
+            240,
+            Math.max(0, ...columns.map((c) => c.items.length)) * 94 + 130,
+          );
+        graph.setAttribute("viewBox", `0 0 ${width} ${height}`);
+        graph.setAttribute("width", width);
+        graph.setAttribute("height", height);
+        graph.style.setProperty("--graph-width", width + "px");
+        const defs = svg("defs"),
+          marker = svg("marker", {
+            id: "blocked-arrow",
+            viewBox: "0 0 10 10",
+            refX: 9,
+            refY: 5,
+            markerWidth: 5,
+            markerHeight: 5,
+            orient: "auto-start-reverse",
+          });
+        marker.append(
+          svg("path", { d: "M 0 0 L 10 5 L 0 10 z", fill: "var(--blocked)" }),
+        );
+        defs.append(marker);
+        graph.append(defs);
+        const edges = svg("g", { "aria-hidden": "true" }),
+          nodes = svg("g");
+        graph.append(edges, nodes);
+        const positions = new Map();
+        columns.forEach((column, col) => {
+          const x = col * 238 + 18,
+            m = column.milestone;
+          if (m) {
+            positions.set(m.number, { x, y: 18, w: 214, h: 82 });
+            nodes.append(
+              graphNode(
+                "milestone",
+                m.number,
+                x,
+                18,
+                214,
+                82,
+                m.title,
+                m.accepted
+                  ? "Accepted"
+                  : m.status === "Accepted"
+                    ? "Awaiting gate closure"
+                    : m.status,
+                m.status,
+              ),
+            );
+          } else
+            nodes.append(
+              svg(
+                "text",
+                { x: x + 12, y: 54, class: "gate" },
+                "Unassigned work",
+              ),
+            );
+          column.items
+            .sort((a, b) => a.number - b.number)
+            .forEach((item, row) => {
+              const y = 130 + row * 94;
+              positions.set(item.number, { x, y, w: 214, h: 78 });
+              nodes.append(
+                graphNode(
+                  "issue",
+                  item.number,
+                  x,
+                  y,
+                  214,
+                  78,
+                  item.title,
+                  "#" + item.number + " · " + item.status,
+                  item.status,
+                ),
+              );
+            });
+        });
+        for (const item of items) {
+          const p = positions.get(item.number);
+          let parent = item.parent && positions.get(item.parent);
+          if (parent) {
+            const left = p.x === parent.x;
+            edges.append(
+              svg("path", {
+                d: left
+                  ? `M${parent.x + 214} ${parent.y + 39} C${parent.x + 232} ${parent.y + 39},${p.x + 232} ${p.y + 39},${p.x + 214} ${p.y + 39}`
+                  : `M${parent.x + 107} ${parent.y + 78} C${parent.x + 107} ${p.y - 16},${p.x + 107} ${parent.y + 94},${p.x + 107} ${p.y}`,
+                class: "edge",
+              }),
+            );
+          } else if (item.milestone !== null)
+            edges.append(
+              svg("path", {
+                d: `M${p.x + 107} 100 L${p.x + 107} 116 L${p.x - 7} 116 L${p.x - 7} ${p.y + 39} L${p.x} ${p.y + 39}`,
+                class: "edge",
+              }),
+            );
+        }
+        for (const item of [
+          ...items,
+          ...snapshot.items.filter((i) => i.number <= 7),
+        ]) {
+          const p = positions.get(item.number);
+          if (!p) continue;
+          for (const blocker of item.blocked_by) {
+            const b = positions.get(blocker);
+            if (!b) continue;
+            const same = b.x === p.x;
+            edges.append(
+              svg("path", {
+                d: same
+                  ? `M${b.x} ${b.y + 39} C${b.x - 16} ${b.y + 39},${p.x - 16} ${p.y + 39},${p.x} ${p.y + 39}`
+                  : `M${b.x + 107} ${b.y + 78} C${b.x + 107} ${b.y + 100},${p.x + 107} ${p.y - 24},${p.x + 107} ${p.y}`,
+                class: "edge block-edge",
+                "marker-end": "url(#blocked-arrow)",
+              }),
+            );
+          }
+        }
+      }
+      function renderDetails() {
+        const panel = el("details");
+        panel.replaceChildren();
+        if (!selected) {
+          panel.append(
+            element("h2", "Task details"),
+            element(
+              "p",
+              "Select a graph node to inspect its acceptance criteria and evidence.",
+              "muted",
+            ),
+          );
+          return;
+        }
+        if (selected.kind === "milestone") {
+          const m = snapshot.milestones.find((x) => x.number === selected.id);
+          if (!m) return;
+          panel.append(
+            element("h2", m.title),
+            statusPill(m.status),
+            element(
+              "p",
+              m.accepted
+                ? "Full milestone gate accepted."
+                : "Full milestone gate remains open.",
+            ),
+            link("Open milestone gate", m.url),
+          );
+          const scoped = workItems().filter((i) => i.milestone === m.number),
+            gate = snapshot.items.find((i) => i.number === m.number);
+          panel.append(
+            element(
+              "p",
+              scoped.filter((i) => i.state === "CLOSED").length +
+                " of " +
+                scoped.length +
+                " tracked issues closed.",
+              "muted",
+            ),
+          );
+          if (gate && gate.acceptance && gate.acceptance.total)
+            panel.append(
+              element(
+                "p",
+                "Gate criteria: " +
+                  gate.acceptance.done +
+                  " / " +
+                  gate.acceptance.total +
+                  " checked.",
+              ),
+            );
+          if (gate && gate.summary) panel.append(element("p", gate.summary));
+          if (gate && gate.blocked_by.length) {
+            panel.append(element("p", "Blocked by"));
+            const list = element("ul");
+            for (const number of gate.blocked_by) {
+              const li = element("li");
+              li.append(
+                link(
+                  "#" + number,
+                  "https://github.com/" + REPO + "/issues/" + number,
+                ),
+              );
+              list.append(li);
+            }
+            panel.append(list);
+          }
+          return;
+        }
+        const item = snapshot.items.find((i) => i.number === selected.id);
+        if (!item) return;
+        panel.append(
+          element("h2", "#" + item.number + " · " + item.title),
+          statusPill(item.status),
+        );
+        if (item.summary) panel.append(element("p", item.summary));
+        if (item.acceptance && item.acceptance.total)
+          panel.append(
+            element(
+              "p",
+              "Acceptance criteria: " +
+                item.acceptance.done +
+                " / " +
+                item.acceptance.total +
+                " checked.",
+            ),
+          );
+        if (item.waiting && item.waiting.length)
+          panel.append(
+            element("p", "Waiting resource: " + item.waiting.join(", ")),
+          );
+        if (item.parent)
+          panel.append(
+            element("p", "Parent: "),
+            link(
+              "#" + item.parent,
+              "https://github.com/" + REPO + "/issues/" + item.parent,
+            ),
+          );
+        if (item.blocked_by.length) {
+          panel.append(element("p", "Blocked by"));
+          const list = element("ul");
+          for (const number of item.blocked_by) {
+            const entry = element("li"),
+              other = snapshot.items.find((i) => i.number === number);
+            entry.append(
+              link(
+                "#" + number + (other ? " · " + other.title : ""),
+                "https://github.com/" + REPO + "/issues/" + number,
+              ),
+            );
+            list.append(entry);
+          }
+          panel.append(list);
+        }
+        if (item.evidence && item.evidence.length) {
+          panel.append(element("p", "Evidence"));
+          const list = element("ul");
+          for (const evidence of item.evidence) {
+            const entry = element("li");
+            entry.append(link(evidence.text, evidence.url));
+            list.append(entry);
+          }
+          panel.append(list);
+        }
+        if (item.labels.length) {
+          const tags = element("p", undefined, "tags");
+          item.labels.forEach((label) =>
+            tags.append(element("span", label, "tag")),
+          );
+          panel.append(tags);
+        }
+        panel.append(
+          element("p"),
+          link("Open issue and full acceptance criteria", item.url),
+        );
+      }
+      function renderItems(items) {
+        const list = el("issues");
+        list.replaceChildren();
+        el("list-title").textContent = "Work items · " + items.length;
+        el("empty").hidden = items.length !== 0;
+        for (const item of items) {
+          const card = element("article", undefined, "issue");
+          const a = link("#" + item.number + " · " + item.title, item.url);
+          card.append(a, statusPill(item.status));
+          const context = [];
+          if (item.milestone !== null) context.push("M" + item.milestone);
+          if (item.work_type) context.push(item.work_type);
+          if (item.archived) context.push("Archived");
+          if (item.waiting && item.waiting.length)
+            context.push(item.waiting.join(", "));
+          if (item.parent) context.push("Parent #" + item.parent);
+          if (item.blocked_by.length)
+            context.push(
+              "Blocked by " + item.blocked_by.map((n) => "#" + n).join(", "),
+            );
+          if (item.acceptance && item.acceptance.total)
+            context.push(
+              item.acceptance.done + "/" + item.acceptance.total + " criteria",
+            );
+          card.append(element("span", context.join(" · "), "context"));
+          const inspect = element("button", "Inspect");
+          inspect.type = "button";
+          inspect.addEventListener("click", () =>
+            activate("issue", item.number),
+          );
+          card.append(inspect);
+          list.append(card);
+        }
+      }
+      function render() {
+        if (!snapshot) return;
+        const data = snapshot,
+          age = Math.max(
+            0,
+            (Date.now() - Date.parse(data.generated_at)) / 1000,
+          );
+        el("timestamp").textContent =
+          "Snapshot: " +
+          new Date(data.generated_at).toLocaleString() +
+          " · " +
+          Math.floor(age / 60) +
+          " minutes old · Source " +
+          data.source_commit.slice(0, 12);
+        el("message").className = "notice";
+        el("metrics").hidden = el("content").hidden =
+          data.state !== "available";
+        if (data.state !== "available") {
+          el("message").classList.add("warning");
+          el("message").textContent =
+            "Project data is unavailable. Documentation remains available; open GitHub for current tracking.";
+          return;
+        }
+        if (refreshFailed || age > data.stale_after_seconds) {
+          el("message").classList.add("warning");
+          el("message").textContent =
+            (refreshFailed ? "Refresh failed. " : "") +
+            (age > data.stale_after_seconds ? "This snapshot is stale. " : "") +
+            "The displayed data is the last loaded snapshot; GitHub has the current status.";
+        } else
+          el("message").textContent =
+            "Published snapshot of live GitHub Project fields and issue relationships.";
+        el("metrics").replaceChildren();
+        for (const [label, value] of [
+          [
+            "Milestones accepted",
+            data.milestones.filter((m) => m.accepted).length + " / 7",
+          ],
+          [
+            "Open work items",
+            workItems().filter((i) => i.state === "OPEN").length,
+          ],
+          [
+            "Awaiting evidence",
+            workItems().filter(
+              (i) => i.status === "Awaiting evidence" && i.state === "OPEN",
+            ).length,
+          ],
+          [
+            "Blocked",
+            workItems().filter(
+              (i) => i.status === "Blocked" && i.state === "OPEN",
+            ).length,
+          ],
+        ]) {
+          const metric = element("div", undefined, "metric");
+          metric.append(
+            element("strong", String(value)),
+            element("span", label),
+          );
+          el("metrics").append(metric);
+        }
+        const items = visibleItems();
+        renderGraph(items);
+        renderItems(items);
+        renderDetails();
+      }
+      function configureFilters() {
+        const current = el("milestone").value;
+        el("milestone").replaceChildren();
+        const all = element("option", "All milestones");
+        all.value = "all";
+        el("milestone").append(all);
+        for (const m of snapshot.milestones) {
+          const option = element("option", m.title);
+          option.value = String(m.number);
+          el("milestone").append(option);
+        }
+        el("milestone").value = current;
+        if (!el("milestone").value) el("milestone").value = "all";
+      }
+      async function refresh() {
+        if (loading) return;
+        loading = true;
+        el("refresh").disabled = true;
+        const controller = new AbortController(),
+          timer = setTimeout(() => controller.abort(), 12000);
+        try {
+          const response = await fetch("./progress.json?t=" + Date.now(), {
+            cache: "no-store",
+            credentials: "omit",
+            signal: controller.signal,
+          });
+          if (!response.ok) throw Error("Snapshot request failed");
+          snapshot = validate(await response.json());
+          refreshFailed = false;
+          if (snapshot.state === "available") configureFilters();
+          render();
+        } catch (error) {
+          refreshFailed = true;
+          if (snapshot) render();
+          else {
+            el("message").className = "notice warning";
+            el("message").textContent =
+              "Project data could not be loaded. Open GitHub for current milestone and issue tracking.";
+          }
+        } finally {
+          clearTimeout(timer);
+          loading = false;
+          el("refresh").disabled = false;
+        }
+      }
+      for (const status of STATUSES) {
+        const option = element("option", status);
+        option.value = status;
+        el("status").append(option);
+      }
+      for (const id of ["milestone", "status", "type", "closed"])
+        el(id).addEventListener("change", () => {
+          if (snapshot && snapshot.state === "available") render();
+        });
+      el("search").addEventListener("input", () => {
+        if (snapshot && snapshot.state === "available") render();
+      });
+      el("reset").addEventListener("click", () => {
+        el("milestone").value = el("status").value = el("type").value = "all";
+        el("search").value = "";
+        el("closed").checked = false;
+        selected = null;
+        if (snapshot && snapshot.state === "available") render();
+      });
+      el("refresh").addEventListener("click", refresh);
+      refresh();
+      setInterval(() => {
+        if (!document.hidden) refresh();
+      }, 60000);
+    </script>
+  </body>
+</html>

@@ -11,15 +11,15 @@ consistency; it does not establish Nintendo authenticity or physical installatio
 
 The candidate targets **WUP Installer GX2 under Aroma with signature patches**,
 including `wiiu/environments/aroma/modules/setup/01_sigpatches.rpx`. The module
-is not bundled and its presence is not assumed. Installer acceptance and actual
-Wii U Menu launch/exit/relaunch remain unverified until a physical return.
+is not bundled and its presence is not assumed. Physical installer acceptance
+and Wii U Menu launch/exit/relaunch are unverified.
 The explicit diagnostic ID **`0005000043543257`** is not a reserved safe range:
 check the console for an unrelated title with that ID before installation.
 
 The `native-install` diagnostic checks its actual title identity and original SD
 recovery behavior in `sd:/ctr2wup/install-check/`. Its matching package supplies
 the install instructions. The package's source, notices and receipts are under
-`support/`; user deployment uses one `sd-card/` tree.
+`support/`; deployment uses one `sd-card/` tree.
 
 ```sh
 python -m host stage-title PATH.rpx --title-id YOUR_APPLICATION_ID --name "My title" --output private/staging
@@ -97,8 +97,8 @@ The common-key file must contain exactly 16 raw bytes. The certificate file is a
 user-managed binary chain with its parents and one RSA-2048 CP and XS signer.
 Establish its provenance locally. No key, certificate or donor is downloaded or
 provided by CTR2WUP. Keep these files outside the staged folders; their paths and
-values are omitted from packaging reports. Do not paste keys into command-line
-arguments or conversations. The explicit policy acknowledges unsigned homebrew;
+values are omitted from packaging reports. Keep keys out of command-line
+arguments, logs and public reports. The explicit policy acknowledges unsigned homebrew;
 it does not establish which patched installer/environment will accept the result.
 
 ```sh
@@ -126,7 +126,7 @@ registry command remains available after structural validation:
 python packaging/validate.py PATH --registry private/title-registry.json --reserve "my project identity"
 ```
 
-The registry covers only this user's local allocations. Same-owner rebuilds may
+The registry covers only local allocations. Same-owner rebuilds may
 update the package revision while retaining the title ID; a different owner
 cannot take it. Serialize concurrent registry writes. TMD digests and randomized
 ciphertext are package revisions; title/save identity remains the explicit ID.

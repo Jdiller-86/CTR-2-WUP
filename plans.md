@@ -18,14 +18,11 @@ Commercial games and the GUI are not supported yet.
    probe exist. Actual GX2 installation and two Menu launches are still unverified.
    This hardware-only gap does not block CPU, graphics or audio development.
 
-No repeat of the native controls, tone, ten-minute stability, ordinary exit or
-save/reload checks is needed. Their reviewed scope is retained in
-[hardware evidence](tests/hardware-evidence.json).
-
 ## Milestones
 
-GitHub issues own detailed scope and status. All seven full milestones remain
-open; completed foundations do not imply commercial compatibility.
+Detailed scope, dependencies and evidence are tracked in the linked issues and
+[Project](https://github.com/users/Jdiller-86/projects/2). The
+[dynamic graph](https://jdiller-86.github.io/CTR-2-WUP/progress/) summarizes live status.
 
 | Milestone | Existing foundation | Remaining outcome |
 | --- | --- | --- |

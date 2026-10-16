@@ -32,7 +32,7 @@ py -3 .\export-asset-samples.py `
 ```
 
 Guest paths start with `/`, use forward slashes and must match the manifest
-exactly, including case. They are not PC filenames. Select the requested files;
+exactly, including case. They are not PC filenames. Select explicit file paths;
 there is no directory, wildcard or automatic discovery export. Use `python3`
 instead of `py` on Linux/macOS.
 
@@ -42,7 +42,7 @@ alias even when `py -m host` works. If Python is still not found, check
 `py -3 --version` and `py --list-paths`; select an installed Python 3.12+.
 
 On success, JSON reports `"ok": true`, the selected file count and ZIP size.
-Share only the new sample ZIP through the agreed private channel. It contains
+The output ZIP contains private asset bytes and must remain private. It contains
 `files/<guest path>` entries and `asset-sample-report.json`. It does not contain
 the full manifest, blob, preparation report, original container or keys.
 

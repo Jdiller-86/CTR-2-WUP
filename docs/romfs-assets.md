@@ -111,7 +111,7 @@ reuses its `romfs/` directory to prove original encrypted CIA -> local preparati
 -> full IVFC -> private asset blob -> actual compiled libctru file access, with
 transient synthetic keys and zero interpreter fallback.
 
-## Remaining work
+## Limits
 
 Commercial asset/revision integration, other cartridge/archive selectors,
 extdata/retail saves and Windows conversion integration remain unfinished. Signature authenticity is unverified. This diagnostic does
