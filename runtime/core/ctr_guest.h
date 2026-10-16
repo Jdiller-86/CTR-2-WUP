@@ -55,8 +55,10 @@ typedef struct {
     uint32_t last_gx_header,last_gx_detail;
     ctr_pica_state pica;
     struct ctr_scene_state *pica_scene;
+    const struct ctr_scene_backend *pica_backend;
     uint64_t pica_draws,pica_triangles,pica_fragments,pica_shader_instructions;
     uint32_t last_scene_result,last_vertex_result,last_shader_result;
+    uint32_t last_scene_backend_stage;
     uint32_t last_pica_result,last_pica_offset,last_pica_register;
 } ctr_guest_gsp;
 #define CTR_GUEST_MAX_THREADS 8u
@@ -150,5 +152,9 @@ uint32_t ctr_guest_event_create(ctr_guest *guest, unsigned reset);
 bool ctr_guest_handle_close(ctr_guest *guest, uint32_t handle);
 /* Call before guest execution/service access. Only Old-family models 0,1,3. */
 bool ctr_guest_configure(ctr_guest *guest, ctr_guest_configuration configuration);
+/* Optional synchronous PICA renderer, set before guest execution/service access.
+ * The descriptor/context remain caller-owned and stable until replaced or close.
+ * NULL selects the portable software renderer. close clears without freeing it. */
+void ctr_guest_set_scene_backend(ctr_guest *guest,const struct ctr_scene_backend *backend);
 const char *ctr_guest_state_name(ctr_guest_state state);
 #endif

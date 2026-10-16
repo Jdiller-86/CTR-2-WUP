@@ -65,9 +65,25 @@ class GuestDrawPackageTests(unittest.TestCase):
         (self.release / 'manifest.json').write_text(json.dumps(self.manifest))
         (self.release / 'release-notes.md').write_text('Original prerelease fixture')
 
-    def package(self):
+    def package(self, backend='software'):
         self.report_path.write_text(json.dumps(self.report))
-        return kit.package(self.release, self.report_path, self.app, self.sdk)
+        return kit.package(self.release, self.report_path, self.app, self.sdk, backend)
+
+    def gx2_profile(self):
+        folder = self.app/'wiiu-gx2'
+        folder.mkdir()
+        records = []
+        for original, name in zip(kit.NAMES, kit.GX2_NAMES):
+            data = (self.app/'wiiu'/original).read_bytes()
+            (folder/name).write_bytes(data)
+            records.append({'name': name, 'size': len(data), 'sha256': hashlib.sha256(data).hexdigest()})
+        app = self.report['applications'][0]
+        app.update({'wiiu_gx2_artifacts': records, 'independent_frame_checks_backend': 'software',
+                    'gx2_guest': {'backend': 'gx2', 'native_cross_build': True,
+                                  'software_frame_checks': True, 'gpu_hardware_verified': False}})
+        self.report['gx2_shader_validation'] = {'ok': True, 'source_commit': 'a'*40,
+                                              'source_dirty': False, 'console_verified': False}
+
 
     def test_source_matched_kit_checks_all_published_bytes_and_preserves_limits(self):
         result = self.package()
@@ -120,6 +136,51 @@ class GuestDrawPackageTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'receipt'):
             self.package()
         self.assertFalse(list(self.release.glob('*guest-draws*')))
+
+    def test_gx2_kit_uses_only_distinct_native_profile_and_labels_reference_scope(self):
+        self.gx2_profile()
+        result = self.package('gx2')
+        self.assertEqual(result['name'], 'CTR2WUP-gx2-guest-0.23.0.zip')
+        with zipfile.ZipFile(self.release/result['name']) as archive:
+            self.assertIn('sd-card/wiiu/apps/ctr2wup-gx2-guest.wuhb', archive.namelist())
+            self.assertNotIn('sd-card/wiiu/apps/ctr2wup-libctru-draw.wuhb', archive.namelist())
+            receipt = json.loads(archive.read('manifest.json'))
+            self.assertEqual(receipt['render_backend'], 'gx2')
+            self.assertEqual(receipt['reference_frames_backend'], 'software')
+            self.assertTrue(receipt['native_cross_build'])
+            self.assertFalse(receipt['gpu_hardware_verified'])
+            self.assertFalse(receipt['console_verified'])
+            self.assertIn(b'CTR2WUP GX2 Guest', archive.read('START-HERE.md'))
+
+    def test_software_report_cannot_be_relabelled_as_gpu_output(self):
+        with self.assertRaisesRegex(ValueError, 'distinct cross-built GX2'):
+            self.package('gx2')
+        self.assertFalse(list(self.release.glob('*gx2-guest*')))
+        self.gx2_profile()
+        original = copy.deepcopy(self.report)
+        for field, value in (('source_commit', 'b'*40), ('source_dirty', True), ('console_verified', True)):
+            with self.subTest(field=field):
+                self.report = copy.deepcopy(original)
+                self.report['gx2_shader_validation'][field] = value
+                with self.assertRaisesRegex(ValueError, 'distinct cross-built GX2'):
+                    self.package('gx2')
+        self.report = copy.deepcopy(original)
+        self.report['applications'][0]['gx2_guest']['gpu_hardware_verified'] = True
+        with self.assertRaisesRegex(ValueError, 'distinct cross-built GX2'):
+            self.package('gx2')
+
+    def test_gx2_binary_tamper_or_software_names_preserves_release(self):
+        self.gx2_profile()
+        original = copy.deepcopy(self.report)
+        self.report['applications'][0]['wiiu_gx2_artifacts'] = self.report['applications'][0]['wiiu_artifacts']
+        with self.assertRaisesRegex(ValueError, 'receipt'):
+            self.package('gx2')
+        self.report = original
+        (self.app/'wiiu-gx2'/kit.GX2_NAMES[1]).write_bytes(b'WUHBchanged')
+        with self.assertRaisesRegex(ValueError, 'receipt'):
+            self.package('gx2')
+        self.assertEqual(json.loads((self.release/'manifest.json').read_text()), self.manifest)
+        self.assertFalse(list(self.release.glob('*gx2-guest*')))
 
 
 if __name__ == '__main__':

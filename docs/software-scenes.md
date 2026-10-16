@@ -2,8 +2,8 @@
 
 The bounded software renderer accepts PICA-format vertex/index state, shaders
 and triangle lists. It provides a correctness reference for [compiled guest
-draws](guest-pica-draws.md). General PICA rendering and native GX2 shader
-translation remain unsupported.
+draws](guest-pica-draws.md) and the optional translated GX2 backend. Both paths
+retain the same narrow scene contract; general PICA rendering remains unsupported.
 
 ## Execution boundary
 
@@ -36,7 +36,7 @@ and a 1 MiB target with dimensions at most 512×512. No primitive is carried
 across lists. Unknown pipeline/framebuffer/texture/TEV/depth registers,
 inexact arithmetic, other arithmetic opcodes, relative addressing, geometry, clipping, perspective, varying color,
 interpolation, sampling and blending fail visibly. This is not a general PICA
-renderer or a GPU shader translator.
+renderer.
 
 `runtime/core/ctr_shader.c` accepts only finite normal values exactly
 representable as PICA float24, plus signed zero. NaN/infinity, denormals,
@@ -108,10 +108,54 @@ python tools/validate-shader-arithmetic.py --output artifacts/arithmetic-referen
 ```
 
 The normal scene validator also runs it, including under sanitizers in CI.
-Relative addressing, dot products, branches, hardware rounding and native GPU
-translation remain unsupported. Native Scene Check renders this CPU path and
+Relative addressing, dot products, branches and hardware rounding remain
+unsupported. Native Scene Check renders this CPU path and
 presents its owned images through GX2 surface copies; it does not translate the
 PICA shader into a Latte shader.
+
+## GX2 shader and backend contract
+
+`runtime/core/ctr_gx2_shader.c` encodes the accepted linear MOV/ADD/MUL/NOP/END
+program as explicit little-endian Latte instruction bytes, preserving operand
+and output-map semantics. Source lanes are captured before writes. Storage is
+padded to 256 bytes; the native adapter uses aligned shader memory and reserves
+a vertex budget above the encoder's **53 GPRs**.
+
+| Vertex ABI | Registers or upload |
+| --- | --- |
+| Inputs `v0`–`v15` | GPR 1–16, fetched as float4 |
+| Temporaries `r0`–`r15` | GPR 17–32 |
+| PICA outputs `o0`–`o15` | GPR 33–48 |
+| Captured source vectors | GPR 49–50 |
+| Position and primary-color exports | GPR 51 and 52 |
+| Float uniforms `c0`–`c95` | Constant-file vectors 0–95 in UniformRegister mode; `GX2SetVertexUniformReg(index * 4, 4, bits)` |
+
+`ctr_scene_execute_target_backend` preflights every actual vertex with the exact
+float24 evaluator, then passes original inputs and state to synchronous
+`begin`/`draw`/`end` callbacks. Compilation does not expand the numeric domain.
+Readback must match the entire staged target, including padding and trailing
+bytes, before commit. Callback failures and mismatches report
+`CTR_SCENE_BACKEND` and abort without fallback.
+
+`runtime/wiiu/gx2_scene.c` implements GX2 surfaces, shaders, uniforms,
+viewport/cull/scissor and readback for opaque untextured draws. It restores the
+presentation context after each callback and retires GPU references before
+freeing resources; failed retirement quarantines allocations until graphics
+shutdown. Physical parity remains unverified, with preflight and readback enabled.
+
+The independent validator decodes emitted GPU bytes and compares original
+programs against arbitrary-precision rational expectations and the CPU evaluator:
+
+```sh
+python tools/validate-gx2-shaders.py --sanitize --output artifacts/gx2-shader-reference-NEW
+```
+
+ISA facts follow pinned
+[Latte instruction definitions](https://github.com/decaf-emu/decaf-emu/blob/e6c528a20a41c34e0f9eb91dd3da40f119db2dee/src/libgpu/latte/latte_instructions.h)
+and the
+[WUT position/color shader interface](https://github.com/devkitPro/wut/tree/937f0d6901f5e2a72672154a674ec47b63e2f417/samples/cmake/content).
+The encoder and decoder are original; no emulator implementation or external
+assembler is bundled. These checks do not establish console execution or speed.
 
 ## Validation and references
 
@@ -152,5 +196,5 @@ to top-first display orientation. It is not Wii U or 3DS hardware evidence.
 ![Desktop software scene: green upper right and red lower left](images/software-scene.png)
 
 Broader shader/fragment behavior, independent hardware raster observations and
-a license-cleared GX2 shader route with measured costs remain development work.
+measured GX2 costs remain development work.
 The original software scenes do not establish commercial compatibility.

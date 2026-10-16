@@ -15,6 +15,8 @@ check-c:
 	$(MAKE) -C tests/gsp check sanitize
 	$(MAKE) -C tests/gx check sanitize
 	$(MAKE) -C tests/pica check sanitize
+	$(MAKE) -C tests/gx2-shader check sanitize
+	$(MAKE) -C tests/gx2-native check sanitize
 	$(MAKE) -C tests/vertex check sanitize
 	$(MAKE) -C tests/scenes check sanitize
 	$(MAKE) -C tests/guest-draws check sanitize
@@ -34,7 +36,7 @@ check-c:
 	$(MAKE) -C tests/m1-storage check sanitize
 	$(MAKE) -C tests/recomp-progress check sanitize
 check-c-portable:
-	@set -e; for suite in cpu guest services heap kernel hid gsp gx pica vertex scenes guest-draws relay multiple threads filesystem assets textures apt report audio dsp-adpcm cstm audio-engine audio-stream-native recomp-progress; do $(MAKE) -C tests/$$suite check; done
+	@set -e; for suite in cpu guest services heap kernel hid gsp gx pica gx2-shader gx2-native vertex scenes guest-draws relay multiple threads filesystem assets textures apt report audio dsp-adpcm cstm audio-engine audio-stream-native recomp-progress; do $(MAKE) -C tests/$$suite check; done
 prototype:
 	$(MAKE) -C runtime/wiiu -j 3
 doctor:

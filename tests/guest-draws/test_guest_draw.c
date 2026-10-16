@@ -238,4 +238,118 @@ static void queues(void) {
     CHECK(execute(&g,&l,BASE,&c)==CTR_GX_MEMORY && c.memory==CTR_MEM_OVERLAP && !c.signal);
     CHECK(!memcmp(before,shared->storage,BYTES) && !g.gsp.pica_scene);shared->storage=old;ctr_guest_close(&g);
 }
-int main(void) { successful();rollback();shader_capacity();arithmetic_draws();queues();printf("guest PICA draw tests: %u assertions passed\n",assertions);return 0; }
+typedef struct {
+    unsigned begins,draws,ends,aborts;
+    ctr_scene_backend_stage fail;
+    bool active,arithmetic;
+    uint8_t scratch[BYTES];
+} backend_mock;
+static bool backend_begin(void *context,const ctr_scene_surface *initial) {
+    backend_mock *m=context;CHECK(!m->active);++m->begins;m->active=true;
+    CHECK(initial->width==64 && initial->height==64 && initial->stride==256 && initial->size==BYTES);
+    memcpy(m->scratch,initial->bytes,sizeof(m->scratch));
+    return m->fail!=CTR_SCENE_BACKEND_BEGIN;
+}
+static bool backend_draw(void *context,const ctr_scene_state *s,const ctr_vertex *v,unsigned count) {
+    backend_mock *m=context;CHECK(m->active && !m->ends && count==3);++m->draws;
+    CHECK(m->draws<=2 && s->shader.entry==0 && s->registers[0x2bd]==3 && s->registers[0x4f]==2);
+    CHECK(s->registers[0x50]==UINT32_C(0x03020100) && s->registers[0x51]==UINT32_C(0x0b0a0908));
+    CHECK(s->registers[0x040]==0 && s->registers[0x065]==0 && s->registers[0x041]==UINT32_C(0x440000));
+    CHECK(s->shader.code[0]==(m->arithmetic?UINT32_C(0x4e020000):UINT32_C(0x4c000000)));
+    if(m->arithmetic)CHECK(s->shader.uniforms[0][0]==UINT32_C(0x40000000) &&
+                           s->shader.uniforms[1][0]==UINT32_C(0x3e800000));
+    /* Inputs must remain original decoded attributes, not CPU-transformed clip
+     * positions. Fixed primary color must reflect the current draw's upload. */
+    const float positions[4][2]={{-0.75f,-0.75f},{0.75f,-0.75f},{-0.75f,0.75f},{0.75f,0.75f}};
+    const float raw[4][2]={{-0.5f,-0.25f},{0.25f,-0.25f},{-0.5f,0.5f},{0.25f,0.5f}};
+    const unsigned order[2][3]={{0,1,2},{1,3,2}};
+    for(unsigned vertex=0;vertex<3;++vertex) {
+        unsigned source=order[m->draws-1u][vertex];CHECK(v[vertex].enabled==3);
+        CHECK(v[vertex].input[0][0]==(m->arithmetic?raw[source][0]:positions[source][0]));
+        CHECK(v[vertex].input[0][1]==(m->arithmetic?raw[source][1]:positions[source][1]));
+        CHECK(v[vertex].input[0][3]==(m->arithmetic?0.5f:1.0f));
+        CHECK(v[vertex].input[1][0]==(m->draws==1?1.0f:0.0f) &&
+              v[vertex].input[1][1]==(m->draws==2?1.0f:0.0f) && v[vertex].input[1][3]==1.0f);
+    }
+    if(m->fail==CTR_SCENE_BACKEND_DRAW && m->draws==2)return false;
+    /* Independent analytic fixture coverage, no scene/shader implementation. */
+    for(unsigned y=8;y<56;++y)for(unsigned x=8;x<56;++x)if((x+y<63u)==(m->draws==1u)) {
+        uint8_t *pixel=m->scratch+(y*64u+x)*4u;
+        pixel[0]=m->draws==1?255:0;pixel[1]=m->draws==2?255:0;pixel[2]=0;pixel[3]=255;
+    }
+    return true;
+}
+static bool backend_end(void *context,const ctr_scene_surface *readback) {
+    backend_mock *m=context;CHECK(m->active && m->draws==2);++m->ends;
+    CHECK(readback->width==64 && readback->height==64 && readback->stride==256 && readback->size==BYTES);
+    memcpy(readback->bytes,m->scratch,sizeof(m->scratch));
+    if(m->fail==CTR_SCENE_BACKEND_PARITY)((uint8_t *)readback->bytes)[0]^=1u;
+    if(m->fail==CTR_SCENE_BACKEND_END)return false;
+    m->active=false;return true;
+}
+static void backend_abort(void *context) { backend_mock *m=context;++m->aborts;m->active=false; }
+static ctr_scene_backend mock_backend(backend_mock *m) {
+    ctr_scene_backend backend={m,backend_begin,backend_draw,backend_end,backend_abort};return backend;
+}
+static void native_backend_success(void) {
+    for(unsigned kind=0;kind<4;++kind) {
+        ctr_guest g;list l;ctr_gx_completion c;open(&g,&l,(kind&1u)!=0);
+        backend_mock m={0};m.arithmetic=kind>=2u;ctr_scene_backend backend=mock_backend(&m);
+        if(m.arithmetic)arithmetic_setup(&g,&l,(kind&1u)!=0);
+        ctr_guest_set_scene_backend(&g,&backend);CHECK(g.gsp.pica_backend==&backend);
+        CHECK(ctr_memory_write_bytes(&g.memory,BASE,l.bytes,(uint32_t)l.size)==CTR_MEM_OK);
+        uint64_t generation=g.memory.generation;uint32_t command[]={0x01000101,BASE,(uint32_t)l.size,0,0,0,0,1};
+        CHECK(ctr_gx_execute(&g,command,&c)==CTR_GX_OK && c.signal && c.irq==5);
+        CHECK(m.begins==1 && m.draws==2 && m.ends==1 && !m.aborts && !m.active);
+        CHECK(g.gsp.pica_draws==2 && g.gsp.pica_triangles==2 && g.gsp.pica_fragments==2304);
+        CHECK(g.gsp.pica_shader_instructions==(m.arithmetic?30u:18u) && g.memory.generation==generation+1u);
+        CHECK(g.gsp.last_scene_result==CTR_SCENE_OK && g.gsp.last_scene_backend_stage==CTR_SCENE_BACKEND_NONE);
+        golden(&g,true);ctr_guest_close(&g);CHECK(!g.gsp.pica_backend && !m.aborts);
+    }
+    /* State-only uploads require no GPU target or callbacks. */
+    ctr_guest g;list l;ctr_gx_completion c;open(&g,&l,false);
+    backend_mock m={0};ctr_scene_backend backend=mock_backend(&m);ctr_guest_set_scene_backend(&g,&backend);
+    l.size=find(&l,0x22f,0);finish(&l);
+    CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK && c.signal && !g.gsp.pica_draws);
+    CHECK(!m.begins && !m.draws && !m.ends && !m.aborts);
+    ctr_guest_set_scene_backend(&g,NULL);CHECK(!g.gsp.pica_backend);ctr_guest_close(&g);
+}
+static void native_backend_rollback(void) {
+    for(unsigned retained=0;retained<2;++retained)for(unsigned stage=CTR_SCENE_BACKEND_BEGIN;stage<=CTR_SCENE_BACKEND_PARITY;++stage) {
+        ctr_guest g;list l;ctr_gx_completion c;open(&g,&l,false);
+        if(retained)CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK);
+        ctr_scene_state before={0};if(g.gsp.pica_scene)before=*g.gsp.pica_scene;
+        ctr_pica_state state=g.gsp.pica;uint8_t pixels[BYTES];memcpy(pixels,backing(&g)+0x2000u,BYTES);
+        backend_mock m={0};m.fail=(ctr_scene_backend_stage)stage;
+        ctr_scene_backend backend=mock_backend(&m);ctr_guest_set_scene_backend(&g,&backend);
+        CHECK(ctr_memory_write_bytes(&g.memory,BASE,l.bytes,(uint32_t)l.size)==CTR_MEM_OK);
+        uint64_t generation=g.memory.generation,code=g.memory.code_generation;g.cpu.exclusive_valid=true;
+        uint32_t command[]={0x01000101,BASE,(uint32_t)l.size,0,0,0,0,1};
+        CHECK(ctr_gx_execute(&g,command,&c)==CTR_GX_UNSUPPORTED && !c.signal);
+        CHECK(g.gsp.last_scene_result==CTR_SCENE_BACKEND && g.gsp.last_scene_backend_stage==stage);
+        CHECK(m.begins==1 && m.aborts==1 && !m.active);
+        CHECK(m.draws==(stage==CTR_SCENE_BACKEND_BEGIN?0u:2u));
+        CHECK(m.ends==(stage<=CTR_SCENE_BACKEND_DRAW?0u:1u));
+        CHECK(!memcmp(pixels,backing(&g)+0x2000u,BYTES) && !memcmp(&state,&g.gsp.pica,sizeof(state)));
+        CHECK(retained?g.gsp.pica_scene && !memcmp(&before,g.gsp.pica_scene,sizeof(before)):!g.gsp.pica_scene);
+        CHECK(g.memory.generation==generation && g.memory.code_generation==code && g.cpu.exclusive_valid);
+        ctr_guest_close(&g);CHECK(!g.gsp.pica_backend && m.aborts==1);
+    }
+    /* Late wire, shader, vertex and counter failures must be discovered before
+     * any native callback, even after an earlier valid draw in software. */
+    for(unsigned kind=0;kind<5;++kind) {
+        ctr_guest g;list l;ctr_gx_completion c;open(&g,&l,false);
+        backend_mock m={0};ctr_scene_backend backend=mock_backend(&m);ctr_guest_set_scene_backend(&g,&backend);
+        if(kind==0) { trim(&l);add(&l,0x123,0);finish(&l); }
+        if(kind==1) { arithmetic_setup(&g,&l,false);numeric_failure(&l); }
+        if(kind==2)backing(&g)[0x1000u+69u]=255;
+        if(kind==3)l.bytes[l.size-8u]^=1u;
+        if(kind==4)g.gsp.pica.committed_lists=UINT64_MAX;
+        uint8_t pixels[BYTES];memcpy(pixels,backing(&g)+0x2000u,BYTES);ctr_pica_state state=g.gsp.pica;
+        CHECK(execute(&g,&l,BASE,&c)==CTR_GX_UNSUPPORTED && !c.signal);
+        CHECK(!m.begins && !m.draws && !m.ends && !m.aborts);
+        CHECK(!memcmp(pixels,backing(&g)+0x2000u,BYTES) && !memcmp(&state,&g.gsp.pica,sizeof(state)) && !g.gsp.pica_scene);
+        ctr_guest_close(&g);
+    }
+}
+int main(void) { successful();rollback();shader_capacity();arithmetic_draws();queues();native_backend_success();native_backend_rollback();printf("guest PICA draw tests: %u assertions passed\n",assertions);return 0; }

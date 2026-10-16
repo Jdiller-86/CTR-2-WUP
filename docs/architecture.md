@@ -11,8 +11,8 @@ conversion as supported. Current deliverables are original diagnostics and host 
 |---|---|
 | `host/` | Python CLI, input inspection/preparation, loading, build orchestration, staging and WUP verification |
 | `translator/` | Original generated-C backend and pinned external AOT integration |
-| `runtime/core/` | Portable checked CPU, memory, scheduler, services, software graphics and audio |
-| `runtime/wiiu/` | WUT platform, GX2 presentation, VPAD, AX, ProcUI and diagnostic logging |
+| `runtime/core/` | Portable checked CPU, memory, scheduler, services, software graphics, Latte encoder and audio |
+| `runtime/wiiu/` | WUT platform, GX2 scene/presentation adapters, VPAD, AX, ProcUI and diagnostic logging |
 | `renderer/` | Host-side command, texture and framebuffer reference tooling |
 | `packaging/` | Original title profiles and packaging policy |
 | `tests/` | Original fixtures, regression/reference checks and reviewed hardware baseline |
@@ -43,10 +43,13 @@ threads. [Memory](guest-memory.md) and [services](services.md) retain references
 independently of handles. Unsupported interfaces fail with PC/opcode or IPC context.
 
 [Display and transfer](graphics-transport.md) code reads CPU-backed guest images.
-[Software scenes](software-scenes.md) and [guest draws](guest-pica-draws.md) cover a
-bounded renderer; the native backend presents their output through GX2 copies.
-This does not translate PICA shaders into Latte shaders. [Audio](audio.md) separates
-checked decoding/mixing from owned finite AX buffers; guest DSP protocol remains open.
+[Software scenes](software-scenes.md) provide a bounded reference for
+[guest draws](guest-pica-draws.md). The optional native scene backend translates
+PICA MOV/ADD/MUL/NOP/END to Latte vertex code and submits original inputs through
+GX2. Complete software preflight and byte-exact GPU readback precede atomic guest
+commit; unsupported state or backend failure cannot fall back silently.
+Physical GPU parity remains unverified. [Audio](audio.md) separates checked
+decoding/mixing from owned finite AX buffers; guest DSP protocol remains open.
 
 [Filesystem](filesystem.md) operations use platform-owned private volumes, not
 host paths derived from guest names. Save publication uses checked pending/backup

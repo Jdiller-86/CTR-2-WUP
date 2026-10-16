@@ -4,9 +4,9 @@ The adapter connects a bounded PICA draw subset to the standard guest GSP
 queue. An original normal-CRT ARM application uses unmodified pinned libctru to
 submit two command lists, retain uploaded shader/state between them, render
 indexed triangles into owned linear allocations and display both screens.
-This is CPU software rendering followed by GX display transfers and existing
-native presentation. General PICA behavior and native GX2 shader translation
-remain unsupported.
+The default profile uses CPU software rendering. An optional GX2 profile
+translates the bounded vertex shader and draws into an owned GPU surface before
+the same guest display transfers. General PICA behavior remains unsupported.
 
 ## Build and run the original program
 
@@ -40,6 +40,35 @@ CI executes the sanitized original guest and native build on each PR. Download
 checksums, source/SDK provenance and notices. This artifact contains original
 diagnostics; it is not a game WUP or a physical-console result.
 
+## GX2 guest backend
+
+Build the distinct native profile with:
+
+```sh
+python3 tools/validate-libctru.py --application draw --wiiu --gx2 --sanitize \
+  --output artifacts/reports/compiled-gx2-local
+```
+
+The native adapter receives decoded original vertex inputs, index order, uniforms
+and retained PICA state. It compiles MOV/ADD/MUL/NOP/END into Latte vertex code,
+then uses GX2 fetch, shader and triangle draw commands with an untextured
+primary-color pixel shader. CPU-transformed positions and colors are never
+substituted for shader inputs. The [shader ABI](software-scenes.md#gx2-shader-and-backend-contract)
+defines the supported translation.
+
+A complete software preflight validates the list and computes reference pixels
+before any native submission. The GPU target starts with the original target
+contents; its synchronous readback must match every staged target byte before
+guest pixels, retained state, memory generations or P3D completion commit.
+Backend failures and mismatches fail the list without software fallback.
+
+CI artifact `wiiu-gx2-guest-<source commit>` contains the separately named
+`ctr2wup-gx2-guest.rpx`/`.wuhb`, reference images, provenance and one short
+`START-HERE.md` guide. The report distinguishes host software frame checks,
+independent shader validation and native cross-compilation. Physical GPU
+execution and raster parity remain unverified; retained CPU preflight and
+readback costs preclude a performance claim.
+
 ## Resource and transaction contract
 
 - Commands arrive through the existing standard GSP/GX command-list operation;
@@ -69,9 +98,9 @@ The [scene contract](software-scenes.md) defines the bounded loader, fixed
 attribute, uniform and MOV/ADD/MUL/NOP/END shader subset. ADD/MUL
 accept only exact normal float24/signed-zero results with integer evaluation and
 transactional numeric rejection; [original arithmetic checks](software-scenes.md#exact-add-and-mul)
-validate the exact numeric subset separately from this MOV fixture. Broader arithmetic, sampling,
-general TEV, clipping, depth/blend/stencil and native GPU translation require
-separate scoped features. A raw VFP push/pop guard fix supports exact bit transfers
+validate the exact numeric subset separately from this MOV fixture. Broader arithmetic,
+sampling, general TEV, clipping and depth/blend/stencil remain unsupported.
+A raw VFP push/pop guard fix supports exact bit transfers
 under CRT FPSCR controls; it does not enable unsupported arithmetic modes.
 
 ## Startup and limits

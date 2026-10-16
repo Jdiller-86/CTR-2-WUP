@@ -11,7 +11,7 @@ Wii U compatibility. The selected first-title target is
 | CPU | Checked ARM/Thumb interpreter, original AOT and external generated-C adapter | Incomplete ARM11/VFP coverage; exact revision profiles and useful workload costs remain open |
 | Kernel/services | Single-process threads, memory/objects, TLS/SRV/CFG, HID, GSP and standalone APT/FS | Unsupported commands fail; general applets, retail saves and DSP IPC remain open |
 | Original compiled applications | Standard libctru startup, input, frames, saves, RomFS, transfers and bounded draws | Original programs do not establish retail startup or gameplay |
-| Graphics | Five framebuffer formats, CPU-backed GX transfers, 14 base texture formats, bounded software scenes | General shaders/rounding, sampling/TEV/depth/blend, geometry and native GX2 translation remain open |
+| Graphics | Five framebuffer formats, CPU-backed GX transfers, 14 base texture formats, software scenes and bounded GX2 vertex translation | Physical GPU parity, general shaders/rounding, sampling/TEV/depth/blend and geometry remain open |
 | Audio | DSP ADPCM, bounded CSTM blocks/seek, two-voice 48 kHz mixer and finite native clips | Guest DSP firmware/IPC, CSAR selection, loops and synchronized streaming remain open |
 | Decrypted inputs | Base-application CIA, NCCH v2 CXI and NCSD cartridge inspection | No NAND loader, update/DLC merging or arbitrary-ROM execution |
 | Encrypted inputs | Scoped local CIA/NCCH preparation with local key/seed files | Supported profiles only; no bundled keys or console extraction |
@@ -29,6 +29,8 @@ are recorded in the
 [hardware evidence ledger](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/tests/hardware-evidence.json).
 Host tests and emulated PowerPC checks cover their stated contracts; they do not
 establish physical display/audio quality, installation or console performance.
+The optional translated GX2 draw path has separate validation scope; existing
+software-rendered guest evidence does not establish its physical GPU parity.
 
 New 3DS exclusives, stereo output, online services, cameras, microphone, DLC/update
 merging and save import/export are outside the current scope.

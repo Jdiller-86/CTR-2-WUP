@@ -6,7 +6,8 @@ export DEVKITPRO DEVKITPPC
 export PATH := $(DEVKITPPC)/bin:$(DEVKITPRO)/tools/bin:$(PATH)
 # Keep make targets relative so a checkout directory may contain spaces/Unicode.
 OUTPUT ?= ../../artifacts/wiiu
-TARGET ?= ctr2wup-prototype
+GX2_GUEST ?= 0
+TARGET ?= $(if $(filter 1,$(GX2_GUEST)),ctr2wup-gx2-guest,ctr2wup-prototype)
 GUEST_DEFAULT ?= 0
 EXTERNAL_AOT ?= 0
 COMPILED_HOMEBREW ?= 0
@@ -31,7 +32,7 @@ APP_NAME := CTR2WUP ARM Guest $(APP_VERSION)
 else
 APP_NAME := CTR2WUP Native $(APP_VERSION)
 endif
-BUILD := $(OUTPUT)/objects
+BUILD := $(OUTPUT)/objects$(if $(filter 1,$(GX2_GUEST)),-gx2,)
 CC := $(DEVKITPPC)/bin/powerpc-eabi-gcc
 WUT := $(DEVKITPRO)/wut
 CFLAGS := -std=c11 -O2 -g -Wall -Wextra -Werror -ffunction-sections -fdata-sections \
@@ -65,6 +66,16 @@ endif
 ifeq ($(PICA_HOMEBREW),1)
 CFLAGS += -DCTR_PICA_HOMEBREW
 APP_NAME := CTR2WUP Guest Draws $(APP_VERSION)
+endif
+ifeq ($(GX2_GUEST),1)
+ifneq ($(PICA_HOMEBREW):$(COMPILED_HOMEBREW):$(EXTERNAL_AOT),1:1:1)
+$(error GX2_GUEST requires PICA_HOMEBREW=1 COMPILED_HOMEBREW=1 EXTERNAL_AOT=1)
+endif
+ifneq ($(filter 1,$(FILESYSTEM_HOMEBREW) $(ROMFS_HOMEBREW) $(GX_HOMEBREW) $(AUDIO_ONLY) $(STREAM_AUDIO) $(SCENE_ONLY) $(M1_ONLY) $(INSTALL_ONLY)),)
+$(error GX2_GUEST requires its own compiled PICA profile)
+endif
+CFLAGS += -DCTR_GX2_GUEST
+APP_NAME := CTR2WUP GX2 Guest $(APP_VERSION)
 endif
 ifeq ($(AUDIO_ONLY),1)
 CFLAGS += -DCTR_AUDIO_ONLY
@@ -100,6 +111,9 @@ endif
 SOURCES := $(M1_SOURCES) main.c viewport.c diagnostic_font.c test_report.c test_guide.c test_lifecycle.c image_scale.c report_storage.c test_result.c diagnostic_audio.c guest_slice.c
 ifeq ($(STREAM_AUDIO),1)
 SOURCES += audio_stream_app.c audio_stream_diagnostic.c
+endif
+ifeq ($(GX2_GUEST),1)
+SOURCES += gx2_scene.c
 endif
 OBJECTS := $(addprefix $(BUILD)/,$(SOURCES:.c=.o))
 CORE_SOURCES := $(CTR_RUNTIME_SOURCES) ../core/ctr_cpu_selftest.c \

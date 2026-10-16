@@ -282,7 +282,7 @@ static void raster(const ctr_scene_state *s,const ctr_scene_surface *surface,
 static ctr_scene_result draw(ctr_scene_state *s,const ctr_scene_resources *resources,
                              const ctr_scene_surface *surface,bool indexed,
                              ctr_vertex *decoded,uint8_t *pixels,ctr_scene_report *report,
-                             bool bound,uint32_t color_address) {
+                             bool bound,uint32_t color_address,const ctr_scene_backend *backend) {
     if(bound) {
         ctr_scene_result result=target_pipeline(s,surface,color_address);
         if(result!=CTR_SCENE_OK)return result;
@@ -299,6 +299,11 @@ static ctr_scene_result draw(ctr_scene_state *s,const ctr_scene_resources *resou
     ctr_scene_result result=vertices(s,resources,indexed,decoded,report);
     if(result!=CTR_SCENE_OK)return result;
     s->shader.entry=s->registers[0x2bau];
+    if(backend) {
+        report->backend_stage=CTR_SCENE_BACKEND_DRAW;
+        if(!backend->draw(backend->context,s,decoded,count))return CTR_SCENE_BACKEND;
+        ++report->draws;return CTR_SCENE_OK;
+    }
     scene_vertex primitive[3];
     for(unsigned vertex=0;vertex<count;++vertex) {
         ctr_shader_output out;
@@ -316,14 +321,58 @@ static ctr_scene_result draw(ctr_scene_state *s,const ctr_scene_resources *resou
     ++report->draws;return CTR_SCENE_OK;
 }
 void ctr_scene_init(ctr_scene_state *state) { if(state)memset(state,0,sizeof(*state)); }
+static ctr_scene_result replay(ctr_scene_state *trial,const void *commands,
+                                const ctr_pica_write *writes,size_t count,
+                                const ctr_scene_resources *resources,const ctr_scene_surface *surface,
+                                ctr_vertex *decoded,uint8_t *pixels,ctr_scene_report *report,
+                                bool bound,uint32_t color_address,const ctr_scene_backend *backend) {
+    ctr_scene_result result=CTR_SCENE_OK;
+    unsigned markers=0,fixed_reg=0,uniform_reg=0;size_t fixed_offset=0,uniform_offset=0;
+    for(size_t i=0;i<count;++i) {
+        const ctr_pica_write *write=&writes[i];unsigned reg=write->reg,mask=write->byte_mask;
+        uint32_t value=write->value;report->reg=reg;report->byte_offset=write->byte_offset;
+        if(reg==CTR_PICA_FINALIZE) {
+            const uint8_t *bytes=commands;size_t at=write->byte_offset+4u;
+            uint32_t header=(uint32_t)bytes[at]|(uint32_t)bytes[at+1]<<8|
+                (uint32_t)bytes[at+2]<<16|(uint32_t)bytes[at+3]<<24;
+            if(mask!=15u || value!=CTR_PICA_FINALIZE_VALUE || markers==2u || ((header>>20)&255u))
+                result=CTR_SCENE_WIRE;
+            else ++markers;
+        } else if(markers)result=CTR_SCENE_WIRE;
+        else if(reg==0x22eu || reg==0x22fu) {
+            if(mask!=15u || value!=1u)result=CTR_SCENE_UNSUPPORTED;
+            else result=draw(trial,resources,surface,reg==0x22fu,decoded,pixels,report,bound,color_address,backend);
+        } else if(reg==0x25fu) {
+            if(mask!=15u || value!=1u)result=CTR_SCENE_UNSUPPORTED;
+            /* Complete lists have no carried partial primitive to restart. */
+        } else if(ordinary(reg) || (bound && target_register(reg))) {
+            trial->registers[reg]=ctr_pica_merge(trial->registers[reg],value,mask);
+            trial->register_defined[reg]|=(uint8_t)mask;
+        } else if(bound && (reg==0x110u || reg==0x111u)) {
+            if(mask!=15u || value!=1u)result=CTR_SCENE_UNSUPPORTED;
+            /* The caller owns cache/coherency for any native scratch target. */
+        } else {
+            if(reg>=0x233u && reg<=0x235u && !trial->fixed_words) { fixed_offset=write->byte_offset;fixed_reg=reg; }
+            if(reg>=0x2c1u && reg<=0x2c8u && !trial->uniform_words) { uniform_offset=write->byte_offset;uniform_reg=reg; }
+            result=upload(trial,reg,value,mask);
+        }
+        if(result!=CTR_SCENE_OK)break;
+    }
+    if(result==CTR_SCENE_OK && (!markers || trial->fixed_words || trial->uniform_words)) {
+        result=CTR_SCENE_WIRE;
+        if(trial->fixed_words) { report->byte_offset=fixed_offset;report->reg=fixed_reg; }
+        else if(trial->uniform_words) { report->byte_offset=uniform_offset;report->reg=uniform_reg; }
+    }
+    return result;
+}
 static ctr_scene_result execute(ctr_scene_state *state,const void *commands,size_t size,
                                   const ctr_scene_resources *resources,
                                   const ctr_scene_surface *surface,ctr_scene_report *out,
-                                  bool bound,uint32_t color_address) {
+                                  bool bound,uint32_t color_address,const ctr_scene_backend *backend) {
     if(!state || !resources || !surface)return CTR_SCENE_ARGUMENT;
     if(!span(state,sizeof(*state)) || !span(resources,sizeof(*resources)) ||
        !span(surface,sizeof(*surface)) || !span(commands,size) ||
-       (out && !span(out,sizeof(*out))))return CTR_SCENE_OVERFLOW;
+       (out && !span(out,sizeof(*out))) || (backend && !span(backend,sizeof(*backend))))return CTR_SCENE_OVERFLOW;
     if(!span(resources->bytes,resources->size) || !span(surface->bytes,surface->size))return CTR_SCENE_OVERFLOW;
     const void *objects[]={commands,resources,resources->bytes,surface};
     size_t lengths[]={size,sizeof(*resources),resources->size,sizeof(*surface)};
@@ -334,6 +383,11 @@ static ctr_scene_result execute(ctr_scene_state *state,const void *commands,size
         overlap(surface->bytes,surface->size,objects[i],lengths[i]) ||
         (out && overlap(out,sizeof(*out),objects[i],lengths[i])))return CTR_SCENE_ALIAS;
     ctr_scene_report report={0};
+    if(backend && (overlap(backend,sizeof(*backend),state,sizeof(*state)) ||
+       overlap(backend,sizeof(*backend),surface->bytes,surface->size) ||
+       (out && overlap(backend,sizeof(*backend),out,sizeof(*out)))))return CTR_SCENE_ALIAS;
+    if(backend && (!backend->begin || !backend->draw || !backend->end || !backend->abort))
+        return publish(out,report,CTR_SCENE_ARGUMENT);
     if(sizeof(float)!=4 || FLT_RADIX!=2 || FLT_MANT_DIG!=24 || FLT_MAX_EXP!=128)
         return publish(out,report,CTR_SCENE_UNSUPPORTED);
     float one=1.0f;uint32_t one_bits;
@@ -360,72 +414,70 @@ static ctr_scene_result execute(ctr_scene_state *state,const void *commands,size
         free(writes);free(trial);free(pixels);free(decoded);return publish(out,report,CTR_SCENE_NO_MEMORY);
     }
     *trial=*state;memcpy(pixels,surface->bytes,surface->size);
-    ctr_scene_result result=CTR_SCENE_OK;
     ctr_pica_inspect(commands,size,CTR_PICA_MAX_WRITES,writes,wire.writes,&wire);
-    unsigned markers=0,fixed_reg=0,uniform_reg=0;size_t fixed_offset=0,uniform_offset=0;
-    for(size_t i=0;i<wire.writes;++i) {
-        const ctr_pica_write *write=&writes[i];unsigned reg=write->reg,mask=write->byte_mask;
-        uint32_t value=write->value;report.reg=reg;report.byte_offset=write->byte_offset;
-        if(reg==CTR_PICA_FINALIZE) {
-            const uint8_t *bytes=commands;size_t at=write->byte_offset+4u;
-            uint32_t header=(uint32_t)bytes[at]|(uint32_t)bytes[at+1]<<8|
-                (uint32_t)bytes[at+2]<<16|(uint32_t)bytes[at+3]<<24;
-            if(mask!=15u || value!=CTR_PICA_FINALIZE_VALUE || markers==2u || ((header>>20)&255u))
-                result=CTR_SCENE_WIRE;
-            else ++markers;
-        } else if(markers)result=CTR_SCENE_WIRE;
-        else if(reg==0x22eu || reg==0x22fu) {
-            if(mask!=15u || value!=1u)result=CTR_SCENE_UNSUPPORTED;
-            else result=draw(trial,resources,surface,reg==0x22fu,decoded,pixels,&report,bound,color_address);
-        } else if(reg==0x25fu) {
-            if(mask!=15u || value!=1u)result=CTR_SCENE_UNSUPPORTED;
-            /* Complete lists have no carried partial primitive to restart. */
-        } else if(ordinary(reg) || (bound && target_register(reg))) {
-            trial->registers[reg]=ctr_pica_merge(trial->registers[reg],value,mask);
-            trial->register_defined[reg]|=(uint8_t)mask;
-        } else if(bound && (reg==0x110u || reg==0x111u)) {
-            if(mask!=15u || value!=1u)result=CTR_SCENE_UNSUPPORTED;
-            /* Owned CPU staging is coherent; no asynchronous cache is claimed. */
-        }
+    ctr_scene_result result=replay(trial,commands,writes,wire.writes,resources,surface,
+                                    decoded,pixels,&report,bound,color_address,NULL);
+    if(result==CTR_SCENE_OK && (trial->lists==UINT64_MAX || report.draws>UINT64_MAX-trial->draws ||
+       report.triangles>UINT64_MAX-trial->triangles || report.fragments>UINT64_MAX-trial->fragments ||
+       report.shader_instructions>UINT64_MAX-trial->shader_instructions))result=CTR_SCENE_OVERFLOW;
+    if(result==CTR_SCENE_OK && backend && report.draws) {
+        ctr_scene_state *native=malloc(sizeof(*native));uint8_t *readback=malloc(surface->size);
+        if(!native || !readback)result=CTR_SCENE_NO_MEMORY;
         else {
-            if(reg>=0x233u && reg<=0x235u && !trial->fixed_words) { fixed_offset=write->byte_offset;fixed_reg=reg; }
-            if(reg>=0x2c1u && reg<=0x2c8u && !trial->uniform_words) { uniform_offset=write->byte_offset;uniform_reg=reg; }
-            result=upload(trial,reg,value,mask);
+            *native=*state;memcpy(readback,surface->bytes,surface->size);
+            ctr_scene_surface target=*surface;target.bytes=readback;
+            report.backend_stage=CTR_SCENE_BACKEND_BEGIN;
+            if(!backend->begin(backend->context,surface))result=CTR_SCENE_BACKEND;
+            else {
+                ctr_scene_report native_report={0};
+                result=replay(native,commands,writes,wire.writes,resources,surface,
+                              decoded,NULL,&native_report,bound,color_address,backend);
+                if(result!=CTR_SCENE_OK) {
+                    report.byte_offset=native_report.byte_offset;report.reg=native_report.reg;
+                    report.backend_stage=native_report.backend_stage;
+                } else {
+                    report.backend_stage=CTR_SCENE_BACKEND_END;
+                    if(!backend->end(backend->context,&target))result=CTR_SCENE_BACKEND;
+                    else if(memcmp(readback,pixels,surface->size)) {
+                        report.backend_stage=CTR_SCENE_BACKEND_PARITY;result=CTR_SCENE_BACKEND;
+                    } else {
+                        /* Publish actual native bytes after exact software parity. */
+                        memcpy(pixels,readback,surface->size);report.backend_stage=CTR_SCENE_BACKEND_NONE;
+                    }
+                }
+            }
+            if(result!=CTR_SCENE_OK)backend->abort(backend->context);
         }
-        if(result!=CTR_SCENE_OK)break;
-    }
-    if(result==CTR_SCENE_OK && (!markers || trial->fixed_words || trial->uniform_words)) {
-        result=CTR_SCENE_WIRE;
-        if(trial->fixed_words) { report.byte_offset=fixed_offset;report.reg=fixed_reg; }
-        else if(trial->uniform_words) { report.byte_offset=uniform_offset;report.reg=uniform_reg; }
+        free(native);free(readback);
     }
     if(result==CTR_SCENE_OK) {
-        if(trial->lists==UINT64_MAX || report.draws>UINT64_MAX-trial->draws ||
-           report.triangles>UINT64_MAX-trial->triangles || report.fragments>UINT64_MAX-trial->fragments ||
-           report.shader_instructions>UINT64_MAX-trial->shader_instructions)result=CTR_SCENE_OVERFLOW;
-        else {
-            ++trial->lists;trial->draws+=report.draws;trial->triangles+=report.triangles;
-            trial->fragments+=report.fragments;trial->shader_instructions+=report.shader_instructions;
-            *state=*trial;memcpy(surface->bytes,pixels,surface->size);
-            report.byte_offset=size;report.reg=0;
-        }
+        ++trial->lists;trial->draws+=report.draws;trial->triangles+=report.triangles;
+        trial->fragments+=report.fragments;trial->shader_instructions+=report.shader_instructions;
+        *state=*trial;memcpy(surface->bytes,pixels,surface->size);
+        report.byte_offset=size;report.reg=0;
     }
     free(writes);free(trial);free(pixels);free(decoded);return publish(out,report,result);
 }
 ctr_scene_result ctr_scene_execute(ctr_scene_state *state,const void *commands,size_t size,
                                   const ctr_scene_resources *resources,
                                   const ctr_scene_surface *surface,ctr_scene_report *out) {
-    return execute(state,commands,size,resources,surface,out,false,0);
+    return execute(state,commands,size,resources,surface,out,false,0,NULL);
 }
 ctr_scene_result ctr_scene_execute_target(ctr_scene_state *state,const void *commands,size_t size,
                                          const ctr_scene_resources *resources,
                                          const ctr_scene_surface *surface,uint32_t color_address,
                                          ctr_scene_report *out) {
-    return execute(state,commands,size,resources,surface,out,true,color_address);
+    return execute(state,commands,size,resources,surface,out,true,color_address,NULL);
+}
+ctr_scene_result ctr_scene_execute_target_backend(ctr_scene_state *state,const void *commands,size_t size,
+                                                  const ctr_scene_resources *resources,
+                                                  const ctr_scene_surface *surface,uint32_t color_address,
+                                                  const ctr_scene_backend *backend,ctr_scene_report *out) {
+    return execute(state,commands,size,resources,surface,out,true,color_address,backend);
 }
 const char *ctr_scene_result_name(ctr_scene_result result) {
     static const char *const names[]={"ok","argument","overflow","alias","limit","no-memory",
         "invalid-wire-or-finalization","unsupported-pipeline","invalid-layout","vertex-input",
-        "shader-execution-or-output","unsupported-numeric-value"};
+        "shader-execution-or-output","unsupported-numeric-value","native-backend-or-parity"};
     return (unsigned)result<sizeof(names)/sizeof(names[0])?names[result]:"unknown";
 }

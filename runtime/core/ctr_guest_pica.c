@@ -78,6 +78,7 @@ static void diagnostic(ctr_guest *g,const ctr_scene_report *r) {
     g->gsp.last_scene_result=(uint32_t)r->result;
     g->gsp.last_vertex_result=(uint32_t)r->vertex_result;
     g->gsp.last_shader_result=(uint32_t)r->shader_result;
+    g->gsp.last_scene_backend_stage=(uint32_t)r->backend_stage;
     g->gsp.last_pica_offset=(uint32_t)r->byte_offset;g->gsp.last_pica_register=r->reg;
     g->gsp.last_pica_result=r->result==CTR_SCENE_OK?CTR_PICA_OK:CTR_PICA_UNSUPPORTED;
 }
@@ -161,7 +162,8 @@ ctr_gx_result ctr_guest_pica_execute(ctr_guest *g,const void *commands,size_t si
         resources=(ctr_scene_resources){(uint32_t)base,source,resource_bytes};
         surface=(ctr_scene_surface){pixels,target_bytes,width,height,width*4u};
     }
-    ctr_scene_result rendered=ctr_scene_execute_target(trial,commands,size,&resources,&surface,color_address,&report);
+    ctr_scene_result rendered=ctr_scene_execute_target_backend(trial,commands,size,&resources,&surface,
+                                                               color_address,g->gsp.pica_backend,&report);
     if(rendered!=CTR_SCENE_OK) { result=rendered==CTR_SCENE_NO_MEMORY?CTR_GX_NO_MEMORY:CTR_GX_UNSUPPORTED;goto done; }
     if(draws) {
         layout(pixels,raw,width,height,true);
@@ -181,4 +183,7 @@ done:
     diagnostic(g,&report);
     if(result==CTR_GX_UNSUPPORTED)c->detail=command_address+(report.byte_offset<size?(uint32_t)report.byte_offset:0u);
     free(writes);free(trial);free(source);free(raw);free(pixels);return result;
+}
+void ctr_guest_set_scene_backend(ctr_guest *g,const ctr_scene_backend *backend) {
+    if(g)g->gsp.pica_backend=backend;
 }

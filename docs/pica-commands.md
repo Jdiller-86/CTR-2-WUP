@@ -101,5 +101,5 @@ report. These observations are distinct from picture/launcher confirmations.
   CPU-backed fills/transfers, not PICA draws.
 
 The [compiled guest draw adapter](guest-pica-draws.md) executes its separately
-bounded software subset. General shaders, textures/TEV, geometry, native GX2
-translation and full renderer compatibility remain unsupported.
+bounded software subset or the optional guarded GX2 vertex backend. General
+shaders, textures/TEV, geometry and full renderer compatibility remain unsupported.

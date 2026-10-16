@@ -72,15 +72,20 @@ class HardwareReturnTests(unittest.TestCase):
             collector.collect(self.sd,self.root/'duplicate-layout.zip',self.kit)
 
     def test_legacy_round_remains_source_bound_after_tool_upgrade(self):
-        old = '0.24.1'
-        (self.sd/'ctr2wup'/self.name).rename(self.sd/'ctr2wup'/self.name.replace(collector.VERSION, old))
-        name = 'compiled-pica-draws-0000000000000001-00.txt'
-        (self.sd/'ctr2wup'/name).write_bytes(self.trace(version=old))
-        report = collector.collect(self.sd, self.root/'legacy.zip', {**self.kit, 'version': old})
-        self.assertEqual(report['version'], old);self.assertEqual(report['collector_version'], collector.VERSION)
-        result = analyzer.analyze(self.root/'legacy.zip', COMMIT)
-        self.assertEqual(result['version'], old);self.assertEqual(result['warnings'], [])
-        self.assertEqual(len(result['summaries']), 2)
+        for old in ('0.24.1', '0.25.0'):
+            with self.subTest(version=old):
+                original = self.sd/'ctr2wup'/self.name
+                legacy = self.sd/'ctr2wup'/self.name.replace(collector.VERSION, old)
+                original.rename(legacy)
+                name = 'compiled-pica-draws-0000000000000001-00.txt'
+                (self.sd/'ctr2wup'/name).write_bytes(self.trace(version=old))
+                output = self.root/('legacy-'+old+'.zip')
+                report = collector.collect(self.sd, output, {**self.kit, 'version': old})
+                self.assertEqual(report['version'], old);self.assertEqual(report['collector_version'], collector.VERSION)
+                result = analyzer.analyze(output, COMMIT)
+                self.assertEqual(result['version'], old);self.assertEqual(result['warnings'], [])
+                self.assertEqual(len(result['summaries']), 2)
+                legacy.rename(original)
 
     def test_partial_native_trace_without_result_is_preserved(self):
         (self.sd/'ctr2wup'/self.name).unlink()
@@ -173,3 +178,97 @@ class HardwareReturnTests(unittest.TestCase):
             with zipfile.ZipFile(path, 'w') as archive:
                 for name,data in changed.items():archive.writestr(name,data)
             with self.subTest(kind=kind), self.assertRaises(ValueError):analyzer.analyze(path, COMMIT)
+
+
+class Gx2HardwareReturnTests(unittest.TestCase):
+    trace = HardwareReturnTests.trace
+    def setUp(self):
+        HardwareReturnTests.setUp(self)
+        (self.sd/'ctr2wup'/self.name).unlink()
+        self.name = f'result-compiled-pica-gx2-{collector.VERSION}-0000000000000001-00.txt'
+        self.trace_name = 'compiled-pica-gx2-0000000000000001-00.txt'
+        self.backend = ('GX2 backend: result=ok shader=ok begins=2 draws=4 submissions=4 readbacks=2 '
+                        'shader_ops=36 waits=4 wait_failures=0 allocations=12 releases=12 quarantine=0 '
+                        'backend_stage=0; CPU preflight and full GPU readback parity\n')
+        self.reference = ('Guest GX2 draws (CPU parity reference): draws=4 triangles=4 '
+                          'reference_fragments=97200 reference_shader_steps=36 scene_error=0 vertex_error=0 '
+                          'shader_error=0; translated GPU shaders + exact readback guard\n')
+        self.raw = (f'CTR2WUP result report\nApplication: compiled-pica-gx2 | Build: {collector.VERSION}\n'
+                    f'File: {self.name}\nSource: {COMMIT} dirty=0 | Evidence schema: 2\n'
+                    'Stage: cleanup\nHost exit result: 0\n'
+                    'Guide: COMPLETE | passed=2 failed=0 skipped=0 current_step=3\n'
+                    'Guest: state=exited pc=00100000 instructions=200000 fallback=0 fault=ok detail=00000000 memory=ok\n'
+                    'Draw submitted: 1 serial=1 latency_ms=800 | Slice: reason=exited\n'
+                    + self.backend + self.reference
+                    + '1. GX2 guest triangle pictures: PASS | User confirmed\n'
+                    '2. GPU readback and guest exit: PASS | Guest completed its checks\n')
+        self.data = self.raw.encode().ljust(8192, b' ')
+        (self.sd/'ctr2wup'/self.name).write_bytes(self.data)
+
+    def test_gx2_two_step_report_and_trace_are_source_bound_and_reparsed(self):
+        results = self.sd/'ctr2wup/results';results.mkdir()
+        (self.sd/'ctr2wup'/self.name).rename(results/self.name)
+        trace = self.trace(app='compiled-pica-gx2') + self.backend.encode() + self.reference.encode()
+        (results/self.trace_name).write_bytes(trace)
+        report = collector.collect(self.sd, self.root/'gx2.zip', self.kit, {'picture': 'correct', 'exit': 'returned'})
+        self.assertEqual(len(report['files']), 2)
+        self.assertEqual(report['warnings'], [])
+        parsed = analyzer.analyze(self.root/'gx2.zip', COMMIT)
+        result = next(row for row in parsed['summaries'] if row['kind'] == 'result')
+        self.assertEqual(result['application'], 'compiled-pica-gx2')
+        self.assertEqual(result['render_backend'], 'gx2')
+        self.assertTrue(result['complete_evidence'])
+        self.assertEqual(result['gpu_readback_evidence'], 'passed')
+        self.assertEqual(result['gx2_backend']['readbacks'], 2)
+        self.assertEqual(result['software_reference']['reference_fragments'], 97200)
+        self.assertFalse(parsed['full_milestone_acceptance'])
+        self.assertEqual((results/self.name).read_bytes(), self.data)
+        self.assertTrue(next(row for row in parsed['summaries'] if row['kind'] == 'trace')['source_identity_seen'])
+
+    def test_cpu_reference_counts_without_gpu_readback_never_complete_gpu_evidence(self):
+        for changed in (self.raw.replace(self.backend, ''), self.raw.replace('readbacks=2', 'readbacks=0'),
+                        self.raw.replace('draws=4 submissions=4', 'draws=0 submissions=0')):
+            with self.subTest(changed=changed):
+                summary = collector.result_summary(self.name, changed.encode().ljust(8192, b' '), COMMIT)
+                self.assertFalse(summary['complete_evidence'])
+                self.assertEqual(summary['gpu_readback_evidence'], 'incomplete')
+
+    def test_parity_wait_shader_or_quarantine_failures_are_preserved_and_not_accepted(self):
+        for old, new in (('backend_stage=0', 'backend_stage=4'), ('wait_failures=0', 'wait_failures=1'),
+                         ('quarantine=0', 'quarantine=1'), ('shader=ok', 'shader=opcode'),
+                         ('scene_error=0', 'scene_error=10')):
+            with self.subTest(failure=new):
+                data = self.raw.replace(old, new).encode().ljust(8192, b' ')
+                (self.sd/'ctr2wup'/self.name).write_bytes(data)
+                output = self.root/(new.replace('=', '-')+'.zip')
+                collector.collect(self.sd, output, self.kit)
+                parsed = analyzer.analyze(output, COMMIT)
+                summary = parsed['summaries'][0]
+                self.assertTrue(summary['gpu_failure'])
+                self.assertFalse(summary['complete_evidence'])
+                self.assertEqual(summary['gpu_readback_evidence'], 'failed')
+                if 'stage=4' in new:self.assertEqual(summary['gpu_backend_stage'], 'parity')
+                with zipfile.ZipFile(output) as archive:self.assertEqual(archive.read('logs/'+self.name), data)
+
+    def test_renamed_software_or_wrong_source_guide_and_guest_cannot_prove_gpu_route(self):
+        changes = (('Application: compiled-pica-gx2', 'Application: compiled-pica-draws'),
+                   (f'Source: {COMMIT}', 'Source: '+'b'*40), ('dirty=0', 'dirty=1'),
+                   ('passed=2 failed=0 skipped=0', 'passed=1 failed=1 skipped=0'),
+                   ('GPU readback and guest exit: PASS', 'GPU readback and guest exit: FAIL'),
+                   ('fallback=0', 'fallback=1'), ('state=exited', 'state=running'),
+                   ('Draw submitted: 1', 'Draw submitted: 0'))
+        for old, new in changes:
+            with self.subTest(change=new):
+                data = self.raw.replace(old, new).encode().ljust(8192, b' ')
+                summary = collector.result_summary(self.name, data, COMMIT)
+                self.assertFalse(summary['complete_evidence'])
+        wrong_trace = self.trace(app='compiled-pica-draws')
+        self.assertFalse(collector.trace_identity_matches(self.trace_name, wrong_trace, COMMIT))
+
+    def test_gx2_identity_is_not_accepted_as_an_older_software_round(self):
+        for version in ('0.24.1', '0.25.0'):
+            result_pattern, log_pattern = collector.patterns(version)
+            self.assertIsNone(result_pattern.fullmatch(self.name.replace(collector.VERSION, version)))
+            self.assertIsNone(log_pattern.fullmatch(self.trace_name))
+            self.assertFalse(collector.trace_identity_matches(self.trace_name,
+                self.trace(app='compiled-pica-gx2', version=version), COMMIT, version))
