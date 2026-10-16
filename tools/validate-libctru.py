@@ -48,19 +48,56 @@ def check_draw_frames(folder):
                        'exact_match':True,'sha256':hashlib.sha256(data).hexdigest()})
     return checks
 
-def build_gx2_guest(folder, run, env):
-    """Cross-build the GX2 profile from an already generated original draw guest."""
+def check_textured_frames(folder):
+    """Independent rectangle/UV oracle; no runtime sampler or vertex decoder."""
+    checks=[]
+    for screen,width in (('top',400),('bottom',320)):
+        path=folder/('frame-0-'+screen+'.ppm');data=path.read_bytes()
+        header=f'P6\n{width} 240\n255\n'.encode()
+        if not data.startswith(header) or len(data)!=len(header)+width*240*3:
+            raise RuntimeError('Textured capture has the wrong PPM format or dimensions')
+        expected=bytearray()
+        for y in range(240):
+            for x in range(width):
+                vx,vy=239-y,x
+                if not (30<=vx<210 and width//8<=vy<width*7//8):
+                    rgb=(16,32,49)
+                else:
+                    # UV endpoints span this rectangle. PICA storage reverses V.
+                    u=(2*vx-59)*16//360
+                    v=7-(2*vy+1-width//4)*8//(width*3//2)
+                    rgb=(255*(u&1),255*(((u>>2)^(v>>1))&1),255*(((u>>3)^v)&1))
+                    if (2*vx+1)*width+(2*vy+1)*240>=480*width:rgb=(0,rgb[1],0)
+                expected.extend(rgb)
+        if data[len(header):]!=expected:
+            raise RuntimeError('Captured texture pixels differ from the independent analytic image')
+        # One browser-friendly preview from the exact checked capture, no assets.
+        def chunk(kind,payload):
+            return struct.pack('>I',len(payload))+kind+payload+struct.pack('>I',zlib.crc32(kind+payload))
+        scan=b''.join(b'\0'+expected[y*width*3:(y+1)*width*3] for y in range(240))
+        png=(b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',width,240,8,2,0,0,0))+
+             chunk(b'IDAT',zlib.compress(scan))+chunk(b'IEND',b''))
+        path.with_suffix('.png').write_bytes(png)
+        checks.append({'screen':screen,'width':width,'height':240,'pixels':width*240,
+                       'exact_match':True,'sha256':hashlib.sha256(data).hexdigest()})
+    return checks
+
+def build_gx2_guest(folder, run, env, application='draw'):
+    """Cross-build the distinct GX2 profile from an already generated guest."""
+    if application not in ('draw','textured'):raise ValueError('Unsupported GX2 guest application')
+    textured=application=='textured'
+    target='ctr2wup-textured-guest' if textured else 'ctr2wup-gx2-guest'
     destination=folder/'wiiu-gx2';destination.mkdir()
     recipe=ROOT/'runtime/wiiu';(ROOT/'artifacts').mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='gx2-console-',dir=ROOT/'artifacts') as temporary:
         work=Path(temporary);shutil.copytree(folder/'aot',work/'aot')
         shutil.copy2(folder/'boot-image.h',work/'boot-image.h')
         prefix=os.path.relpath(work,recipe)
-        run('draw-gx2-wiiu-build',['make','-C',str(recipe),'OUTPUT='+prefix+'/wiiu',
-            'TARGET=ctr2wup-gx2-guest','GX2_GUEST=1','PICA_HOMEBREW=1','GUEST_DEFAULT=2',
+        run(application+'-gx2-wiiu-build',['make','-C',str(recipe),'OUTPUT='+prefix+'/wiiu',
+            'TARGET='+target,'GX2_GUEST=1','TEXTURED_HOMEBREW='+str(int(textured)),'PICA_HOMEBREW=1','GUEST_DEFAULT=2',
             'EXTERNAL_AOT=1','COMPILED_HOMEBREW=1','COMPILED_IMAGE_DIR='+prefix,
             'UPSTREAM_DIR='+prefix+'/aot'],env=env)
-        rpx=work/'wiiu/ctr2wup-gx2-guest.rpx';shortcut=rpx.with_suffix('.wuhb')
+        rpx=work/'wiiu'/(target+'.rpx');shortcut=rpx.with_suffix('.wuhb')
         _validate_rpx(rpx)
         if shortcut.read_bytes()[:4]!=b'WUHB':raise RuntimeError('Invalid GX2 guest WUHB')
         shutil.copy2(rpx,destination/rpx.name);shutil.copy2(shortcut,destination/shortcut.name)
@@ -87,15 +124,16 @@ def main():
     p.add_argument('--libctru-source',type=Path,default=ROOT.parent/'ctr2wup-deps/libctru')
     p.add_argument('--devkitarm',type=Path,default=Path(os.environ.get('DEVKITARM',str(Path(os.environ.get('DEVKITPRO','/workspace/ctr2wup-sdk'))/'devkitARM'))))
     p.add_argument('--cc',default='gcc');p.add_argument('--cc-prefix',default='');p.add_argument('--run-prefix',default='');p.add_argument('--static',action='store_true');p.add_argument('--sanitize',action='store_true')
-    p.add_argument('--application',choices=('boot','threaded','graphics','input','interactive','filesystem','romfs','transfer','draw'),help='Run only the selected original application')
+    p.add_argument('--application',choices=('boot','threaded','graphics','input','interactive','filesystem','romfs','transfer','draw','textured'),help='Run only the selected original application')
     p.add_argument('--wiiu',action='store_true',help='Also build original interactive/filesystem applications as RPX/WUHB')
-    p.add_argument('--gx2',action='store_true',help='Also cross-build the distinct GX2 guest profile; requires --application draw --wiiu')
+    p.add_argument('--gx2',action='store_true',help='Also cross-build the distinct GX2 guest profile; requires --application draw or textured and --wiiu')
     p.add_argument('--wiiu-guarded',action='store_true',help='Also verify/build an interactive AOT comparison with call depth limited to 2')
     p.add_argument('--romfs-file',action='store_true',help='Build the RomFS console diagnostic using a verified external asset blob')
     p.add_argument('--live-input',action='store_true',help='Replay held/released A with varied host clocks and console-sized budgets')
     p.add_argument('--trace-startup',action='store_true',help='Capture every IPC at single-instruction boundaries for the original boot application')
     a=p.parse_args()
-    if a.gx2 and (not a.wiiu or a.application!='draw'):p.error('--gx2 requires --application draw --wiiu')
+    if a.gx2 and (not a.wiiu or a.application not in ('draw','textured')):p.error('--gx2 requires --application draw or textured and --wiiu')
+    if a.wiiu and a.application=='textured' and not a.gx2:p.error('--application textured --wiiu requires --gx2')
     if a.trace_startup and a.application!='boot':p.error('--trace-startup requires --application boot')
     if a.wiiu_guarded and (not a.wiiu or a.application!='interactive'):p.error('--wiiu-guarded requires --wiiu --application interactive')
     if a.romfs_file and (not a.wiiu or a.application!='romfs'):p.error('--romfs-file requires --wiiu --application romfs')
@@ -138,17 +176,18 @@ def main():
             if a.static:flags+=['-static','-mcpu=750']
             if a.sanitize:flags+=['-O1','-fno-omit-frame-pointer','-fsanitize=address,undefined']
             if name=='romfs':flags+=['-DCTR_ROMFS_HOMEBREW']
-            if name=='draw':flags+=['-DCTR_DRAW_HOMEBREW']
+            if name in ('draw','textured'):flags+=['-DCTR_DRAW_HOMEBREW']
+            if name=='textured':flags+=['-DCTR_TEXTURED_HOMEBREW']
             sources=runtime_sources(ROOT) + [core / n for n in ('ctr_fs_snapshot.c', 'ctr_sha256.c', 'ctr_romfs_file.c')]+[ROOT/'runtime/recomp/ctr_recomp.c',ROOT/'tests/homebrew/runner.c']+[folder/'aot'/n for n in generation['sources']]
             run(name+'-host-compile',shlex.split(a.cc_prefix)+[a.cc,*flags,*map(str,sources),'-lm','-o',str(binary)])
-            extra=['--trace-ipc'] if a.trace_startup else [str(folder)] if name in ('graphics','interactive','transfer','draw') else ['--filesystem',str(folder/'save.snapshot')] if name=='filesystem' else []
+            extra=['--trace-ipc'] if a.trace_startup else [str(folder)] if name in ('graphics','interactive','transfer','draw','textured') else ['--filesystem',str(folder/'save.snapshot')] if name=='filesystem' else []
             output=run(name+'-execute',shlex.split(a.run_prefix)+[str(binary)]+extra)
-            result=json.loads(output.splitlines()[-1]);expected='CTR2WUP compiled libctru boot PASS' if name=='boot' else 'CTR2WUP compiled thread/TLS/LightLock PASS' if name=='threaded' else 'CTR2WUP compiled graphics PASS' if name=='graphics' else 'CTR2WUP compiled input PASS' if name=='input' else 'CTR2WUP compiled filesystem SAVE 1 PASS' if name=='filesystem' else 'CTR2WUP compiled RomFS PASS' if name=='romfs' else 'CTR2WUP compiled GX transfers PASS' if name=='transfer' else 'CTR2WUP compiled PICA draws PASS' if name=='draw' else 'CTR2WUP compiled interactive PASS'
+            result=json.loads(output.splitlines()[-1]);expected='CTR2WUP compiled libctru boot PASS' if name=='boot' else 'CTR2WUP compiled thread/TLS/LightLock PASS' if name=='threaded' else 'CTR2WUP compiled graphics PASS' if name=='graphics' else 'CTR2WUP compiled input PASS' if name=='input' else 'CTR2WUP compiled filesystem SAVE 1 PASS' if name=='filesystem' else 'CTR2WUP compiled RomFS PASS' if name=='romfs' else 'CTR2WUP compiled GX transfers PASS' if name=='transfer' else 'CTR2WUP compiled PICA draws PASS' if name=='draw' else 'CTR2WUP compiled textured PICA PASS' if name=='textured' else 'CTR2WUP compiled interactive PASS'
             if result['state']!='exited' or result['fallback'] or expected not in result['messages']:raise RuntimeError(name+' did not complete its real guest assertions')
             if name in ('graphics','interactive','transfer') and result['frames']!=[0x00ff00ff,0xff0000ff,0x00ff00ff]:raise RuntimeError('Require all three exact two-screen RGB565 frames')
             if name=='transfer' and result['gx']!={'commands':17,'dma':3,'fills':8,'transfers':3,'copies':1,'cache':1,'pica':1}:raise RuntimeError('Original application did not execute all expected GX operations')
             if name=='transfer' and result['pica_state']!={'lists':1,'writes':11,'finalizers':1,'viewport_width':0x12bb56dd}:raise RuntimeError('Original GPUCMD configuration state did not match masked/grouped writes')
-            if name=='draw' and (result['frames']!=[0x102031ff] or result['pica_render']!={'draws':4,'triangles':4,'fragments':97200,'shader_instructions':36}
+            if name in ('draw','textured') and (result['frames']!=[0x102031ff] or result['pica_render']!={'draws':4,'triangles':4,'fragments':97200,'shader_instructions':48 if name=='textured' else 36}
                                 or result['gx']!={'commands':6,'dma':0,'fills':2,'transfers':2,'copies':0,'cache':0,'pica':2}):
                 raise RuntimeError('Original program did not execute and present all expected PICA draws')
             if name=='input' and result['input_samples']!=3:raise RuntimeError('Require all three standard HID publications')
@@ -163,8 +202,8 @@ def main():
                     fields=dict(item.split('=',1) for item in line.split()[1:]);ipc.append({k:int(v,16) if k in ('header','result','pc') else int(v) if k=='request' else v for k,v in fields.items()})
             if a.trace_startup and sum(bool(event['result']) for event in ipc)!=result['ipc_failures']:raise RuntimeError('Incomplete startup failure trace')
             reports.append({'application':name,'guest':result,'frames':frames,'startup_ipc':ipc,'generation':generation,'allocated_bytes':image['allocated_bytes'],'executable_sha256':hashlib.sha256(image['code']).hexdigest()})
-            if name=='draw':
-                reports[-1]['independent_frame_checks']=check_draw_frames(folder)
+            if name in ('draw','textured'):
+                reports[-1]['independent_frame_checks']=(check_textured_frames if name=='textured' else check_draw_frames)(folder)
                 reports[-1]['independent_frame_checks_backend']='software'
             if name=='romfs':
                 blob=folder/'romfs-level3.bin'
@@ -212,6 +251,10 @@ def main():
                 checks.append({'name':'filesystem-corrupt-reject','exit_code':rejected.returncode,'expected':5})
                 if rejected.returncode!=5 or corrupt.read_bytes()!=bad:raise RuntimeError('Corrupt save was not preserved/rejected')
                 reports[-1]['snapshot_sha256']=hashlib.sha256(snapshot).hexdigest()
+            if a.wiiu and name=='textured':
+                reports[-1]['wiiu_gx2_artifacts']=build_gx2_guest(folder,run,env,name)
+                reports[-1]['gx2_guest']={'backend':'gx2','textured':True,'native_cross_build':True,
+                    'software_frame_checks':True,'gpu_hardware_verified':False}
             if a.wiiu and name in ('interactive','filesystem','romfs','transfer','draw'):
                 wiiu=folder/'wiiu';wiiu.mkdir();recipe=ROOT/'runtime/wiiu'
                 # GNU Make tokenizes source/prerequisite lists. Keep its relative
@@ -244,7 +287,7 @@ def main():
                         if shortcut.read_bytes()[:4]!=b'WUHB':raise RuntimeError('Invalid guarded WUHB')
                         shutil.copy2(rpx,guarded_folder/rpx.name);shutil.copy2(shortcut,guarded_folder/shortcut.name)
                     reports[-1]['guarded_wiiu_artifacts']=[{'name':f.name,'size':f.stat().st_size,'sha256':hashlib.sha256(f.read_bytes()).hexdigest()} for f in sorted(guarded_folder.iterdir())]
-        if a.wiiu and not any('wiiu_artifacts' in r for r in reports):raise ValueError('--wiiu requires interactive, filesystem, romfs, transfer or draw')
+        if a.wiiu and not any('wiiu_artifacts' in r or 'wiiu_gx2_artifacts' in r for r in reports):raise ValueError('--wiiu requires interactive, filesystem, romfs, transfer, draw or textured')
     if source_commit!=run('source-commit-after',['git','-C',str(ROOT),'rev-parse','HEAD']).strip():
         raise RuntimeError('Source commit changed during validation; retain logs and run again')
     source_dirty=source_dirty or bool(run('source-state-after',['git','-C',str(ROOT),'status','--porcelain']))

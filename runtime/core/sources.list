@@ -12,6 +12,7 @@ ctr_pica.c
 ctr_scene.c
 ctr_shader.c
 ctr_gx2_shader.c
+ctr_texture.c
 ctr_vertex.c
 ctr_transfer.c
 ctr_fs.c

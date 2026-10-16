@@ -8,6 +8,7 @@ import struct
 import tempfile
 import unittest
 import zipfile
+import zlib
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location('guest_draw_kit', ROOT / 'tools/package-guest-draws.py')
@@ -83,6 +84,33 @@ class GuestDrawPackageTests(unittest.TestCase):
                                   'software_frame_checks': True, 'gpu_hardware_verified': False}})
         self.report['gx2_shader_validation'] = {'ok': True, 'source_commit': 'a'*40,
                                               'source_dirty': False, 'console_verified': False}
+
+    def textured_profile(self):
+        self.gx2_profile()
+        self.report['version'] = self.manifest['version'] = '0.27.0'
+        old_source = self.release/'CTR2WUP-source-0.23.0.zip'
+        new_source = self.release/'CTR2WUP-source-0.27.0.zip'
+        old_source.rename(new_source)
+        self.manifest['artifacts'][0]['name'] = new_source.name
+        (self.release/'manifest.json').write_text(json.dumps(self.manifest))
+        app = self.report['applications'][0]
+        app['application'] = 'textured'
+        app['gx2_guest']['textured'] = True
+        app['guest']['messages'] = ['CTR2WUP compiled textured PICA PASS']
+        app['guest']['pica_render']['shader_instructions'] = 48
+        for frame, check in zip(app['frames'], app['independent_frame_checks']):
+            width = check['width']
+            pixels = b''.join(bytes((x % 256, y % 256, (x + 3*y) % 256))
+                              for y in range(240) for x in range(width))
+            data = f'P6\n{width} 240\n255\n'.encode() + pixels
+            (self.app/frame['name']).write_bytes(data)
+            frame['sha256'] = check['sha256'] = hashlib.sha256(data).hexdigest()
+        records = []
+        for original, name in zip(kit.GX2_NAMES, kit.TEXTURED_NAMES):
+            data = (self.app/'wiiu-gx2'/original).read_bytes()
+            (self.app/'wiiu-gx2'/name).write_bytes(data)
+            records.append({'name': name, 'size': len(data), 'sha256': hashlib.sha256(data).hexdigest()})
+        app['wiiu_gx2_artifacts'] = records
 
 
     def test_source_matched_kit_checks_all_published_bytes_and_preserves_limits(self):
@@ -181,6 +209,70 @@ class GuestDrawPackageTests(unittest.TestCase):
             self.package('gx2')
         self.assertEqual(json.loads((self.release/'manifest.json').read_text()), self.manifest)
         self.assertFalse(list(self.release.glob('*gx2-guest*')))
+
+    def test_textured_kit_has_distinct_identity_and_previews_checked_reference_pixels(self):
+        self.textured_profile()
+        result = self.package('textured')
+        self.assertEqual(result['name'], 'CTR2WUP-textured-guest-0.27.0.zip')
+        with zipfile.ZipFile(self.release/result['name']) as archive:
+            self.assertIn('sd-card/wiiu/apps/ctr2wup-textured-guest.wuhb', archive.namelist())
+            self.assertNotIn('sd-card/wiiu/apps/ctr2wup-gx2-guest.wuhb', archive.namelist())
+            receipt = json.loads(archive.read('manifest.json'))
+            self.assertEqual(receipt['render_backend'], 'gx2')
+            self.assertTrue(receipt['textured'])
+            self.assertFalse(receipt['gpu_hardware_verified'])
+            self.assertIn(b'CTR2WUP Textured Guest', archive.read('START-HERE.md'))
+            for screen, width in (('top', 400), ('bottom', 320)):
+                data = archive.read(f'images/textured-guest-{screen}.png')
+                self.assertEqual(data[:8], b'\x89PNG\r\n\x1a\n')
+                at, compressed = 8, b''
+                while at < len(data):
+                    length = int.from_bytes(data[at:at+4], 'big')
+                    kind, payload = data[at+4:at+8], data[at+8:at+8+length]
+                    self.assertEqual(zlib.crc32(kind+payload), int.from_bytes(data[at+8+length:at+12+length], 'big'))
+                    if kind == b'IDAT':compressed += payload
+                    if kind == b'IHDR':self.assertEqual(struct.unpack('>II', payload[:8]), (width, 240))
+                    at += 12+length
+                raw = zlib.decompress(compressed)
+                ppm = archive.read(f'reference/frame-0-{screen}.ppm').split(b'\n', 3)[3]
+                self.assertEqual(len(raw), 240*(width*3+1))
+                self.assertEqual(b''.join(raw[y*(width*3+1)+1:(y+1)*(width*3+1)] for y in range(240)), ppm)
+                self.assertTrue(all(raw[y*(width*3+1)] == 0 for y in range(240)))
+            self.assertFalse(any('guest-draw-' in name for name in archive.namelist()))
+
+    def test_old_software_or_gx2_report_cannot_identify_a_textured_guest(self):
+        with self.assertRaisesRegex(ValueError, 'source-matched'):
+            self.package('textured')
+        self.gx2_profile()
+        with self.assertRaisesRegex(ValueError, 'source-matched'):
+            self.package('textured')
+        # Renaming the application still lacks the new program's PASS/counters.
+        self.report['applications'][0]['application'] = 'textured'
+        with self.assertRaisesRegex(ValueError, 'original guest'):
+            self.package('textured')
+        self.assertFalse(list(self.release.glob('*textured-guest*')))
+
+    def test_textured_source_profile_and_binary_tampering_preserve_release(self):
+        self.textured_profile()
+        original = copy.deepcopy(self.report)
+        changes = (
+            lambda r: r.update(source_commit='b'*40),
+            lambda r: r['gx2_shader_validation'].update(source_dirty=True),
+            lambda r: r['applications'][0]['gx2_guest'].pop('textured'),
+            lambda r: r['applications'][0]['gx2_guest'].update(gpu_hardware_verified=True),
+            lambda r: r['applications'][0]['guest']['pica_render'].update(shader_instructions=36),
+            lambda r: r['applications'][0].update(wiiu_gx2_artifacts=r['applications'][0]['wiiu_artifacts']),
+        )
+        for index, change in enumerate(changes):
+            with self.subTest(change=index):
+                self.report = copy.deepcopy(original)
+                change(self.report)
+                with self.assertRaises(ValueError):self.package('textured')
+                self.assertFalse(list(self.release.glob('*textured-guest*')))
+        self.report = original
+        (self.app/'wiiu-gx2'/kit.TEXTURED_NAMES[1]).write_bytes(b'WUHBchanged')
+        with self.assertRaisesRegex(ValueError, 'receipt'):self.package('textured')
+        self.assertEqual(json.loads((self.release/'manifest.json').read_text()), self.manifest)
 
 
 if __name__ == '__main__':

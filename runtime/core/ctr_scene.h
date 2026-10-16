@@ -6,6 +6,8 @@
 #define CTR_SCENE_MAX_VERTICES 256u
 #define CTR_SCENE_MAX_DRAWS 32u
 #define CTR_SCENE_MAX_SURFACE_BYTES (1024u*1024u)
+#define CTR_SCENE_MAX_TEXTURE_SPANS 32u
+#define CTR_SCENE_MAX_TEXTURE_SOURCE_BYTES (4u*1024u*1024u)
 typedef enum {
     CTR_SCENE_OK, CTR_SCENE_ARGUMENT, CTR_SCENE_OVERFLOW, CTR_SCENE_ALIAS,
     CTR_SCENE_LIMIT, CTR_SCENE_NO_MEMORY, CTR_SCENE_WIRE, CTR_SCENE_UNSUPPORTED,
@@ -26,11 +28,28 @@ typedef struct ctr_scene_state {
     uint64_t lists,draws,triangles,fragments,shader_instructions;
 } ctr_scene_state;
 typedef struct {
+    uint32_t base_address;
+    const void *bytes;size_t size;
+} ctr_scene_resource_span;
+typedef struct {
     /* Explicit caller-resolved PICA physical base; never dereferenced. All array
      * and index offsets resolve inside this single owned stable resource span. */
     uint32_t base_address;
     const void *bytes;size_t size;
+    /* Optional stable owned texture snapshots. A texture must fit completely
+     * inside this geometry span or one of these additional physical spans.
+     * Physical spans cannot overlap. At most 32 extra spans / 4 MiB total. */
+    const ctr_scene_resource_span *textures;
+    unsigned texture_count;
 } ctr_scene_resources;
+typedef struct {
+    /* Decoded raw-memory row order: PICA V=0 samples row height-1. Borrowed
+     * only during draw; never retained in ctr_scene_state or guest mappings. */
+    const uint8_t *rgba;
+    unsigned width,height;
+    uint32_t address,format,params;
+    unsigned tev_mode; /* 0: texture replace; 1: texture * primary color. */
+} ctr_scene_texture;
 typedef struct {
     /* Explicit resolved backend target: linear RGBA8, row zero at bottom.
      * No PICA framebuffer address, tiling or GPU coherency is inferred. */
@@ -39,8 +58,8 @@ typedef struct {
 } ctr_scene_surface;
 /* Optional synchronous renderer. All commands, resources and software pixels
  * are validated before begin. begin initializes private scratch from initial;
- * draw receives decoded original inputs and the complete current PICA/shader
- * state. Borrowed inputs remain valid only during the callback and must not be
+ * draw receives original inputs, complete current PICA/shader state and an
+ * optional decoded texture. Borrowed data is valid only during the callback and must not be
  * modified. end fills linear RGBA8 readback and releases renderer resources.
  * abort must be safe after failed begin/draw/end and after successful end; it
  * releases scratch without publishing pixels. The caller owns this descriptor
@@ -49,7 +68,8 @@ typedef struct {
 typedef struct ctr_scene_backend {
     void *context;
     bool (*begin)(void *context,const ctr_scene_surface *initial);
-    bool (*draw)(void *context,const ctr_scene_state *state,const ctr_vertex *vertices,unsigned count);
+    bool (*draw)(void *context,const ctr_scene_state *state,const ctr_vertex *vertices,unsigned count,
+                 const ctr_scene_texture *texture);
     bool (*end)(void *context,const ctr_scene_surface *readback);
     void (*abort)(void *context);
 } ctr_scene_backend;
@@ -68,8 +88,10 @@ void ctr_scene_init(ctr_scene_state *state);
  * registers, complete packed fixed/uniform uploads and full-mask draw triggers.
  * Draw complete triangle lists (<=256 vertices each), W=1, inside clip volume,
  * exact 1/16-pixel positions and constant opaque binary primary color per
- * triangle. Fragment policy is untextured replacement with depth/blend disabled.
- * Unknown/texture/TEV/depth/framebuffer registers, unsupported arithmetic and geometry fail.
+ * triangle. Optional texture0 supports all 14 base formats, nearest filtering,
+ * clamp/repeat/mirror, signed exact Q16 UVs in [-16,16], and texture replacement
+ * or modulation by primary color. V=0 samples the last raw texture row.
+ * Depth/blend, other texture/TEV modes, unsupported arithmetic and geometry fail.
  * Every list stages state and the complete target before any commit, so late
  * errors preserve previous state/pixels. Inputs must be owned/aligned/stable.
  * Reports may change on failure unless aliased. This software entry point never
@@ -81,8 +103,8 @@ ctr_scene_result ctr_scene_execute(ctr_scene_state *state,const void *commands,
                                   const ctr_scene_surface *surface,
                                   ctr_scene_report *report);
 /* Same owned staging boundary with explicit PICA framebuffer/fragment state.
- * Requires defined untextured primary-color/pass-through TEV, logic COPY,
- * full opaque color writes, no depth/stencil/alpha/blend, RGBA8, 8x8 tiles,
+ * Requires defined primary-color or supported texture/pass-through TEV, logic
+ * COPY, full RGBA writes, no depth/stencil/alpha/blend, RGBA8, 8x8 tiles,
  * and unflipped dimensions/address matching the caller-resolved linear target.
  * The caller resolves, snapshots and commits guest tiled storage separately;
  * this API never follows an address or reads/writes a guest mapping. */

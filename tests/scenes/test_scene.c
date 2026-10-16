@@ -283,7 +283,7 @@ static size_t find(const ctr_scene_fixture *f,unsigned reg,unsigned instance) {
 }
 static void set(ctr_scene_fixture *f,unsigned reg,uint32_t v) { put32(f->commands+find(f,reg,0),v); }
 static ctr_scene_result execute(ctr_scene_fixture *f,ctr_scene_state *state,uint8_t *pixels,ctr_scene_report *report) {
-    ctr_scene_resources r={UINT32_C(0x18000000),f->resources,f->resource_bytes};
+    ctr_scene_resources r={UINT32_C(0x18000000),f->resources,f->resource_bytes,NULL,0};
     ctr_scene_surface s={pixels,CTR_SCENE_FIXTURE_BYTES,64,64,256};
     return ctr_scene_execute(state,f->commands,f->command_bytes,&r,&s,report);
 }
@@ -490,7 +490,7 @@ static void scene_errors(void) {
     RESET();put32(f.resources+48,UINT32_C(0x7fc00000));f.command_bytes=find(&f,0x232,1);finish(&f);
     CHECK(execute(&f,&state,pixels,&report)==CTR_SCENE_OK && report.draws==1 && report.fragments==1128);
     /* Report aliases never damage either input or the render target. */
-    RESET();ctr_scene_resources resources={UINT32_C(0x18000000),f.resources,f.resource_bytes};
+    RESET();ctr_scene_resources resources={UINT32_C(0x18000000),f.resources,f.resource_bytes,NULL,0};
     ctr_scene_surface surface={pixels,sizeof(pixels),64,64,256};
     CHECK(ctr_scene_execute(&state,f.commands,f.command_bytes,&resources,&surface,(ctr_scene_report *)&state)==CTR_SCENE_ALIAS);
     CHECK(!memcmp(&state,&previous,sizeof(state)) && !memcmp(pixels,old_pixels,sizeof(pixels)));
@@ -524,7 +524,8 @@ static bool padded_begin(void *context,const ctr_scene_surface *initial) {
     CHECK(initial->width==64 && initial->height==64 && initial->stride==260 && initial->size==p->size);
     return true;
 }
-static bool padded_draw(void *context,const ctr_scene_state *state,const ctr_vertex *vertices,unsigned count) {
+static bool padded_draw(void *context,const ctr_scene_state *state,const ctr_vertex *vertices,unsigned count,const ctr_scene_texture *texture) {
+    CHECK(!texture);
     padded_backend *p=context;++p->draws;CHECK(count==3 && vertices[0].enabled==3);
     CHECK(state->registers[0x11d]==UINT32_C(0x03002000));return true;
 }
@@ -557,7 +558,7 @@ static void backend_full_target(void) {
     ctr_scene_state initial,expected,state;target_state(&initial);expected=initial;
     uint8_t pixels[SIZE],old[SIZE],reference[SIZE];ctr_scene_fixture_background(old,sizeof(old));
     memcpy(reference,old,sizeof(old));
-    ctr_scene_resources resources={UINT32_C(0x18000000),f.resources,f.resource_bytes};
+    ctr_scene_resources resources={UINT32_C(0x18000000),f.resources,f.resource_bytes,NULL,0};
     ctr_scene_surface surface={reference,sizeof(reference),64,64,260};ctr_scene_report report;
     CHECK(ctr_scene_execute_target(&expected,f.commands,f.command_bytes,&resources,&surface,UINT32_C(0x18010000),&report)==CTR_SCENE_OK);
     for(unsigned kind=0;kind<3;++kind) {
@@ -587,8 +588,265 @@ static void backend_full_target(void) {
     CHECK(ctr_scene_execute_target_backend(&state,f.commands,f.command_bytes,&resources,&surface,
           UINT32_C(0x18010000),(const ctr_scene_backend *)(UINTPTR_MAX-3u),&report)==CTR_SCENE_OVERFLOW);
 }
+static void insert(ctr_scene_fixture *f,size_t at,unsigned reg,uint32_t v) {
+    CHECK(f->command_bytes+8u<=sizeof(f->commands));
+    memmove(f->commands+at+8u,f->commands+at,f->command_bytes-at);
+    put32(f->commands+at,v);put32(f->commands+at+4u,UINT32_C(0xf0000)|reg);f->command_bytes+=8u;
+}
+static void textured_fixture(ctr_scene_fixture *f,bool shorts,unsigned mode,unsigned wrap,
+                             float u0,float u1,float v0,float v1) {
+    ctr_scene_fixture_make(f,shorts);uint8_t positions[64];memcpy(positions,f->resources,sizeof(positions));
+    memset(f->resources,0,sizeof(f->resources));
+    for(unsigned i=0;i<4;++i) {
+        memcpy(f->resources+i*24u,positions+i*16u,16u);
+        put32(f->resources+i*24u+16u,bits(i&1u?u1:u0));
+        put32(f->resources+i*24u+20u,bits(i&2u?v1:v0));
+    }
+    const uint8_t order[]={0,1,2,1,3,2};unsigned index_bytes=shorts?2u:1u;
+    for(unsigned i=0;i<6;++i)f->resources[96u+i*index_bytes]=order[i];
+    f->resource_bytes=96u+6u*index_bytes;
+    set(f,0x201,UINT32_C(0x7ff));set(f,0x202,UINT32_C(0x20020000));
+    set(f,0x204,UINT32_C(0x20));set(f,0x205,UINT32_C(0x20180000));
+    set(f,0x2b9,UINT32_C(0xa0000002));set(f,0x2bd,7);set(f,0x04f,3);
+    put32(f->commands+find(f,0x227,0),(shorts?UINT32_C(0x80000000):0u)|96u);
+    put32(f->commands+find(f,0x227,1),(shorts?UINT32_C(0x80000000):0u)|(96u+3u*index_bytes));
+    put32(f->commands+find(f,0x2cc,2),mov(2,2,0));
+    insert(f,find(f,0x2bf,0),0x2cc,UINT32_C(0x88000000));
+    size_t at=find(f,0x232,0);
+    const unsigned regs[]={0x052,0x064,0x06f,0x080,0x082,0x083,0x084,0x085,0x08e};
+    const uint32_t values[]={UINT32_C(0x1f1f0d0c),1,0x103,1,UINT32_C(0x00100008),wrap,0,
+        UINT32_C(0x03001000),0};
+    for(unsigned i=0;i<sizeof(regs)/sizeof(*regs);++i,at+=8u)insert(f,at,regs[i],values[i]);
+    const unsigned tev[]={0xc0,0xc8,0xd0,0xd8,0xf0,0xf8};
+    for(unsigned i=0;i<6;++i) {
+        insert(f,at,tev[i],i?UINT32_C(0xf000f):UINT32_C(0x30003));at+=8u;
+        insert(f,at,tev[i]+1u,0);at+=8u;
+        insert(f,at,tev[i]+2u,!i && mode?UINT32_C(0x10001):0u);at+=8u;
+        insert(f,at,tev[i]+4u,0);at+=8u;
+    }
+    finish(f);
+}
+static unsigned texture_tile(unsigned x,unsigned y,unsigned width) {
+    unsigned small=0;
+    for(unsigned bit=0;bit<3;++bit)small|=((x>>bit)&1u)<<(2u*bit)|((y>>bit)&1u)<<(2u*bit+1u);
+    return ((y/8u)*(width/8u)+x/8u)*64u+small;
+}
+static void texture_pattern(uint8_t *raw,unsigned width,unsigned height) {
+    for(unsigned y=0;y<height;++y)for(unsigned x=0;x<width;++x) {
+        uint8_t rgba[]={(uint8_t)(13u*x+17u*y),(uint8_t)(5u*x+29u*y),
+            (uint8_t)(7u*x+3u*y+11u),(uint8_t)(19u*x+23u*y+37u)};
+        for(unsigned lane=0;lane<4;++lane)raw[texture_tile(x,y,width)*4u+lane]=rgba[3u-lane];
+    }
+}
+static unsigned golden_wrap(int coordinate,unsigned extent,unsigned mode) {
+    if(mode==0u)return coordinate<0?0u:coordinate>=(int)extent?extent-1u:(unsigned)coordinate;
+    int period=(int)extent*(mode==3u?2:1);
+    while(coordinate<0)coordinate+=period;
+    while(coordinate>=period)coordinate-=period;
+    return mode==3u && coordinate>=(int)extent?(unsigned)(period-coordinate-1):(unsigned)coordinate;
+}
+static int golden_floor(int64_t n,int64_t d) { return (int)(n>=0?n/d:-((-n+d-1)/d)); }
+static void textured_golden(const uint8_t *pixels,unsigned mode,unsigned wrap,
+                            float u0,float u1,float v0,float v1) {
+    int bounds[4]={(int)(u0*65536.0f),(int)(u1*65536.0f),(int)(v0*65536.0f),(int)(v1*65536.0f)};
+    for(unsigned y=0;y<64;++y)for(unsigned x=0;x<64;++x) {
+        uint8_t expected[]={16,32,48,255};
+        if(x>=8u && x<56u && y>=8u && y<56u) {
+            /* Closed affine square coordinates, independent of triangle edges
+             * and barycentric arithmetic used by the renderer. */
+            int64_t u=(int64_t)bounds[0]*96+((int)x*2-15)*(int64_t)(bounds[1]-bounds[0]);
+            int64_t v=(int64_t)bounds[2]*96+((int)y*2-15)*(int64_t)(bounds[3]-bounds[2]);
+            unsigned tx=golden_wrap(golden_floor(u*16,96*65536),16,(wrap>>12)&3u);
+            unsigned ty=7u-golden_wrap(golden_floor(v*8,96*65536),8,(wrap>>8)&3u);
+            expected[0]=(uint8_t)(13u*tx+17u*ty);expected[1]=(uint8_t)(5u*tx+29u*ty);
+            expected[2]=(uint8_t)(7u*tx+3u*ty+11u);expected[3]=(uint8_t)(19u*tx+23u*ty+37u);
+            if(mode) { bool red=x+y<63u;expected[red?1:0]=0;expected[2]=0; }
+        }
+        CHECK(!memcmp(pixels+(y*64u+x)*4u,expected,4u));
+    }
+}
+static void textured_scenes(void) {
+    ctr_scene_fixture f;ctr_scene_state state;ctr_scene_report report;
+    uint8_t raw[16u*8u*4u],pixels[CTR_SCENE_FIXTURE_BYTES];texture_pattern(raw,16,8);
+    ctr_scene_resource_span span={UINT32_C(0x18008000),raw,sizeof(raw)};
+    const unsigned modes[]={0,2,3};
+    for(unsigned shorts=0;shorts<2;++shorts)for(unsigned mode=0;mode<2;++mode)
+        for(unsigned sw=0;sw<3;++sw)for(unsigned tw=0;tw<3;++tw)for(unsigned range=0;range<3;++range) {
+        unsigned wrap=(modes[sw]<<12)|(modes[tw]<<8);
+        float u0=range==2?-16.0f:range?-1.0f:0.0f,u1=range==2?16.0f:range?2.0f:1.0f;
+        float v0=range==2?16.0f:range?-0.5f:0.0f,v1=range==2?-16.0f:range?1.5f:1.0f;
+        textured_fixture(&f,shorts!=0,mode,wrap,u0,u1,v0,v1);
+        if(mode && range==1)set(&f,0xc0,UINT32_C(0x300030));
+        ctr_scene_init(&state);ctr_scene_fixture_background(pixels,sizeof(pixels));
+        ctr_scene_resources resources={UINT32_C(0x18000000),f.resources,f.resource_bytes,&span,1};
+        ctr_scene_surface surface={pixels,sizeof(pixels),64,64,256};
+        CHECK(ctr_scene_execute(&state,f.commands,f.command_bytes,&resources,&surface,&report)==CTR_SCENE_OK);
+        CHECK(report.draws==2 && report.triangles==2 && report.fragments==2304 && report.shader_instructions==24);
+        textured_golden(pixels,mode,wrap,u0,u1,v0,v1);
+    }
+    /* Exact endpoint UVs exercise clamp, negative repeat and negative mirrored
+     * repeat at integer boundaries, rather than only interior sample centers. */
+    for(unsigned mode=0;mode<3;++mode)for(int uv=-16;uv<=16;++uv) {
+        unsigned wrap=(modes[mode]<<12)|(modes[mode]<<8);
+        textured_fixture(&f,false,0,wrap,(float)uv,(float)uv,(float)uv,(float)uv);
+        ctr_scene_init(&state);ctr_scene_fixture_background(pixels,sizeof(pixels));
+        ctr_scene_resources resources={UINT32_C(0x18000000),f.resources,f.resource_bytes,&span,1};
+        ctr_scene_surface surface={pixels,sizeof(pixels),64,64,256};
+        CHECK(ctr_scene_execute(&state,f.commands,f.command_bytes,&resources,&surface,&report)==CTR_SCENE_OK);
+        textured_golden(pixels,0,wrap,(float)uv,(float)uv,(float)uv,(float)uv);
+    }
+    /* The geometry span itself can own the texture; no external map or fixture
+     * address is required by the implementation. */
+    uint8_t combined[1024]={0};textured_fixture(&f,false,0,0,0,1,0,1);
+    memcpy(combined,f.resources,f.resource_bytes);memcpy(combined+512,raw,sizeof(raw));
+    set(&f,0x085,UINT32_C(0x18000200)/8u);ctr_scene_init(&state);
+    ctr_scene_fixture_background(pixels,sizeof(pixels));
+    ctr_scene_resources resources={UINT32_C(0x18000000),combined,sizeof(combined),NULL,0};
+    ctr_scene_surface surface={pixels,sizeof(pixels),64,64,256};
+    CHECK(ctr_scene_execute(&state,f.commands,f.command_bytes,&resources,&surface,&report)==CTR_SCENE_OK);
+    textured_golden(pixels,0,0,0,1,0,1);
+    /* Every existing base decoder is connected to sampling, including ETC1
+     * signed modifiers and ETC1A4 alpha. All-zero source has an analytic value. */
+    uint8_t blank[256]={0};
+    static const unsigned alpha[]={0,255,0,255,0,0,255,255,0,0,255,0,255,0};
+    static const unsigned bpp[]={32,24,16,16,16,16,16,8,8,8,4,4,4,8};
+    for(unsigned format=0;format<14;++format) {
+        textured_fixture(&f,false,0,format>=12?32:0,0,1,0,1);set(&f,0x082,UINT32_C(0x00080008));set(&f,0x08e,format);
+        ctr_scene_resource_span texture={UINT32_C(0x18008000),blank,8u*8u*bpp[format]/8u};
+        resources=(ctr_scene_resources){UINT32_C(0x18000000),f.resources,f.resource_bytes,&texture,1};
+        ctr_scene_init(&state);ctr_scene_fixture_background(pixels,sizeof(pixels));
+        CHECK(ctr_scene_execute(&state,f.commands,f.command_bytes,&resources,&surface,&report)==CTR_SCENE_OK);
+        for(unsigned y=8;y<56;++y)for(unsigned x=8;x<56;++x) {
+            const uint8_t expected[]={(uint8_t)(format>=12?2:0),(uint8_t)(format>=12?2:0),
+                (uint8_t)(format>=12?2:0),(uint8_t)alpha[format]};
+            CHECK(!memcmp(pixels+(y*64u+x)*4u,expected,4u));
+        }
+    }
+}
+typedef struct {
+    const uint8_t *expected;
+    unsigned begins,draws,ends,aborts;
+    bool corrupt;
+} texture_backend;
+static bool texture_begin(void *context,const ctr_scene_surface *initial) {
+    texture_backend *p=context;++p->begins;
+    CHECK(initial->width==64 && initial->height==64 && initial->stride==256);
+    const uint8_t background[]={16,32,48,255};CHECK(!memcmp(initial->bytes,background,4));return true;
+}
+static bool texture_draw(void *context,const ctr_scene_state *s,const ctr_vertex *vertices,unsigned count,
+                         const ctr_scene_texture *texture) {
+    texture_backend *p=context;++p->draws;CHECK(count==3 && vertices[0].enabled==7);
+    CHECK(s->registers[0x080]==1 && texture && texture->rgba && texture->width==16 && texture->height==8);
+    CHECK(texture->address==UINT32_C(0x18008000) && !texture->format && !texture->params && !texture->tev_mode);
+    const uint8_t first[]={0,0,11,37},lastrow[]={119,203,32,198};
+    CHECK(!memcmp(texture->rgba,first,4) && !memcmp(texture->rgba+7u*16u*4u,lastrow,4));
+    CHECK(vertices[0].input[2][0]==(p->draws==1u?0.0f:1.0f));return true;
+}
+static bool texture_end(void *context,const ctr_scene_surface *readback) {
+    texture_backend *p=context;++p->ends;memcpy(readback->bytes,p->expected,readback->size);
+    if(p->corrupt)((uint8_t *)readback->bytes)[(16u*64u+16u)*4u]^=1u;
+    return true;
+}
+static void texture_abort(void *context) { texture_backend *p=context;++p->aborts; }
+static void textured_rollback(void) {
+    ctr_scene_fixture f;ctr_scene_state state,previous;ctr_scene_report report;
+    uint8_t raw[512],raw_before[512],pixels[CTR_SCENE_FIXTURE_BYTES],before[CTR_SCENE_FIXTURE_BYTES],reference[CTR_SCENE_FIXTURE_BYTES];
+    texture_pattern(raw,16,8);memcpy(raw_before,raw,sizeof(raw));
+    ctr_scene_resource_span span={UINT32_C(0x18008000),raw,sizeof(raw)};
+    ctr_scene_resources resources={UINT32_C(0x18000000),f.resources,0,&span,1};
+    ctr_scene_surface surface={pixels,sizeof(pixels),64,64,256};
+    textured_fixture(&f,false,0,0,0,1,0,1);resources.size=f.resource_bytes;target_state(&state);
+    ctr_scene_fixture_background(pixels,sizeof(pixels));memcpy(before,pixels,sizeof(before));
+    CHECK(ctr_scene_execute_target(&state,f.commands,f.command_bytes,&resources,&surface,
+          UINT32_C(0x18010000),&report)==CTR_SCENE_OK);memcpy(reference,pixels,sizeof(reference));
+    /* The payload contains actual decoded source rows and original guest UV
+     * attributes; exact full-target parity still guards the native commit. */
+    for(unsigned corrupt=0;corrupt<2;++corrupt) {
+        textured_fixture(&f,false,0,0,0,1,0,1);resources.size=f.resource_bytes;
+        target_state(&state);previous=state;memcpy(pixels,before,sizeof(pixels));
+        texture_backend context={reference,0,0,0,0,corrupt!=0};
+        ctr_scene_backend backend={&context,texture_begin,texture_draw,texture_end,texture_abort};
+        CHECK(ctr_scene_execute_target_backend(&state,f.commands,f.command_bytes,&resources,&surface,
+              UINT32_C(0x18010000),&backend,&report)==(corrupt?CTR_SCENE_BACKEND:CTR_SCENE_OK));
+        CHECK(context.begins==1 && context.draws==2 && context.ends==1 && context.aborts==corrupt);
+        CHECK(!memcmp(pixels,corrupt?before:reference,sizeof(pixels)));
+        if(corrupt)CHECK(!memcmp(&state,&previous,sizeof(state)));
+    }
+    for(unsigned kind=0;kind<19;++kind) {
+        textured_fixture(&f,false,0,0,0,1,0,1);resources.size=f.resource_bytes;
+        target_state(&state);previous=state;memcpy(pixels,before,sizeof(pixels));
+        if(kind==0)append(&f,0x083,2); /* Late unsupported magnification filter. */
+        if(kind==1)append(&f,0x083,UINT32_C(0x100)); /* Border wrap. */
+        if(kind==2)append(&f,0x084,1); /* Unsupported mip/LOD. */
+        if(kind==3)append(&f,0xc2,2); /* Unsupported TEV after both draws. */
+        if(kind==4)append(&f,0xc1,1);
+        if(kind==5)append(&f,0xc4,1);
+        if(kind==6)append(&f,0x08e,14);
+        if(kind==7)append(&f,0x080,3);
+        if(kind==8)set(&f,0x082,UINT32_C(0x000f0008));
+        if(kind==9)set(&f,0x085,(span.base_address+(uint32_t)span.size-8u)/8u);
+        if(kind==10)put32(f.resources+16u,bits(17.0f));
+        if(kind==11)put32(f.resources+16u,bits(1.0f/131072.0f));
+        if(kind==12)set(&f,0x052,UINT32_C(0x1f1f1f0c));
+        if(kind==13)set(&f,0x064,0);
+        if(kind==14)set(&f,0x06f,3);
+        if(kind==15) { /* Compressed format must carry its real format flag. */
+            set(&f,0x08e,12);set(&f,0x082,UINT32_C(0x00080008));
+        }
+        if(kind==16)set(&f,0x083,32); /* Noncompressed format cannot carry it. */
+        if(kind==17) { /* The first staged draw succeeds before source failure. */
+            insert(&f,find(&f,0x22f,1),0x085,(span.base_address+(uint32_t)span.size-8u)/8u);finish(&f);
+        }
+        if(kind==18) {
+            set(&f,0x08e,12);set(&f,0x082,UINT32_C(0x00080008));set(&f,0x083,32);
+            memset(raw,0,sizeof(raw));put32(raw+4,UINT32_C(0x702)); /* Invalid ETC differential block. */
+        }
+        texture_backend context={reference,0,0,0,0,false};
+        ctr_scene_backend backend={&context,texture_begin,texture_draw,texture_end,texture_abort};
+        CHECK(ctr_scene_execute_target_backend(&state,f.commands,f.command_bytes,&resources,&surface,
+              UINT32_C(0x18010000),&backend,&report)!=CTR_SCENE_OK);
+        CHECK(!context.begins && !context.draws && !context.ends && !context.aborts);
+        CHECK(!memcmp(pixels,before,sizeof(pixels)) && !memcmp(&state,&previous,sizeof(state)));
+        if(kind<8u)CHECK(report.draws==2);
+        if(kind==17u)CHECK(report.draws==1);
+        memcpy(raw,raw_before,sizeof(raw));
+    }
+    /* Metadata and source aliases, physical ambiguity, wraparound and aggregate
+     * bounds fail before any writes to state, target or borrowed source data. */
+    for(unsigned kind=0;kind<12;++kind) {
+        textured_fixture(&f,false,0,0,0,1,0,1);target_state(&state);previous=state;
+        memcpy(pixels,before,sizeof(pixels));
+        ctr_scene_resource_span spans[2]={{UINT32_C(0x18008000),raw,sizeof(raw)},
+                                        {UINT32_C(0x18009000),raw,sizeof(raw)}};
+        resources=(ctr_scene_resources){UINT32_C(0x18000000),f.resources,f.resource_bytes,spans,1};
+        ctr_scene_result expected=CTR_SCENE_ALIAS;
+        uint8_t *oversized=NULL;
+        if(kind==0)resources.textures=(const ctr_scene_resource_span *)&state;
+        if(kind==1)resources.textures=(const ctr_scene_resource_span *)pixels;
+        if(kind==2)resources.textures=(const ctr_scene_resource_span *)&report;
+        if(kind==3)spans[0].bytes=&state;
+        if(kind==4)spans[0].bytes=pixels;
+        if(kind==5)spans[0].bytes=&report;
+        if(kind==6)spans[0].base_address=resources.base_address;
+        if(kind==7) { resources.texture_count=2;spans[1].base_address=spans[0].base_address; }
+        if(kind==8) { resources.texture_count=33;expected=CTR_SCENE_LIMIT; }
+        if(kind==9) { spans[0].base_address=UINT32_MAX;expected=CTR_SCENE_OVERFLOW; }
+        if(kind==10) { spans[0].size=0;expected=CTR_SCENE_LAYOUT; }
+        if(kind==11) {
+            oversized=malloc(CTR_SCENE_MAX_TEXTURE_SOURCE_BYTES+1u);CHECK(oversized);
+            spans[0].bytes=oversized;spans[0].size=CTR_SCENE_MAX_TEXTURE_SOURCE_BYTES+1u;expected=CTR_SCENE_LIMIT;
+        }
+        ctr_scene_result actual=ctr_scene_execute(&state,f.commands,f.command_bytes,&resources,&surface,&report);
+        if(actual!=expected)fprintf(stderr,"texture alias case %u: actual=%s expected=%s\n",kind,
+            ctr_scene_result_name(actual),ctr_scene_result_name(expected));
+        CHECK(actual==expected);
+        CHECK(!memcmp(pixels,before,sizeof(pixels)) && !memcmp(&state,&previous,sizeof(state)));
+        CHECK(!memcmp(raw,raw_before,sizeof(raw)));
+        free(oversized);
+    }
+}
 int main(void) {
     floats24();shader_patterns();shader_arithmetic();arithmetic_boundaries();shader_errors();shader_capacity();
-    scenes();arithmetic_scenes();scene_capacity();scene_errors();backend_full_target();
+    scenes();arithmetic_scenes();scene_capacity();scene_errors();backend_full_target();textured_scenes();textured_rollback();
     printf("original shader/scene tests: %u assertions passed\n",assertions);return 0;
 }

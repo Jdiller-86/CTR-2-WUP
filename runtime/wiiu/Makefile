@@ -7,7 +7,8 @@ export PATH := $(DEVKITPPC)/bin:$(DEVKITPRO)/tools/bin:$(PATH)
 # Keep make targets relative so a checkout directory may contain spaces/Unicode.
 OUTPUT ?= ../../artifacts/wiiu
 GX2_GUEST ?= 0
-TARGET ?= $(if $(filter 1,$(GX2_GUEST)),ctr2wup-gx2-guest,ctr2wup-prototype)
+TEXTURED_HOMEBREW ?= 0
+TARGET ?= $(if $(filter 1,$(TEXTURED_HOMEBREW)),ctr2wup-textured-guest,$(if $(filter 1,$(GX2_GUEST)),ctr2wup-gx2-guest,ctr2wup-prototype))
 GUEST_DEFAULT ?= 0
 EXTERNAL_AOT ?= 0
 COMPILED_HOMEBREW ?= 0
@@ -32,7 +33,7 @@ APP_NAME := CTR2WUP ARM Guest $(APP_VERSION)
 else
 APP_NAME := CTR2WUP Native $(APP_VERSION)
 endif
-BUILD := $(OUTPUT)/objects$(if $(filter 1,$(GX2_GUEST)),-gx2,)
+BUILD := $(OUTPUT)/objects$(if $(filter 1,$(GX2_GUEST)),-gx2,)$(if $(filter 1,$(TEXTURED_HOMEBREW)),-textured,)
 CC := $(DEVKITPPC)/bin/powerpc-eabi-gcc
 WUT := $(DEVKITPRO)/wut
 CFLAGS := -std=c11 -O2 -g -Wall -Wextra -Werror -ffunction-sections -fdata-sections \
@@ -76,6 +77,13 @@ $(error GX2_GUEST requires its own compiled PICA profile)
 endif
 CFLAGS += -DCTR_GX2_GUEST
 APP_NAME := CTR2WUP GX2 Guest $(APP_VERSION)
+endif
+ifeq ($(TEXTURED_HOMEBREW),1)
+ifneq ($(GX2_GUEST),1)
+$(error TEXTURED_HOMEBREW requires GX2_GUEST=1)
+endif
+CFLAGS += -DCTR_TEXTURED_HOMEBREW
+APP_NAME := CTR2WUP Textured Guest $(APP_VERSION)
 endif
 ifeq ($(AUDIO_ONLY),1)
 CFLAGS += -DCTR_AUDIO_ONLY
@@ -124,7 +132,7 @@ CORE_SOURCES := $(CTR_RUNTIME_SOURCES) ../core/ctr_cpu_selftest.c \
     ../core/ctr_hid_fixture.c \
     ../core/ctr_gsp_fixture.c \
     ../core/ctr_relay_fixture.c \
-    ../core/ctr_stack_fixture.c ../core/ctr_thread_fixture.c ../core/ctr_sha256.c ../core/ctr_romfs_file.c ../core/ctr_texture.c \
+    ../core/ctr_stack_fixture.c ../core/ctr_thread_fixture.c ../core/ctr_sha256.c ../core/ctr_romfs_file.c \
     ../../tests/fixtures/threads/thread.generated.c ../../tests/fixtures/threads/thread-image.generated.c \
     ../../tests/fixtures/stack/stack.generated.c ../../tests/fixtures/stack/stack-image.generated.c \
     ../../tests/fixtures/relay/relay.generated.c ../../tests/fixtures/relay/relay-image.generated.c \

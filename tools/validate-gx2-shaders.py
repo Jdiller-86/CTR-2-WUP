@@ -173,10 +173,13 @@ class Case:
             for lane in range(4):
                 semantic = mapping >> (lane * 8) & 31
                 if semantic != 31: semantics[semantic] = outputs[register][lane]
-        return {'outputs': [word for values in outputs for word in values],
+        result = {'outputs': [word for values in outputs for word in values],
                 'written': written, 'input_mask': input_mask, 'uniform_used': uniforms,
                 'position': [semantics[lane] for lane in range(4)],
                 'color': [semantics[lane] for lane in range(8, 12)], 'instructions': executed}
+        if 12 in semantics or 13 in semantics:
+            result['texcoord0'] = [semantics[12], semantics[13], 0, 0x3f800000]
+        return result
 
 
 def cases():
@@ -249,6 +252,62 @@ def cases():
                    change=change, expected_compile=status, expected_cpu=cpu)
     numeric = default_inputs(); numeric[2][0] = 0x3f800001
     yield Case('numeric-preflight-retained', bad, inputs=numeric, expected_cpu='unsupported-numeric-value')
+    yield from texture_cases()
+
+
+def texture_cases():
+    """Original UV programs exercise export layout, independently of sampling."""
+    end = Instruction('END')
+    base = [Instruction('MOV', 0, 0), Instruction('MOV', 1, 1), Instruction('MOV', 2, 2)]
+    maps = (0x03020100, 0x0b0a0908, 0x1f1f0d0c)
+    yield Case('texcoord0-identity', base + [end], output_mask=7, maps=maps)
+    for u in range(4):
+        for v in range(4):
+            if u == v: continue
+            mapping = 0x1f1f1f1f
+            mapping = mapping & ~(255 << (u * 8)) | 12 << (u * 8)
+            mapping = mapping & ~(255 << (v * 8)) | 13 << (v * 8)
+            yield Case(f'texcoord0-source-lanes-{u}-{v}', base + [end], output_mask=7,
+                       maps=maps[:2] + (mapping,))
+    # Packed output tables follow the mask's register order, not semantic order.
+    yield Case('texcoord0-sparse-output', [Instruction('MOV', 3, 0), Instruction('MOV', 6, 1),
+               Instruction('MOV', 15, 2), end], output_mask=(1 << 3) | (1 << 6) | (1 << 15),
+               maps=maps[:2] + (0x0c1f1f0d,))
+    yield Case('texcoord0-interleaved-semantics', base + [end], output_mask=7,
+               maps=(0x0d0c0100, 0x09080302, 0x1f1f0b0a))
+    for op in ('MOV', 'ADD', 'MUL'):
+        for signs in range(4):
+            yield Case(f'texcoord0-{op}-signs-{signs}', base + [
+                Instruction('MOV', 16, 2),
+                Instruction(op, 16, 16, 3, (3, 1, 2, 0), (2, 0, 3, 1),
+                            bool(signs & 1), bool(signs & 2)),
+                Instruction('MOV', 2, 16), end], output_mask=7, maps=maps)
+    # Boundary coordinates and signed zero remain exact-rational shader inputs;
+    # scene sampling limits are enforced by the scene contract, not the encoder.
+    for raw in (0, 0x80000000, binary32(Fraction(-16)), binary32(Fraction(16)),
+                binary32(Fraction(-1, 16)), binary32(Fraction(255, 16)),
+                binary32(Fraction(32))):
+        inputs = default_inputs(); inputs[2] = [raw, raw ^ 0x80000000, 0, 0x3f800000]
+        yield Case(f'texcoord0-numeric-{raw:08x}', base + [end], inputs=inputs,
+                   output_mask=7, maps=maps)
+    values = [binary32(Fraction(-1, 4)), binary32(Fraction(3, 4)), 0, 0x3f800000]
+    yield Case('texcoord0-uniform-95', base + [Instruction('MOV', 2, 127), end],
+               uniforms={95: (15, values)}, output_mask=7, maps=maps)
+    yield Case('texcoord0-entry-508-last-511', base + [end], entry=508, output_mask=7, maps=maps)
+    yield Case('texcoord0-clause-boundaries-511', base + [Instruction('ADD', 16, 2, 3)] * 508 + [end],
+               output_mask=7, maps=maps)
+    for mapping, status in ((0x1f1f1f0c, 'undefined-source-or-semantic'),
+                            (0x1f1f1f0d, 'undefined-source-or-semantic'),
+                            (0x1f1f0c0c, 'undefined-source-or-semantic'),
+                            (0x1f0e0d0c, 'unsupported-instruction-or-state')):
+        yield Case(f'reject-texcoord0-map-{mapping:08x}', base + [end], output_mask=7,
+                   maps=maps[:2] + (mapping,), expected_compile=status)
+    yield Case('reject-texcoord0-unwritten-output', base[:2] + [end], output_mask=7,
+               maps=maps, expected_compile='undefined-source-or-semantic')
+    yield Case('reject-texcoord0-unwritten-lane', base[:2] + [Instruction('MOV', 2, 2, mask=1), end],
+               output_mask=7, maps=maps, expected_compile='undefined-source-or-semantic')
+    yield Case('reject-texcoord0-missing-color', base + [end], output_mask=7,
+               maps=(maps[0], 0x1f0a0908, maps[2]), expected_compile='undefined-source-or-semantic')
 
 
 def decode(program, inputs, uniforms=None, gprs=128):
@@ -256,7 +315,7 @@ def decode(program, inputs, uniforms=None, gprs=128):
     if not program or len(program) % 8 or len(program) > 65536:
         raise ValueError('Invalid program span')
     registers = dict(inputs); uniforms = uniforms or {}
-    exports, clauses, alu_count, at, fetches = [], [], 0, 0, 0
+    exports, clauses, export_opcodes, alu_count, at, fetches = [], [], [], 0, 0, 0
     read_inputs, read_uniforms, highest = 0, [0] * 96, 0
 
     def source(selector, channel, negate):
@@ -309,7 +368,7 @@ def decode(program, inputs, uniforms=None, gprs=128):
             if opcode == 19:
                 if at != 8 or word0 or word1 != 19 << 23: raise ValueError('Invalid fetch-shader call')
                 fetches += 1
-            elif opcode == 40:
+            elif opcode in (39, 40):
                 if word0 & 0xffc00000 or word1 & 0x405ff000: raise ValueError('Unsupported export addressing/mode')
                 kind, base, register = word0 >> 13 & 3, word0 & 8191, word0 >> 15 & 127
                 if register >= gprs: raise ValueError('Export exceeds GPR allocation')
@@ -323,12 +382,21 @@ def decode(program, inputs, uniforms=None, gprs=128):
                     else: raise ValueError('Unwritten export lane')
                 exports.append({'type': kind, 'base': base, 'gpr': register,
                                 'selectors': selectors, 'values': values, 'barrier': bool(word1 >> 31)})
-                if word1 & (1 << 21): ended = True; break
+                export_opcodes.append(opcode)
+                if word1 & (1 << 21):
+                    if opcode != 40: raise ValueError('Program terminates with unfinished export')
+                    ended = True; break
             else:
                 raise ValueError('Unsupported control-flow instruction')
     if not ended or fetches != 1: raise ValueError('Missing program termination/fetch')
-    if [(item['type'], item['base']) for item in exports] != [(1, 60), (2, 0)]:
-        raise ValueError('Expected POS0 and PARAM0 exports')
+    destinations = [(item['type'], item['base']) for item in exports]
+    if destinations not in ([(1, 60), (2, 0)], [(1, 60), (2, 0), (2, 1)]):
+        raise ValueError('Expected POS0, PARAM0 and optional PARAM1 exports')
+    expected_opcodes = [40, 40] if len(exports) == 2 else [40, 39, 40]
+    if export_opcodes != expected_opcodes: raise ValueError('Incorrect export completion sequence')
+    if len(exports) == 3 and exports[2]['selectors'] != [0, 1, 4, 5]:
+        raise ValueError('Expected texcoord0 xy01 export')
+    if any(item['barrier'] for item in exports[1:]): raise ValueError('Unexpected parameter export barrier')
     if not exports[0]['barrier']: raise ValueError('Position export lacks completion barrier')
     if any(begin < at for begin, _ in clauses): raise ValueError('ALU overlaps control flow')
     data_begin = min((begin for begin, _ in clauses), default=len(program))
@@ -367,6 +435,9 @@ def validate(binary, corpus=None):
         accepted += 1
         if result['cpu'] != 'ok': preflight_rejected += 1; continue
         expected = case.oracle()
+        textured = 'texcoord0' in expected
+        if result['texcoord0'] != textured or result['gprs'] != (54 if textured else 53):
+            raise ValueError(f'{case.name}: texture export metadata/allocation differs')
         registers = {(register + 1, lane): raw for register, values in enumerate(case.inputs)
                      if case.enabled & (1 << register) for lane, raw in enumerate(values)}
         uniforms = {(register, lane): raw for register, (mask, values) in case.uniforms.items()
@@ -376,6 +447,10 @@ def validate(binary, corpus=None):
             raise ValueError(f'{case.name}: original PICA CPU output differs from rational oracle')
         if decoded['exports'][0]['values'] != expected['position'] or decoded['exports'][1]['values'] != expected['color']:
             raise ValueError(f'{case.name}: independently decoded Latte exports differ from rational oracle')
+        if len(decoded['exports']) != (3 if textured else 2):
+            raise ValueError(f'{case.name}: independently decoded texture export count differs')
+        if textured and decoded['exports'][2]['values'] != expected['texcoord0']:
+            raise ValueError(f'{case.name}: independently decoded texcoord0 differs from rational oracle')
         for key in ('input_mask', 'uniform_used'):
             if result[key] != expected[key] or decoded[key] != expected[key]:
                 raise ValueError(f'{case.name}: decoded {key} differs from original source use')
@@ -383,10 +458,12 @@ def validate(binary, corpus=None):
             raise ValueError(f'{case.name}: instruction counts differ')
         total_alu += decoded['alu_instructions']; total_clauses += decoded['clauses']
         if case.name in ('identity', 'in-place-ADD-15', 'uniform-95', 'permuted-output-registers',
-                         'split-output-semantics', 'clause-boundaries-511'):
+                         'split-output-semantics', 'clause-boundaries-511', 'texcoord0-identity',
+                         'texcoord0-sparse-output', 'texcoord0-uniform-95', 'texcoord0-clause-boundaries-511'):
             samples.append({'name': case.name, 'position_bits': expected['position'], 'color_bits': expected['color'],
                             'clauses': decoded['clauses'], 'alu_instructions': decoded['alu_instructions'],
                             'program_sha256': hashlib.sha256(bytes.fromhex(result['bytes'])).hexdigest()})
+            if textured: samples[-1]['texcoord0_bits'] = expected['texcoord0']
     return {'ok': True, 'cases': len(corpus), 'accepted': accepted, 'rejected': rejected,
             'numeric_preflight_rejected': preflight_rejected, 'decoded_alu_instructions': total_alu,
             'decoded_clauses': total_clauses, 'input_sha256': hashlib.sha256(payload).hexdigest(),

@@ -27,7 +27,17 @@ static bool draw_ready;
 static uint32_t draw_pixel(unsigned x,unsigned y,unsigned screen) {
     unsigned height=screen?320u:400u,px=239u-y,py=x;
     if(px<30u || px>=210u || py<height/8u || py>=height*7u/8u)return UINT32_C(0x102031ff);
+#ifdef CTR_TEXTURED_HOMEBREW
+    unsigned tx=((2u*px+1u-60u)*16u)/360u;
+    unsigned ty=7u-((2u*py+1u-height/4u)*8u)/(height*3u/2u);
+    uint32_t result=((tx&1u)?UINT32_C(0xff000000):0u)|
+        ((((tx>>2)^(ty>>1))&1u)?UINT32_C(0x00ff0000):0u)|
+        ((((tx>>3)^ty)&1u)?UINT32_C(0x0000ff00):0u)|255u;
+    if((2u*px+1u)*height+(2u*py+1u)*240u>=480u*height)result&=UINT32_C(0x00ff00ff);
+    return result;
+#else
     return (2u*px+1u)*height+(2u*py+1u)*240u<480u*height?UINT32_C(0xff0000ff):UINT32_C(0x00ff00ff);
+#endif
 }
 #endif
 static void message(void *context,const char *text) {

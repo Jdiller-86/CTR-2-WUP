@@ -1,5 +1,6 @@
 """Original semantic and malformed-machine-code checks for the Latte oracle."""
 from fractions import Fraction
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -26,6 +27,9 @@ class ShaderReferenceTests(unittest.TestCase):
         cls.program = bytes.fromhex(cls.result['bytes'])
         cls.registers = {(register + 1, lane): raw for register, values in enumerate(cls.identity.inputs)
                          for lane, raw in enumerate(values)}
+        cls.textured = next(VALIDATOR.texture_cases())
+        cls.texture_result = json.loads(subprocess.check_output([str(cls.binary)], input=cls.textured.payload().encode()))
+        cls.texture_program = bytes.fromhex(cls.texture_result['bytes'])
 
     @classmethod
     def tearDownClass(cls):
@@ -39,6 +43,14 @@ class ShaderReferenceTests(unittest.TestCase):
         struct.pack_into('<I', program, offset, value)
         return bytes(program)
 
+    def changed_texture_word(self, offset, value):
+        program = bytearray(self.texture_program)
+        struct.pack_into('<I', program, offset, value)
+        return bytes(program)
+
+    def decode_texture(self, program):
+        return VALIDATOR.decode(program, self.registers, gprs=self.texture_result['gprs'])
+
     def test_original_corpus_matches_public_cpu_and_independent_machine_decoder(self):
         report = VALIDATOR.validate(self.binary)
         self.assertGreater(report['cases'], 1600)
@@ -47,6 +59,59 @@ class ShaderReferenceTests(unittest.TestCase):
         self.assertEqual(report['numeric_preflight_rejected'], 1)
         self.assertFalse(report['console_verified'])
         self.assertLess(len(json.dumps(report)), 6000)
+
+    def test_existing_untextured_shader_corpus_keeps_identical_program_bytes(self):
+        corpus = [case for case in VALIDATOR.cases() if 'texcoord0' not in case.name]
+        payload = ''.join(case.payload() for case in corpus).encode()
+        rows = [json.loads(line) for line in subprocess.check_output([str(self.binary)], input=payload).splitlines()]
+        digest = hashlib.sha256()
+        for row in rows:
+            if row['compile'] != 'ok': continue
+            self.assertFalse(row['texcoord0'])
+            self.assertEqual(row['gprs'], 53)
+            program = bytes.fromhex(row['bytes'])
+            digest.update(len(program).to_bytes(4, 'little'))
+            digest.update(program)
+        self.assertEqual(len(rows), 1663)
+        self.assertEqual(digest.hexdigest(), '62b5b88f76240f77075128409d77004a0b6ce3ca274f591c924088eaceb5b1da')
+
+    def test_uv_export_uses_second_parameter_and_defined_xy01_components(self):
+        self.assertTrue(self.texture_result['texcoord0'])
+        self.assertEqual(self.texture_result['gprs'], 54)
+        self.assertEqual(struct.unpack_from('<I', self.texture_program, 28)[0], 0x13800688)
+        self.assertEqual(struct.unpack_from('<II', self.texture_program, 32), (1 | (2 << 13) | (53 << 15), 0x14200b08))
+        decoded = self.decode_texture(self.texture_program)
+        self.assertEqual(decoded['highest_gpr'], 53)
+        self.assertEqual(decoded['exports'][2]['values'], self.textured.oracle()['texcoord0'])
+        self.assertEqual(decoded['exports'][2]['selectors'], [0, 1, 4, 5])
+
+    def test_uv_export_requires_its_additional_register_budget(self):
+        with self.assertRaisesRegex(ValueError, 'allocation'):
+            VALIDATOR.decode(self.texture_program, self.registers, gprs=53)
+
+    def test_uv_export_cannot_replace_or_skip_parameter_one(self):
+        word = struct.unpack_from('<I', self.texture_program, 32)[0]
+        with self.assertRaisesRegex(ValueError, 'PARAM1'):
+            self.decode_texture(self.changed_texture_word(32, (word & ~8191) | 2))
+
+    def test_uv_export_constants_cannot_change_silently(self):
+        word = struct.unpack_from('<I', self.texture_program, 36)[0]
+        with self.assertRaisesRegex(ValueError, 'xy01'):
+            self.decode_texture(self.changed_texture_word(36, (word & ~(7 << 6)) | (5 << 6)))
+
+    def test_color_export_must_remain_open_until_uv_export_completes(self):
+        with self.assertRaisesRegex(ValueError, 'completion sequence'):
+            self.decode_texture(self.changed_texture_word(28, 0x14000688))
+        with self.assertRaisesRegex(ValueError, 'unfinished export'):
+            self.decode_texture(self.changed_texture_word(28, 0x13a00688))
+
+    def test_valid_uv_source_corruption_changes_independent_expected_coordinate(self):
+        address = 512 + 32 * 8
+        word = struct.unpack_from('<I', self.texture_program, address)[0]
+        changed = self.changed_texture_word(address, word | (1 << 10))
+        actual = self.decode_texture(changed)['exports'][2]['values']
+        self.assertNotEqual(actual, self.textured.oracle()['texcoord0'])
+        self.assertEqual(actual[0], self.textured.inputs[2][1])
 
     def test_valid_but_wrong_swizzle_changes_semantic_result(self):
         # The first MOV captures v0.x. Selecting y is legal machine code, but

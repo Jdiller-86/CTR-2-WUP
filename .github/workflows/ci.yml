@@ -143,6 +143,11 @@ jobs:
             --output artifacts/ci/scenes 2>&1 | tee artifacts/ci/native/scenes.log
       - name: Validate generated GX2 shaders against independent Latte decoding
         run: python3 tools/validate-gx2-shaders.py --cc "${{ matrix.cc }}" --sanitize --output artifacts/ci/gx2-shaders
+      - name: Compare original texture and TEV scenes with exact rational pixels
+        run: |
+          artifacts/gx2-native-tests/native --fragment-programs > artifacts/ci/native/fragment-programs.json
+          python3 tools/validate-textured-scenes.py --cc "${{ matrix.cc }}" --sanitize \
+            --fragment-programs artifacts/ci/native/fragment-programs.json --output artifacts/ci/textured-scenes
       - name: Compare display cache work and exact output
         run: python3 tools/benchmark-display.py --cc "${{ matrix.cc }}" --output artifacts/ci/display-benchmark
       - name: Compare original DSP ADPCM samples with rational reference
@@ -158,7 +163,13 @@ jobs:
           name: native-${{ matrix.cc }}-${{ github.sha }}
           path: |
             artifacts/ci/native/*.log
+            artifacts/ci/native/fragment-programs.json
             artifacts/ci/gx2-shaders/report.json
+            artifacts/ci/textured-scenes/report.json
+            artifacts/ci/textured-scenes/*.commands
+            artifacts/ci/textured-scenes/*.resources
+            artifacts/ci/textured-scenes/*.texture
+            artifacts/ci/textured-scenes/*.rgba
             artifacts/ci/display-benchmark/report.json
             artifacts/ci/dsp-adpcm/report.json
             artifacts/ci/dsp-adpcm/original-vectors.bin
@@ -378,6 +389,45 @@ jobs:
         with:
           name: wiiu-gx2-guest-${{ github.sha }}
           path: artifacts/ci/gx2-guest/
+          retention-days: 30
+          if-no-files-found: error
+      - name: Execute and cross-build the original textured guest
+        run: |
+          set -euo pipefail
+          python3 tools/validate-libctru.py --application textured --wiiu --gx2 --sanitize \
+            --devkitarm "$DEVKITPRO/devkitARM" --output artifacts/ci/compiled-textured \
+            2>&1 | tee artifacts/ci/sdk/compiled-textured.log
+          mkdir -p artifacts/ci/textured-guest/images artifacts/ci/textured-guest/licenses artifacts/ci/textured-guest/rpx artifacts/ci/textured-guest/sd-card/wiiu/apps
+          cp artifacts/ci/compiled-textured/report.json artifacts/ci/textured-guest/
+          cp artifacts/ci/compiled-textured/gx2-shaders/report.json artifacts/ci/textured-guest/shader-validation.json
+          cp artifacts/ci/compiled-textured/textured/frame-*.* artifacts/ci/textured-guest/images/
+          cp artifacts/ci/compiled-textured/textured/wiiu-gx2/*.rpx artifacts/ci/textured-guest/rpx/
+          cp artifacts/ci/compiled-textured/textured/wiiu-gx2/*.wuhb artifacts/ci/textured-guest/sd-card/wiiu/apps/
+          python - <<'PYGUIDE'
+          import json, os
+          from pathlib import Path
+          from host import __version__
+          stage = Path('artifacts/ci/textured-guest')
+          guide = Path('tools/templates/textured-guest.md').read_text()
+          (stage/'START-HERE.md').write_text(
+              guide.replace('@VERSION@', __version__).replace('@SOURCE_COMMIT@', os.environ['GITHUB_SHA']))
+          (stage/'profile.json').write_text(json.dumps({
+              'version': __version__, 'source_commit': os.environ['GITHUB_SHA'],
+              'application': 'CTR2WUP Textured Guest', 'render_backend': 'gx2', 'textured': True,
+              'native_cross_build': True, 'reference_frames_backend': 'software',
+              'gpu_hardware_verified': False, 'console_verified': False}, indent=2)+'\n')
+          PYGUIDE
+          cp LICENSE THIRD_PARTY_NOTICES artifacts/ci/textured-guest/
+          cp docs/licenses/libctru.txt artifacts/ci/textured-guest/licenses/
+          cp -R "$DEVKITPRO/licenses" artifacts/ci/textured-guest/licenses/sdk
+          cp "$DEVKITPRO/ctr2wup-image-digest.txt" artifacts/ci/textured-guest/sdk-image-digest.txt
+          git rev-parse HEAD > artifacts/ci/textured-guest/source-commit.txt
+          (cd artifacts/ci/textured-guest && sha256sum -- rpx/*.rpx sd-card/wiiu/apps/*.wuhb > SHA256SUMS)
+      - name: Upload the focused compiled Textured Guest package
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wiiu-textured-guest-${{ github.sha }}
+          path: artifacts/ci/textured-guest/
           retention-days: 30
           if-no-files-found: error
       - name: Build and independently verify the original Audio Streams diagnostic

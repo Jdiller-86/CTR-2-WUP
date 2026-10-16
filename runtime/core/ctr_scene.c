@@ -1,5 +1,6 @@
 /* Original experimental owned-resource PICA scene boundary; no emulator linked. */
 #include "ctr_scene.h"
+#include "ctr_texture.h"
 #include <float.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,7 +21,8 @@ static unsigned bit_count(unsigned mask) {
 static bool ordinary(unsigned reg) {
     return (reg>=0x040u && reg<=0x044u) || (reg>=0x04fu && reg<=0x056u) ||
            (reg>=0x065u && reg<=0x068u) || (reg>=0x200u && reg<=0x22au) ||
-           reg==0x25eu || reg==0x25fu || (reg>=0x2b9u && reg<=0x2bdu);
+           reg==0x064u || reg==0x06fu || reg==0x25eu || reg==0x25fu ||
+           (reg>=0x2b9u && reg<=0x2bdu);
 }
 static bool target_register(unsigned reg) {
     static const unsigned tev[]={0xc0,0xc8,0xd0,0xd8,0xf0,0xf8};
@@ -29,27 +31,106 @@ static bool target_register(unsigned reg) {
         (reg>=0x100u && reg<=0x107u) || (reg>=0x112u && reg<=0x117u) ||
         (reg>=0x11bu && reg<=0x11eu);
 }
+static bool fragment_register(unsigned reg) {
+    static const unsigned tev[]={0xc0,0xc8,0xd0,0xd8,0xf0,0xf8};
+    for(unsigned i=0;i<6;++i)if(reg>=tev[i] && reg<=tev[i]+4u)return true;
+    return (reg>=0x080u && reg<=0x08bu) || reg==0x08eu || reg==0x08fu ||
+        reg==0x0e0u || reg==0x0fdu;
+}
 static bool configured(const ctr_scene_state *s,unsigned reg,uint32_t value) {
     return s->register_defined[reg]==15u && s->registers[reg]==value;
 }
 static ctr_scene_result target_pipeline(const ctr_scene_state *s,const ctr_scene_surface *surface,
                                         uint32_t color_address) {
-    static const unsigned disabled[]={0x080,0x08f,0x100,0x104,0x105,0x106,0x112,0x114,0x115,0x117,0x11b};
+    static const unsigned disabled[]={0x08f,0x100,0x104,0x105,0x106,0x112,0x114,0x115,0x117,0x11b};
     for(unsigned i=0;i<sizeof(disabled)/sizeof(*disabled);++i)
         if(!configured(s,disabled[i],0u))return CTR_SCENE_UNSUPPORTED;
     if(!configured(s,0x102u,3u) || !configured(s,0x107u,UINT32_C(0xf00)) ||
        !configured(s,0x113u,15u))return CTR_SCENE_UNSUPPORTED;
     if(s->registers[0x0e0u] || s->registers[0x116u] || s->registers[0x11cu])return CTR_SCENE_UNSUPPORTED;
-    static const unsigned tev[]={0xc0,0xc8,0xd0,0xd8,0xf0,0xf8};
-    for(unsigned i=0;i<6;++i) {
-        if(!configured(s,tev[i],i?UINT32_C(0xf000f):0u) ||
-           !configured(s,tev[i]+1u,0u) || !configured(s,tev[i]+2u,0u) ||
-           !configured(s,tev[i]+4u,0u))return CTR_SCENE_UNSUPPORTED;
-    }
     uint32_t dimensions=surface->width|((surface->height-1u)<<12)|UINT32_C(0x01000000);
     if((color_address&7u) || (surface->width&7u) || (surface->height&7u) ||
        !configured(s,0x11du,color_address>>3) || !configured(s,0x11eu,dimensions))return CTR_SCENE_LAYOUT;
     return CTR_SCENE_OK;
+}
+static ctr_scene_result fragment(const ctr_scene_state *s,const ctr_scene_resources *resources,
+                                 bool bound,ctr_scene_texture *texture,uint8_t **allocation) {
+    static const unsigned tev[]={0xc0,0xc8,0xd0,0xd8,0xf0,0xf8};
+    bool textured=s->registers[0x080u]!=0u;
+    if((s->register_defined[0x064u] && !configured(s,0x064u,textured?1u:0u)) ||
+       (s->register_defined[0x06fu] && !configured(s,0x06fu,textured?UINT32_C(0x103):3u)))
+        return CTR_SCENE_UNSUPPORTED;
+    if(!textured && !bound)return CTR_SCENE_OK;
+    if(!configured(s,0x080u,textured?1u:0u) || s->registers[0x08fu] ||
+       s->registers[0x0e0u] || s->registers[0x0fdu])return CTR_SCENE_UNSUPPORTED;
+    unsigned mode=0;
+    for(unsigned i=0;i<6;++i) {
+        uint32_t source=s->registers[tev[i]],operation=s->registers[tev[i]+2u];
+        if(!configured(s,tev[i]+1u,0u) || !configured(s,tev[i]+4u,0u) ||
+           s->register_defined[tev[i]]!=15u || s->register_defined[tev[i]+2u]!=15u)
+            return CTR_SCENE_UNSUPPORTED;
+        if(i || !textured) {
+            if(source!=(i?UINT32_C(0xf000f):0u) || operation)return CTR_SCENE_UNSUPPORTED;
+        } else {
+            if(source==UINT32_C(0x30003) && !operation)mode=0;
+            else if((source==UINT32_C(0x30003) || source==UINT32_C(0x300030)) &&
+                    operation==UINT32_C(0x10001))mode=1;
+            else return CTR_SCENE_UNSUPPORTED;
+        }
+    }
+    if(!textured)return CTR_SCENE_OK;
+    for(unsigned reg=0x082u;reg<=0x085u;++reg)
+        if(s->register_defined[reg]!=15u)return CTR_SCENE_UNSUPPORTED;
+    if(s->register_defined[0x08eu]!=15u || s->registers[0x084u])return CTR_SCENE_UNSUPPORTED;
+    for(unsigned reg=0x086u;reg<=0x08bu;++reg)
+        if(s->registers[reg])return CTR_SCENE_UNSUPPORTED;
+    uint32_t dimensions=s->registers[0x082u],format=s->registers[0x08eu],params=s->registers[0x083u];
+    unsigned width=(dimensions>>16)&2047u,height=dimensions&2047u;
+    if((dimensions&~UINT32_C(0x07ff07ff)) || format>=14u)return CTR_SCENE_UNSUPPORTED;
+    size_t bytes=0;
+    if(ctr_texture_size(format,width,height,&bytes)!=CTR_TEXTURE_OK)return CTR_SCENE_LAYOUT;
+    if((params&~UINT32_C(0x3320)) || ((params>>8)&3u)==1u || ((params>>12)&3u)==1u ||
+       (params&32u)!=(format>=12u?32u:0u))return CTR_SCENE_UNSUPPORTED;
+    if(s->registers[0x085u]>UINT32_MAX/8u)return CTR_SCENE_OVERFLOW;
+    uint32_t address=s->registers[0x085u]*8u;const uint8_t *source=NULL;
+    uint64_t end=(uint64_t)address+bytes;
+    if(end>(uint64_t)UINT32_MAX+1u)return CTR_SCENE_OVERFLOW;
+    if(address>=resources->base_address && end<=(uint64_t)resources->base_address+resources->size)
+        source=(const uint8_t *)resources->bytes+(address-resources->base_address);
+    for(unsigned i=0;!source && i<resources->texture_count;++i) {
+        const ctr_scene_resource_span *p=&resources->textures[i];
+        if(address>=p->base_address && end<=(uint64_t)p->base_address+p->size)
+            source=(const uint8_t *)p->bytes+(address-p->base_address);
+    }
+    if(!source)return CTR_SCENE_LAYOUT;
+    uint8_t *rgba=malloc((size_t)width*height*4u);
+    if(!rgba)return CTR_SCENE_NO_MEMORY;
+    if(ctr_texture_decode(source,bytes,format,width,height,rgba,(size_t)width*height*4u)!=CTR_TEXTURE_OK) {
+        free(rgba);return CTR_SCENE_LAYOUT;
+    }
+    *texture=(ctr_scene_texture){rgba,width,height,address,format,params,mode};
+    *allocation=rgba;return CTR_SCENE_OK;
+}
+/* Reject unsupported independently meaningful state even when it follows a
+ * staged draw. Configuration may prepare a later list, but cannot hide an
+ * unsupported filter, texture mode or combiner behind the last trigger. */
+static bool fragment_value(unsigned reg,uint32_t value) {
+    static const unsigned tev[]={0xc0,0xc8,0xd0,0xd8,0xf0,0xf8};
+    if(reg==0x080u)return value<=1u;
+    if(reg==0x082u)return !(value&~UINT32_C(0x07ff07ff));
+    if(reg==0x083u)return !(value&~UINT32_C(0x3320)) &&
+        ((value>>8)&3u)!=1u && ((value>>12)&3u)!=1u;
+    if(reg==0x084u || (reg>=0x086u && reg<=0x08bu) ||
+       reg==0x08fu || reg==0x0e0u || reg==0x0fdu)return !value;
+    if(reg==0x085u)return value<=UINT32_MAX/8u;
+    if(reg==0x08eu)return value<14u;
+    for(unsigned i=0;i<6;++i) {
+        if(reg==tev[i])return i?value==UINT32_C(0xf000f):
+            value==0u || value==UINT32_C(0x30003) || value==UINT32_C(0x300030);
+        if(reg==tev[i]+1u || reg==tev[i]+4u)return !value;
+        if(reg==tev[i]+2u)return !value || (!i && value==UINT32_C(0x10001));
+    }
+    return true;
 }
 static ctr_scene_result packed(const uint32_t words[3],uint32_t bits[4]) {
     uint32_t raw[4]={words[2]&UINT32_C(0xffffff),
@@ -195,9 +276,9 @@ static ctr_scene_result vertices(const ctr_scene_state *s,const ctr_scene_resour
     }
     return CTR_SCENE_OK;
 }
-typedef struct { int32_t x,y;float position[4],color[4]; } scene_vertex;
+typedef struct { int32_t x,y,uv[2];float position[4],color[4]; } scene_vertex;
 static ctr_scene_result semantics(const ctr_scene_state *s,const ctr_shader_output *out,
-                                  const ctr_scene_surface *surface,scene_vertex *v) {
+                                  const ctr_scene_surface *surface,scene_vertex *v,bool textured) {
     unsigned mask=s->registers[0x2bdu],total=s->registers[0x04fu],packed_index=0,seen=0;
     if((mask&~65535u) || !mask || total>7u || total!=bit_count(mask))return CTR_SCENE_UNSUPPORTED;
     for(unsigned reg=0;reg<16;++reg)if(mask&(1u<<reg)) {
@@ -206,14 +287,21 @@ static ctr_scene_result semantics(const ctr_scene_state *s,const ctr_shader_outp
         for(unsigned lane=0;lane<4;++lane) {
             unsigned id=(mapping>>(lane*8u))&31u;
             if(id==31u)continue;
-            if(id>11u || (id>=4u && id<8u))return CTR_SCENE_UNSUPPORTED;
+            if(id>13u || (id>=4u && id<8u))return CTR_SCENE_UNSUPPORTED;
             if((seen&(1u<<id)) || !(out->written[reg]&(1u<<lane)))return CTR_SCENE_SHADER;
             seen|=1u<<id;
             if(id<4u)v->position[id]=out->values[reg][lane];
-            else v->color[id-8u]=out->values[reg][lane];
+            else if(id<12u)v->color[id-8u]=out->values[reg][lane];
+            else {
+                double scaled=(double)out->values[reg][lane]*65536.0;
+                if(scaled<-1048576.0 || scaled>1048576.0)return CTR_SCENE_UNSUPPORTED;
+                int32_t fixed=(int32_t)scaled;
+                if((double)fixed!=scaled)return CTR_SCENE_NUMERIC;
+                v->uv[id-12u]=fixed;
+            }
         }
     }
-    if(seen!=UINT32_C(0x0f0f))return CTR_SCENE_SHADER;
+    if(seen!=UINT32_C(0x3f0f) && (textured || seen!=UINT32_C(0x0f0f)))return CTR_SCENE_SHADER;
     if(v->position[3]!=1.0f || v->position[0]<-1.0f || v->position[0]>1.0f ||
        v->position[1]<-1.0f || v->position[1]>1.0f || v->position[2]<-1.0f || v->position[2]>0.0f)
         return CTR_SCENE_UNSUPPORTED;
@@ -246,11 +334,23 @@ static int64_t edge(scene_vertex a,scene_vertex b,int32_t x,int32_t y) {
 static bool inclusive(scene_vertex a,scene_vertex b) {
     return b.y<a.y || (b.y==a.y && b.x<a.x);
 }
+static int64_t floor_div(int64_t numerator,int64_t denominator) {
+    int64_t value=numerator/denominator;
+    return value-(numerator%denominator<0);
+}
+static unsigned wrapped(int64_t coordinate,unsigned extent,unsigned mode) {
+    if(!mode)return coordinate<0?0u:coordinate>=(int64_t)extent?extent-1u:(unsigned)coordinate;
+    int64_t period=mode==3u?(int64_t)extent*2:extent;
+    int64_t remainder=coordinate%period;if(remainder<0)remainder+=period;
+    if(mode==3u && remainder>=(int64_t)extent)remainder=period-1-remainder;
+    return (unsigned)remainder;
+}
 static void raster(const ctr_scene_state *s,const ctr_scene_surface *surface,
-                   uint8_t *pixels,scene_vertex v[3],ctr_scene_report *report) {
+                   uint8_t *pixels,scene_vertex v[3],ctr_scene_report *report,
+                   const ctr_scene_texture *texture) {
     int64_t area=edge(v[0],v[1],v[2].x,v[2].y);unsigned cull=s->registers[0x040u]&3u;
     if(!area || (cull==1u && area>0) || (cull==2u && area<0))return;
-    if(area<0) { scene_vertex t=v[1];v[1]=v[2];v[2]=t; }
+    if(area<0) { scene_vertex t=v[1];v[1]=v[2];v[2]=t;area=-area; }
     int32_t min_x=v[0].x,max_x=v[0].x,min_y=v[0].y,max_y=v[0].y;
     for(unsigned i=1;i<3;++i) {
         if(v[i].x<min_x)min_x=v[i].x;
@@ -274,7 +374,24 @@ static void raster(const ctr_scene_state *s,const ctr_scene_surface *surface,
         }
         if(inside) {
             uint8_t *pixel=pixels+(size_t)y*surface->stride+(size_t)x*4u;
-            for(unsigned lane=0;lane<4;++lane)pixel[lane]=v[0].color[lane]==1.0f?255u:0u;
+            if(texture) {
+                int64_t weights[3]={edge(v[1],v[2],x*16+8,y*16+8),
+                    edge(v[2],v[0],x*16+8,y*16+8),edge(v[0],v[1],x*16+8,y*16+8)};
+                unsigned coordinates[2];
+                for(unsigned axis=0;axis<2;++axis) {
+                    int64_t numerator=0;
+                    for(unsigned i=0;i<3;++i)numerator+=weights[i]*v[i].uv[axis];
+                    unsigned extent=axis?texture->height:texture->width;
+                    /* Geometry is inside 512x512 on a 12.4 grid, |UV|<=16:
+                     * even the largest numerator*extent is below 2^57. */
+                    int64_t texel=floor_div(numerator*extent,area*65536);
+                    coordinates[axis]=wrapped(texel,extent,(texture->params>>(axis?8u:12u))&3u);
+                }
+                unsigned row=texture->height-1u-coordinates[1];
+                const uint8_t *sample=texture->rgba+((size_t)row*texture->width+coordinates[0])*4u;
+                for(unsigned lane=0;lane<4;++lane)
+                    pixel[lane]=texture->tev_mode && v[0].color[lane]!=1.0f?0u:sample[lane];
+            } else for(unsigned lane=0;lane<4;++lane)pixel[lane]=v[0].color[lane]==1.0f?255u:0u;
             ++report->fragments;
         }
     }
@@ -298,27 +415,36 @@ static ctr_scene_result draw(ctr_scene_state *s,const ctr_scene_resources *resou
     if(s->fixed_words || s->uniform_words)return CTR_SCENE_LAYOUT;
     ctr_scene_result result=vertices(s,resources,indexed,decoded,report);
     if(result!=CTR_SCENE_OK)return result;
+    ctr_scene_texture texture={0};uint8_t *texture_allocation=NULL;
+    result=fragment(s,resources,bound,&texture,&texture_allocation);
+    if(result!=CTR_SCENE_OK)return result;
+    const ctr_scene_texture *sampling=texture_allocation?&texture:NULL;
     s->shader.entry=s->registers[0x2bau];
     if(backend) {
         report->backend_stage=CTR_SCENE_BACKEND_DRAW;
-        if(!backend->draw(backend->context,s,decoded,count))return CTR_SCENE_BACKEND;
+        bool accepted=backend->draw(backend->context,s,decoded,count,sampling);
+        free(texture_allocation);
+        if(!accepted)return CTR_SCENE_BACKEND;
         ++report->draws;return CTR_SCENE_OK;
     }
     scene_vertex primitive[3];
     for(unsigned vertex=0;vertex<count;++vertex) {
         ctr_shader_output out;
         report->shader_result=ctr_shader_execute(&s->shader,&decoded[vertex],&out);
-        if(report->shader_result!=CTR_SHADER_OK)return CTR_SCENE_SHADER;
+        if(report->shader_result!=CTR_SHADER_OK) { result=CTR_SCENE_SHADER;break; }
         report->shader_instructions+=out.instructions;
-        result=semantics(s,&out,surface,&primitive[vertex%3u]);
-        if(result!=CTR_SCENE_OK)return result;
+        result=semantics(s,&out,surface,&primitive[vertex%3u],sampling!=NULL);
+        if(result!=CTR_SCENE_OK)break;
         if(vertex%3u==2u) {
             for(unsigned i=1;i<3;++i)for(unsigned lane=0;lane<4;++lane)
-                if(primitive[i].color[lane]!=primitive[0].color[lane])return CTR_SCENE_UNSUPPORTED;
-            raster(s,surface,pixels,primitive,report);++report->triangles;
+                if(primitive[i].color[lane]!=primitive[0].color[lane])result=CTR_SCENE_UNSUPPORTED;
+            if(result!=CTR_SCENE_OK)break;
+            raster(s,surface,pixels,primitive,report,sampling);++report->triangles;
         }
     }
-    ++report->draws;return CTR_SCENE_OK;
+    free(texture_allocation);
+    if(result==CTR_SCENE_OK)++report->draws;
+    return result;
 }
 void ctr_scene_init(ctr_scene_state *state) { if(state)memset(state,0,sizeof(*state)); }
 static ctr_scene_result replay(ctr_scene_state *trial,const void *commands,
@@ -345,9 +471,11 @@ static ctr_scene_result replay(ctr_scene_state *trial,const void *commands,
         } else if(reg==0x25fu) {
             if(mask!=15u || value!=1u)result=CTR_SCENE_UNSUPPORTED;
             /* Complete lists have no carried partial primitive to restart. */
-        } else if(ordinary(reg) || (bound && target_register(reg))) {
+        } else if(ordinary(reg) || fragment_register(reg) || (bound && target_register(reg))) {
             trial->registers[reg]=ctr_pica_merge(trial->registers[reg],value,mask);
             trial->register_defined[reg]|=(uint8_t)mask;
+            if(fragment_register(reg) && trial->register_defined[reg]==15u &&
+               !fragment_value(reg,trial->registers[reg]))result=CTR_SCENE_UNSUPPORTED;
         } else if(bound && (reg==0x110u || reg==0x111u)) {
             if(mask!=15u || value!=1u)result=CTR_SCENE_UNSUPPORTED;
             /* The caller owns cache/coherency for any native scratch target. */
@@ -383,6 +511,20 @@ static ctr_scene_result execute(ctr_scene_state *state,const void *commands,size
         overlap(surface->bytes,surface->size,objects[i],lengths[i]) ||
         (out && overlap(out,sizeof(*out),objects[i],lengths[i])))return CTR_SCENE_ALIAS;
     ctr_scene_report report={0};
+    if(resources->texture_count>CTR_SCENE_MAX_TEXTURE_SPANS)
+        return publish(out,report,CTR_SCENE_LIMIT);
+    size_t span_bytes=resources->texture_count*sizeof(*resources->textures);
+    if(!span(resources->textures,span_bytes))return CTR_SCENE_OVERFLOW;
+    if(overlap(resources->textures,span_bytes,state,sizeof(*state)) ||
+       overlap(resources->textures,span_bytes,surface->bytes,surface->size) ||
+       (out && overlap(resources->textures,span_bytes,out,sizeof(*out))))return CTR_SCENE_ALIAS;
+    for(unsigned i=0;i<resources->texture_count;++i) {
+        const ctr_scene_resource_span *p=&resources->textures[i];
+        if(!span(p->bytes,p->size))return CTR_SCENE_OVERFLOW;
+        if(overlap(p->bytes,p->size,state,sizeof(*state)) ||
+           overlap(p->bytes,p->size,surface->bytes,surface->size) ||
+           (out && overlap(p->bytes,p->size,out,sizeof(*out))))return CTR_SCENE_ALIAS;
+    }
     if(backend && (overlap(backend,sizeof(*backend),state,sizeof(*state)) ||
        overlap(backend,sizeof(*backend),surface->bytes,surface->size) ||
        (out && overlap(backend,sizeof(*backend),out,sizeof(*out)))))return CTR_SCENE_ALIAS;
@@ -395,6 +537,25 @@ static ctr_scene_result execute(ctr_scene_state *state,const void *commands,size
     if(one_bits!=UINT32_C(0x3f800000))return publish(out,report,CTR_SCENE_UNSUPPORTED);
     if(resources->size>CTR_VERTEX_MAX_SOURCE_BYTES || surface->size>CTR_SCENE_MAX_SURFACE_BYTES)
         return publish(out,report,CTR_SCENE_LIMIT);
+    if((uint64_t)resources->base_address+resources->size>(uint64_t)UINT32_MAX+1u)
+        return publish(out,report,CTR_SCENE_OVERFLOW);
+    size_t texture_bytes=0;
+    for(unsigned i=0;i<resources->texture_count;++i) {
+        const ctr_scene_resource_span *p=&resources->textures[i];
+        if(p->size>CTR_SCENE_MAX_TEXTURE_SOURCE_BYTES-texture_bytes)
+            return publish(out,report,CTR_SCENE_LIMIT);
+        texture_bytes+=p->size;
+        if(!p->size)return publish(out,report,CTR_SCENE_LAYOUT);
+        uint64_t end=(uint64_t)p->base_address+p->size;
+        if(end>(uint64_t)UINT32_MAX+1u)return publish(out,report,CTR_SCENE_OVERFLOW);
+        if(p->base_address<(uint64_t)resources->base_address+resources->size &&
+           resources->base_address<end)return publish(out,report,CTR_SCENE_ALIAS);
+        for(unsigned j=0;j<i;++j) {
+            const ctr_scene_resource_span *q=&resources->textures[j];
+            if(p->base_address<(uint64_t)q->base_address+q->size && q->base_address<end)
+                return publish(out,report,CTR_SCENE_ALIAS);
+        }
+    }
     if(!surface->width || !surface->height || surface->width>512u || surface->height>512u ||
        surface->stride<surface->width*4u || (uint64_t)surface->height*surface->stride>surface->size ||
        (resources->base_address&15u))return publish(out,report,CTR_SCENE_LAYOUT);

@@ -200,7 +200,11 @@ static bool allocation_failure_seen;
 static int alloc_ok_for_report;
 static uint16_t touch_min_x=UINT16_MAX,touch_min_y=UINT16_MAX,touch_max_x,touch_max_y;
 #ifdef CTR_GX2_GUEST
+#ifdef CTR_TEXTURED_HOMEBREW
+#define REPORT_APPLICATION "compiled-pica-textured"
+#else
 #define REPORT_APPLICATION "compiled-pica-gx2"
+#endif
 #define PICA_REPORT_SCOPE "Guest GX2 draws (CPU parity reference)"
 #define PICA_REPORT_RENDERER "translated GPU shaders + exact readback guard"
 #define PICA_REPORT_METRICS "reference_fragments=%llu reference_shader_steps=%llu"
@@ -292,14 +296,15 @@ static void gx2_readback_log(void *context,const ctr_scene_surface *surface) {
     WHBLogPrintf("GX2 GRID sequence=%llu rgba=%s",(unsigned long long)(scene->readbacks+1u),grid);
 }
 static void gx2_description(char *line,size_t capacity) {
-    snprintf(line,capacity,"GX2 backend: result=%s shader=%s begins=%llu draws=%llu submissions=%llu readbacks=%llu shader_ops=%llu waits=%llu wait_failures=%llu allocations=%llu releases=%llu quarantine=%u backend_stage=%u; CPU preflight and full GPU readback parity\n",
+    snprintf(line,capacity,"GX2 backend: result=%s shader=%s begins=%llu draws=%llu submissions=%llu readbacks=%llu shader_ops=%llu waits=%llu wait_failures=%llu allocations=%llu releases=%llu quarantine=%u backend_stage=%u texture_uploads=%llu texture_bytes=%llu; CPU preflight and full GPU readback parity\n",
         ctr_wiiu_gx2_scene_result_name(gx2_scene.result),ctr_gx2_shader_result_name(gx2_scene.shader_result),
         (unsigned long long)gx2_scene.begins,(unsigned long long)gx2_scene.draws,
         (unsigned long long)gx2_scene.submissions,(unsigned long long)gx2_scene.readbacks,
         (unsigned long long)gx2_scene.shader_instructions,(unsigned long long)gx2_scene.waits,
         (unsigned long long)gx2_scene.wait_failures,(unsigned long long)gx2_scene.allocations,
         (unsigned long long)gx2_scene.releases,gx2_scene.quarantined,
-        final_guest.captured?final_guest.gx.last_scene_backend_stage:gsp_guest.gsp.last_scene_backend_stage);
+        final_guest.captured?final_guest.gx.last_scene_backend_stage:gsp_guest.gsp.last_scene_backend_stage,
+        (unsigned long long)gx2_scene.texture_uploads,(unsigned long long)gx2_scene.texture_bytes);
 }
 static void gx2_log(const char *stage) {
     char line[768];gx2_description(line,sizeof(line));
@@ -573,6 +578,7 @@ static void guest_debug(void *context,const char *message) {
     }
     if(strstr(message,"CTR2WUP compiled interactive PASS") ||
        strstr(message,"CTR2WUP compiled PICA draws PASS") ||
+       strstr(message,"CTR2WUP compiled textured PICA PASS") ||
        strstr(message,"CTR2WUP compiled GX transfers PASS") ||
        strstr(message,"CTR2WUP compiled RomFS PASS") ||
        strstr(message,"CTR2WUP compiled filesystem SAVE 1 PASS") ||
@@ -1285,6 +1291,8 @@ int main(int argc, char **argv) {
     /* The installed-title check has one prompt and no repeated native guide. */
 #elif defined(CTR_SCENE_ONLY)
     ctr_test_guide_init(&test_guide,CTR_GUIDE_SCENE,guide_log,NULL);
+#elif defined(CTR_TEXTURED_HOMEBREW)
+    ctr_test_guide_init(&test_guide,CTR_GUIDE_TEXTURED,guide_log,NULL);
 #elif defined(CTR_GX2_GUEST)
     ctr_test_guide_init(&test_guide,CTR_GUIDE_GX2,guide_log,NULL);
 #elif defined(CTR_PICA_HOMEBREW)
@@ -1489,7 +1497,7 @@ int main(int argc, char **argv) {
 #ifndef CTR_PICA_HOMEBREW
         if(pad.trigger&(VPAD_BUTTON_A|VPAD_BUTTON_B|VPAD_BUTTON_PLUS))freeze_trace_frames=64;
 #endif
-        if(test_guide.kind!=CTR_GUIDE_PICA && test_guide.kind!=CTR_GUIDE_GX2 && (pad.trigger&VPAD_BUTTON_A)) {
+        if(test_guide.kind!=CTR_GUIDE_PICA && test_guide.kind!=CTR_GUIDE_GX2 && test_guide.kind!=CTR_GUIDE_TEXTURED && (pad.trigger&VPAD_BUTTON_A)) {
             a_request_time=OSGetTime();a_request_frame=gsp_presented;a_response_pending=true;
             WHBLogPrintf("A response pending: frame_before=%llu instructions_before=%llu",
                 (unsigned long long)gsp_presented,(unsigned long long)gsp_guest.cpu.instructions);
@@ -1499,7 +1507,7 @@ int main(int argc, char **argv) {
         if (run_guest_diagnostics && (pad.trigger&VPAD_BUTTON_A)) play_tone();
 #endif
         if (run_guest_diagnostics && (pad.trigger&VPAD_BUTTON_X)) alloc_ok=allocation_test();
-        if (run_guest_diagnostics && test_guide.done && test_guide.kind!=CTR_GUIDE_SCENE && test_guide.kind!=CTR_GUIDE_PICA && test_guide.kind!=CTR_GUIDE_GX2 && (pad.trigger&VPAD_BUTTON_Y)) {
+        if (run_guest_diagnostics && test_guide.done && test_guide.kind!=CTR_GUIDE_SCENE && test_guide.kind!=CTR_GUIDE_PICA && test_guide.kind!=CTR_GUIDE_GX2 && test_guide.kind!=CTR_GUIDE_TEXTURED && (pad.trigger&VPAD_BUTTON_Y)) {
 #ifdef CTR_COMPILED_HOMEBREW
             guest_mode=guest_mode==2?0:2;
 #else
@@ -1507,7 +1515,7 @@ int main(int argc, char **argv) {
 #endif
             WHBLogPrintf("display_mode=%s",guest_mode==2?"standard-hid-gsp":guest_mode==1?"guest-fixture":"native");
         }
-        if (run_guest_diagnostics && test_guide.done && test_guide.kind!=CTR_GUIDE_SCENE && test_guide.kind!=CTR_GUIDE_PICA && test_guide.kind!=CTR_GUIDE_GX2 && (pad.trigger&VPAD_BUTTON_PLUS)) restart_guest();
+        if (run_guest_diagnostics && test_guide.done && test_guide.kind!=CTR_GUIDE_SCENE && test_guide.kind!=CTR_GUIDE_PICA && test_guide.kind!=CTR_GUIDE_GX2 && test_guide.kind!=CTR_GUIDE_TEXTURED && (pad.trigger&VPAD_BUTTON_PLUS)) restart_guest();
         VPADTouchData touch={0}; uint16_t tx=0, ty=0;
         VPADGetTPCalibratedPointEx(VPAD_CHAN_0,VPAD_TP_1280X720,&touch,&pad.tpNormal);
         int inside=touch.touched && touch.validity==VPAD_VALID &&
@@ -1632,7 +1640,11 @@ int main(int argc, char **argv) {
             image_text(top_image,TOP_W,11,text);
 #ifdef CTR_PICA_HOMEBREW
 #ifdef CTR_GX2_GUEST
+#ifdef CTR_TEXTURED_HOMEBREW
+            image_text(top_image,TOP_W,12,"GUEST TEXTURES / TEV / GPU READBACK");
+#else
             image_text(top_image,TOP_W,12,"GX2 GUEST SHADERS / GPU PIXEL READBACK");
+#endif
 #else
             image_text(top_image,TOP_W,12,"GUEST TRIANGLES / EXACT PIXEL READBACK");
 #endif
@@ -1892,6 +1904,9 @@ int main(int argc, char **argv) {
         gx2_scene.readbacks && gx2_scene.result==CTR_WIIU_GX2_SCENE_OK &&
         !gx2_scene.wait_failures && !gx2_scene.quarantined && !guest_fault_seen &&
         test_guide.done && test_guide.passed==2u && !test_guide.failed && !test_guide.skipped &&
+#ifdef CTR_TEXTURED_HOMEBREW
+        gx2_scene.texture_uploads && gx2_scene.texture_bytes &&
+#endif
         !test_result.failed && !test_report.failed?0:1;
 #else
     result=0;
