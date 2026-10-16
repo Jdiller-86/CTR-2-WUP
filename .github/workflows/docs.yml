@@ -69,5 +69,5 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
-# The public source repository hosts its own checked documentation and dashboard.
+# The public source repository hosts its own checked documentation.
 # The export remains docs-only: commercial/private inputs never enter Pages.

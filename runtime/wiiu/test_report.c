@@ -3,12 +3,36 @@
 
 #include <errno.h>
 #include <string.h>
-#ifdef _WIN32
-#include <io.h>
 #include <sys/stat.h>
+#ifdef _WIN32
+#include <direct.h>
+#include <io.h>
 #else
 #include <unistd.h>
 #endif
+
+static bool directory_ready(const char *path) {
+#ifdef _WIN32
+    if (_mkdir(path) == 0) return true;
+    struct _stat64 information;
+    if (errno == EEXIST && _stat64(path, &information) == 0 &&
+        (information.st_mode & _S_IFMT) == _S_IFDIR) return true;
+#else
+    if (mkdir(path, 0777) == 0) return true;
+    struct stat information;
+    if (errno == EEXIST && stat(path, &information) == 0 && S_ISDIR(information.st_mode)) return true;
+#endif
+    if (errno == EEXIST) errno = ENOTDIR;
+    return false;
+}
+
+bool ctr_test_report_directory(const char *data_root, bool install_check,
+                               char *directory, size_t capacity) {
+    if (!data_root || !*data_root || !directory || !capacity) { errno = EINVAL; return false; }
+    int n = snprintf(directory, capacity, "%s/%s", data_root, install_check ? "install-check" : "results");
+    if (n < 0 || (size_t)n >= capacity) { errno = ENAMETOOLONG; return false; }
+    return directory_ready(data_root) && directory_ready(directory);
+}
 
 static bool fail(ctr_test_report *r, int error, const char *stage) {
     if (!r->failed) {
@@ -53,7 +77,7 @@ bool ctr_test_report_open(ctr_test_report *r, const char *directory,
     if (!ctr_test_report_line(r, "CTR2WUP Wii U test report")) return false;
     snprintf(line, sizeof(line), "Application: %s | Build: %s", application, version);
     if (!ctr_test_report_line(r, line) ||
-        !ctr_test_report_line(r, "Upload this .txt file from sd:/ctr2wup/ after the test.") ||
+        !ctr_test_report_line(r, "After exiting, ZIP and return the results folder shown by the application.") ||
         !ctr_test_report_line(r, "Session STARTED. Missing END OF REPORT marker means interrupted/incomplete evidence.") ||
         !ctr_test_report_line(r, "PASS messages cover the named software checks, not commercial compatibility.") ||
         !ctr_test_report_line(r, "Picture alignment/colors, audible sound and launcher return need your brief observation.") ||

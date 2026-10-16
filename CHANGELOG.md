@@ -5,6 +5,13 @@ do not establish commercial-game compatibility or installable WUP acceptance.
 
 ## 0.27.0 — unreleased
 
+- Consolidate the roadmap into `plans.md`, reduce documentation to usage and
+  technical contracts, and replace mirrored tracking catalogs/automations with
+  native GitHub issues and milestones. Package instructions ship with their
+  generators; existing scoped hardware evidence is preserved.
+- Isolate ordinary diagnostic reports and traces in one `ctr2wup/results/`
+  return folder, separate from snapshots and RomFS inputs. Preserve intake of
+  older logs and reject conflicting duplicate reports.
 - Add original plaintext `0x2000` WUP packaging with a generated test-signing
   chain and independent integrity/signature verification. No common key,
   production certificate, donor or owned game is needed for this profile.

@@ -124,7 +124,7 @@ def review(folder, source, observations=None):
         manual.extend(matches[0].get(k) for k in ('menu_launch', 'both_screens', 'minus_pressed', 'returned_to_menu', 'no_problem')) if len(matches) == 1 else manual.append(None)
     explicit_failure = obs.get('install_success') is False or obs.get('title_id_checked') is False or any(r.get(k) is False for r in records for k in ('menu_launch', 'both_screens', 'minus_pressed', 'returned_to_menu', 'no_problem'))
     check('physical-observations', 'FAIL' if explicit_failure else 'PASS' if len(records) == len(runs) >= 2 and {r.get('session') for r in records} == set(sessions) and all(v is True for v in manual) else 'INCOMPLETE', 'Exact suite/environment/GX2 and both observed Menu launches/screens/Minus returns must be explicitly confirmed.')
-    ledger = json.loads(read(ROOT/'docs/m1-evidence.json', 1024*1024))
+    ledger = json.loads(read(ROOT/'tests/hardware-evidence.json', 1024*1024))
     baseline = [dict(issue=c['issue'], status=c['reviewed_status']) for c in ledger['criteria'] if c['issue'] in (12, 14)]
     check('retained-baseline', 'PASS' if baseline == [dict(issue=12, status='Done'), dict(issue=14, status='Done')] else 'INCOMPLETE', 'Carry reviewed collection and native controls/audio/stability evidence; no native guide repeat requested.')
     status = next((s for s in ('FAIL', 'INCOMPLETE') if any(c['status'] == s for c in checks)), 'PASS')

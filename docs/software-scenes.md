@@ -1,44 +1,9 @@
-# First software triangle scenes
+# Software triangle scenes
 
-v0.22.0 establishes the first original scene through a bounded PICA-format
-loader, index, shader and raster path. Two indexed triangles form a square,
-red at lower left and green at upper right. Both unsigned byte and unsigned
-short index formats produce identical pixels. This is a software correctness
-checkpoint for M4; full renderer acceptance remains open.
-
-Version 0.23 connects this owned renderer to [standard compiled guest draws](guest-pica-draws.md).
-The focused native check below remains a separate original diagnostic.
-
-## Focused Wii U check
-
-Build with `python -m host build --target scene-check --output artifacts/my-scene-check`.
-The 0.24.1 evaluation runs the exact ADD/MUL transform and console-side analytic
-pixel checks; October 15 results pass these and both picture prompts on two
-launches. This is a scoped software-renderer pass; broader shader and native GPU
-acceptance remains open. See [the hardware evidence](console-evidence.md).
-The 0.25.0 display-cache build retains these exact checks and needs a new
-physical picture/restart/timing comparison. The procedure below is retained for
-focused follow-ups. Use
-[the focused hardware guide](console-retest.md) for
-the current two-app package, repeat launch and the Windows log collector.
-The matching CI run also supplies `wiiu-scene-check-<source commit>`, containing
-RPX/WUHB, build receipt, checksums, source identity and notices. Use its WUHB
-from `sd:/wiiu/apps/` with the supported homebrew launcher, or its RPX with
-Homebrew Launcher. This is an original homebrew check, not an installable WUP.
-
-The TV shows the byte-index scene; GamePad shows the short-index scene. Both
-should show a solid square with red lower left, green upper right and a dark
-border. The TV guide asks for two observations. Press **R** for correct or
-**L** for a problem; **ZL** skips and **ZR** records a failure. **Minus** closes
-the application and preserves results. Send the new plain-text files from
-`sd:/ctr2wup/` and report whether Minus returned to the launcher. The automatic
-pixel self-test and render timings enter the small result and full trace;
-human display observations remain separate. An automatic failure cannot pass
-the picture guide.
-
-This check uses the existing native audio initialization and report/exit
-lifecycle. The reviewed October 13 Audio Check/GX Transfers 0.20.0 and
-Save/RomFS results remain valid for their builds; no unchanged guide repeat is requested.
+The bounded software renderer accepts PICA-format vertex/index state, shaders
+and triangle lists. It provides a correctness reference for [compiled guest
+draws](guest-pica-draws.md). General PICA rendering and native GX2 shader
+translation remain unsupported.
 
 ## Execution boundary
 
@@ -81,8 +46,7 @@ in-place swizzles and rejects undefined lanes or missing code/END.
 
 ### Vertex code capacity
 
-The merged capacity increment in [PR #98](https://github.com/Jdiller-86/CTR-2-WUP/pull/98)
-expands code storage from 256 to **512 words**. Entries 0–511 are valid;
+Vertex code storage contains **512 words**. Entries 0–511 are valid;
 execution must encounter an actual END before leaving word 511. The upload
 cursor may retain the exhausted value 512, but another code word fails without
 wrapping or committing any part of that list. All eight upload ports, repeated
@@ -102,20 +66,9 @@ memory generations, exclusive state and pending queue/IRQ behavior.
 Run `make -C tests/scenes check sanitize` and
 `make -C tests/guest-draws check sanitize` to reproduce them.
 
-With devkitPPC GCC 16.1.0, `-O2 -mcpu=750 -meabi -mhard-float`, the program
-object grows from 3,556 to 4,836 bytes and scene state from 8,952 to 10,232 bytes.
-Each retained/staged scene therefore adds 1,280 heap bytes. Compiler
-`-fstack-usage` reports unchanged static frames: shader execution 640 bytes,
-scene execution 928 bytes, guest adapter 272 bytes. These are cross-compiler
-measurements, not physical memory/performance observations. Required Windows,
-Python, sanitizer, Wii U and documentation hosted checks pass. No commercial
-shader is executed by these original probes.
-
 ### Exact ADD and MUL
 
-Scoped [#76](https://github.com/Jdiller-86/CTR-2-WUP/issues/76), under #28/M4,
-adds component-wise ADD and MUL to the bounded software path in source 0.24.0.
-The published 0.23.0 kits retain their original MOV-only execution. Both operands
+Component-wise ADD and MUL share the bounded software execution path. Both operands
 use independent descriptor swizzles/negation and initialized input/temporary
 lanes; the first operand may also select a float uniform. Destination masks
 select the lanes actually read and written, and in-place temporary execution
@@ -146,8 +99,7 @@ formats reproduce the analytic square exactly, executing 30 instructions per
 two-draw scene. MOV scenes still execute 18. Late numeric, undefined-source and
 unsupported-state failures preserve retained shaders, pixels and counters;
 guest checks also preserve memory generations, exclusive state and pending IRQ/
-queue completion after an earlier staged draw. Required host/sanitizer/native/
-Windows/docs checks gate delivery through PR #105. No new physical guide or console pass is implied.
+queue completion after an earlier staged draw. These checks validate the exact supported numeric subset.
 
 Run the independent numeric check directly with:
 
@@ -156,24 +108,18 @@ python tools/validate-shader-arithmetic.py --output artifacts/arithmetic-referen
 ```
 
 The normal scene validator also runs it, including under sanitizers in CI.
-With devkitPPC GCC 16.1.0 and the native `-O2 -mcpu=750 -meabi -mhard-float`
-flags, the shader execution function has a 704-byte static frame (640 before
-arithmetic); its operand-reader helper has a 40-byte frame. These are individual
-compiler frame measurements, not a physical peak-stack or performance result.
-Program/scene storage capacity is unchanged by this increment.
 Relative addressing, dot products, branches, hardware rounding and native GPU
-translation remain separate work. #28 and M4 remain open.
+translation remain unsupported. Native Scene Check renders this CPU path and
+presents its owned images through GX2 surface copies; it does not translate the
+PICA shader into a Latte shader.
 
-The native Scene Check runs this CPU path, flips its owned image rows for display,
-then uses the established GX2 surface-copy presentation. It does not submit a
-PICA shader as a Latte shader. The v0.22 standard guest GSP queue continues to use the
-separate configuration-only PICA executor and rejects draws.
+## Validation and references
 
-## Evidence and reference limits
-
-Run `make check`, `make prototype`, then:
+Run the focused contract suites and independent reference validator:
 
 ```sh
+make -C tests/scenes check sanitize
+make -C tests/guest-draws check sanitize
 python tools/validate-scenes.py --output artifacts/scene-evidence \
   --nihstro-dir /path/to/clean/pinned/nihstro
 ```
@@ -203,9 +149,8 @@ numeric oracle. No emulator code is copied, linked or bundled with the runtime.
 The image below is actual desktop output from the original renderer, flipped
 to top-first display orientation. It is not Wii U or 3DS hardware evidence.
 
-![Desktop software scene: green upper right and red lower left](images/software-scene-v022.png)
+![Desktop software scene: green upper right and red lower left](images/software-scene.png)
 
-Remaining acceptance requires physical Wii U picture/timing/exit reports,
-independent hardware/reference raster observations, broader shader/fragment
-behavior, guest resource integration and a license-cleared GX2 shader route with
-measured costs. No commercial compatibility or full milestone PASS is implied.
+Broader shader/fragment behavior, independent hardware raster observations and
+a license-cleared GX2 shader route with measured costs remain development work.
+The original software scenes do not establish commercial compatibility.

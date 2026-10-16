@@ -1,64 +1,33 @@
-# CTR2WUP documentation
+# Documentation
 
-CTR2WUP is developing an UWUVCI-style Windows GUI that turns an owned 3DS game
-into an individual playable Wii U WUP. Current releases contain original
-homebrew diagnostics and developer tooling. **Commercial games and the injector
-GUI are not supported yet.**
+CTR2WUP is developing a Windows injector that converts a supported, owned 3DS
+game into a per-game Wii U WUP. Current builds provide original diagnostics and
+developer tools. Commercial game conversion and the injector GUI are unfinished.
 
-The single HTML guide in development releases can be downloaded and opened
-directly in a browser, with offline search, navigation and printing. The source
-guides below also remain readable in GitHub. See [documentation hosting](github-development.md#documentation-and-free-hosting)
-for the canonical project site, live dashboard and build receipts.
+## Use the tools
 
-## Start here
+- [Getting started](getting-started.md): downloads, SD layout and diagnostic launch.
+- [Compatibility](compatibility.md): supported inputs and execution boundaries.
+- [Encrypted inputs](encrypted-input.md) and [CIA intake](cia-intake.md): local preparation.
+- [Private asset samples](private-asset-samples.md): bounded analysis exports.
+- [Packaging](packaging.md): staging, WUP construction and verification.
+- [Troubleshooting](troubleshooting.md): build, storage and launch problems.
 
-- [Repository tour](repository-guide.md): reader routes, source map and first host check.
-- [Development tracking](development-tracking.md): native feature/task/milestone/PR workflow.
-- [Without hosted Actions](direct-development.md): secure GitHub management and scoped local merge evidence.
+Each diagnostic package includes its own short instructions. Follow those
+instructions for that package; the documentation describes stable usage and
+technical interfaces.
 
-- [Getting started](getting-started.md): downloads, Aroma launch, SD layout and reports.
-- [Full M1 suite](m1-acceptance.md) and [Audio Streams](audio-stream-testing.md): guided current testing and FTP returns.
-- [Troubleshooting](troubleshooting.md): missing reports, storage failures and hangs.
-- [Testing](testing.md): which checks establish desktop, Windows and console evidence.
-- [Current status](../STATUS.md) and [progress assessment](progress.md).
-- [Live development Project](https://github.com/users/Jdiller-86/projects/2) for
-  authoritative task status, blockers and reviewed milestone acceptance.
-- [GitHub development](github-development.md): CI, releases, issues, agents and permissions.
-- [Contributing](../CONTRIBUTING.md) and [security reports](../SECURITY.md).
+## Develop
 
-## Build and development
+Start with [Contributing](../CONTRIBUTING.md), [Windows builds](build-windows.md)
+and [Testing](testing.md). [Architecture](architecture.md) maps the source and
+execution pipeline. The root [plans.md](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/plans.md)
+contains current development priorities; GitHub issues hold work discussions.
 
-- [Build on Windows](build-windows.md) and [environment/toolchain audit](foundation-audit.md).
-- [Architecture](architecture.md), [product plan](development-plan.md) and [GUI workflow](gui-workflow.md).
-- [Milestone acceptance](milestones.md) and [remaining inputs](current-roadblock.md).
-- [CPU/AOT integration](upstream-integration.md), [compiled homebrew](compiled-homebrew.md),
-  [threads](guest-threads.md), [memory](guest-memory.md) and [kernel objects](kernel-objects.md).
+The runtime references describe [CPU execution](cpu.md), [memory](guest-memory.md),
+[services and input](services.md), [display and transfers](graphics-transport.md),
+[software scenes](software-scenes.md), [guest draws](guest-pica-draws.md),
+[filesystem](filesystem.md) and [audio](audio.md). These are bounded contracts,
+not claims of general 3DS compatibility.
 
-## Runtime and preparation contracts
-
-- [Renderer status](renderer-status.md), [GX transfers](gx-transfers.md),
-  [framebuffer display](gsp-display.md), [shared GSP/VBlank](gsp-queues.md) and [input](hid-input.md).
-- [Compiled guest draws](guest-pica-draws.md): standard GSP queue, exact two-screen
-  captures, owned resources and transactional completion.
-- [First software scenes](software-scenes.md): checked loader/MOV/ADD/MUL shader/raster
-  boundary, independent exact images and focused Scene Check console guide.
-- [DSP ADPCM reference](dsp-adpcm.md): exact original codec/history/seek and failure
-  checks; guest DSP/mixing/playback remains open.
-- [Filesystem/saves](filesystem.md), [RomFS assets](romfs-assets.md) and [application lifecycle](compiled-homebrew.md).
-- [Private asset samples](private-asset-samples.md): standalone checked ZIP export
-  from existing local reports, without a host wheel update.
-- [Local encrypted input](encrypted-input.md), [decryptor investigation](batch-decryptor-audit.md),
-  [CIA intake](cia-intake.md) and [title staging/packaging](packaging.md).
-
-## Evidence and history
-
-[Compatibility](compatibility.md) describes supported boundaries.
-[Console evidence](console-evidence.md) separates supplied logs from verbal
-reports. Original fresh-launch save/results/assets are verified; the focused
-[launch-audio regression](launch-audio.md) has reviewed scoped passes.
-[Development history](development-history.md) preserves earlier implementation
-notes and receipts; its old pending statements are historical.
-
-No desktop pass, CI badge or RPX build establishes commercial gameplay, hardware
-performance or successful WUP installation. Keep ROMs, keys, saves, game traces
-and extracted commercial assets private.
+Keep game dumps, keys, extracted assets, saves and commercial traces private.

@@ -33,9 +33,9 @@ class M1PackageTests(unittest.TestCase):
         self.installed = self.root/'installed'
         self.source = self.root/'source'
         self.licenses = self.root/'licenses'
-        for directory in (self.native, self.installed, self.source/'docs', self.licenses):
+        for directory in (self.native, self.installed, self.source/'tools/templates', self.licenses):
             directory.mkdir(parents=True)
-        (self.source/'docs/m1-acceptance.md').write_text('# Install check\n\nOriginal focused guide.\n')
+        (self.source/'tools/templates/install-check.md').write_text('# Install check\n\nOriginal focused guide.\n')
         (self.source/'LICENSE').write_text('Original project license')
         (self.source/'THIRD_PARTY_NOTICES').write_text('Original third-party notices')
         (self.licenses/'LICENSE.txt').write_text('Original SDK license fixture')

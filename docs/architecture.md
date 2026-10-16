@@ -1,252 +1,78 @@
-# Architecture and implementation boundaries
+# Architecture
 
-The attached development brief is the project requirements. The repository was
-empty at the start of this implementation. See `foundation-audit.md` for pinned
-candidate source, measured builds, and licensing/PowerPC constraints.
+CTR2WUP is developing a Windows application that turns one supported, owned 3DS
+revision into a standalone Wii U title. The engine must demonstrate execution,
+rendering, audio, saves and real package installation before the GUI presents a
+conversion as supported. Current deliverables are original diagnostics and host tools.
 
-The host CLI is Python 3.12; inspection/runtime tooling uses the standard library
-and encrypted packaging optionally uses cryptography. It uses the
-same argument-list subprocess interface on Windows and Linux. Container parsing,
-inspection, build reports, and package inspection are separate from execution.
-Executable artifacts are the original native diagnostic and controlled guest RPXs,
-plus the separate .NET CIA intake console utility cross-published for Windows x64.
-An RPX is not an installable WUP directory.
+## Source map
 
-The portable [vertex module](vertex-attributes.md) resolves explicitly supplied
-array streams into shader-input vectors. Its contiguous and indexed entry points
-share layout/range/value validation and commit output only after the complete
-request is valid. The indexed path reads unsigned 8-bit or little-endian 16-bit
-elements, preserving order and duplicates without reading unreferenced vertices.
-It does not follow guest addresses or implement PICA loader state, fixed
-attributes, float24/shader arithmetic, primitive assembly or GX2 submission.
+| Directory | Responsibility |
+|---|---|
+| `host/` | Python CLI, input inspection/preparation, loading, build orchestration, staging and WUP verification |
+| `translator/` | Original generated-C backend and pinned external AOT integration |
+| `runtime/core/` | Portable checked CPU, memory, scheduler, services, software graphics and audio |
+| `runtime/wiiu/` | WUT platform, GX2 presentation, VPAD, AX, ProcUI and diagnostic logging |
+| `renderer/` | Host-side command, texture and framebuffer reference tooling |
+| `packaging/` | Original title profiles and packaging policy |
+| `tests/` | Original fixtures, regression/reference checks and reviewed hardware baseline |
+| `tools/` | Build, validation and package generation commands |
+| `docs/` | Stable usage and technical contracts |
 
-The separate original [scene boundary](software-scenes.md) now adapts bounded
-PICA loader/index/fixed/uniform/output state to that decoder and an original
-MOV/ADD/MUL/NOP/END shader executor. ADD/MUL evaluate exact normal float24/signed
-zero through checked integer arithmetic; inexact results fail before publication.
-It stages owned registers/resources and a complete
-linear target, then rasterizes complete triangles with exact supported numeric
-values and constant opaque colors. A late error rolls back all state and pixels.
-The focused native Scene Check presents these CPU-produced scenes with existing
-GX2 surface copies. The standard guest adapter resolves owned physical resources
-and canonical tiled targets around this boundary. General GPU shader translation
-remains unsupported; the scene boundary itself never follows guest addresses.
+## Pipeline
 
-The CIA intake path uses bounded signature-layout/TMD/bitmap/content checks and
-selects index-0 application NCCH with checked absolute file offsets. Its derived
-CXI view preserves ExeFS/exheader code identity while explicitly removing RomFS
-and header signature. The standalone .NET helper validates stored hashes; the
-shared Python engine also validates BLZ/decompressed revision. This private view
-supports analysis through a 32 MiB attachment constraint, not game execution or
-asset staging. See `cia-intake.md` for supported profile and limitations.
+1. Inspect the container and identify the exact executable revision.
+2. Prepare encrypted input locally when required; validate recovered code and assets.
+3. Load checked executable segments and analyze/lift supported code.
+4. Compile generated C against the shared runtime and Wii U backend.
+5. Stage original metadata, artwork, executable and owned assets.
+6. Construct and independently verify the WUP.
 
-The portable C core stores guest addresses as 32-bit integers and accesses bytes
-through checked mappings. Guest memory is explicitly little-endian on every
-host. The initial interpreter and direct generated-C backend are bounded CPU
-subsets with explicit unsupported exits. `host/loader.py` extracts inspected NCCH
-segments; the portable loader allocates checked permissions/stack/TLS/BSS. A
-single-guest runtime implements bounded SVC sleep/events/handles/ticks/debug/exit.
-Version 0.6.0 adds user read-only CP15 TLS access, typed/refcounted session handles,
-checked TLS IPC transport and restricted SRV/CFG startup commands. Its original
-ARM probe reads configured region/model/language through all three execution
-paths; see `shared-services.md`. This is shared runtime code, not a game patch.
-Version 0.7.0 adds owned heap/linear CPU allocation, atomic partial free/protection
-and queries; `guest-memory.md` defines the bounded contract. Ordinary heap
-changes preserve AOT snapshots; executable writes/aliases and execute protection
-still invalidate them. GPU/DSP physical memory remains pending.
-The original ARM fixture writes both framebuffers and responds to input through
-an explicit harness contract. Neither implements complete ARM11/VFP, a full
-3DS kernel, general IPC or game HLE. The pinned external lifter now generates C through
-an original host driver. An original ABI 4 implementation statically executes
-that code using checked little-endian callbacks and per-instruction state;
-see `upstream-integration.md`. Its desktop runtime is not a Wii U dependency.
+Each stage has explicit inputs, reports and unsupported failures. The CLI provides
+the reusable engine. Inspection, translation, package integrity and physical
+compatibility are separate facts. No stage treats a generic-success service stub
+or a valid package structure as proof that a game works.
 
-The native WUT backend provides independent TV and GamePad diagnostic output,
-input, sound, process lifecycle, timing, and CPU self-test instrumentation.
-v0.14.6 reserves a separate fixed-size 4 KiB result TXT independently of WHB
-trace handlers. Every update checks the reserved identity, writes, closes and
-reads back all bytes; named guide outcomes persist in the result even if the
-full trace fails. First errors are sticky; result-storage failure pauses guest
-input/execution, while full-trace failure is reported independently. Result
-writes happen at startup/self-tests/guest/checkpoint/guide/save/periodic/cleanup
-boundaries. Guest state is captured before close so cleanup cannot erase its
-final stats. Final result writes precede system transition.
+## Portable runtime
 
-The longer trace retains v0.14.5 `fflush`/`fsync`, checked close, mounted-volume
-flush and existing-file reopen. Handler registration is now checked. WUT owns
-the SD mount; the diagnostic releases its extra FSA client before transition.
-Neither exact read-back nor desktop abrupt-exit tests establish SD power-loss
-durability. The user reports successful v0.14.5 Native/Guarded/Compiled runs but
-no new logs; the uploaded text reports are older. Cause is unknown. See
-[console-evidence.md](console-evidence.md).
+Guest addresses remain 32-bit integers. Checked little-endian mappings enforce
+permissions, ranges, alignment and ownership on every host. Writes through
+executable aliases invalidate AOT snapshots and the exclusive monitor.
+[CPU execution](cpu.md) shares one process and deterministically scheduled guest
+threads. [Memory](guest-memory.md) and [services](services.md) retain references
+independently of handles. Unsupported interfaces fail with PC/opcode or IPC context.
 
-v0.14.4 caches bounded nearest-neighbor coordinate maps and reuses scaled rows,
-with byte-order-independent RGBA output, checked source/output capacity and black
-borders/padding. The native backend flushes/invalidates the produced GX2 surfaces.
-The guide waits for a fresh decoded green frame after input before offering R,
-and records A-to-green delay separately from user visual confirmation.
-AOT execution returns a missing-block fault after 64 consecutive dispatches with
-no guest instruction progress, so empty/unwinding entries cannot consume unlimited
-host time without spending their budget. This guard cannot recover GPU/platform
-hangs and has not been attributed to the console freeze. Varied-clock live-input
-replay checks original compiled red/green transitions and exit on desktop.
-v0.14.3 polls ProcUI directly, suspends input/rendering outside foreground and
-releases guest/owned AX/GX2/report resources before ProcUIShutdown. On Minus it
-cleans up, clears stale graphics callbacks while retaining save acknowledgement,
-requests Menu and polls to EXITING; HBL relaunch follows cleanup/shutdown.
-WUT's devoptab owns SD mounting. Checked TXT records include lifecycle states and
-bounded input/guest/render checkpoints; end-of-report does not establish menu
-return. Native AX ownership is explicit; compiled apps do not use AX.
-The guarded AOT comparison uses a call limit of two instead of the standard 64,
-with the existing unwind/dispatcher. Exact desktop frames/input/exit match; depth,
-unwinds and frame-boundary stack headroom are diagnostic evidence, not proof of
-a console stack fault. See `console-retest.md`.
-All diagnostic builds also contain the original TLS/SRV/CFG startup self-test
-with a visible result and SD log. Unsupported cache operations fail visibly
-instead of inheriting the external emitter's no-op behavior.
-All builds also embed the original ARM heap lifecycle self-test and its SD log.
-Version 0.8.0 adds shared/mutex/semaphore objects and wait-any/all, with mapping/
-wait ownership independent of handles. `kernel-objects.md` defines its
-single-thread scope. Its original ARM self-test is also embedded.
-Version 0.9.0 exposes standard read-only HID pad/touch rings and events. An
-independent original ARM consumer in each Wii U build reads live VPAD input
-through that service; `hid-input.md` defines its bounds and absent motion support.
-Version 0.10.0 adds checked direct GSP framebuffer submission and portable
-rotated RGBA8/BGR8/RGB565/RGB5A1/RGBA4 conversion. A separate original ARM guest
-reads HID, writes RGB565 and displays through this interface in all Wii U builds;
-see `gsp-display.md`. Version 0.11.0 adds one local GSP relay/shared framebuffer
-page, diagnostic VBlank and atomic queued presentation; see `gsp-queues.md`.
-The standard display guest uses this queue. Version 0.17 adds scoped synchronous
-GX commands; see [gx-transfers.md](gx-transfers.md). Version 0.23 connects bounded [compiled guest PICA draws](guest-pica-draws.md)
-with owned physical resources, canonical tiled targets and atomic completion;
-software execution remains separate from native GPU shader translation.
-Its guest mode presents completed ARM-written raw framebuffers through the same
-GX2 copying path. It is separate from PICA/GSP emulation; see `guest-fixture.md`.
-Version 0.12 adds checked user-mode ARM/Thumb multiple-register/stack transfers
-and BLX calls, with an embedded original nested-call self-test and independent
-ARM1176 reference checks; see `cpu-stack.md`.
-Compilation proves toolchain integration. Only physical console results can
-prove rendering, input, sound, guest semantics on PowerPC, or performance.
+[Display and transfer](graphics-transport.md) code reads CPU-backed guest images.
+[Software scenes](software-scenes.md) and [guest draws](guest-pica-draws.md) cover a
+bounded renderer; the native backend presents their output through GX2 copies.
+This does not translate PICA shaders into Latte shaders. [Audio](audio.md) separates
+checked decoding/mixing from owned finite AX buffers; guest DSP protocol remains open.
 
-Version 0.13 adds eight single-core guest contexts with strict priorities,
-instruction quanta, CPU/TLS/raw VFP/FPSCR isolation and retained wait/stack
-ownership. Thread joins, owner-aware locks, address arbiters and local quota
-queries support normal compiled libctru threads/startup. BSS shares the final
-DATA page correctly; a read-only synthetic kernel configuration page supplies
-explicit HLE policy. See `guest-threads.md` for supported SVCs and limits.
-`compiled-homebrew.md` records normal devkitARM CRT/newlib/libctru applications,
-checked three-frame CPU display, standard input and a fourth interactive Wii U
-build. The v0.13 path left APT/FS startup requests visibly unavailable; v0.14 adds
-explicit standalone APT and platform-owned private FS volumes with checked
-archive/file sessions and snapshot commits. Guest filenames never address the
-host filesystem. The original compiled test proves save/read/fresh-process reload;
-see `filesystem.md` for supported commands and remaining commercial boundaries.
-It does not execute PICA or supply commercial compatibility.
+[Filesystem](filesystem.md) operations use platform-owned private volumes, not
+host paths derived from guest names. Save publication uses checked pending/backup
+states. [RomFS](romfs-assets.md) exposes an immutable bounded provider.
 
-v0.14.6 adds an explicit borrowed 64-bit read-only current-process Level-3 RomFS
-view. Checked FSFILE transport exposes bytes; unmodified libctru resolves nested
-and Unicode names/directories in guest code. Lifetime and read publication are
-checked, with no host path exposure. v0.16 adds canonical NCCH/IVFC verification and asset preparation; signature
-authentication and commercial asset integration remain open; see `romfs-assets.md`.
+## Wii U ownership and diagnostics
 
-Save publication reserves `.pending`, moves a validated primary to absent
-`.previous`, publishes into the vacant primary name, then removes the backup.
-Failed publish attempts rollback; absent-primary load can recover a validated
-backup. Corruption and ambiguous siblings remain visible failures. This avoids
-requiring FSA rename replacement; it is not a concurrent-writer/power-loss guarantee.
+The WUT backend owns TV/GamePad surfaces, VPAD/touch, AX voices, ProcUI and reports.
+Foreground loss suspends guest input/rendering. Cleanup releases guest, audio,
+graphics and report resources before system transition. A fixed-size result TXT
+is independent of the full trace; identity, write, close and read-back failures
+are sticky. Guest state is captured before teardown, and final results precede exit.
+A saved result does not itself establish successful Menu return or SD durability.
 
-A read-only shared time page at 1ff81000 uses two banks and a published sequence,
-explicit synthetic Unix-zero epoch, guest-clock progression and matching 268111856
-Hz ticks. It is separate from kernel policy/TLS and counts as an additional 4 KiB
-backing allocation. ARM single-data byte/halfword/word accesses use checked
-little-endian U=1/A=0 unaligned semantics; other instruction classes stay strictly
-aligned. Defined lowest-base STM writeback is supported. Reference and generated
-original/external AOT checks are recorded in `cpu-stack.md`.
+## Windows product contract
 
+The planned C# WPF application uses a versioned engine interface. The default flow
+is **choose game → configure title/artwork/output → Inject → finished WUP**.
+It automatically selects a supported exact-revision profile, reports actual stages,
+remains responsive, supports cancellation/retry and exposes detailed diagnostics
+only when needed. Routine conversion must require no compiler commands or manual
+file editing. Stable collision-checked per-game identities preserve saves on rebuild.
+Top screen defaults to TV; bottom screen and touch default to GamePad.
 
-`renderer/` contains bounded command inspection and small format/presentation
-references. Capturing PICA register writes does not execute a draw. An explicit
-exception reports the absent shader/texture/TEV/GX2 translation path.
-
-`packaging/` inspects original/supplied package structure and title identities.
-Content structure, cryptographic authenticity, and installer acceptance are
-different checks. There is no bundled common key and no unlicensed packer.
-Original `stage-title` metadata/artwork is a packaging prerequisite. Its output
-is explicitly not an installable package. Version 0.4.0 implements scoped
-encrypted FST/content/TMD/ticket construction with user-local inputs, and a
-separate streaming decrypting verifier. The original four-content profile has
-no authentic signatures and awaits installer/console acceptance. No key or
-certificate is bundled; offline proof uses temporary synthetic inputs only.
-
-Generated artifacts are ignored by Git. User ROMs, saves, extracted assets,
-translated commercial code, keys, and packages must stay under ignored private
-directories. Synthetic fixtures are original instructions/data generated from
-source; no commercial assets are distributed.
-
-## Execution gates
-
-1. Native RPX compile and desktop tests can be completed in this environment.
-2. Physical RPX screen/input/audio/exit tests and PowerPC CPU results are pending.
-3. Checked loading and bounded guest-thread/kernel services now execute original
-   compiled libctru CPU/input/framebuffer applications. Console stability,
-   physical interface evidence and wider APT/FS/GX service semantics are needed.
-4. PICA rendering, required services/modules, filesystem/save/audio semantics,
-   and exact-ROM revision profiles must precede a commercial conversion.
-5. License-cleared packing plus locally configured keys and actual install/menu
-   launch tests must precede a WUP conversion claim.
-6. The Windows GUI follows a demonstrated execution pipeline; it is deferred.
-
-The interpreter implements ARMv6 SXTB/SXTH/UXTB/UXTH register extensions, ROR
-#0/8/16/24, conditional execution and destination/source aliasing without flag
-changes. PC operands and adding/paired forms remain unsupported. Unit/sanitizer
-checks and 2,048 Unicorn ARM1176 cases validate this scope. Full compiled libctru
-interpreter startup still stops on STRD, so no interpreter comparison is shipped.
-For the optional reference, install `unicorn==2.1.4` in a developer Python
-environment, then run `python3 tools/reference-extend.py --output NEW_DIRECTORY`.
-
-
-v0.15.0 adds input preparation ahead of container inspection. A bounded local
-key provider loads selected 16-byte file references in-process, with redacted
-failures/repr. Plaintext support-file imports create a separate explicitly private
-store. CIA AES-CBC main-content hashes are checked before inner NCCH decryption;
-NCCH v2 primary/secondary CTR, seed/key derivation and extents are checked before
-publishing a derived CXI. Output includes the main RomFS, but not other contents,
-tickets or key files. Input/output identities and lack of signature authentication are explicit;
-v0.16 verifies the full canonical IVFC tree when RomFS is present. Read-only sources, bounded chunks, input-change checks
-and atomic non-overwriting publication reuse the existing host boundaries.
-The validated decrypted CXI enters the unchanged loader/lifter pipeline; key
-values never reach generated C, runtime binaries or WUP staging. See
-`encrypted-input.md` for profiles and pending hardware/Windows checks.
-
-
-v0.16 separates validated asset preparation from execution. The host verifies
-NCCH's anchored RomFS superblock, the complete canonical IVFC tree, every file
-hash and the bounded Level-3 directory/hash metadata. It atomically exports one
-Level-3 `romfs.bin` plus a manifest, never host paths derived from guest names.
-The file provider streams SHA-256 once at open, checks the configured expected
-hash and lends a read-only view to existing FS transport. It uses standard-C
-`fseek`/`ftell`, so the Wii U/32-bit limit is LONG_MAX, and requires immutable
-backing during execution. It owns no extra SD mount/client. Guest teardown
-releases mounts/references before provider close and system transition.
-
-The portable texture decoder converts bounded base-level PICA tiles to explicit
-RGBA bytes without native guest-word loads. It preflights compressed blocks,
-lengths and aliases before publication. The Python/reference tools and emulated
-PPC checks establish decoder behavior, not GX2 upload/sampling or draw execution.
-See `romfs-assets.md` and `renderer-status.md` for the supported contracts.
-
-
-v0.17.0 adds a standard client-0 GSP GX ring dispatcher and synchronous CPU-backed
-operations. DMA/fill/display conversion/raw copy stage source/outputs and validate
-all spans before command mutation; output cannot touch retained relay backing
-through any guest alias. Complete-range bulk memory APIs copy adjacent mappings,
-reject host/guest backing alias and update exclusive/code generations correctly.
-Successful commands advance and signal only enqueued completions; errors preserve
-the failing entry and later work while retaining an already committed prefix.
-PICA command lists, physical/VRAM translation and asynchronous GPU coherency are
-outside that contract. `gx-transfers.md` records accepted wire flags/dimensions.
-
-GitHub now separates source-reviewed runtime evidence from hosted CI and physical
-testing. Managed milestone issue sections derive from checked-in status data;
-PR/check/artifact/release records never automatically close hardware acceptance.
-Repository instructions and agent profiles preserve the same boundaries.
+Local decryption uses the user's own selected key/seed exports with redacted
+errors. Keys never enter generated code, exported projects, reports or WUPs.
+The reference interaction is
+[UWUVCI AIO](https://github.com/stuff-by-3-random-dudes/UWUVCI-AIO-WPF);
+no code, artwork, commercial donor or binaries were imported from it.

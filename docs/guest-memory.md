@@ -1,23 +1,23 @@
 # Shared guest memory management
 
-v0.13 places BSS directly after initialized DATA, including its last page's
+The loader places BSS directly after initialized DATA, including its last page's
 unused tail, and copies no ExeFS padding into BSS. A separate read-only synthetic
 kernel configuration page at 1ff80000 supplies documented HLE policy; it counts
 toward backing limits. Thread stacks pin owned allocations until their guest
 context exits, and eight 512-byte TLS slots share the original TLS page. See
-`guest-threads.md`; no retail firmware image or cross-process mapping is supplied.
+`cpu.md`; no retail firmware image or cross-process mapping is supplied.
 
 
-v0.14.6 adds a separate read-only shared time page at 1ff81000. Its double-bank
+A separate read-only shared time page at 1ff81000 is also mapped. Its double-bank
 milliseconds/tick-frequency/tick-offset reference advances with the guest clock
 from an explicitly synthetic Unix-zero epoch. Ordinary unmodified libctru time
 queries can run; actual RTC/timezone/full firmware config is not supplied. This
 page adds 4 KiB to loader backing/quota accounting; the minimal thread fixture
-now owns 36 KiB rather than 32 KiB. Both host and portable loaders reject segment
+owns 36 KiB. Both host and portable loaders reject segment
 collisions and include the allocation in their bounds.
 
-Version 0.7.0 advances M3/P3 with ControlMemory (SVC 1) and QueryMemory (SVC 2).
-It does not enable a commercial profile. This is original C11 code with checked
+ControlMemory (SVC 1) and QueryMemory (SVC 2) manage guest allocations.
+This is original C11 code with checked
 little-endian accesses and no guest-to-host pointer casts. Public interface
 values/register conventions were checked against libctru
 `9b55eda44cf80b971503991e0c78f9bc8fe50425` (`svc.h`/`svc.s`); the already-audited
@@ -77,13 +77,13 @@ invalidating unchanged executable snapshots. Adding/removing executable mappings
 changing execute protection and writes through executable aliases still invalidate
 AOT. Dynamic heap management therefore preserves normal translated execution.
 
-Linear backing is contiguous for checked **CPU** accesses only. FCRAM physical
-addresses, GPU/DSP allocation, cache/coherency support and the GX2 memory bridge
-are absent. MAP/UNMAP aliases, RESERVE, system/base regions, New-family linear
-windows and unknown flags stop visibly as unsupported. Image reprotection, multi-thread ownership, physical accounting and broader
-kernel behavior remain unfinished.
+Linear backing is contiguous for checked CPU accesses. The bounded guest-draw
+adapter maps owned Old-family linear allocations to physical resources; general
+FCRAM/VRAM/DSP mapping and asynchronous GPU coherency remain unsupported. MAP/UNMAP aliases, RESERVE, system/base regions, New-family linear
+windows and unknown flags stop visibly as unsupported. Image reprotection, general physical accounting and broader kernel behavior
+remain unfinished. Thread stacks and shared objects retain their owned backing.
 
-## Original execution evidence
+## Validation
 
 `host/heap_fixture.py` generates an original NCCH with 151 ARM instructions.
 It allocates three heap pages, writes little-endian values, queries the region,
@@ -99,13 +99,7 @@ compares actual external AOT, original AOT and interpreter CPU/mapping/backing
 state at 1/7/23 instruction budgets. It also checks guest-store fault PCs on
 protected/freed pages, zero fallback and preserved executable generations.
 
-All three Wii U builds embed the original interpreter/AOT self-test. Native mode
-displays `GUEST HEAP LIFECYCLE PASS CODE 0`; SD logs record
-`heap_selftest PASS result=0`, or an exact FAIL code. The external-AOT heap probe
-is a desktop/emulated-PPC test, separate from the console guest program.
-Physical behavior/timings, native Windows and conventional 3DS homebrew boot
-remain pending. STATUS.md records current report paths.
-
-v0.8.0 pins source allocations used by shared-memory objects; FREE/PROT rejects
-those allocations until final release. Owned shared backing uses the combined
-budget. See `kernel-objects.md`.
+The same original interpreter/AOT self-test is embedded in native diagnostics.
+Host reference runs and physical observations remain separate evidence.
+Source allocations pinned by shared objects reject FREE/PROT until final release;
+owned shared backing uses the same combined budget. See [services](services.md).

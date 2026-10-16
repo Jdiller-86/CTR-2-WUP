@@ -1,10 +1,9 @@
-# Controlled NCCH guest execution (0.2.0)
+# Controlled NCCH guest execution
 
 This original, redistributable ARM fixture is the first executable guest pipeline:
 NCCH inspection and hash checks → checked segment extraction → original generated
 C → portable guest loader/SVC runtime → raw TV/GamePad framebuffer presentation.
-Desktop execution and Wii U cross-compilation pass. Physical Wii U execution is
-awaiting testing. This fixture uses an explicit harness I/O contract; it is not
+This fixture uses an explicit harness I/O contract; it is not
 a stock 3DS graphical application and does not implement HID, GSP or PICA.
 
 ## Reproduce from source
@@ -40,14 +39,13 @@ are read/write. Padding/BSS, the 16 KiB stack below `0x10000000`, and the TLS pa
 at `0x1ff82000` are zeroed. Initial SP is `0x10000000`; entry uses user ARM mode.
 No guest pointer becomes a host pointer. Allocation is bounded to 64 MiB; page
 alignment, descriptor sizes, permissions, overlaps and wraparound are checked.
-Non-page-aligned data/BSS layouts are explicitly rejected for now. The TLS page
-exists; v0.6.0 implements its user read-only CP15 access and a separate original
-SRV/CFG startup probe. See `shared-services.md`; the framebuffer contract below
-still uses harness input and is not HID/GSP.
+The general loader supports BSS immediately after non-page-aligned initialized
+DATA. TLS has user read-only CP15 access; [services](services.md) defines the
+standard transport. This fixture still uses harness input, not HID/GSP.
 
 | Data-page offset | Harness/guest meaning |
 |---|---|
-| `0` | Host supplies buttons; bit0 changes the top framebuffer color |
+| `0` | Host supplies buttons; bit 0 changes the top framebuffer color |
 | `4`, `8`, `12` | Host supplies touch X, Y and active flag; guest checks bounds |
 | `16` | Guest increments completed-frame count after writing both buffers |
 | `20` | Host requests exit; guest calls ExitProcess at its next loop entry |
@@ -60,73 +58,21 @@ little-endian pixels through checked mappings and converts them to the host's
 RGBA representation. These addresses are a fixture contract, not emulated 3DS
 shared-memory/HID/GSP addresses. No GPU draw commands are executed.
 
-## Implemented SVC subset
+## Runtime and validation
 
-One guest CPU/thread runs under instruction quotas; callers supply monotonic
-virtual time in nanoseconds. No host thread is created for a guest thread.
+The fixture uses ExitProcess, SleepThread, OutputDebugString and checked
+instruction budgets. The shared runtime also implements the thread/object/
+service interfaces documented in [CPU](cpu.md) and [services](services.md).
+Unknown SVCs fault visibly. Virtual time is monotonic and ticks use268111856 Hz.
 
-| SVC | Implemented behavior/register contract |
-|---|---|
-| `03` ExitProcess | Guest enters exited state |
-| `0a` SleepThread | `r0:r1` nanoseconds; zero yields, positive sleeps; negative/overflow faults |
-| `17` CreateEvent | Reset type `r1`: OneShot0 or Sticky1; result `r0`, handle `r1`; Pulse unsupported |
-| `18` SignalEvent | Handle `r0`, result `r0`; wakes the controlled waiter |
-| `19` ClearEvent | Handle `r0`, result `r0` |
-| `23` CloseHandle | Handle `r0`, result `r0`; retains objects owned by other handles/waiter |
-| `24` WaitSynchronization1 | Handle `r0`, timeout `r2:r3`; zero polls, positive times out, negative waits indefinitely |
-| `27` DuplicateHandle | Input handle `r1`, result `r0`, new handle `r1` |
-| `28` GetSystemTick | Virtual time scaled to 268,111,856 Hz; low/high `r0:r1` |
-| `2d` ConnectToPort | Bounded `srv:` name at `r1`; result/typed session handle `r0`/`r1` |
-| `32` SendSyncRequest | Checked TLS IPC; restricted SRV registration/CFG configuration reads |
-| `3d` OutputDebugString | Checked pointer `r0`, length `r1`, maximum 256 bytes; success result `r0=0` |
+Two controlled frames with button1/touch(100,80) execute1,382,534 instructions,
+zero fallback and four SVCs before exit. Interpreter/original/external AOT checks
+compare every register, loaded byte and framebuffer. Top RGB is `10 bb 22`;
+bottom is `77 22 bb` with a white touch pixel. The generator binds fixture identity;
+no commercial profile can be enabled by renaming an input.
 
-There are 32 event objects and 64 generation-tagged handles. Stale/closed handles,
-timeouts and exhaustion return explicit results. Unknown SVCs fault visibly.
-v0.6.0 adds 16 session objects sharing the handle table; event/session operations
-are type checked. Multi-thread scheduling, timers, memory-control SVCs, general
-IPC and FS/APT/HID/GSP remain unimplemented. Only the CFG reads in
-`shared-services.md` are implemented. Interface facts
-were checked against audited research sources and the public libctru SVC header;
-their implementation was not copied.
-
-## Console controls and expected evidence
-
-Launch `ctr2wup-guest-fixture.wuhb` with a compatible Aroma setup or the RPX with
-an RPX-capable launcher. It starts in guest mode. The native diagnostic also
-contains this guest; Y toggles modes. Plus restarts the guest; B asks the guest
-to exit; Minus exits the host application. A changes the next guest top color
-and plays the native test tone. A calibrated touch changes the bottom color
-and draws one white guest pixel. Hold A/touch through a completed guest frame.
-
-The TV has a small host status overlay; the remaining image and GamePad image
-come from guest ARM memory writes. Quotas allow 50,000 guest instructions per
-display iteration, so a full guest frame spans multiple display iterations.
-This deliberately bounded correctness test does not measure game performance.
-Record both outputs, increasing guest frame count, successful color/touch/exit/
-restart, and `sd:/ctr2wup/native-*.log`; follow `console-testing.md`.
-
-## Verified desktop evidence
-
-Two AOT frames with button1 and touch(100,80) execute 1,382,534 guest instructions,
-zero fallback instructions, four SVCs and one debug message, then exit normally.
-Top RGB is `10 bb 22`; bottom RGB is `77 22 bb`, with a white touch pixel.
-Interpreter and AOT frames have identical SHA-256 values:
-
-```text
-top.ppm     267878f6f7665b30bf43465c48d9b55094e8fe7d8fc694585e1afe74c30bae81
-bottom.ppm  6cadca972cf65a4842d8d8a73bd6a4b806bf1706a2c5b826cd136d21a371d06d
-```
-
-The original fixture SHA-256 is
-`004d03a5a0eca2679f2efbf6f887590fbf51ed984649056e78702c43af968210`.
-The separate executable revision is
-`38820d9091dcf0eb863b5c74c04536c9e765aaf39f4719f017205298015a3472`.
-Kernel/loader tests cover faults, events, sleeps, ticks and actual interpreter/AOT
-guest state/memory matches, both normally and under ASan/UBSan. All hardware,
-stock 3DS homebrew, commercial gameplay, saves and WUP claims remain open.
-
-The separate v0.7.0 original heap lifecycle probe exercises real memory SVCs
-without extending this framebuffer harness contract. All three RPXs embed its
-original interpreter/AOT self-test; external AOT is also verified on desktop and
-emulated PPC. See `guest-memory.md` and collect the additional native-mode result
-per `console-testing.md`. GPU/DSP physical memory and broader boot remain pending.
+The optional native target starts in guest mode. Its host controls show on-screen;
+Plus restarts, B requests guest exit and Minus exits the application. Input is
+sampled between bounded50000-instruction slices. Full ARM-written frames span
+several display iterations; this correctness fixture does not predict game speed.
+Hardware procedures live in the downloaded diagnostic package.

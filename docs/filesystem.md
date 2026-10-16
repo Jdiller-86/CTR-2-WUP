@@ -1,4 +1,4 @@
-# Private filesystem and standalone application lifecycle (0.14.6)
+# Private filesystem and standalone lifecycle
 
 This is shared runtime implementation, independent of any game patch. The original
 compiled program uses normal libctru/newlib `fopen`, `fread`, `fwrite`, `fflush`,
@@ -38,13 +38,13 @@ volume only when its platform persistence callback succeeds. A failed flush can
 leave dirty buffered data but does not claim a successful save. The original
 snapshot adapter uses explicit little-endian framing, bounded whole-input
 validation and a CRC32 corruption check. CRC32 provides no authenticity. It
-publishes through an exclusive sibling `.pending` file. v0.14.6 validates any
+publishes through an exclusive sibling `.pending` file. The loader validates any
 existing primary, moves it to an absent `.previous`, then renames the stage into
 the vacant primary name. Successful publication removes the old backup. A failed
 publish attempts rollback; if rollback fails, both siblings remain available.
 This avoids relying on POSIX replacement semantics: WUT passes rename directly
-to FSA. The exact console failure stage is unknown; a no-overwrite filesystem
-model reproduces the assumption and exercises the corrected publisher.
+to FSA. A no-overwrite filesystem model checks this platform constraint and the
+publication/rollback paths.
 
 If the primary is missing, a validated `.previous` can be loaded with the explicit
 RECOVERED status. A corrupt primary is never masked by a backup or reset. Stale
@@ -52,16 +52,13 @@ RECOVERED status. A corrupt primary is never masked by a backup or reset. Stale
 both for investigation. There is no concurrent-writer or power-loss durability
 guarantee. Failure/abrupt-process/rollback/recovery cases run under sanitizers.
 
-The user's uploaded snapshot is CRC-valid, with `/progress.dat` and `/記録.dat`
-at visit 1. A private copy advances to visits 2 and 3 in the updated desktop
-runner while the original remains unchanged. Console update/reload acceptance
-is pending. The guest now names its failing phase; the independent result TXT
-records guest message, load status and persistence errno even if full tracing fails.
+The guest names its failing phase; the independent result TXT records guest
+messages, load status and persistence errno even if the full trace fails.
 
 Read-only Level-3 RomFS assets are implemented separately; ordinary libctru
 handles nested names and directory listing in guest code. See
-[romfs-assets.md](romfs-assets.md). NCCH/IVFC extraction/authentication, cartridge
-assets, generic FSUSER directories, rename/subfiles, extdata, secure values,
+[romfs-assets.md](romfs-assets.md). NCCH/IVFC preparation is a separate host stage. Generic FSUSER directories,
+rename/subfiles, extdata, secure values,
 retail save formatting and commercial integration remain unfinished.
 
 ## Standalone APT
@@ -86,25 +83,16 @@ access to the user's SD card. There is no shell lid, HOME menu, sleep, cross-tit
 launch, shared font, applet, CPU-time quota or New 3DS implementation. Unsupported
 operations fail; `complete_service_startup` remains false in reports.
 
-## Build and console check
+## Validation
 
 ```sh
 make -C tests/filesystem check sanitize
-make -C tests/apt check sanitize
-python3 tools/validate-libctru.py --application filesystem --wiiu \
-  --output artifacts/reports/my-save-test
-python3 tools/validate-libctru.py --application boot --trace-startup \
-  --output artifacts/reports/my-startup-trace
+python3 tools/validate-libctru.py --application filesystem --wiiu --output artifacts/filesystem
 ```
 
-The additional `ctr2wup-libctru-filesystem.rpx` / `.wuhb` executes the same original
-ARM program through external AOT. Launch with an accessible mounted SD card; the existing diagnostic creates
-its `ctr2wup` directory on the WUT-owned SD mount.
-On a fresh diagnostic save it must display/log `SAVE 1 PASS` and `state=exited`.
-Plus restarts from the snapshot and must display/log `RELOAD PASS`; exit/relaunch
-must also reload. The private path is
-`sd:/ctr2wup/filesystem-test.snapshot`. Keep the existing file and any
-`.pending` / `.previous` for investigation if the test fails; never replace a failed load with
-an empty save. Minus exits the host. This is an original diagnostic save and
-RPX/WUHB, not a Mario save or an installable WUP. The initial snapshot is received; successful physical update/reload is pending.
-Use the current [console retest](console-retest.md) and return its new result TXT.
+The original compiled program exercises UTF-16 paths, newlib file I/O, explicit
+commit and fresh-process reload. Independent snapshot inspection and API tests
+cover corruption, interrupted publication, resource lifetime, bounds/aliases and
+failure preservation. Native diagnostics use only an original private save;
+these checks do not establish retail-save compatibility or power-loss durability.
+Preserve primary, `.pending` and `.previous` files when investigating a failure.

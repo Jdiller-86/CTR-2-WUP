@@ -1,14 +1,12 @@
-# Local encrypted-ROM preparation (0.16.0)
+# Local encrypted-input preparation
 
-On October 12, 2026 the user expanded the intended injector to accept either
-already-decrypted dumps or encrypted dumps with locally supplied material from
-their own 3DS. This amends the original brief's initial decrypted-only input
-scope; the original brief is preserved. The final product remains a Windows GUI
-that converts a supported revision into a playable per-game Wii U WUP.
+CTR2WUP accepts already-decrypted input or supported encrypted containers with
+locally supplied material. Preparation validates recovered bytes before the
+loader/translator; it does not enable unsupported game profiles.
 
 ## What is implemented
 
-The shared Python engine now supplies **prepare-rom** and **import-rom-keys**.
+The shared Python engine supplies **prepare-rom** and **import-rom-keys**.
 They are developer commands; the Windows GUI and on-console extraction helper
 are not implemented. Decryption is local preparation before the existing checked
 loader/translator. No platform key values, console dumps or commercial assets
@@ -64,7 +62,7 @@ is not cryptographically authenticated: the recovered CIA must still match its T
 A console-bound/personalized ticket needs an already recovered local title key;
 EC ticket depersonalization is not implemented. Fixed-key NCCH, v1 counters,
 unknown crypto methods, raw encrypted SD/NAND, updates and DLC are unsupported.
-Actual user-console exports and native Windows behavior remain untested.
+Only the documented import formats are accepted.
 
 ## Developer workflow
 
@@ -116,12 +114,11 @@ sources) and the existing audited loader sources. No GodMode9 code, bundled key
 database or executable was incorporated. An actual locally exported key set and
 owned encrypted dump, clean Windows execution and broader integrity profiles
 remain acceptance work. PICA, guest audio, retail saves and installable commercial
-WUP conversion remain separate unfinished milestones.
+WUP conversion remain outside this preparation contract.
 
 Use `prepare-assets` on the recovered CXI to prepare a private checked Level-3
 blob and manifest. Guest filenames remain virtual; no archive filenames are
 extracted onto host paths. See [romfs-assets.md](romfs-assets.md).
 
-[Batch CIA 3DS Decryptor investigation](batch-decryptor-audit.md) compares its
-methods, licenses and input/output handoff. Supported decrypted `.cci` (NCSD)
-can enter the same checked pipeline; no batch executable is bundled or executed.
+Supported decrypted `.cci` (NCSD) enters the same checked preparation pipeline;
+no external batch decryptor executable is bundled or executed.

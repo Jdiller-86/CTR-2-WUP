@@ -72,12 +72,12 @@ def package(folder, report_path, application, sdk_receipt):
                 or check.get('height') != 240 or check.get('pixels') != width * 240):
             raise ValueError('Original frame bytes differ from their exact checked receipt')
         entries['reference/' + name] = data
-        image = f'guest-draw-{screen}-v023.png'
+        image = f'guest-draw-{screen}.png'
         entries['images/' + image] = (ROOT / 'docs/images' / image).read_bytes()
     sdk = release.regular(sdk_receipt, 4096)
     if sdk.read_text().strip() != release.SDK_IMAGE:
         raise ValueError('Require the pinned SDK receipt')
-    entries.update({'START-HERE.md': (ROOT / 'docs/guest-pica-draws.md').read_bytes(),
+    entries.update({'START-HERE.md': release.render_guide(ROOT/'tools/templates/guest-draws.md', version, commit),
                     'build-reports/original-draws.json': report_path.read_bytes(),
                     'sdk-image-digest.txt': sdk.read_bytes(),
                     'source-and-notices/' + source_name: source.read_bytes(),
@@ -104,7 +104,7 @@ def package(folder, report_path, application, sdk_receipt):
     manifest['artifacts'].append(record)
     (folder / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
     notes = folder / 'release-notes.md'
-    notes.write_text(notes.read_text() + f'\n## Original Guest Draws\n\n{name} contains the checked compiled guest, exact original frames, source/SDK identity and notices. October 13 scoped observations belong to their earlier build; these new bytes have no separate console acceptance. Do not repeat unchanged completed guides. Full platform and commercial gates remain open.\n')
+    notes.write_text(notes.read_text() + f'\n## Original Guest Draws\n\n{name} contains the checked compiled guest, exact original frames, source/SDK identity and notices. Use only when the changed rendering path needs physical verification; a new build alone does not require another run.\n')
     records = manifest['artifacts'] + [{'name': 'manifest.json'}, {'name': 'release-notes.md'}]
     (folder / 'SHA256SUMS.txt').write_text(''.join(release.sha256(folder / row['name']) + '  ' + row['name'] + '\n'
                                                for row in sorted(records, key=lambda row: row['name'])))

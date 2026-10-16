@@ -1,64 +1,27 @@
-name: Wii U test result
-description: Submit original diagnostic results, including failed runs or missing logs.
+name: Wii U result
+description: Return a requested hardware check or report where it stopped.
 title: "[Console]: "
 labels: [console-testing]
 body:
   - type: markdown
     attributes:
-      value: |
-        Use the guide supplied with your build, or [guided testing](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/docs/guided-testing.md).
-        TXT results are normally written under `sd:/ctr2wup/`; report the exact filenames and any on-screen storage error.
-        A build passing on desktop does not establish console behavior. Failed runs and missing reports are useful evidence.
-        Submit only original diagnostic evidence. Do not upload ROMs, keys, game assets, commercial saves or packages.
-  - type: input
-    id: build
-    attributes:
-      label: Application and exact build
-      description: Include diagnostic name, displayed version, commit or release identifier, and artifact checksum if available.
-      placeholder: "Native / Compiled / Guarded / Save / RomFS / Asset Files; version; source"
-    validations:
-      required: true
+      value: Follow the package's START-HERE guide. Attach only its results folder, with no games, keys or saves.
   - type: textarea
-    id: console
-    attributes:
-      label: Console and software
-      description: State region, exact firmware, Aroma, launch method, SD format and installer version if used. Use unknown instead of latest when an exact version is unavailable.
-    validations:
-      required: true
-  - type: textarea
-    id: procedure
-    attributes:
-      label: Procedure and observations
-      description: Which guided steps passed or failed? Include input-to-screen delays, sound, storage behavior, Minus/Menu return, re-launch and whether reboot was needed. For Save, include first-run and reload outcomes separately.
-    validations:
-      required: true
-  - type: dropdown
     id: outcome
     attributes:
-      label: Overall observed outcome
-      options:
-        - Completed all requested checks
-        - Completed with a failed check or unexpected behavior
-        - Hung, froze or could not complete
-        - Could not launch or install
+      label: What happened?
+      description: Which requested checks passed, or where did it stop? Mention firmware/Aroma changes only if relevant.
     validations:
       required: true
   - type: textarea
     id: reports
     attributes:
-      label: Result files and missing evidence
-      description: Attach sanitized original diagnostic TXT files here. List their exact names and when the run occurred; explicitly note if no new file was saved. Do not upload commercial snapshots or traces.
+      label: Results ZIP
+      description: Attach the whole return folder named in the guide. Include partial failures; say if no files appeared.
     validations:
       required: true
-  - type: textarea
-    id: repetition
+  - type: input
+    id: build
     attributes:
-      label: Repeatability
-      description: How many runs, from a fresh boot or after another app? State any differing results and whether a prior file might have been mistaken for a new report.
-  - type: checkboxes
-    id: privacy
-    attributes:
-      label: Submission check
-      options:
-        - label: These attachments contain only original diagnostic evidence and no private game data, keys or credentials.
-          required: true
+      label: Build, if the logs are missing
+      description: Package name or download link is enough.

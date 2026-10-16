@@ -139,8 +139,8 @@ static void guide_tests(void) {
     in.milliseconds=600009;ctr_test_guide_update(&g,&in);CHECK(g.step==8);
     in.milliseconds=600010;ctr_test_guide_update(&g,&in);CHECK(g.step==9);
     in.pressed=CTR_GUIDE_R;ctr_test_guide_update(&g,&in);CHECK(g.done && g.passed==10 && !g.failed && !g.skipped);
-    ctr_test_guide_view(&g,in.milliseconds,view);CHECK(strstr(view[3],"SD:/CTR2WUP/*.TXT")!=NULL);
-    CHECK(strstr(view[4],"Upload")!=NULL);
+    ctr_test_guide_view(&g,in.milliseconds,view);CHECK(strstr(view[3],"SD:/CTR2WUP/RESULTS/")!=NULL);
+    CHECK(strstr(view[4],"ZIP and return")!=NULL);
     CHECK(strstr(guide_log_text,"User confirmed")!=NULL && strstr(guide_log_text,"ten requested buttons")!=NULL);
     ctr_test_guide_summary(&g);CHECK(strstr(guide_log_text,"not_finished=0")!=NULL);
     char results[1536];
@@ -386,6 +386,45 @@ static void read_file(const char *path, char *buffer, size_t size) {
     CHECK(fclose(f) == 0);
 }
 
+static void return_directory_tests(void) {
+    char root[384],directory[512],snapshot[512],romfs[512],text[256];
+    CHECK(ctr_test_temp_directory(root,sizeof(root),"ctr2wup-return"));
+    snprintf(snapshot,sizeof(snapshot),"%s/filesystem-test.snapshot",root);
+    snprintf(romfs,sizeof(romfs),"%s/romfs-test.bin",root);
+    const char *inputs[]={snapshot,romfs};
+    for(unsigned i=0;i<2;++i) {
+        FILE *file=fopen(inputs[i],"wb");CHECK(file!=NULL);
+        CHECK(fputs("Original data stays outside the return folder",file)>=0);
+        CHECK(fclose(file)==0);
+    }
+    for(unsigned install=0;install<2;++install) {
+        CHECK(ctr_test_report_directory(root,install!=0,directory,sizeof(directory)));
+        CHECK(ctr_test_report_directory(root,install!=0,directory,sizeof(directory))); /* Repeated launch. */
+        ctr_test_report trace={0};ctr_test_result result={0};
+        CHECK(ctr_test_report_open(&trace,directory,"native","0.27.0",1));
+        CHECK(ctr_test_result_open(&result,directory,"native","0.27.0",1));
+        CHECK(ctr_test_report_line(&trace,"Original trace"));
+        CHECK(ctr_test_report_close(&trace));
+        CHECK(ctr_test_result_update(&result,"Original result"));
+        CHECK(strncmp(trace.path,directory,strlen(directory))==0);
+        CHECK(strncmp(result.path,directory,strlen(directory))==0);
+        for(unsigned i=0;i<2;++i) {
+            read_file(inputs[i],text,sizeof(text));
+            CHECK(strcmp(text,"Original data stays outside the return folder")==0);
+        }
+        CHECK(ctr_test_unlink(trace.path)==0 && ctr_test_unlink(result.path)==0);
+        CHECK(ctr_test_remove_directory(directory)==0); /* Only the two TXT files were created. */
+    }
+    CHECK(ctr_test_report_directory(root,false,directory,sizeof(directory)));
+    CHECK(ctr_test_remove_directory(directory)==0);
+    FILE *blocked=fopen(directory,"wb");CHECK(blocked!=NULL && fclose(blocked)==0);
+    CHECK(!ctr_test_report_directory(root,false,directory,sizeof(directory)) && errno==ENOTDIR);
+    CHECK(ctr_test_unlink(directory)==0);
+    CHECK(!ctr_test_report_directory(root,false,directory,4) && errno==ENAMETOOLONG);
+    for(unsigned i=0;i<2;++i)CHECK(ctr_test_unlink(inputs[i])==0);
+    CHECK(ctr_test_remove_directory(root)==0);
+}
+
 typedef struct {
     ctr_test_report *report;
     unsigned calls;
@@ -627,6 +666,7 @@ int main(int argc,char **argv) {
     if(argc==4 && !strcmp(argv[1],"--ctr-test-child"))return interrupted_report(argv[2],argv[3]);
     checks+=test_audio_stream_app();
     storage_tests();
+    return_directory_tests();
     slice_tests();guide_tests();
     lifecycle_tests();
     exit_order_tests();

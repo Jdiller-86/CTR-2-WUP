@@ -1,26 +1,14 @@
 # Compiled original guest PICA draws
 
-For the **0.25.0** display-cache comparison, follow [the current two-app guide](console-retest.md).
-PR #106 gates confirmation on a successfully decoded/submitted drawn frame,
-adds a measured bounded runner and an automatic second-run prompt, and supplies
-source-bound results plus a Windows return-log collector. The completed 0.24.1 report/
-trace follow-up verifies correct picture-confirmation order, two guest sessions
-and all three guide steps PASS, including Plus restart and its own draw/PASS/exit.
-All files are received. Scenes take 91.190–91.613 s; native scale/publication
-averages 132.218–132.281 ms. The 0.25.0 cache targets that measured cost;
-its host pixel/work checks pass and new-build physical comparison remains pending. See
-[the evidence review](console-evidence.md).
-The earlier results below remain dated evidence.
-
-Version **0.23.0** connects a bounded PICA draw subset to the standard guest GSP
+The adapter connects a bounded PICA draw subset to the standard guest GSP
 queue. An original normal-CRT ARM application uses unmodified pinned libctru to
 submit two command lists, retain uploaded shader/state between them, render
 indexed triangles into owned linear allocations and display both screens.
 This is CPU software rendering followed by GX display transfers and existing
 native presentation. General PICA behavior and native GX2 shader translation
-remain open under M4.
+remain unsupported.
 
-## Reproduce the checkpoint
+## Build and run the original program
 
 After the [verified SDK and ARM fixture setup](compiled-homebrew.md), run:
 
@@ -41,12 +29,11 @@ oracle independently compares all **172,800 top/bottom pixels** in the captured
 PPMs. The two images show a dark background and a central region divided diagonally into
 red and green triangles; top and bottom display sizes are 400×240 and 320×240.
 
-Original host captures; the October 13 physical run has separate user picture
-confirmation and the guest's own target/readback PASS:
+The images below are original host captures, not console screenshots:
 
-![Original compiled guest top screen](images/guest-draw-top-v023.png)
+![Original compiled guest top screen](images/guest-draw-top.png)
 
-![Original compiled guest bottom screen](images/guest-draw-bottom-v023.png)
+![Original compiled guest bottom screen](images/guest-draw-bottom.png)
 
 CI executes the sanitized original guest and native build on each PR. Download
 `wiiu-guest-draws-<source commit>` for the checked RPX/WUHB, PPM images, report,
@@ -79,43 +66,18 @@ diagnostics; it is not a game WUP or a physical-console result.
   queue entries remain committed; the failing entry stays pending without its IRQ.
 
 The [scene contract](software-scenes.md) defines the bounded loader, fixed
-attribute, uniform and MOV/ADD/MUL/NOP/END shader subset. Source 0.24.0's ADD/MUL
+attribute, uniform and MOV/ADD/MUL/NOP/END shader subset. ADD/MUL
 accept only exact normal float24/signed-zero results with integer evaluation and
 transactional numeric rejection; [original arithmetic checks](software-scenes.md#exact-add-and-mul)
-do not alter the earlier compiled MOV fixture or its console guide. Broader arithmetic, sampling,
+validate the exact numeric subset separately from this MOV fixture. Broader arithmetic, sampling,
 general TEV, clipping, depth/blend/stencil and native GPU translation require
 separate scoped features. A raw VFP push/pop guard fix supports exact bit transfers
 under CRT FPSCR controls; it does not enable unsupported arithmetic modes.
 
-## Physical route and reviewed follow-up
+## Startup and limits
 
-The October 13 run records both guide steps PASS, own guest exit, zero fallback
-and clean shutdown. The rendered second presentation takes 57.33 seconds in the
-trace; the user estimates roughly two minutes. The first frame is startup output,
-and the visual guide accepted confirmation before the drawn frame. The user's
-separate picture confirmation is retained; presentation gating and phase timing
-need a focused follow-up. See [the evidence review](console-evidence.md). This
-single run does not establish repeat-launch stability or useful game speed.
-
-Copy the artifact's WUHB to `sd:/wiiu/apps/` and launch it in Aroma when physical
-testing is requested for a new build. In 0.23.0 the focused **Guest Draws** guide
-requires a guest frame, but startup output also satisfies that guard. Wait for
-the actual red/green diagonal scene
-on TV and GamePad, then confirm the guest's own PASS and orderly exit. Minus
-returns from the native diagnostic. Preserve the named result TXT, source commit
-and artifact hashes; follow [result collection](console-retest.md).
-
-The compiled program has three known startup service lookup failures (`APT:S`,
-`APT:A`, `ptm:sysm`) under the documented standalone startup profile. It still
-reaches its own main/assertions/exit. This does not claim complete service startup,
-console picture/timing, WUP installation or commercial compatibility. The earlier
-focused Audio Check/GX Transfers 0.20.0 launch-music regression has reviewed
-October 13 physical passes; it does not establish 3DS guest audio.
-
-## Tracking
-
-The primary scoped feature is `guest-pica-draws`, implemented by PR #57 under
-task #27 and M4. It also advances #28/#30 and the checked ABI work in #18.
-The native issue and PR are linked in [Project #2](https://github.com/users/Jdiller-86/projects/2).
-Next features and their acceptance criteria are listed in
-[development tracking](development-tracking.md).
+The original program uses the standalone startup profile, with known unavailable
+lookups `APT:S`, `APT:A` and `ptm:sysm`. It reaches its own main/assertions/exit.
+General applets, retail startup and commercial compatibility are unsupported.
+Physical procedures belong to the matching diagnostic package. A successful
+original draw does not establish useful game speed or complete renderer support.

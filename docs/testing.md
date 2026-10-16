@@ -1,67 +1,51 @@
-# Testing and evidence
+# Testing
 
-Tests must establish the behavior named in their result. Use original fixtures
-for shared development; keep commercial files and credentials under ignored
-private directories. Unsupported CPU/services/GPU states must fail visibly.
+Use original fixtures for shared development. Keep commercial inputs, derived
+code and credentials private. Unsupported CPU/service/GPU states fail visibly.
+A check establishes the behavior it exercises, not general game compatibility.
 
-## Desktop regression checks
+## Local checks
 
 ```sh
 make check
 make prototype
 ```
 
-`make check` runs Python and portable C suites, including ASan/UBSan. Separate
-CI targets are `make check-python`, `make check-c` and normal-only
-`make check-c-portable`. The latter is appropriate for native Windows GCC,
-where the Linux sanitizer runtime is not assumed available.
+`make check` runs Python and portable C suites, including ASan/UBSan with leak
+detection. Focused targets are `make check-python`, `make check-c` and
+`make check-c-portable`; the last runs normal C checks for native Windows GCC.
+Run affected checks while editing, then the checks appropriate to the final
+change. A documentation-only update needs documentation validation.
 
-Targeted graphics checks include:
+Independent format/pixel/numeric references are documented beside their
+contracts. Validators write original fixtures, compiler/source identity and
+bounded reports under a new output directory in `artifacts/`. Do not replace an
+existing result to make a failing case appear to pass.
 
-```sh
-make -C tests/gx check sanitize
-python3 tools/validate-transfers.py --output artifacts/my-transfer-matrix
-python3 tools/validate-libctru.py --application transfer --wiiu \
-  --output artifacts/my-compiled-transfer
-```
+## Hosted checks
 
-The compiled test uses pinned external libctru and the audited AOT toolchain.
-Optional external color/layout references use a clean pinned Zakuro checkout;
-that code remains test-only. Full console rendering is not inferred from it.
+CI covers supported Python versions, GCC/Clang sanitizer runs, Windows host/
+portable C, workflow lint and an immutable-SDK Wii U build. Required CI reports
+its dependencies' actual status. Documentation builds strictly and checks the
+publishable site. Logs and original artifacts bind to a source commit.
 
-## Continuous integration
+Optional Windows deep validation exercises the external AOT adapter and WPF SDK
+probe; an SDK probe does not implement the final GUI. Emulated PowerPC checks
+byte-order/ABI behavior without establishing physical Wii U performance.
 
-Automatic CI runs Python 3.12/3.14, GCC/Clang normal/sanitizer fixtures, native
-Windows host/portable-C checks, workflow lint and an immutable-SDK Wii U build.
-**Required CI** summarizes those results; a failed dependency cannot become a
-successful aggregate. Artifacts include logs and original diagnostic binaries,
-with source commits, hashes and notices. Read the actual run status and logs.
+## Hardware evidence
 
-Manual Windows development validation adds the external AOT execution and WPF
-SDK probe. WPF tooling readiness is not a finished GUI. Optional manual CodeQL
-requires existing repository scanning eligibility; it does not enable a paid
-plan and is not part of the required regression gate.
+Reuse reviewed evidence for unchanged behavior. Request a new physical run only
+for changed behavior or a specific missing acceptance observation; version
+numbers alone are insufficient reason. Each package contains one short guide,
+one deployment tree and one return folder with build identity/full logging.
+Ordinary diagnostic logs are isolated under `sd:/ctr2wup/results/`; the installed
+candidate uses `sd:/ctr2wup/install-check/`. Saves and asset blobs stay outside
+these return folders.
 
-## Wii U evidence
-
-Each diagnostic guides its needed inputs and records a TXT result independently
-of the full trace. Collect the release/commit, app version, launch route, console
-firmware/Aroma/installer versions where available, observed output, exit behavior
-and named report files. The console-result issue form accepts this evidence.
-
-Keep **automatic observations**, **user confirmations**, **failures**, **skips**
-and **unrun checks** distinct. A saved result does not prove successful Menu
-return. A valid visit-1 snapshot does not establish later update/reload. A reported
-pass can guide continued development while hard logs remain pending.
-
-No new long test is requested while the current tester is away. The existing
-Save/RomFS follow-up, optional Asset Files and new GX Transfers round await
-availability. See [getting started](getting-started.md) and each kit's guide.
-
-## Acceptance
-
-A full milestone closes only when its [complete criteria](milestones.md) have
-recorded evidence. Commercial acceptance requires the exact selected revision,
-boot/menu/gameplay/input/audio/save/reload/stability, actual WUP install/Menu
-launch, useful Wii U timings and the final Windows GUI conversion workflow.
-Passing unit tests and creating more diagnostics are partial implementation.
+Automatic checks, human observations, failures, skips and unrun steps stay
+separate. A saved report does not prove Menu return; unit tests do not prove
+picture/audio quality or installation. The compact
+[reviewed ledger](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/tests/hardware-evidence.json)
+retains reusable baseline scope and provenance. Package-specific questions and
+results belong in the package and its issue/conversation, not this documentation.

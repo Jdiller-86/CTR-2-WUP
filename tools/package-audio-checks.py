@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Add the verified two-app audio retest to an existing checked development release."""
+"""Add the verified two-app audio diagnostic to a checked development release."""
 import argparse
 import hashlib
 import importlib.util
@@ -65,7 +65,7 @@ def package(folder, audio, transfer_report, transfer_dir):
             release.validate_binary(file)
             target = ('rpx/' if file.suffix == '.rpx' else 'sd-card/wiiu/apps/') + artifact
             entries[target] = file.read_bytes()
-    entries.update({'START-HERE.md': (ROOT / 'docs/launch-audio.md').read_bytes(),
+    entries.update({'START-HERE.md': release.render_guide(ROOT/'tools/templates/audio-check.md', version, manifest['source_commit']),
                     'build-reports/audio-check.json': (audio / 'build-report.json').read_bytes(),
                     'build-reports/compiled-gx.json': transfer_report.read_bytes(),
                     'source-and-notices/' + source_name: source.read_bytes(),
@@ -88,10 +88,7 @@ def package(folder, audio, transfer_report, transfer_dir):
     manifest['artifacts'].append(record)
     (folder / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
     notes = folder / 'release-notes.md'
-    notes.write_text(notes.read_text() + '\n## Short audio retest\n\n'
-                     + f'Use **{name}** for only Audio Check and GX Transfers. Follow START-HERE.md, '
-                     + 'if a changed audio/lifecycle path needs a focused regression; retain plain-text results and source identity. '
-                     + 'October 13 Audio Check/GX 0.20.0 scoped silence/tone/exit results are reviewed, as are Save/RomFS. Do not repeat unchanged completed tests. This new build has no separate physical acceptance.\n')
+    notes.write_text(notes.read_text() + f'\n{name}: optional Audio Check and GX Transfers diagnostics; follow the included START-HERE.md only when a changed audio/lifecycle path needs verification.\n')
     records = manifest['artifacts'] + [{'name': 'manifest.json'}, {'name': 'release-notes.md'}]
     (folder / 'SHA256SUMS.txt').write_text(''.join(release.sha256(folder / row['name']) + '  ' + row['name'] + '\n'
                                                for row in sorted(records, key=lambda row: row['name'])))

@@ -1,9 +1,8 @@
 # Checked external AOT integration
 
-Version 0.3.0 uses the pinned external lifter's **C generation**, then statically
-links the translated executable with an original CTR2WUP ABI/runtime on desktop
-and Wii U. It no longer stops at analysis. The commercial conversion command
-remains gated; this integration does not enable arbitrary game execution.
+The pinned external lifter generates C that links statically against an original
+CTR2WUP ABI/runtime on desktop and Wii U. Its desktop runtime is not a Wii U
+dependency. Commercial conversion stays gated by exact supported profiles.
 
 ## Reproduction
 
@@ -14,159 +13,76 @@ python3 -m host translate artifacts/original-input/ctr2wup-guest.cxi --output ar
 python3 -m host run-fixture artifacts/original-input/ctr2wup-guest.cxi --backend upstream --output artifacts/lifted-frames
 python3 -m host build artifacts/original-input/ctr2wup-guest.cxi --target guest-fixture --backend upstream --output artifacts/lifted-console
 make upstream-check
-python3 tools/validate-upstream.py --sanitize --output artifacts/my-upstream-sanitizers
+python3 tools/validate-upstream.py --sanitize --output artifacts/upstream-check
 ```
 
-On Windows use `tools/install-translator-windows.ps1` after installing official
-Rust/rustup and Git; native GCC is required for execution. The generation receipt
-binds the clean audited source pin, current original driver and binary hashes.
-Source/header/driver changes require rebuilding or regeneration. Configure
-`CTR2WUP_GENERATOR` only with a corresponding receipt; this is local build
-provenance checking, not cryptographic authentication of an untrusted tool.
-For a source archive extracted elsewhere, `CTR2WUP_LIFTER_SOURCE` selects the
-clean pinned checkout and `CTR2WUP_GENERATOR` selects the existing external driver.
-For external analysis from that location, `CTR2WUP_LIFTER` selects the audited
-`3dsrecomp` executable.
+Windows uses `tools/install-translator-windows.ps1`, official Rust/rustup/Git and
+native GCC. The receipt binds a clean audited source pin, original driver and
+binary hashes. Source/header/driver changes require rebuilding or regeneration.
+`CTR2WUP_LIFTER_SOURCE` selects the clean pinned checkout;
+`CTR2WUP_GENERATOR` selects its driver with the corresponding receipt;
+`CTR2WUP_LIFTER` selects the external analysis executable. This is local build
+provenance, not authentication of an untrusted binary.
 
-The driver calls upstream public discovery/generation APIs and exposes every
-discovered instruction as a resume point. It discards the emitted upstream
-`recomp.h`. The Python adapter removes register-local/page-table/budget
-optimizations from the pinned emitter's C and inserts an original instruction
-boundary. Unexpected grammar fails the build. The replacement header is an
-original implementation of interface facts, under this project's MIT license.
-The lifter executable/source are external and are not bundled. Its missing
-complete permission/copyright notice still blocks bundling its implementation.
+The driver uses upstream public discovery/generation APIs and exposes every
+discovered instruction as a resume point. It discards upstream `recomp.h`.
+The adapter removes pinned-emitter register-local/page-table/budget optimizations
+and inserts an original instruction boundary; unexpected grammar fails the build.
+The replacement header implements interface facts under MIT. The lifter source/
+executable remain external; incomplete upstream permission/copyright notices
+prevent bundling that implementation.
 
 ## Runtime contract
 
-v0.13 additionally preserves CPU/TLS/raw VFP/FPSCR contexts across real guest
-threads, implements checked user ARMv6 CP15 DMB/DSB, byte media/SMLAxy and scalar
-FP word transport, and allows integer work with nondefault FPSCR controls.
-Unsupported FP arithmetic/control modes still fail before effects. Normal
-devkitARM CRT/libctru/newlib applications exercise actual thread/C TLS/LightLock,
-standard HID and shared-GSP CPU framebuffers; see `compiled-homebrew.md`.
-The original three-thread, FP-context and media probes bring the external suite
-to 14 probes. The independent ARM1176 reference has 870 cases and a nested-call
-trace. Emulated PPC Linux is not a Wii U or performance acceptance result.
-
-v0.6.0 refreshes user read-only TLS from the CPU context on every execution entry.
-Its original 89-instruction SRV/CFG startup probe matches interpreter/original/
-external AOT state and memory (297 boundary assertions). It also rejects
-unsupported CP15 cache operations and ARMv7 DMB/DSB/ISB, including emitter no-ops;
-35 dedicated assertions cover executed faults and condition skips.
-`--service-api` adds the 1,001-assertion malformed IPC/handle/resource suite to a
-compiler/target run. All four integration probes pass on GCC/sanitizers, Clang
-and emulated big-endian PPC Linux. See `shared-services.md` for exact interfaces
-and limits; this does not provide a complete guest kernel or commercial profile.
-
-v0.7.0 adds the original 151-instruction heap lifecycle probe. All three backends
-match CPU/mapping/backing state at 1/7/23 instruction budgets, with zero fallback
-and unchanged executable generations. Guest stores fault identically on
-protected/freed pages. The 1,778 boundary assertions and 307 heap API assertions
-pass GCC/sanitizers, Clang and emulated PPC Linux. `--heap-api` adds the latter
-suite; combine it with `--service-api` for a 14-check run of all five probes and
-both API suites. See `guest-memory.md` for exact supported memory semantics.
-
-- Registers and guest addresses are `uint32_t`; page pointers remain unused.
-  Every memory access takes the checked little-endian callback path; span
-  bypasses are disabled. No 4 GiB host address reservation is required.
-- The attach step checks ABI 4, generation 3, entry ordering and FNV code-piece
-  hashes against executable mappings. CRO/module attachment is rejected.
+- Registers/guest addresses are `uint32_t`. Every access takes checked
+  little-endian callbacks; page pointers/span bypasses are unused. No 4 GiB
+  host reservation is needed.
+- Attach checks ABI 4, generation 3, entry ordering and FNV code-piece hashes
+  against executable mappings. CRO/module attachment is rejected.
 - State is visible at every instruction. Exact budgets resume mid-function;
-  SVCs unwind to the existing guest scheduler, which owns sleep/events/exit.
-- Callback failures stop immediately through a bounded host `setjmp`/`longjmp`
-  boundary. Fault diagnostics retain the instruction PC and failing address;
-  no following instruction or store executes. Multi-transfer instructions may
-  retain earlier transfers if a later access faults. The external instruction
-  counter includes an attempted faulting instruction; successful execution
-  matches the interpreter's count.
-- Executable mapping/protection changes and code writes, including writable
-  aliases, invalidate the snapshot. Ordinary data mappings preserve it.
-  Guest writes clear the single-guest exclusive monitor. Multi-core/multi-thread
-  exclusive semantics are not implemented.
-- Missing blocks and emitted interpreter requests fail visibly by default.
-  Opt-in C attachment fallback executes only the existing bounded interpreter
-  and records every fallback instruction. It cannot supply general ARM/VFP HLE.
-- Scalar VFP words/double assembly are endian-safe. Only basic default-control
-  arithmetic/moves/compare are currently exercised. Non-default FPSCR controls
-  and vectors fail. Complete NaN/denormal/exception/rounding/conversion behavior
-  is unverified; absent helpers cause compilation failure rather than success
-  stubs. Builds disable contraction/fast math. This is not full VFP support.
-- Native guest call depth is limited to 64; deeper calls unwind to dispatch.
+  SVCs unwind to the shared scheduler for sleep/events/exit. TLS refreshes from
+  the current CPU at every execution entry.
+- Callback faults unwind immediately through bounded `setjmp`/`longjmp`, retaining
+  instruction PC/address. Later effects cannot execute. Multiple transfers may
+  retain earlier words; abort bookkeeping restores an emitter's early LDM base.
+  The external counter includes an attempted faulting instruction.
+- Executable mapping/protection changes and writes through any alias invalidate
+  snapshots. Ordinary data mapping preserves them. Writes/context switches
+  invalidate the single emulated CPU's exclusive monitor.
+- Missing blocks and emitted interpreter requests fail by default. Explicit C
+  attachment fallback uses only the bounded interpreter and records its count.
+- Native guest call depth is bounded to 64; deeper calls unwind to dispatch.
+  A 64-dispatch no-progress guard prevents empty/unwinding blocks from consuming
+  unlimited host time without guest budget progress.
 
-## Verified evidence
+Thread contexts preserve CPU/TLS/raw VFP/FPSCR state. Checked ARMv6 DMB/DSB,
+media/SMLAxy and scalar FP word transport support ordinary compiled startup;
+unsupported CP15/cache operations, including emitter NOPs, fail visibly.
+[CPU](cpu.md), [services](services.md), [memory](guest-memory.md) and
+[compiled homebrew](compiled-homebrew.md) define shared behavior.
 
-The original 85-instruction framebuffer guest produces two touched/button
-frames, 1,382,534 executed instructions, four SVCs and an orderly exit with zero
-fallback. Full registers/flags and all loaded memory regions agree with the
-interpreter after uneven budgets; framebuffer files match byte-for-byte.
-The separate original 30-instruction ARM/Thumb probe verifies scalar single and
-double arithmetic, compare/flags, stack transfer, state switch and one-instruction
-resume. Its register/VFP results also match Unicorn 2.1.4.
+## Floating-point limits
 
-The external integration suite passes **566 framebuffer/boundary assertions
-and 34 ARM/Thumb/VFP assertions** with GCC, ASan/UBSan, Clang and statically linked
-32-bit big-endian PowerPC Linux GCC under QEMU's 750 model. This is emulated Linux
-evidence, not Espresso performance or Wii U execution. Real devkitPPC/WUT
-RPX/WUHB linking also succeeds; physical input/rendering/exit tests are pending.
+Scalar single/double assembly is endian-safe. Basic default-control arithmetic,
+moves and comparisons have original reference probes. Nondefault arithmetic
+controls/vectors and incomplete NaN/denormal/exception/rounding/conversion cases
+remain unsupported or unverified; absent helpers cause compile failure.
+Builds disable contraction/fast math. Integer work may retain nondefault FPSCR.
 
-For this guest the generated C is about 24 KiB, with one function and 85 resume
-entries. There is no 4 GiB reservation or million-entry page table. The checked
-desktop run uses roughly 0.02 seconds of CPU for two frames on this machine;
-this is a regression measurement, not a game or console speed claim. Code-size,
-memory, compiler peak RSS and fallback timings for the selected commercial
-revision remain awaiting its private analysis and hardware measurements.
+VPUSH/VPOP and exercised VLDM/VSTM are raw bit transport under CRT flush/default-
+NaN controls. Ranges/counts are checked before effects; payload bits and FPSCR
+are preserved. This enables checked compiled calls without claiming full VFP.
 
-Versioned reports are under `artifacts/reports/upstream-*` and the main validation
-report. Emulated PowerPC/Clang checks can be repeated from the cloud host with:
+## Validation
 
-```sh
-python3 tools/validate-upstream.py --cc powerpc-linux-gnu-gcc --cc-prefix 'bash /workspace/ctr2wup-tools/environment/dev-container.sh' --run-prefix 'bash /workspace/ctr2wup-tools/environment/dev-container.sh qemu-ppc -cpu 750' --static --output artifacts/my-ppc-check
-```
+`tools/validate-upstream.py` compares original framebuffer, TLS/services, heap,
+synchronization, HID/GSP/relay, stack, thread, media and FP-context programs.
+Optional `--service-api`, `--heap-api`, `--kernel-api`, `--hid-api`, `--gsp-api`,
+`--relay-api`, `--fs-api`, `--apt-api`, `--thread-api` and `--multiple-api` add focused
+malformed-input/ownership checks. Complete CPU/mapped/shared bytes, exact pixels,
+faults and counters are compared across backends at uneven instruction budgets.
 
-Source `tests/recomp/abi.s` generated `abi.arm.bin` with Clang 19's
-`--target=arm-none-eabi -mcpu=arm1176jzf-s -mfpu=vfp -mfloat-abi=softfp` and
-`llvm-objcopy -O binary --only-section=.text`; the object has no relocations.
-
-v0.8.0 adds the 148-instruction original shared/sync probe (639 assertions)
-and `--kernel-api` (197 assertions). All six probes pass GCC/sanitizers, Clang
-and emulated PPC; the compiler/target runs include the kernel API (14 checks).
-See `kernel-objects.md` for exact lifetime rules; v0.13 adds the separate
-single-core guest-thread scheduler described in `guest-threads.md`.
-
-v0.9.0 adds the standard-HID consumer (185 instructions, 18 SVCs, 858 boundary
-assertions) and `--hid-api` (336 assertions). The validator runs seven probes;
-compiler/target runs with HID API contain 16 checks. See `hid-input.md` for the
-shared-ring contract and live original-AOT Wii U input consumer.
-
-v0.10.0 adds an original standard-HID/GSP RGB565 graphics probe: 1382865
-instructions, 27 SVCs, zero fallback; 3603 assertions including four reference
-PPMs. `--gsp-api` adds 362 format/rights/bounds assertions. All eight probes plus
-that API give 18 compiler/target checks. The original ARM halfword subset is
-exercised in the graphics program. See `gsp-display.md` for exact limits.
-
-v0.11.0 adds the ninth external probe, `relay`: 1,383,167 instructions and 34
-SVCs per path, zero fallback, full-state/pixel parity including a VBlank between
-LDREX/STREX. It exports four `relay/frame-{1,2}-{top,bottom}.ppm` images.
-`--relay-api` adds timing, ring, lifetime, rejection and resource rollback checks.
-Nine probes plus this API produce 20 compiler/target checks. See `gsp-queues.md`
-for the single-client diagnostic timing and remaining stock startup/GX/PICA gaps.
-
-v0.12 adds `stack` and `stack_reject`, bringing external probes to eleven.
-The original nested ARM/Thumb program takes 47 instructions/one SVC; 352
-assertions compare normal execution and six partial-word fault paths across
-external/original AOT and interpreter. The 48-assertion rejection probe checks
-six empty/unpredictable Thumb forms, including ones the emitter erases.
-`--multiple-api` adds the stack/transfer API suite (24 compiler/target checks
-total). An ARM LDM abort restores an early-emitter writeback; prior successful
-loads remain visible. See `cpu-stack.md` for constraints and independent evidence.
-
-
-## Raw VFP memory under CRT controls
-
-Version 0.23 keeps VPUSH/VPOP and the exercised VLDM/VSTM forms as raw bit
-transport under the CRT FPSCR flush/default-NaN controls. Register ranges and
-word counts are checked before effects; NaN/denormal payload bits and FPSCR are
-preserved. Unsupported arithmetic modes still reject before execution. This
-scoped fix enables the original compiled draw program without claiming general
-VFP control-mode support. The progress suite retains its separate dispatch checks.
+GCC/Clang sanitizer, native Windows and emulated big-endian PowerPC checks
+establish their stated execution behavior. QEMU Linux is not Wii U hardware,
+and tiny synthetic timings do not predict useful game performance. Optional
+Unicorn ARM1176 checks provide an independent instruction reference.

@@ -166,7 +166,7 @@ def main():
               "unverified": ["physical Wii U execution, input/audio/exit", "PowerPC correctness/timings", "clean Windows execution", "commercial ROM execution", "WUP installation"],
               "unimplemented": ["complete ARM/VFP", "multi-thread kernel and general IPC/HID/GSP/other services", "PICA-to-GX2 rendering", "commercial archive/ROMFS/save integration, audio/CRO", "commercial conversion pipeline", "Windows GUI"],
               "packaging": {"writer": "original scoped encrypted profile", "offline_report": str((report_root/"offline-packaging/report.json").relative_to(ROOT)), "synthetic_credentials_only": True, "installer_acceptance": "unverified"},
-              "configuration": {"draft_persistence": "see STATUS.md", "publication": "not_checked_by_runner", "fresh_task_restore": "not_checked_by_runner"}}
+              "configuration": {"draft_persistence": "see plans.md", "publication": "not_checked_by_runner", "fresh_task_restore": "not_checked_by_runner"}}
     destination = report_root / "report.json"
     destination.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(str(destination))

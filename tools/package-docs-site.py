@@ -102,7 +102,7 @@ def static_files(site: Path) -> tuple[dict[str, bytes], list[str]]:
             continue
         if path.suffix.lower() not in STATIC_SUFFIXES and not (relative.startswith("docs/licenses/") and path.name in TEXT_LICENSES):
             raise ValueError("Unexpected static documentation asset: " + relative)
-        if path.suffix.lower() == ".json" and relative not in {"search/search_index.json", "docs/milestone-status.json", "docs/m1-evidence.json"}:
+        if path.suffix.lower() == ".json" and relative not in {"search/search_index.json"}:
             raise ValueError("Unexpected documentation JSON payload")
         data = read_file(path)
         if path.suffix in {".js", ".css"}:
@@ -118,8 +118,6 @@ def static_files(site: Path) -> tuple[dict[str, bytes], list[str]]:
 
 
 def local_target(site: Path, page: Path, target: str, site_url: str) -> tuple[Path, str] | None:
-    if target == 'https://jdiller-86.github.io/CTR-2-WUP/progress/':
-        return None  # Separately published live endpoint; an ordinary external link offline.
     parsed = urlsplit(target)
     base = urlsplit(site_url)
     if parsed.scheme or parsed.netloc:
@@ -261,7 +259,7 @@ class Reader:
             rendered = '<div class="table-wrap" tabindex="0" role="region" aria-label="Scrollable documentation table">' + rendered + '</div>'
         return rendered
 
-    def html(self, report: dict, progress: dict) -> str:
+    def html(self, report: dict) -> str:
         order = self.order()
         navigation = []; sections = []
         for relative in order:
@@ -277,10 +275,8 @@ class Reader:
             navigation.append(f'<a class="page-link" href="#{identifier}">{escape(relative)}</a>')
         version = escape(report["project_version"])
         commit = escape(report["source_commit"])
-        gates = progress["full_milestones_accepted"]
-        count = len(progress["milestones"])
-        header = f'<header><div><strong>CTR2WUP documentation</strong><span>Version {version} · dated assessment: {gates}/{count} full milestones accepted</span></div><label for="guide-search">Search this guide</label><input id="guide-search" type="search" placeholder="Search topics and article text" autocomplete="off"><button id="theme-toggle" type="button">Light / dark</button><button id="print-guide" type="button">Print</button></header>'
-        banner = f'<p class="scope">The planned product is a Windows GUI that injects an owned 3DS game into a playable Wii U WUP. Current releases are original diagnostics; commercial games and the GUI remain unfinished. This guide records evidence at its source version; <a href="https://github.com/users/Jdiller-86/projects/2">Project #2 owns current tracking and acceptance</a>. Reading and search work offline. External source/issue links need internet and may require repository access. Source commit: <code>{commit}</code>.</p>'
+        header = f'<header><div><strong>CTR2WUP documentation</strong><span>Version {version}</span></div><label for="guide-search">Search this guide</label><input id="guide-search" type="search" placeholder="Search topics and article text" autocomplete="off"><button id="theme-toggle" type="button">Light / dark</button><button id="print-guide" type="button">Print</button></header>'
+        banner = f'<p class="scope">The planned product is a Windows GUI that injects an owned 3DS game into a playable Wii U WUP. Current releases are original diagnostics; commercial games and the GUI remain unfinished. <a href="https://github.com/Jdiller-86/CTR-2-WUP/blob/main/plans.md">Development plan</a>. Reading and search work offline. External source/issue links need internet and may require repository access. Source commit: <code>{commit}</code>.</p>'
         return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>CTR2WUP documentation ' + version + '</title><style>' + CSS + '</style></head><body>' + header + '<div class="layout"><aside aria-label="Document navigation"><p id="search-status" role="status" aria-live="polite"></p><nav>' + "".join(navigation) + '</nav></aside><main>' + banner + "".join(sections) + '</main></div><script>' + SCRIPT + '</script></body></html>'
 
 
@@ -422,19 +418,15 @@ def package(options: argparse.Namespace) -> dict:
         raise ValueError("Expected a public documentation repository name")
     public_url="https://"+options.public_repository.split('/')[0].lower()+".github.io/"+options.public_repository.split('/')[1]+"/"
     files,excluded=static_files(site)
-    progress=json.loads(files["docs/milestone-status.json"])
-    if progress.get("version")!=version or progress.get("full_milestones_accepted")!=report.get("full_milestones_accepted"):
-        raise ValueError("Documentation progress differs from its validated build")
     reader=Reader(site,files,report["site_url"])
     if len(reader.pages)+("404.html" in files)!=report.get("html_pages"):
         raise ValueError("Rendered document set differs from the validated build")
-    standalone=reader.html(report,progress)
+    standalone=reader.html(report)
     if len(standalone.encode())>16*1024*1024:
         raise ValueError("Standalone guide exceeds its bounded size")
     audit=audit_reader(standalone)
-    project_url = "https://github.com/users/Jdiller-86/projects/2"
-    if commit not in standalone or "Windows GUI" not in standalone or f"{progress['full_milestones_accepted']}/{len(progress['milestones'])}" not in standalone or project_url not in standalone:
-        raise ValueError("Standalone guide lost source identity, goal, dated assessment or its authoritative Project link")
+    if commit not in standalone or "Windows GUI" not in standalone:
+        raise ValueError("Standalone guide lost source identity or product goal")
     html_name=f"CTR2WUP-Documentation-{version}.html";zip_name=f"CTR2WUP-Public-Docs-{version}.zip"
     old_url=report["site_url"].rstrip('/')+'/';rebased={}
     for relative,data in files.items():
@@ -460,8 +452,7 @@ licenses are retained; the raw ARM startup assembly/linker files stay in source.
 
 Maintain Markdown in the public source repository and regenerate with
 `tools/build-docs-site.py` and `tools/package-docs-site.py`. Its trusted-main
-`publish-docs.yml` workflow deploys the checked site and live aggregate dashboard
-through GitHub Pages; no premium plan or separate documentation repository is
+`publish-docs.yml` workflow deploys the checked site through GitHub Pages; no premium plan or separate documentation repository is
 needed. Do not extract this archive over the source checkout or maintain a
 second generated article tree. Prior documentation links redirect to the
 canonical site. This export is suitable for independent offline review.
@@ -470,7 +461,7 @@ canonical site. This export is suitable for independent offline review.
     with tempfile.TemporaryDirectory(prefix='.docs-publication-',dir=output.parent) as temporary:
         stage=Path(temporary)
         (stage/html_name).write_text(standalone,encoding='utf-8')
-        receipt={"schema_version":1,"ok":True,"version":version,"source_commit":commit,"public_repository":options.public_repository,"public_site_url":public_url,"standalone_html":html_name,"public_bundle":zip_name,"document_pages":len(reader.pages),"embedded_text_attachments":len(reader.attachments),"inline_images":reader.images,"excluded_source_files":excluded,"all_maintained_article_pages_retained":True,"public_site_internal_links_verified":public_links,"archive_contains_documentation_only":True,"application_source_bundled":False,"private_payloads_bundled":False,"progress_milestones_accepted":progress['full_milestones_accepted'],"console_acceptance_claimed":False,**audit}
+        receipt={"schema_version":1,"ok":True,"version":version,"source_commit":commit,"public_repository":options.public_repository,"public_site_url":public_url,"standalone_html":html_name,"public_bundle":zip_name,"document_pages":len(reader.pages),"embedded_text_attachments":len(reader.attachments),"inline_images":reader.images,"excluded_source_files":excluded,"all_maintained_article_pages_retained":True,"public_site_internal_links_verified":public_links,"archive_contains_documentation_only":True,"application_source_bundled":False,"private_payloads_bundled":False,"console_acceptance_claimed":False,**audit}
         bundle={"README.md":instructions.encode(),"documentation-provenance.json":json.dumps(receipt,indent=2).encode()}
         bundle.update({"site/"+name:data for name,data in rebased.items()})
         sums="".join(digest(data)+"  "+name+"\n" for name,data in sorted(bundle.items()))

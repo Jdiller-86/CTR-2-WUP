@@ -167,7 +167,7 @@ def package(native, audio_kit, output, installed=None, sdk_licenses=None, sdk_re
     entries['support/build-report.json'] = audio.release.regular(native/'build-report.json').read_bytes()
     identity = ('**Ready for the new install check.** Title: **'+candidate['title_name']+'** · '
                 'ID: `'+candidate['title_id']+'` · version `'+VERSION+'`.\n\n')
-    guide = audio.immutable_guide(audio.release.regular(ROOT/'docs/m1-acceptance.md').read_bytes(), commit)
+    guide = audio.release.render_guide(ROOT/'tools/templates/install-check.md', VERSION, commit)
     heading, rest = guide.split(b'\n', 1)
     entries['START-HERE.md'] = heading+b'\n\n'+identity.encode()+rest.lstrip(b'\n')
     m1 = dict(schema_version=1, kind='ctr2wup-m1-acceptance',

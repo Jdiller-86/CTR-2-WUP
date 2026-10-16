@@ -283,13 +283,23 @@ jobs:
           set -euo pipefail
           python -m host build --target scene-check --output artifacts/ci/scene-check
           cp LICENSE THIRD_PARTY_NOTICES artifacts/ci/scene-check/
-          cp docs/software-scenes.md artifacts/ci/scene-check/START-HERE.md
+          mkdir -p artifacts/ci/scene-check/sd-card/wiiu/apps artifacts/ci/scene-check/rpx
+          mv artifacts/ci/scene-check/*.wuhb artifacts/ci/scene-check/sd-card/wiiu/apps/
+          mv artifacts/ci/scene-check/*.rpx artifacts/ci/scene-check/rpx/
+          python - <<'PYGUIDE'
+          import os
+          from pathlib import Path
+          from host import __version__
+          guide = Path('tools/templates/scene-check.md').read_text()
+          Path('artifacts/ci/scene-check/START-HERE.md').write_text(
+              guide.replace('@VERSION@', __version__).replace('@SOURCE_COMMIT@', os.environ['GITHUB_SHA']))
+          PYGUIDE
           cp "$DEVKITPRO/ctr2wup-image-digest.txt" artifacts/ci/scene-check/sdk-image-digest.txt
           cp -R "$DEVKITPRO/licenses" artifacts/ci/scene-check/sdk-licenses
           mkdir -p artifacts/ci/scene-check/images
-          cp docs/images/software-scene-v022.png artifacts/ci/scene-check/images/
+          cp docs/images/software-scene.png artifacts/ci/scene-check/images/
           git rev-parse HEAD > artifacts/ci/scene-check/source-commit.txt
-          (cd artifacts/ci/scene-check && sha256sum -- *.rpx *.wuhb > SHA256SUMS)
+          (cd artifacts/ci/scene-check && sha256sum -- rpx/*.rpx sd-card/wiiu/apps/*.wuhb > SHA256SUMS)
       - name: Upload the focused Scene Check
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -310,18 +320,26 @@ jobs:
           python3 tools/validate-libctru.py --application draw --wiiu --sanitize \
             --devkitarm "$DEVKITPRO/devkitARM" --output artifacts/ci/compiled-draw \
             2>&1 | tee artifacts/ci/sdk/compiled-draw.log
-          mkdir -p artifacts/ci/guest-draws/images artifacts/ci/guest-draws/licenses
+          mkdir -p artifacts/ci/guest-draws/images artifacts/ci/guest-draws/licenses artifacts/ci/guest-draws/rpx artifacts/ci/guest-draws/sd-card/wiiu/apps
           cp artifacts/ci/compiled-draw/report.json artifacts/ci/guest-draws/
           cp artifacts/ci/compiled-draw/draw/frame-*.ppm artifacts/ci/guest-draws/images/
-          cp docs/images/guest-draw-*-v023.png artifacts/ci/guest-draws/images/
-          cp artifacts/ci/compiled-draw/draw/wiiu/*.rpx artifacts/ci/compiled-draw/draw/wiiu/*.wuhb artifacts/ci/guest-draws/
-          cp docs/guest-pica-draws.md artifacts/ci/guest-draws/START-HERE.md
+          cp docs/images/guest-draw-*.png artifacts/ci/guest-draws/images/
+          cp artifacts/ci/compiled-draw/draw/wiiu/*.rpx artifacts/ci/guest-draws/rpx/
+          cp artifacts/ci/compiled-draw/draw/wiiu/*.wuhb artifacts/ci/guest-draws/sd-card/wiiu/apps/
+          python - <<'PYGUIDE'
+          import os
+          from pathlib import Path
+          from host import __version__
+          guide = Path('tools/templates/guest-draws.md').read_text()
+          Path('artifacts/ci/guest-draws/START-HERE.md').write_text(
+              guide.replace('@VERSION@', __version__).replace('@SOURCE_COMMIT@', os.environ['GITHUB_SHA']))
+          PYGUIDE
           cp LICENSE THIRD_PARTY_NOTICES artifacts/ci/guest-draws/
           cp docs/licenses/libctru.txt artifacts/ci/guest-draws/licenses/
           cp -R "$DEVKITPRO/licenses" artifacts/ci/guest-draws/licenses/sdk
           cp "$DEVKITPRO/ctr2wup-image-digest.txt" artifacts/ci/guest-draws/sdk-image-digest.txt
           git rev-parse HEAD > artifacts/ci/guest-draws/source-commit.txt
-          (cd artifacts/ci/guest-draws && sha256sum -- *.rpx *.wuhb > SHA256SUMS)
+          (cd artifacts/ci/guest-draws && sha256sum -- rpx/*.rpx sd-card/wiiu/apps/*.wuhb > SHA256SUMS)
       - name: Build and independently verify the original Audio Streams diagnostic
         run: |
           set -euo pipefail

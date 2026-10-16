@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Optionally collect source-matched Audio Streams TXT files downloaded by FTP.
 
-Point --sd-root at a local directory containing ctr2wup/. No FTP connection,
+Point --sd-root at a local directory containing ctr2wup/results/ (older builds
+wrote directly in ctr2wup/). No FTP connection,
 console command, save, ROM, key or unrelated file is read. Zipping those two
 named TXT files yourself is equally valid; this tool only adds a checked receipt.
 """
@@ -147,15 +148,28 @@ def collect(sd_root: Path, output: Path, kit: dict, observations: dict | None = 
     real_path(folder)
     if not folder.is_dir():
         raise ValueError('Select the local SD/FTP download root containing its ctr2wup directory')
+    results = real_path(folder / 'results')
+    folders = [folder]
+    if results.exists():
+        if not results.is_dir():
+            raise ValueError('The downloaded results path is not a directory; preserve the original files')
+        folders.append(results)
     output = real_path(output)
     if output.exists():
         raise FileExistsError('Preserve the existing return ZIP; choose a new output filename')
     paths, ignored = [], 0
-    for path in folder.iterdir():
-        if RESULT_PATTERN.fullmatch(path.name) or TRACE_PATTERN.fullmatch(path.name):
-            paths.append(path)
-        else:
-            ignored += 1
+    names = set()
+    for location in folders:
+        for path in location.iterdir():
+            if path == results:
+                continue
+            if RESULT_PATTERN.fullmatch(path.name) or TRACE_PATTERN.fullmatch(path.name):
+                if path.name in names:
+                    raise ValueError('Duplicate log filename across legacy/results directories; preserve both originals')
+                names.add(path.name)
+                paths.append(path)
+            else:
+                ignored += 1
     if len(paths) > MAX_FILES:
         raise ValueError('More than 64 Audio Streams files; preserve earlier runs and return smaller batches')
     warnings = [f'{ignored} unrelated entries ignored without reading their contents'] if ignored else []
@@ -205,7 +219,7 @@ def collect(sd_root: Path, output: Path, kit: dict, observations: dict | None = 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--sd-root', type=Path, required=True, help='Local folder containing ctr2wup/ after FTP download')
+    parser.add_argument('--sd-root', type=Path, required=True, help='Local folder containing ctr2wup/results/ after FTP download; legacy root logs also accepted')
     parser.add_argument('--output', type=Path)
     parser.add_argument('--manifest', type=Path, default=Path(__file__).resolve().with_name('manifest.json'))
     args = parser.parse_args()

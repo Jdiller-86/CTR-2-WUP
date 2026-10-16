@@ -1,5 +1,4 @@
-"""Canonical Pages staging/dispatch boundaries; original fixtures, no network."""
-import copy
+"""Canonical Pages archive staging boundaries; original fixtures, no network."""
 import hashlib
 import importlib.util
 import json
@@ -16,23 +15,6 @@ spec.loader.exec_module(hosting)
 COMMIT = 'a' * 40
 
 
-class FakeGitHub:
-    def __init__(self):
-        self.source = {'full_name': hosting.SOURCE, 'private': False, 'default_branch': 'main'}
-        self.commit = COMMIT
-        self.writes = []
-
-    def api(self, path, method='GET', payload=None, missing=False):
-        if method != 'GET':
-            self.writes.append((path, method, copy.deepcopy(payload)))
-            return None
-        if path == 'repos/' + hosting.SOURCE:
-            return self.source
-        if path == 'repos/' + hosting.SOURCE + '/commits/main':
-            return {'sha': self.commit}
-        raise AssertionError(path)
-
-
 class DocsHostingTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
@@ -40,7 +22,6 @@ class DocsHostingTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.folder = self.root / 'artifacts/publication'
         self.folder.mkdir(parents=True)
-        self.api = FakeGitHub()
         self.entries = {'README.md': b'Original docs fixture',
                         'documentation-provenance.json': json.dumps({'source_commit': COMMIT}).encode(),
                         'site/index.html': b'<html>Original docs</html>',
@@ -62,34 +43,6 @@ class DocsHostingTests(unittest.TestCase):
                   'artifacts': [{'name': name, 'sha256': hashlib.sha256((self.folder / name).read_bytes()).hexdigest()}]}
         (self.folder / 'publication-report.json').write_text(json.dumps(report))
 
-    def test_dry_run_does_not_change_repository_or_pages(self):
-        self.assertTrue(hosting.publish(self.folder, COMMIT, self.api)['ok'])
-        self.assertEqual(self.api.writes, [])
-
-    def test_publication_dispatches_only_current_main_without_git_writes(self):
-        result = hosting.publish(self.folder, COMMIT, self.api, apply=True)
-        self.assertEqual(self.api.writes, [('repos/' + hosting.SOURCE + '/actions/workflows/publish-docs.yml/dispatches', 'POST', {'ref': 'main'})])
-        self.assertTrue(result['workflow_dispatched'])
-        self.assertFalse(result['pages_deployment_verified'])
-
-    def test_stale_main_and_creation_refuse_before_writes(self):
-        self.api.commit = 'b' * 40
-        with self.assertRaisesRegex(hosting.PublishError, 'current trusted main'):
-            hosting.publish(self.folder, COMMIT, self.api, apply=True)
-        with self.assertRaisesRegex(hosting.PublishError, 'creation is unsupported'):
-            hosting.publish(self.folder, COMMIT, self.api, create=True, apply=True)
-        self.assertEqual(self.api.writes, [])
-
-    def test_preserves_unexpected_identity_visibility_and_branch(self):
-        for change in ({'private': True}, {'default_branch': 'owner-branch'}, {'full_name': 'other/repo'}):
-            with self.subTest(change=change):
-                original = dict(self.api.source)
-                self.api.source.update(change)
-                with self.assertRaises(hosting.PublishError):
-                    hosting.publish(self.folder, COMMIT, self.api, apply=True)
-                self.assertEqual(self.api.writes, [])
-                self.api.source = original
-
     def test_staging_copies_only_site_and_provenance_into_fresh_ignored_output(self):
         output = self.root / 'artifacts/site'
         with patch.object(hosting, 'ROOT', self.root):
@@ -105,12 +58,11 @@ class DocsHostingTests(unittest.TestCase):
 
     def test_wrong_source_and_archive_tampering_fail_before_mutation(self):
         with self.assertRaisesRegex(hosting.PublishError, 'identity/privacy'):
-            hosting.publish(self.folder, 'b' * 40, self.api, apply=True)
+            hosting.bundle(self.folder, 'b' * 40)
         path = self.folder / 'CTR2WUP-Public-Docs-0.20.0.zip'
         path.write_bytes(path.read_bytes() + b'tamper')
         with self.assertRaisesRegex(hosting.PublishError, 'checksum'):
-            hosting.publish(self.folder, COMMIT, self.api, apply=True)
-        self.assertEqual(self.api.writes, [])
+            hosting.bundle(self.folder, COMMIT)
 
     def test_source_keys_traversal_workflows_and_executables_are_rejected(self):
         for path, data in [('site/main.c', b'original test source'), ('site/user.keys', b'not a real key'),
@@ -120,8 +72,7 @@ class DocsHostingTests(unittest.TestCase):
                 self.entries[path] = data
                 self.write_bundle()
                 with self.assertRaises(hosting.PublishError):
-                    hosting.publish(self.folder, COMMIT, self.api, apply=True)
-                self.assertEqual(self.api.writes, [])
+                    hosting.bundle(self.folder, COMMIT)
                 del self.entries[path]
 
 

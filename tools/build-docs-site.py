@@ -17,17 +17,21 @@ import re
 import shutil
 import subprocess
 import sys
+import tomllib
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 ROOT_PAGES = {
-    "README.md": "index.md", "STATUS.md": "status.md",
+    "README.md": "index.md",
     "CONTRIBUTING.md": "contributing.md", "SECURITY.md": "security.md",
-    "CHANGELOG.md": "changelog.md", "AGENTS.md": "agent-instructions.md",
     "LICENSE": "license.md", "THIRD_PARTY_NOTICES": "third-party-notices.md",
 }
+
+
+def project_version(root: Path) -> str:
+    return tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
 
 
 class RenderedPage(HTMLParser):
@@ -72,10 +76,6 @@ def rewrite_markdown(text: str, source: Path, destination: Path, mapping: dict[s
     # reading the guide must not depend on a network badge image.
     badge = re.compile(r"\[!\[([^]]+)\]\(" + re.escape(repository) + r"/actions/workflows/[^)]+/badge\.svg\)\]\(([^)]+)\)")
     text = badge.sub(lambda match: "[" + match.group(1) + " results](" + match.group(2) + ")", text)
-    # The live chart is an ordinary link in the offline
-    # documentation build. Never embed invented/static Project counts here.
-    chart = '[![Project progress](https://jdiller-86.github.io/CTR-2-WUP/progress/gates.svg)](https://jdiller-86.github.io/CTR-2-WUP/progress/)'
-    text = text.replace(chart, '[Live Project progress](https://github.com/users/Jdiller-86/projects/2)')
     def rewrite(target: str) -> str:
         wrapped = target.startswith("<") and target.endswith(">")
         parsed = urlsplit(target[1:-1] if wrapped else target)
@@ -161,11 +161,6 @@ def verify_site(site: Path, site_url: str) -> dict:
     def verify(source: Path, target: str) -> None:
         nonlocal checked, external
         parsed = urlsplit(target)
-        if target == 'https://jdiller-86.github.io/CTR-2-WUP/progress/':
-            # A separate Project workflow publishes this live endpoint. It is
-            # HTTP-verified during hosting, outside the static docs artifact.
-            external += 1
-            return
         if parsed.scheme or parsed.netloc:
             if (parsed.scheme, parsed.netloc) != (base.scheme, base.netloc):
                 external += 1
@@ -205,12 +200,9 @@ def verify_site(site: Path, site_url: str) -> dict:
         raise ValueError("Search index is empty")
     for row in search["docs"]:
         verify(site / "index.html", row["location"])
-    project_url = "https://github.com/users/Jdiller-86/projects/2"
-    if project_url not in pages[(site / "index.html").resolve()].links:
-        raise ValueError("The overview must link the authoritative live Project")
     return {"html_pages": len(pages), "checked_internal_links_and_assets": checked,
             "external_links_not_network_checked": external, "search_entries": len(search["docs"]),
-            "authoritative_project_link_present": True, "all_rendered_internal_links_resolve": True}
+            "all_rendered_internal_links_resolve": True}
 
 
 def build(options: argparse.Namespace) -> dict:
@@ -249,9 +241,7 @@ def build(options: argparse.Namespace) -> dict:
         shutil.rmtree(source)
     source.mkdir()
     files = subprocess.check_output(["git", "-C", str(root), "ls-files", "-z", "docs"], text=True).split("\0")
-    # The private development ledger contains issue/PR relationships. Publish
-    # the policy page and safe aggregate dashboard, not this management input.
-    files = [name for name in files if name and name not in {"docs/features.json", "docs/project-reviews.json"}]
+    files = [name for name in files if name and (root / name).is_file()]
     if (root / "docs/stylesheets/extra.css").is_file() and "docs/stylesheets/extra.css" not in files:
         files.append("docs/stylesheets/extra.css")
     mapping = dict(ROOT_PAGES)
@@ -287,19 +277,16 @@ def build(options: argparse.Namespace) -> dict:
     if result.returncode:
         raise ValueError("Strict documentation build failed; see " + str(output / "build.log"))
     verification = verify_site(output / "site", site_url)
-    status = json.loads((root / "docs/milestone-status.json").read_text(encoding="utf-8"))
     home = RenderedPage()
     home.feed((output / "site/index.html").read_text(encoding="utf-8"))
     text = " ".join(" ".join(home.text).split())
-    gates = f"{status['full_milestones_accepted']} of {len(status['milestones'])}"
-    if "Windows GUI" not in text or "Early development" not in text:
+    if "Windows GUI" not in text or "not available yet" not in text:
         raise ValueError("Homepage lost the maintained product goal or development status")
     report = {"ok": True, "source_commit": commit, "site_url": site_url,
-              "project_version": status["version"], "dependency_versions": dependencies,
+              "project_version": project_version(root), "dependency_versions": dependencies,
               "site_directory": str(output / "site"), "strict_build": True,
               "project_markdown_from_maintained_sources": True, "sources": hashes,
               "generated_site_engine_notices": notice_count,
-              "full_milestones_accepted": status["full_milestones_accepted"],
               "console_execution_claimed": False, **verification}
     (output / "build-report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     return report
