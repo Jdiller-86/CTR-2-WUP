@@ -441,6 +441,28 @@ static void return_directory_tests(void) {
     CHECK(!ctr_test_report_directory(root,false,directory,sizeof(directory)) && errno==ENOTDIR);
     CHECK(ctr_test_unlink(directory)==0);
     CHECK(!ctr_test_report_directory(root,false,directory,4) && errno==ENAMETOOLONG);
+    char first[512],second[512],parent[512];
+    const char *source_a="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const char *source_b="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    CHECK(ctr_test_report_source_directory(root,source_a,first,sizeof(first)));
+    CHECK(ctr_test_report_source_directory(root,source_b,second,sizeof(second)));
+    CHECK(strcmp(first,second)!=0);
+    CHECK(ctr_test_report_source_directory(root,source_a,directory,sizeof(directory)));
+    CHECK(strcmp(first,directory)==0);
+    ctr_test_report scoped={0};
+    CHECK(ctr_test_report_open(&scoped,first,"native-install","0.27.0",2));
+    CHECK(ctr_test_report_line(&scoped,"Original source-bound report"));
+    CHECK(ctr_test_report_close(&scoped));
+    CHECK(ctr_test_report_source_directory(root,source_b,directory,sizeof(directory)));
+    char scoped_text[1024];read_file(scoped.path,scoped_text,sizeof(scoped_text));
+    CHECK(strstr(scoped_text,"Original source-bound report")!=NULL);
+    CHECK(!ctr_test_report_source_directory(root,"../bad",directory,sizeof(directory)) && errno==EINVAL);
+    CHECK(!ctr_test_report_source_directory(root,"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",directory,sizeof(directory)) && errno==EINVAL);
+    CHECK(!ctr_test_report_source_directory(root,source_a,directory,4) && errno==ENAMETOOLONG);
+    CHECK(ctr_test_unlink(scoped.path)==0);
+    CHECK(ctr_test_remove_directory(first)==0 && ctr_test_remove_directory(second)==0);
+    CHECK(ctr_test_report_directory(root,true,parent,sizeof(parent)));
+    CHECK(ctr_test_remove_directory(parent)==0);
     for(unsigned i=0;i<2;++i)CHECK(ctr_test_unlink(inputs[i])==0);
     CHECK(ctr_test_remove_directory(root)==0);
 }

@@ -16,6 +16,7 @@ NAMES = ('ctr2wup-install-check.rpx', 'ctr2wup-install-check.wuhb')
 MAX_TOTAL = 24 * 1024 * 1024
 INSTALL_FOLDER = 'CTR2WUP-M1'
 EXPECTED_TITLE_ID = '0005000043543257'
+EXPECTED_TITLE_NAME = 'CTR2WUP Install Check'
 
 
 def helpers():
@@ -43,6 +44,18 @@ def native_receipt(native, commit, audio):
             or report.get('source_commit') != commit or report.get('source_dirty') is not False
             or report.get('input_identity') is not None):
         raise ValueError('Require a clean exact-source install-check native build')
+    witness = report.get('install_check')
+    if (not isinstance(witness, dict)
+            or witness.get('storage_protocol') != 'snapshot-v2'
+            or witness.get('session_protocol') != 'install-v2'
+            or witness.get('production_snapshot_adapter') is not True
+            or witness.get('cross_launch_recovery') is not True
+            or witness.get('process_session_trace') is not True
+            or witness.get('full_native_guide') is not False
+            or witness.get('log_directory') != 'ctr2wup/install-check/'+commit
+            or witness.get('console_verified') is not False
+            or witness.get('full_milestone_acceptance') is not False):
+        raise ValueError('Require the production snapshot-v2 install-check build witness')
     release.check_records(report.get('artifacts'), NAMES, native)
     for name in NAMES:
         release.validate_binary(native/name)
@@ -120,7 +133,7 @@ def install_payload(installed, commit, native, audio):
             or report.get('original_inputs_only') is not True or report.get('install_test_ready') is not True
             or report.get('profile') != 'wiiu_plaintext_homebrew'
             or report.get('requires_signature_patches') is not True
-            or not isinstance(report.get('title_name'), str) or not report['title_name'].strip()
+            or report.get('title_name') != EXPECTED_TITLE_NAME
             or not isinstance(report.get('title_id'), str)
             or report['title_id'] != EXPECTED_TITLE_ID):
         raise ValueError('Require a clean source-bound original install candidate')
@@ -165,19 +178,18 @@ def package(native, audio_kit, output, installed=None, sdk_licenses=None, sdk_re
     candidate, entries = install_payload(installed, commit, report, audio)
     entries.update(provenance(audio_kit, sdk_licenses, sdk_receipt, commit, audio))
     entries['support/build-report.json'] = audio.release.regular(native/'build-report.json').read_bytes()
-    identity = ('**Ready for the new install check.** Title: **'+candidate['title_name']+'** · '
-                'ID: `'+candidate['title_id']+'` · version `'+VERSION+'`.\n\n')
-    guide = audio.release.render_guide(ROOT/'tools/templates/install-check.md', VERSION, commit)
-    heading, rest = guide.split(b'\n', 1)
-    entries['START-HERE.md'] = heading+b'\n\n'+identity.encode()+rest.lstrip(b'\n')
+    entries['START-HERE.md'] = audio.release.render_guide(
+        ROOT/'tools/templates/install-check.md', VERSION, commit)
+    log_directory = 'ctr2wup/install-check/'+commit
     m1 = dict(schema_version=1, kind='ctr2wup-m1-acceptance',
-              suite_id='m1-install-'+VERSION+'-'+commit[:12], version=VERSION,
+              acceptance_profile='m1-completion-v2',
+              suite_id='m1-completion-'+VERSION+'-'+commit[:12], version=VERSION,
               source_commit=commit, source_dirty=False, native_app='native-install',
               original_inputs_only=True, console_verified=False, full_milestone_acceptance=False,
-              scope='new-installed-title-route-only', prior_native_evidence_carried_forward=True,
-              recovery=dict(available=True, protocol='scratch-v1'),
-              install_check=dict(full_native_guide=False, storage_protocol='scratch-v1',
-                                 log_directory='ctr2wup/install-check'),
+              scope='installed-title-and-production-snapshot-recovery', prior_native_evidence_carried_forward=True,
+              recovery=dict(available=True, protocol='snapshot-v2'),
+              install_check=dict(full_native_guide=False, storage_protocol='snapshot-v2',
+                                 session_protocol='install-v2', log_directory=log_directory),
               package=dict(available=True, source_commit=commit, title_name=candidate['title_name'],
                            title_id=candidate['title_id'], install_test_ready=True,
                            requires_signature_patches=True, console_verified=False),
@@ -186,7 +198,7 @@ def package(native, audio_kit, output, installed=None, sdk_licenses=None, sdk_re
     entries['support/manifest.json'] = manifest
     # FTP copies identity into the dedicated log directory; the user returns
     # that whole folder instead of finding a separate manifest or pairing files.
-    entries['sd-card/ctr2wup/install-check/kit.json'] = manifest
+    entries['sd-card/'+log_directory+'/kit.json'] = manifest
     entries['support/SHA256SUMS.txt'] = ''.join(audio.digest(d)+'  '+n+'\n' for n, d in sorted(entries.items())).encode()
     output = Path(os.path.abspath(output))
     if output.exists() or any(p.is_symlink() for p in (output, *output.parents)):

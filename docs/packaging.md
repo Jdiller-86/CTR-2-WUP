@@ -16,10 +16,16 @@ and Wii U Menu launch/exit/relaunch are unverified.
 The explicit diagnostic ID **`0005000043543257`** is not a reserved safe range:
 check the console for an unrelated title with that ID before installation.
 
-The `native-install` diagnostic checks its actual title identity and original SD
-recovery behavior in `sd:/ctr2wup/install-check/`. Its matching package supplies
-the install instructions. The package's source, notices and receipts are under
-`support/`; deployment uses one `sd-card/` tree.
+The `native-install` diagnostic checks its actual title identity and the production
+`ctr_fs_snapshot_*` adapter using isolated original data. The first Menu launch
+leaves a deliberately interrupted publication (**PREPARED**); the second recovers
+the committed `.previous`, rejects the uncommitted `.pending` and verifies a new
+publication (**RECOVERED**). Later launches only recheck completion. Source-bound
+`install-v2`/`snapshot-v2` receipts and recovery files stay under
+`sd:/ctr2wup/install-check/<source-commit>/`; return the whole parent folder over
+FTP. This proves deterministic software interruption recovery, not power-loss
+durability. The package supplies one guide and `sd-card/` tree; source, notices
+and checksums remain under `support/`.
 
 ```sh
 python -m host stage-title PATH.rpx --title-id YOUR_APPLICATION_ID --name "My title" --output private/staging

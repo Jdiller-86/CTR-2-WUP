@@ -25,6 +25,10 @@ typedef struct {
  * in the data root; installed-title evidence retains its separate directory. */
 bool ctr_test_report_directory(const char *data_root, bool install_check,
                                char *directory, size_t capacity);
+/* Isolate installed-title logs by exact source, retaining the same parent FTP
+ * return folder. source40 is exactly 40 lowercase hexadecimal characters. */
+bool ctr_test_report_source_directory(const char *data_root,const char *source40,
+                                      char *directory,size_t capacity);
 
 /* The caller supplies an existing directory and a zero-initialized report.
  * Each launch reserves a new file exclusively; existing reports are preserved.

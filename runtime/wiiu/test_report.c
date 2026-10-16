@@ -34,6 +34,23 @@ bool ctr_test_report_directory(const char *data_root, bool install_check,
     return directory_ready(data_root) && directory_ready(directory);
 }
 
+bool ctr_test_report_source_directory(const char *data_root,const char *source,
+                                      char *directory,size_t capacity) {
+    if(!source || strlen(source)!=40 || strspn(source,"0123456789abcdef")!=40 ||
+       !directory || !capacity) { errno=EINVAL;return false; }
+    char parent[512];
+    if(!ctr_test_report_directory(data_root,true,parent,sizeof(parent)))return false;
+    int n=snprintf(directory,capacity,"%s/%s",parent,source);
+    if(n<0 || (size_t)n>=capacity) { errno=ENAMETOOLONG;return false; }
+    if(!directory_ready(directory))return false;
+#ifndef _WIN32
+    struct stat information;
+    if(lstat(directory,&information)!=0)return false;
+    if(!S_ISDIR(information.st_mode) || S_ISLNK(information.st_mode)) { errno=ENOTDIR;return false; }
+#endif
+    return true;
+}
+
 static bool fail(ctr_test_report *r, int error, const char *stage) {
     if (!r->failed) {
         r->failed = true;

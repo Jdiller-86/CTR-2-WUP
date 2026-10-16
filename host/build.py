@@ -218,8 +218,10 @@ def prototype(output: str | Path, guest_path=None, *, backend="original", audio_
             manifest["stages"].append({"name":"original_cstm_mixing_native_pcm_human_hearing","state":"awaiting_console_test"})
             manifest["limitations"].append("Original checked CSTM, two portable voices and fixed finite native PCM; guest DSP IPC, asynchronous streaming and audible hardware output remain unverified")
         if install_only:
-            manifest["install_check"]={"full_native_guide":False,"storage_protocol":"scratch-v1",
-                "sentinel_bytes":128,"process_session_trace":True,"log_directory":"ctr2wup/install-check",
+            manifest["install_check"]={"full_native_guide":False,"storage_protocol":"snapshot-v2",
+                "session_protocol":"install-v2","production_snapshot_adapter":True,
+                "cross_launch_recovery":True,"process_session_trace":True,
+                "log_directory":"ctr2wup/install-check/"+source_commit,
                 "console_verified":False,"full_milestone_acceptance":False}
             manifest["stages"][-1]={"name":"installed_title_menu_launch_sd_recovery_fresh_reload_exit","state":"awaiting_console_test"}
             manifest["limitations"].append("Focused original installed-title payload; packaging and physical GX2 installation/Menu launch require separate evidence")

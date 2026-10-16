@@ -35,7 +35,8 @@ class M1PackageTests(unittest.TestCase):
         self.licenses = self.root/'licenses'
         for directory in (self.native, self.installed, self.source/'tools/templates', self.licenses):
             directory.mkdir(parents=True)
-        (self.source/'tools/templates/install-check.md').write_text('# Install check\n\nOriginal focused guide.\n')
+        (self.source/'tools/templates/install-check.md').write_bytes(
+            (ROOT/'tools/templates/install-check.md').read_bytes())
         (self.source/'LICENSE').write_text('Original project license')
         (self.source/'THIRD_PARTY_NOTICES').write_text('Original third-party notices')
         (self.licenses/'LICENSE.txt').write_text('Original SDK license fixture')
@@ -54,7 +55,13 @@ class M1PackageTests(unittest.TestCase):
             artifacts.append(dict(name=name, size=len(data), sha256=audio.digest(data)))
         self.native_report = dict(ok=True, target='install-check', profile='native-install',
                                   runtime_version=tool.VERSION, source_commit=COMMIT,
-                                  source_dirty=False, input_identity=None, artifacts=artifacts)
+                                  source_dirty=False, input_identity=None, artifacts=artifacts,
+                                  install_check=dict(full_native_guide=False,
+                                      storage_protocol='snapshot-v2', session_protocol='install-v2',
+                                      production_snapshot_adapter=True, cross_launch_recovery=True,
+                                      process_session_trace=True,
+                                      log_directory='ctr2wup/install-check/'+COMMIT,
+                                      console_verified=False, full_milestone_acceptance=False))
         (self.native/'build-report.json').write_text(json.dumps(self.native_report))
         payload = {'title.tmd': b'Original TMD fixture', 'title.tik': b'Original ticket fixture',
                    'title.cert': b'Original certificate fixture', '00000000.app': bytes(header)}
@@ -97,16 +104,30 @@ class M1PackageTests(unittest.TestCase):
         self.assertFalse((stage/'KIT-STATUS.md').exists())
         self.assertTrue((stage/'support/licenses/sdk/LICENSE.txt').is_file())
         manifest = json.loads((stage/'support/manifest.json').read_text())
-        self.assertEqual(manifest['scope'], 'new-installed-title-route-only')
+        self.assertEqual(manifest['scope'], 'installed-title-and-production-snapshot-recovery')
+        self.assertEqual(manifest['acceptance_profile'], 'm1-completion-v2')
         self.assertTrue(manifest['prior_native_evidence_carried_forward'])
         self.assertFalse(manifest['install_check']['full_native_guide'])
-        self.assertEqual(manifest['install_check']['log_directory'], 'ctr2wup/install-check')
+        self.assertEqual(manifest['recovery'], dict(available=True, protocol='snapshot-v2'))
+        self.assertEqual(manifest['install_check']['storage_protocol'], 'snapshot-v2')
+        self.assertEqual(manifest['install_check']['session_protocol'], 'install-v2')
+        self.assertEqual(manifest['install_check']['log_directory'], 'ctr2wup/install-check/'+COMMIT)
         self.assertTrue(manifest['package']['available'])
         self.assertFalse(manifest['console_verified'])
         self.assertFalse(manifest['full_milestone_acceptance'])
         self.assertEqual((stage/'support/manifest.json').read_bytes(),
-                         (stage/'sd-card/ctr2wup/install-check/kit.json').read_bytes())
-        self.assertIn(self.candidate['title_id'], (stage/'START-HERE.md').read_text())
+                         (stage/'sd-card/ctr2wup/install-check'/COMMIT/'kit.json').read_bytes())
+        self.assertEqual({p.name for p in (stage/'sd-card/ctr2wup/install-check').iterdir()}, {COMMIT})
+        self.assertEqual(len(list(stage.rglob('*.md'))), 1)
+        guide = (stage/'START-HERE.md').read_text()
+        self.assertEqual(len(guide.strip().split('\n\n')[1:]), 3)
+        self.assertIn(self.candidate['title_id'], guide.split('\n\n')[1])
+        self.assertIn(tool.VERSION, guide.split('\n\n')[1])
+        self.assertIn(COMMIT, guide.split('\n\n')[1])
+        self.assertNotIn('@SOURCE_COMMIT@', guide)
+        self.assertIn('**PREPARED**', guide)
+        self.assertIn('**RECOVERED**', guide)
+        self.assertIn('whole `sd:/ctr2wup/install-check/` folder', guide)
         for row in manifest['files']:
             data = (stage/row['path']).read_bytes()
             self.assertEqual(len(data), row['size'])
@@ -122,6 +143,24 @@ class M1PackageTests(unittest.TestCase):
             tool.package(self.native, None, self.root/'out')
         self.assertFalse((self.root/'out').exists())
 
+    def test_old_or_mismatched_native_recovery_witness_never_gets_completion_claims(self):
+        witness = self.native_report.pop('install_check')
+        (self.native/'build-report.json').write_text(json.dumps(self.native_report))
+        with self.assertRaisesRegex(ValueError, 'snapshot-v2.*witness'):
+            self.package()
+        self.assertFalse((self.root/'out').exists())
+        for field, bad in (('storage_protocol', 'scratch-v1'), ('session_protocol', 'install-v1'),
+                           ('production_snapshot_adapter', False), ('cross_launch_recovery', False),
+                           ('process_session_trace', False), ('full_native_guide', True),
+                           ('log_directory', 'ctr2wup/install-check'),
+                           ('console_verified', True), ('full_milestone_acceptance', True)):
+            with self.subTest(field=field):
+                self.native_report['install_check'] = dict(witness, **{field: bad})
+                (self.native/'build-report.json').write_text(json.dumps(self.native_report))
+                with self.assertRaisesRegex(ValueError, 'snapshot-v2.*witness'):
+                    self.package()
+                self.assertFalse((self.root/'out').exists())
+
     def test_independently_extracted_rpx_must_match_clean_build(self):
         self.verified['files'][0]['sha256'] = 'b'*64
         with self.assertRaisesRegex(ValueError, 'Independent'):
@@ -129,6 +168,12 @@ class M1PackageTests(unittest.TestCase):
         self.assertFalse((self.root/'out').exists())
         self.verified['files'][0]['sha256'] = self.candidate['rpx_sha256']
         self.candidate['source_commit'] = 'b'*40
+        self.write_candidate()
+        with self.assertRaisesRegex(ValueError, 'source-bound'):
+            self.package()
+        self.assertFalse((self.root/'out').exists())
+        self.candidate['source_commit'] = COMMIT
+        self.candidate['title_name'] = 'Different title'
         self.write_candidate()
         with self.assertRaisesRegex(ValueError, 'source-bound'):
             self.package()

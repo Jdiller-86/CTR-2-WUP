@@ -116,6 +116,9 @@ LDFLAGS := -mcpu=750 -meabi -mhard-float -specs="$(WUT)/share/wut.specs" \
 ifneq ($(filter 1,$(M1_ONLY) $(INSTALL_ONLY)),)
 M1_SOURCES := m1_storage_probe.c
 endif
+ifeq ($(INSTALL_ONLY),1)
+M1_SOURCES += m1_snapshot_probe.c
+endif
 SOURCES := $(M1_SOURCES) main.c viewport.c diagnostic_font.c test_report.c test_guide.c test_lifecycle.c image_scale.c report_storage.c test_result.c diagnostic_audio.c guest_slice.c
 ifeq ($(STREAM_AUDIO),1)
 SOURCES += audio_stream_app.c audio_stream_diagnostic.c

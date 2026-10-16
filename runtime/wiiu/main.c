@@ -41,16 +41,35 @@ static ctr_scene_backend gx2_backend;
 #endif
 #if defined(CTR_M1_ONLY) || defined(CTR_INSTALL_ONLY)
 #include "m1_storage_probe.h"
+#ifdef CTR_INSTALL_ONLY
+#include "m1_snapshot_probe.h"
+#endif
 #if defined(CTR_STREAM_AUDIO) || defined(CTR_AUDIO_ONLY) || defined(CTR_SCENE_ONLY) || defined(CTR_COMPILED_HOMEBREW) || CTR_GUEST_DEFAULT != 0
 #error M1_Check_requires_the_full_native_platform_profile
 #endif
+#ifdef CTR_INSTALL_ONLY
+static CtrM1SnapshotEvidence m1_snapshot={.storage={.result=CTR_M1_STORAGE_ARGUMENT,.error_stage="not_run"},.phase="NONE"};
+#define m1_storage m1_snapshot.storage
+#else
 static CtrM1StorageEvidence m1_storage={.result=CTR_M1_STORAGE_ARGUMENT,.error_stage="not_run"};
+#endif
 static void m1_storage_line(char *line,size_t capacity) {
+#ifdef CTR_INSTALL_ONLY
+    snprintf(line,capacity,"M1_STORAGE protocol=snapshot-v2 phase=%s producer_session=%016llx recovery_session=%016llx current_session=%016llx production_adapter=%u interruption_prepared=%u sentinel_written=%u sentinel_readback=%u fresh_reload=%u previous_recovered=%u pending_rejected=%u invalid_path_rejected=%u final_readback=%u result=%s errno=%d error_stage=%s writes=%u readbacks=%u recoveries=%u; software_recovery_not_power_loss=1",
+        m1_snapshot.phase?m1_snapshot.phase:"NONE",(unsigned long long)m1_snapshot.producer_session,
+        (unsigned long long)m1_snapshot.recovery_session,(unsigned long long)m1_snapshot.current_session,
+        m1_snapshot.production_adapter,m1_snapshot.interruption_prepared,
+        m1_storage.sentinel_written,m1_storage.sentinel_readback,m1_storage.fresh_reload,
+        m1_storage.previous_recovered,m1_storage.pending_rejected,m1_storage.invalid_path_rejected,
+        m1_storage.final_readback,ctr_m1_storage_result_name(m1_storage.result),m1_storage.error_code,
+        m1_storage.error_stage?m1_storage.error_stage:"none",m1_storage.writes,m1_storage.readbacks,m1_storage.recoveries);
+#else
     snprintf(line,capacity,"M1_STORAGE protocol=scratch-v1 sentinel_written=%u sentinel_readback=%u fresh_reload=%u previous_recovered=%u pending_rejected=%u invalid_path_rejected=%u final_readback=%u result=%s errno=%d error_stage=%s writes=%u readbacks=%u recoveries=%u; software_recovery_not_power_loss=1",
         m1_storage.sentinel_written,m1_storage.sentinel_readback,m1_storage.fresh_reload,
         m1_storage.previous_recovered,m1_storage.pending_rejected,m1_storage.invalid_path_rejected,
         m1_storage.final_readback,ctr_m1_storage_result_name(m1_storage.result),m1_storage.error_code,
         m1_storage.error_stage?m1_storage.error_stage:"none",m1_storage.writes,m1_storage.readbacks,m1_storage.recoveries);
+#endif
 }
 #endif
 #ifdef CTR_STREAM_AUDIO
@@ -372,7 +391,7 @@ static bool stream_result_snapshot(const char *stage) {
 
 #ifdef CTR_INSTALL_ONLY
 #define INSTALL_TITLE_ID UINT64_C(0x0005000043543257)
-#define INSTALL_DIRECTORY "fs:/vol/external01/ctr2wup/install-check"
+#define INSTALL_DIRECTORY "fs:/vol/external01/ctr2wup/install-check/" CTR_SOURCE_COMMIT
 static bool install_result_snapshot(const char *stage) {
     char body[CTR_TEST_RESULT_BYTES],storage_line[768];
     m1_storage_line(storage_line,sizeof(storage_line));
@@ -381,7 +400,7 @@ static bool install_result_snapshot(const char *stage) {
         "Stage: %s\nHost exit result: %d (-1 means still running)\n"
         "Install Check title: CTR2WUP Install Check\n"
         "Actual title ID: %016llx | Expected title ID: %016llx | Match: %u\n"
-        "Session: %016llx | Protocol: install-v1\n"
+        "Session: %016llx | Protocol: install-v2\n"
         "Frames: host=%u | Input: samples=%u errors=%u Minus_presses=%u\n"
         "%s\n"
         "Native audio context: result=%s owned=%u attempts=%u successes=%u failures=%u releases=%u\n"
@@ -1236,12 +1255,11 @@ int main(int argc, char **argv) {
         const char *data_directory="fs:/vol/external01/ctr2wup";
         char directory[512];
 #ifdef CTR_INSTALL_ONLY
-        bool install_check=true;
+        bool directory_ok=ctr_test_report_source_directory(data_directory,CTR_SOURCE_COMMIT,directory,sizeof(directory));
 #else
         /* Keep the single FTP return folder free of saves and RomFS inputs. */
-        bool install_check=false;
+        bool directory_ok=ctr_test_report_directory(data_directory,false,directory,sizeof(directory));
 #endif
-        bool directory_ok=ctr_test_report_directory(data_directory,install_check,directory,sizeof(directory));
         if(directory_ok)ctr_test_result_open(&test_result,directory,REPORT_APPLICATION,CTR_APP_VERSION,(uint64_t)session_started);
         else { test_result.failed=true;test_result.error_code=errno;test_result.error_stage="directory"; }
 #ifdef CTR_FILESYSTEM_HOMEBREW
@@ -1259,11 +1277,11 @@ int main(int argc, char **argv) {
                   CTR_APP_VERSION,REPORT_APPLICATION,(unsigned)(8*sizeof(void *)),udp_ready,report_handler_added);
     WHBLogPrintf("BUILD source_commit=%s source_dirty=%u evidence_schema=2 result_bytes=%u",CTR_SOURCE_COMMIT,CTR_SOURCE_DIRTY,CTR_TEST_RESULT_BYTES);
 #ifdef CTR_INSTALL_ONLY
-    WHBLogPrintf("INSTALL_SESSION ticks=%016llx source_commit=%s version=%s protocol=install-v1 title_id=%016llx expected_title_id=%016llx title_match=%u",
+    WHBLogPrintf("INSTALL_SESSION ticks=%016llx source_commit=%s version=%s protocol=install-v2 title_id=%016llx expected_title_id=%016llx title_match=%u",
         (unsigned long long)session_started,CTR_SOURCE_COMMIT,CTR_APP_VERSION,
         (unsigned long long)lifecycle.title_id,(unsigned long long)INSTALL_TITLE_ID,lifecycle.title_id==INSTALL_TITLE_ID);
     if(lifecycle.title_id!=INSTALL_TITLE_ID)WHBLogPrintf("INSTALL_ROUTE FAIL expected_installed_title_not_running; homebrew launch cannot establish installed-title acceptance");
-    ctr_m1_storage_probe(INSTALL_DIRECTORY,CTR_SOURCE_COMMIT,&m1_storage);
+    ctr_m1_snapshot_probe(INSTALL_DIRECTORY,CTR_SOURCE_COMMIT,(uint64_t)session_started,&m1_snapshot);
     char storage_line[768];m1_storage_line(storage_line,sizeof(storage_line));WHBLogPrintf("%s",storage_line);
 #elif defined(CTR_M1_ONLY)
     WHBLogPrintf("M1_SESSION ticks=%016llx source_commit=%s version=%s protocol=m1-v1",
@@ -1727,7 +1745,11 @@ int main(int argc, char **argv) {
         snprintf(guide_rows[2],72,"Actual title: %016llX",(unsigned long long)lifecycle.title_id);
         snprintf(guide_rows[3],72,"Expected:     %016llX",(unsigned long long)INSTALL_TITLE_ID);
         snprintf(guide_rows[4],72,"%s / LIVE FRAME %u",lifecycle.title_id==INSTALL_TITLE_ID?"INSTALLED TITLE MATCH":"WRONG ROUTE - NOT INSTALLED TITLE",frame);
-        snprintf(guide_rows[5],72,"SD recovery: %s / fresh reload: %s",ctr_m1_storage_result_name(m1_storage.result),m1_storage.fresh_reload?"YES":"FIRST RUN");
+        snprintf(guide_rows[5],72,"SD: %s / %s",ctr_m1_storage_result_name(m1_storage.result),m1_snapshot.phase?m1_snapshot.phase:"NONE");
+        if(m1_storage.result==CTR_M1_STORAGE_PASS && !strcmp(m1_snapshot.phase,"PREPARED"))
+            snprintf(guide_rows[1],72,"Check screens, MINUS, then launch once more");
+        if(m1_storage.result!=CTR_M1_STORAGE_PASS)
+            snprintf(guide_rows[1],72,"SD CHECK FAILED / MINUS exits / return logs");
         snprintf(guide_rows[6],72,"Source %.12s / version %s",CTR_SOURCE_COMMIT,CTR_APP_VERSION);
 #elif defined(CTR_STREAM_AUDIO)
         unsigned guide_step_before=stream_app.step;
