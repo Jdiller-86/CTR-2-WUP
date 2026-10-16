@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import unittest
 from urllib.error import HTTPError
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location('docs_site_test', ROOT / 'tools/verify-docs-site.py')
@@ -19,6 +20,16 @@ class DocsSiteTests(unittest.TestCase):
             'application_source_bundled': False, 'private_payloads_bundled': False}).encode()}
         for route in ('', 'docs/getting-started/'):
             data[site.CANONICAL + route] = b'<html>Original guide</html>'
+        return data
+
+    def project_endpoints(self, snapshot):
+        data = self.endpoints()
+        data[site.CANONICAL + 'progress/'] = b'<html>Project progress</html>'
+        data[site.CANONICAL + 'progress/progress.json'] = json.dumps(snapshot).encode()
+        data[site.CANONICAL + 'progress/gates.svg'] = ET.tostring(ET.Element(
+            '{http://www.w3.org/2000/svg}svg', {
+                'data-source-commit': snapshot['source_commit'],
+                'data-generated-at': snapshot['generated_at'], 'data-state': snapshot['state']}))
         return data
 
     def test_current_source_and_usage_page_verify_without_project(self):
@@ -48,34 +59,54 @@ class DocsSiteTests(unittest.TestCase):
         self.assertEqual(result['attempts'], 1)
 
     def test_online_graph_verifies_even_when_project_access_is_unavailable(self):
-        endpoints = self.endpoints()
-        endpoints[site.CANONICAL + 'progress/'] = b'<html>Project progress</html>'
-        endpoints[site.CANONICAL + 'progress/progress.json'] = json.dumps({
+        endpoints = self.project_endpoints({
             'schema_version': 2, 'repository': 'Jdiller-86/CTR-2-WUP',
             'project_url': 'https://github.com/users/Jdiller-86/projects/2',
             'source_commit': 'a' * 40, 'state': 'unavailable', 'stale_after_seconds': 7200,
-            'generated_at': datetime.now(timezone.utc).isoformat()}).encode()
+            'generated_at': datetime.now(timezone.utc).isoformat()})
         result = site.verify('a' * 40, endpoints.__getitem__, with_project=True)
         self.assertTrue(result['ok'])
         self.assertEqual(result['project_snapshot_state'], 'unavailable')
         self.assertFalse(result['project_snapshot_stale'])
+        self.assertTrue(result['embedded_graph_verified'])
 
     def test_online_graph_reports_stale_data_and_rejects_wrong_source(self):
-        endpoints = self.endpoints()
-        endpoints[site.CANONICAL + 'progress/'] = b'<html>Project progress</html>'
         snapshot = {'schema_version': 2, 'repository': 'Jdiller-86/CTR-2-WUP',
                     'project_url': 'https://github.com/users/Jdiller-86/projects/2',
                     'source_commit': 'a' * 40, 'state': 'available', 'stale_after_seconds': 7200,
                     'generated_at': (datetime.now(timezone.utc) - timedelta(hours=3)).isoformat()}
-        path = site.CANONICAL + 'progress/progress.json'
-        endpoints[path] = json.dumps(snapshot).encode()
+        endpoints = self.project_endpoints(snapshot)
         self.assertTrue(site.verify('a' * 40, endpoints.__getitem__, with_project=True)['project_snapshot_stale'])
         snapshot['source_commit'] = 'b' * 40
-        endpoints[path] = json.dumps(snapshot).encode()
+        endpoints[site.CANONICAL + 'progress/progress.json'] = json.dumps(snapshot).encode()
         result = site.verify_until_ready('a' * 40, get=endpoints.__getitem__, with_project=True,
                                          attempts=1, wait=lambda _: None)
         self.assertFalse(result['ok'])
         self.assertEqual(result['error_code'], 'project_source')
+
+    def test_readme_graph_requires_svg_matching_source_timestamp_and_state(self):
+        snapshot = {'schema_version': 2, 'repository': 'Jdiller-86/CTR-2-WUP',
+                    'project_url': 'https://github.com/users/Jdiller-86/projects/2',
+                    'source_commit': 'a' * 40, 'state': 'available', 'stale_after_seconds': 7200,
+                    'generated_at': datetime.now(timezone.utc).isoformat()}
+        url = site.CANONICAL + 'progress/gates.svg'
+        for case in ('missing', 'html', 'source', 'timestamp', 'state'):
+            with self.subTest(case=case):
+                endpoints = self.project_endpoints(snapshot)
+                if case == 'missing':
+                    endpoints[url] = b''
+                elif case == 'html':
+                    endpoints[url] = b'<html>Error page</html>'
+                else:
+                    image = ET.fromstring(endpoints[url])
+                    attribute = {'source': 'data-source-commit', 'timestamp': 'data-generated-at',
+                                 'state': 'data-state'}[case]
+                    image.set(attribute, 'different')
+                    endpoints[url] = ET.tostring(image)
+                result = site.verify_until_ready('a' * 40, get=endpoints.__getitem__,
+                                                 with_project=True, attempts=1)
+                self.assertFalse(result['ok'])
+                self.assertTrue(result['error_code'].startswith('project_image'))
 
     def test_source_propagation_retry_is_bounded(self):
         waits = []

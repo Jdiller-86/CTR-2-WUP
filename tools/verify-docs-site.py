@@ -8,6 +8,7 @@ import subprocess
 import time
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 CANONICAL = 'https://jdiller-86.github.io/CTR-2-WUP/'
@@ -60,8 +61,19 @@ def verify(commit, get=fetch, *, with_project=False):
         age = (datetime.now(timezone.utc) - generated).total_seconds()
         if age < -300:
             raise VerificationError('project_timestamp', 'Published Project snapshot timestamp is in the future')
+        try:
+            chart = ET.fromstring(get(CANONICAL + 'progress/gates.svg'))
+        except ET.ParseError as error:
+            raise VerificationError('project_image', 'README graph image is invalid', True) from error
+        if chart.tag != '{http://www.w3.org/2000/svg}svg':
+            raise VerificationError('project_image', 'README graph image is not SVG')
+        if (chart.get('data-source-commit') != commit
+                or chart.get('data-generated-at') != project['generated_at']
+                or chart.get('data-state') != project['state']):
+            raise VerificationError('project_image_source', 'README graph image does not match the live snapshot', True)
         result.update(project_snapshot_state=project['state'], project_generated_at=project['generated_at'],
-                      project_snapshot_stale=age > project['stale_after_seconds'])
+                      project_snapshot_stale=age > project['stale_after_seconds'],
+                      embedded_graph_verified=True)
     return result
 
 

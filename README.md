@@ -17,6 +17,13 @@ diagnostics. Super Mario 3D Land is the first planned compatibility target.
 [Issues](https://github.com/Jdiller-86/CTR-2-WUP/issues) ·
 [Contributing](CONTRIBUTING.md)
 
+## Project progress
+
+[![Project progress](https://jdiller-86.github.io/CTR-2-WUP/progress/gates.svg)](https://jdiller-86.github.io/CTR-2-WUP/progress/)
+
+Updated hourly from the [Project](https://github.com/users/Jdiller-86/projects/2).
+Open the graph for interactive task details and dependencies.
+
 ## Capabilities
 
 - Bounded container inspection, optional local decryption and verified asset preparation.
