@@ -19,6 +19,12 @@ typedef struct {
     uint64_t begins, draws, submissions, readbacks, shader_instructions;
     uint64_t waits, wait_failures, allocations, releases;
     bool quarantined;
+    /* Optional borrowed CPU evidence observer. Called after a retired GPU copy
+     * has populated readback, including before any later context-restore
+     * failure. The surface is read-only and valid only during the callback;
+     * the observer must not call GX2 or reenter this backend. */
+    void (*observe_readback)(void *context,const ctr_scene_surface *readback);
+    void *readback_context;
 } ctr_wiiu_gx2_scene;
 
 /* The caller supplies the native renderer's active WHB context. This backend

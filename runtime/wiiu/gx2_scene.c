@@ -292,6 +292,7 @@ static bool end(void *context,const ctr_scene_surface *readback) {
     for(unsigned y=0;y<p->height;++y)
         memcpy((uint8_t *)readback->bytes+(size_t)y*readback->stride,
                (const uint8_t *)p->linear.image+(size_t)y*p->linear.pitch*4u,p->width*4u);
+    if(s->observe_readback)s->observe_readback(s->readback_context,readback);
     if(!restore(s))return false;
     ++s->readbacks;s->result=CTR_WIIU_GX2_SCENE_OK;release(s,p);return true;
 }

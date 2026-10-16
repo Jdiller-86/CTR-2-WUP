@@ -16,6 +16,7 @@ static const ctr_shader_program *expected_shader;
 static const ctr_vertex *expected_vertices;
 static unsigned expected_count,gpu_draws,read_invalidates,uniform_uploads;
 static unsigned context_switches;
+static unsigned wait_calls,fail_wait_call;
 static unsigned scissor[4],rectangles[4][4],rectangle_count;
 static float half_x,half_y,offset_x,offset_y;
 static bool cull_front,cull_back;
@@ -42,7 +43,7 @@ void ctr_gx2_test_free(void *p) {
     }
 }
 void GX2SetContextState(GX2ContextState *context) { assert(context);active_context=context;++context_switches; }
-bool GX2DrawDone(void) { return wait_ok; }
+bool GX2DrawDone(void) { ++wait_calls;return wait_ok && wait_calls!=fail_wait_call; }
 void GX2CalcSurfaceSizeAndAlignment(GX2Surface *surface) {
     assert(surface->depth==1 && surface->mipLevels==1);
     surface->pitch=surface->width+8u;surface->alignment=256;
@@ -134,6 +135,7 @@ static void reset(void) {
     assert(!live_allocations);alloc_attempts=0;fail_allocation=0;fetch_bytes=512;
     wait_ok=true;compile_ok=true;layout_ok=true;active_context=&native_context;bound_target=NULL;
     gpu_draws=0;read_invalidates=0;uniform_uploads=0;rectangle_count=0;context_switches=0;
+    wait_calls=0;fail_wait_call=0;
 }
 static void setup(ctr_scene_state *state,ctr_vertex vertices[3]) {
     memset(state,0,sizeof(*state));memset(vertices,0,3*sizeof(*vertices));
@@ -239,8 +241,36 @@ static void failures(void) {
     assert(!backend.end(backend.context,&surface) && scene.readbacks==0 && scene.quarantined);
     wait_ok=true;backend.abort(backend.context);clean(&scene);
 }
+static unsigned observed_readbacks;
+static uint8_t *expected_readback;
+static void observe(void *context,const ctr_scene_surface *readback) {
+    assert(context==&observed_readbacks && readback->bytes==expected_readback);
+    assert(readback->width==16 && readback->height==16 && readback->stride==72 && readback->size==1161);
+    const uint8_t *pixels=readback->bytes;
+    assert(pixels[0]==17 && pixels[1]==33 && pixels[2]==49 && pixels[3]==255);
+    assert(pixels[64]==0x55 && pixels[1160]==0x55); /* Borrowed padding is preserved. */
+    ++observed_readbacks;
+}
+static void readback_observer(void) {
+    for(unsigned failure=0;failure<3;++failure) {
+        reset();observed_readbacks=0;
+        uint8_t bytes[1161];memset(bytes,0x55,sizeof(bytes));expected_readback=bytes;
+        ctr_scene_surface surface={bytes,sizeof(bytes),16,16,72};
+        ctr_scene_state state;ctr_vertex vertices[3];setup(&state,vertices);
+        ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+        scene.observe_readback=observe;scene.readback_context=&observed_readbacks;
+        ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+        assert(backend.begin(backend.context,&surface));
+        assert(backend.draw(backend.context,&state,vertices,3));
+        /* First end wait retires the copy; the next retires context restore. */
+        if(failure)fail_wait_call=wait_calls+failure;
+        assert(backend.end(backend.context,&surface)==(failure==0));
+        assert(observed_readbacks==(failure==1?0u:1u));
+        backend.abort(backend.context);clean(&scene);
+    }
+}
 int main(void) {
-    baseline();allocation_failures();scissor_modes();failures();
+    baseline();allocation_failures();scissor_modes();failures();readback_observer();
     puts("GX2 native API model: lifetime, failure quarantine, raw input upload, shader binding, scissor partition and readback passed");
     return 0;
 }

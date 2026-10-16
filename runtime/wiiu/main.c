@@ -272,6 +272,25 @@ static uint32_t presented_frames;
 static OSTime guest_origin;
 
 #ifdef CTR_GX2_GUEST
+static void gx2_readback_log(void *context,const ctr_scene_surface *surface) {
+    const ctr_wiiu_gx2_scene *scene=context;
+    const uint8_t *bytes=surface->bytes;
+    uint32_t hash=UINT32_C(2166136261);
+    for(size_t i=0;i<surface->size;++i)hash=(hash^bytes[i])*UINT32_C(16777619);
+    char grid[145];size_t used=0;
+    for(unsigned row=0;row<4;++row)for(unsigned col=0;col<4;++col) {
+        unsigned x=(2u*col+1u)*surface->width/8u,y=(2u*row+1u)*surface->height/8u;
+        const uint8_t *pixel=bytes+(size_t)y*surface->stride+x*4u;
+        int n=snprintf(grid+used,sizeof(grid)-used,"%s%02x%02x%02x%02x",used?" ":"",
+            (unsigned)pixel[0],(unsigned)pixel[1],(unsigned)pixel[2],(unsigned)pixel[3]);
+        if(n<0 || (size_t)n>=sizeof(grid)-used)return;
+        used+=(size_t)n;
+    }
+    WHBLogPrintf("GX2 READBACK sequence=%llu width=%u height=%u stride=%u bytes=%u fnv1a=%08x; GPU bytes before parity/commit; grid4x4=odd_eighths rows=bottom_to_top RGBA8",
+        (unsigned long long)(scene->readbacks+1u),surface->width,surface->height,
+        surface->stride,(unsigned)surface->size,hash);
+    WHBLogPrintf("GX2 GRID sequence=%llu rgba=%s",(unsigned long long)(scene->readbacks+1u),grid);
+}
 static void gx2_description(char *line,size_t capacity) {
     snprintf(line,capacity,"GX2 backend: result=%s shader=%s begins=%llu draws=%llu submissions=%llu readbacks=%llu shader_ops=%llu waits=%llu wait_failures=%llu allocations=%llu releases=%llu quarantine=%u backend_stage=%u; CPU preflight and full GPU readback parity\n",
         ctr_wiiu_gx2_scene_result_name(gx2_scene.result),ctr_gx2_shader_result_name(gx2_scene.shader_result),
@@ -1355,6 +1374,7 @@ int main(int argc, char **argv) {
     gfx_ready=1;
 #ifdef CTR_GX2_GUEST
     ctr_wiiu_gx2_scene_init(&gx2_scene,WHBGfxGetTVContextState());
+    gx2_scene.observe_readback=gx2_readback_log;gx2_scene.readback_context=&gx2_scene;
     gx2_backend=ctr_wiiu_gx2_scene_backend(&gx2_scene);
 #endif
     GX2Surface *tv_target=&WHBGfxGetTVColourBuffer()->surface;

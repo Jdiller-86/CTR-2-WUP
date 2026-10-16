@@ -61,6 +61,8 @@ before any native submission. The GPU target starts with the original target
 contents; its synchronous readback must match every staged target byte before
 guest pixels, retained state, memory generations or P3D completion commit.
 Backend failures and mismatches fail the list without software fallback.
+The existing TXT trace retains a hash and 4×4 RGBA sample grid for each retired
+GPU readback, including pixels from a list later rejected for parity.
 
 CI artifact `wiiu-gx2-guest-<source commit>` contains the separately named
 `ctr2wup-gx2-guest.rpx`/`.wuhb`, reference images, provenance and one short
