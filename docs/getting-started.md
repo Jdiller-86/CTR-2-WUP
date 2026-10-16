@@ -11,10 +11,10 @@ packages or a successful [Actions run](https://github.com/Jdiller-86/CTR-2-WUP/a
 for development artifacts. Keep the binaries, source identity and instructions
 from the same package. Check its checksum manifest when supplied.
 
-A diagnostic kit contains one `START-HERE.md`, an `sd-card/` tree to copy and
-`support/` for source, notices and developer receipts. Read the short guide in
-the downloaded package; it identifies the app, required environment and result
-folder. Building a binary does not establish a physical-console pass.
+Begin with the kit's single `START-HERE.md` and the `sd-card/` tree to copy.
+Source, notices and build receipts are supporting material. The short guide
+identifies the app, required environment and result folder. Building a binary
+does not establish a physical-console pass.
 
 ## Copy and launch
 
