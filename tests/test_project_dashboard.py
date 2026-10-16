@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from xml.etree import ElementTree
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location('graph_hosting', ROOT / 'tools/publish-docs-site.py')
@@ -109,6 +110,63 @@ class ProjectDashboardTests(unittest.TestCase):
         self.assertEqual((output / 'index.html').read_text(), 'Original documentation')
         self.assertIn('Project progress', (output / 'progress/index.html').read_text())
         self.assertEqual(json.loads((output / 'progress/progress.json').read_text())['source_commit'], COMMIT)
+        self.assertEqual((output / 'progress/gates.svg').read_text(),
+                         hosting.project_graph_svg(hosting.public_project_snapshot(self.path, COMMIT)))
+
+    def test_embedded_image_counts_work_without_inferring_milestone_acceptance(self):
+        data = snapshot()
+        task = data['items'][-1]
+        task['status'] = 'Done'
+        task['state'] = 'CLOSED'
+        data['items'].extend([
+            {**deepcopy(task), 'number': 13, 'status': 'Blocked', 'state': 'OPEN'},
+            {**deepcopy(task), 'number': 14, 'status': 'In progress', 'state': 'OPEN',
+             'work_type': 'Feature'},
+            {**deepcopy(task), 'number': 15, 'archived': True},
+        ])
+        for item in data['items']:
+            item['url'] = f'https://github.com/{hosting.SOURCE}/issues/{item["number"]}'
+        image = ElementTree.fromstring(hosting.project_graph_svg(self.read(data)))
+        text = ' '.join(image.itertext())
+        self.assertIn('0/7 full milestones accepted · 3 tasks and features', text)
+        self.assertIn('M1: Original gate: Done 1/3', text)
+        self.assertIn('M1: Original gate: Blocked 1/3', text)
+        self.assertIn('M1: Original gate: Active 1/3', text)
+        self.assertEqual(text.count('0 total'), 6)
+        self.assertNotIn('Accepted', [node.text for node in image.iter()
+                                     if node.tag.endswith('}text')])
+        data['milestones'][0]['status'] = data['items'][0]['status'] = 'Accepted'
+        text = ''.join(ElementTree.fromstring(hosting.project_graph_svg(self.read(data))).itertext())
+        self.assertIn('0/7 full milestones accepted', text)
+        self.assertIn('Acceptance pending', text)
+        data['milestones'][0].update(status='Accepted', accepted=True)
+        data['items'][0].update(status='Accepted', state='CLOSED')
+        self.assertIn('1/7 full milestones accepted',
+                      ''.join(ElementTree.fromstring(hosting.project_graph_svg(self.read(data))).itertext()))
+
+    def test_embedded_image_is_self_contained_escaped_and_bound_to_snapshot(self):
+        data = snapshot()
+        data['milestones'][0]['title'] = 'M1: <script> & "quoted"'
+        image = ElementTree.fromstring(hosting.project_graph_svg(self.read(data)))
+        self.assertEqual(image.attrib['data-source-commit'], COMMIT)
+        self.assertEqual(image.attrib['data-generated-at'], data['generated_at'])
+        self.assertEqual(image.attrib['data-state'], 'available')
+        self.assertEqual(image.attrib['viewBox'], '0 0 1000 490')
+        self.assertIn(data['milestones'][0]['title'], ''.join(image.itertext()))
+        safe_tags = {'svg', 'g', 'text', 'title', 'desc', 'rect'}
+        for node in image.iter():
+            self.assertIn(node.tag.removeprefix('{http://www.w3.org/2000/svg}'), safe_tags)
+            self.assertFalse(any(name.startswith('on') or name in {'href', 'src', 'style'}
+                                 for name in node.attrib))
+
+    def test_embedded_image_unavailable_state_never_claims_empty_or_complete_progress(self):
+        image = ElementTree.fromstring(hosting.project_graph_svg(self.read({'state': 'unavailable'})))
+        text = ''.join(image.itertext())
+        self.assertEqual(image.attrib['data-state'], 'unavailable')
+        self.assertIn('Project tracking is unavailable', text)
+        self.assertIn('No current totals are displayed', text)
+        self.assertNotIn('/7 full milestones accepted', text)
+        self.assertNotIn('0 total', text)
 
 
 if __name__ == '__main__':

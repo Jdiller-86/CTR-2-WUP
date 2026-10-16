@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import os
 import tempfile
 import hashlib
+from html import escape
 import importlib.util
 import json
 from pathlib import Path, PurePosixPath
@@ -180,6 +181,83 @@ def public_project_snapshot(path, commit):
         return unavailable
 
 
+def project_graph_svg(snapshot):
+    """Render the sanitized Project snapshot as a GitHub-compatible image."""
+    stamp = escape(snapshot['generated_at'], quote=True)
+    commit = escape(snapshot['source_commit'], quote=True)
+    state = escape(snapshot['state'], quote=True)
+    parts = [
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="490" '
+        'viewBox="0 0 1000 490" role="img" aria-labelledby="title description" '
+        f'data-source-commit="{commit}" data-generated-at="{stamp}" data-state="{state}">',
+        '<title id="title">CTR2WUP Project progress</title>',
+        '<desc id="description">Seven milestone states and the status of their tasks and '
+        'features. Completing work does not accept a full milestone.</desc>',
+        '<rect width="1000" height="490" rx="12" fill="#0d1117"/>',
+        '<g font-family="Verdana,sans-serif" fill="#e6edf3">',
+        '<text x="26" y="38" font-size="21" font-weight="bold">CTR2WUP development</text>',
+    ]
+    if snapshot['state'] != 'available':
+        parts += [
+            '<text x="26" y="88" font-size="16">Project tracking is unavailable.</text>',
+            '<text x="26" y="118" font-size="14">No current totals are displayed. Open the interactive graph for details.</text>',
+        ]
+    else:
+        groups = [
+            ('Planned', '#8b949e', ('Planned',)),
+            ('Active', '#58a6ff', ('In progress', 'Ready for review')),
+            ('Awaiting evidence', '#d29922', ('Awaiting evidence',)),
+            ('Blocked', '#f85149', ('Blocked',)),
+            ('Done', '#3fb950', ('Done',)),
+            ('Other', '#bc8cff', ('Closed', 'Unassigned', 'Other', 'Accepted')),
+        ]
+        work = [item for item in snapshot['items']
+                if not item['archived'] and item['work_type'] != 'Milestone'
+                and item['number'] not in range(1, 8)]
+        accepted = sum(row['accepted'] for row in snapshot['milestones'])
+        parts.append(f'<text x="26" y="65" font-size="13">{accepted}/7 full milestones accepted · '
+                     f'{len(work)} tasks and features in the active Project</text>')
+        for index, (label, color, _) in enumerate(groups):
+            x = 26 + index * 158
+            parts += [f'<rect x="{x}" y="86" width="10" height="10" rx="2" fill="{color}"/>',
+                      f'<text x="{x + 16}" y="96" font-size="11">{label}</text>']
+        parts += [
+            '<text x="26" y="128" font-size="11" fill="#8b949e">MILESTONE</text>',
+            '<text x="370" y="128" font-size="11" fill="#8b949e">TASK AND FEATURE STATUS</text>',
+            '<text x="814" y="128" font-size="11" fill="#8b949e">FULL MILESTONE</text>',
+        ]
+        for index, row in enumerate(sorted(snapshot['milestones'], key=lambda value: value['number'])):
+            y = 158 + index * 40
+            title = escape(row['title'])
+            label = escape(row['title'] if len(row['title']) <= 43 else row['title'][:42] + '…')
+            selected = [item for item in work if item['milestone'] == row['number']]
+            parts += [f'<text x="26" y="{y}" font-size="12"><title>{title}</title>{label}</text>',
+                      f'<rect x="370" y="{y - 15}" width="350" height="21" rx="3" fill="#21262d"/>']
+            position = 370.0
+            for group, color, statuses in groups:
+                count = sum(item['status'] in statuses for item in selected)
+                if not count:
+                    continue
+                width = count * 350 / len(selected)
+                parts.append(f'<rect x="{position:.3f}" y="{y - 15}" width="{width:.3f}" '
+                             f'height="21" fill="{color}"><title>{title}: {group} '
+                             f'{count}/{len(selected)}</title></rect>')
+                if width >= 25:
+                    parts.append(f'<text x="{position + width / 2:.3f}" y="{y}" '
+                                 f'font-size="11" text-anchor="middle" fill="#0d1117">{count}</text>')
+                position += width
+            parts.append(f'<text x="735" y="{y}" font-size="11" fill="#8b949e">{len(selected)} total</text>')
+            gate = ('Accepted' if row['accepted'] else 'Acceptance pending'
+                    if row['status'] == 'Accepted' else escape(row['status']))
+            color = '#3fb950' if row['accepted'] else '#e6edf3'
+            parts.append(f'<text x="814" y="{y}" font-size="12" fill="{color}">{gate}</text>')
+        parts.append('<text x="26" y="438" font-size="12">Bars show tasks and features; completing work does not accept a full milestone.</text>')
+    parts += [f'<text x="26" y="468" font-size="11" fill="#8b949e">Snapshot: {stamp} · '
+              f'Source: {commit[:12]} · Open the interactive graph for current details.</text>',
+              '</g></svg>\n']
+    return ''.join(parts)
+
+
 def stage_progress(output, path, commit):
     """The live graph is online-only and never enters the offline docs bundle."""
     progress = output / 'progress'
@@ -188,6 +266,7 @@ def stage_progress(output, path, commit):
     snapshot = public_project_snapshot(path, commit)
     (progress / 'index.html').write_bytes(dashboard)
     (progress / 'progress.json').write_text(json.dumps(snapshot, indent=2) + '\n', encoding='utf-8')
+    (progress / 'gates.svg').write_text(project_graph_svg(snapshot), encoding='utf-8')
     return snapshot['state']
 
 

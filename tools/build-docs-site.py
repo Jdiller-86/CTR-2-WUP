@@ -76,6 +76,10 @@ def rewrite_markdown(text: str, source: Path, destination: Path, mapping: dict[s
     # reading the guide must not depend on a network badge image.
     badge = re.compile(r"\[!\[([^]]+)\]\(" + re.escape(repository) + r"/actions/workflows/[^)]+/badge\.svg\)\]\(([^)]+)\)")
     text = badge.sub(lambda match: "[" + match.group(1) + " results](" + match.group(2) + ")", text)
+    # The README chart is live; offline documentation keeps its ordinary link.
+    graph = 'https://jdiller-86.github.io/CTR-2-WUP/progress/'
+    text = re.sub(r'\[!\[([^]]+)\]\(' + re.escape(graph + 'gates.svg') + r'\)\]\('
+                  + re.escape(graph) + r'\)', lambda match: '[' + match.group(1) + '](' + graph + ')', text)
     def rewrite(target: str) -> str:
         wrapped = target.startswith("<") and target.endswith(">")
         parsed = urlsplit(target[1:-1] if wrapped else target)
