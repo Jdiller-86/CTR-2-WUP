@@ -1,4 +1,5 @@
 """Pages identity is verified independently of optional GitHub Project access."""
+from datetime import datetime, timedelta, timezone
 import importlib.util
 import json
 from pathlib import Path
@@ -45,6 +46,36 @@ class DocsSiteTests(unittest.TestCase):
         result = site.verify_until_ready('a' * 40, get=endpoints.__getitem__)
         self.assertEqual(result['error_code'], 'provenance_policy')
         self.assertEqual(result['attempts'], 1)
+
+    def test_online_graph_verifies_even_when_project_access_is_unavailable(self):
+        endpoints = self.endpoints()
+        endpoints[site.CANONICAL + 'progress/'] = b'<html>Project progress</html>'
+        endpoints[site.CANONICAL + 'progress/progress.json'] = json.dumps({
+            'schema_version': 2, 'repository': 'Jdiller-86/CTR-2-WUP',
+            'project_url': 'https://github.com/users/Jdiller-86/projects/2',
+            'source_commit': 'a' * 40, 'state': 'unavailable', 'stale_after_seconds': 7200,
+            'generated_at': datetime.now(timezone.utc).isoformat()}).encode()
+        result = site.verify('a' * 40, endpoints.__getitem__, with_project=True)
+        self.assertTrue(result['ok'])
+        self.assertEqual(result['project_snapshot_state'], 'unavailable')
+        self.assertFalse(result['project_snapshot_stale'])
+
+    def test_online_graph_reports_stale_data_and_rejects_wrong_source(self):
+        endpoints = self.endpoints()
+        endpoints[site.CANONICAL + 'progress/'] = b'<html>Project progress</html>'
+        snapshot = {'schema_version': 2, 'repository': 'Jdiller-86/CTR-2-WUP',
+                    'project_url': 'https://github.com/users/Jdiller-86/projects/2',
+                    'source_commit': 'a' * 40, 'state': 'available', 'stale_after_seconds': 7200,
+                    'generated_at': (datetime.now(timezone.utc) - timedelta(hours=3)).isoformat()}
+        path = site.CANONICAL + 'progress/progress.json'
+        endpoints[path] = json.dumps(snapshot).encode()
+        self.assertTrue(site.verify('a' * 40, endpoints.__getitem__, with_project=True)['project_snapshot_stale'])
+        snapshot['source_commit'] = 'b' * 40
+        endpoints[path] = json.dumps(snapshot).encode()
+        result = site.verify_until_ready('a' * 40, get=endpoints.__getitem__, with_project=True,
+                                         attempts=1, wait=lambda _: None)
+        self.assertFalse(result['ok'])
+        self.assertEqual(result['error_code'], 'project_source')
 
     def test_source_propagation_retry_is_bounded(self):
         waits = []

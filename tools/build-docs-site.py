@@ -162,7 +162,9 @@ def verify_site(site: Path, site_url: str) -> dict:
         nonlocal checked, external
         parsed = urlsplit(target)
         if parsed.scheme or parsed.netloc:
-            if (parsed.scheme, parsed.netloc) != (base.scheme, base.netloc):
+            if ((parsed.scheme, parsed.netloc) != (base.scheme, base.netloc)
+                    or parsed.path.rstrip('/') == prefix + 'progress'):
+                # The live graph is deployed separately from the offline-capable docs.
                 external += 1
                 return
         raw = unquote(parsed.path)

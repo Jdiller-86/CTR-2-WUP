@@ -19,8 +19,7 @@ change. A documentation-only update needs documentation validation.
 
 Independent format/pixel/numeric references are documented beside their
 contracts. Validators write original fixtures, compiler/source identity and
-bounded reports under a new output directory in `artifacts/`. Do not replace an
-existing result to make a failing case appear to pass.
+bounded reports under a new output directory in `artifacts/`.
 
 ## Hosted checks
 
@@ -33,12 +32,10 @@ Optional Windows deep validation exercises the external AOT adapter and WPF SDK
 probe; an SDK probe does not implement the final GUI. Emulated PowerPC checks
 byte-order/ABI behavior without establishing physical Wii U performance.
 
-## Hardware evidence
+## Hardware diagnostics
 
-Reuse reviewed evidence for unchanged behavior. Request a new physical run only
-for changed behavior or a specific missing acceptance observation; version
-numbers alone are insufficient reason. Each package contains one short guide,
-one deployment tree and one return folder with build identity/full logging.
+Each diagnostic package contains a deployment guide, an SD-card tree and a
+result folder with build identity and full logging.
 Ordinary diagnostic logs are isolated under `sd:/ctr2wup/results/`; the installed
 candidate uses `sd:/ctr2wup/install-check/`. Saves and asset blobs stay outside
 these return folders.
@@ -46,6 +43,6 @@ these return folders.
 Automatic checks, human observations, failures, skips and unrun steps stay
 separate. A saved report does not prove Menu return; unit tests do not prove
 picture/audio quality or installation. The compact
-[reviewed ledger](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/tests/hardware-evidence.json)
-retains reusable baseline scope and provenance. Package-specific questions and
-results belong in the package and its issue/conversation, not this documentation.
+[hardware ledger](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/tests/hardware-evidence.json)
+records baseline scope and provenance. Detailed acceptance criteria and results
+are tracked in [GitHub issues](https://github.com/Jdiller-86/CTR-2-WUP/issues).

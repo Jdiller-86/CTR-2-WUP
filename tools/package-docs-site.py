@@ -121,7 +121,8 @@ def local_target(site: Path, page: Path, target: str, site_url: str) -> tuple[Pa
     parsed = urlsplit(target)
     base = urlsplit(site_url)
     if parsed.scheme or parsed.netloc:
-        if (parsed.scheme, parsed.netloc) != (base.scheme, base.netloc):
+        if ((parsed.scheme, parsed.netloc) != (base.scheme, base.netloc)
+                or parsed.path.rstrip('/') == base.path.rstrip('/') + '/progress'):
             if parsed.scheme not in {"https", "http", "mailto", "tel"}:
                 raise ValueError("Unsafe documentation link scheme")
             return None
@@ -276,7 +277,7 @@ class Reader:
         version = escape(report["project_version"])
         commit = escape(report["source_commit"])
         header = f'<header><div><strong>CTR2WUP documentation</strong><span>Version {version}</span></div><label for="guide-search">Search this guide</label><input id="guide-search" type="search" placeholder="Search topics and article text" autocomplete="off"><button id="theme-toggle" type="button">Light / dark</button><button id="print-guide" type="button">Print</button></header>'
-        banner = f'<p class="scope">The planned product is a Windows GUI that injects an owned 3DS game into a playable Wii U WUP. Current releases are original diagnostics; commercial games and the GUI remain unfinished. <a href="https://github.com/Jdiller-86/CTR-2-WUP/blob/main/plans.md">Development plan</a>. Reading and search work offline. External source/issue links need internet and may require repository access. Source commit: <code>{commit}</code>.</p>'
+        banner = f'<p class="scope">CTR2WUP developer documentation. Reading and search work offline. <a href="https://jdiller-86.github.io/CTR-2-WUP/progress/">Live project graph</a>. Source: <code>{commit}</code>.</p>'
         return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>CTR2WUP documentation ' + version + '</title><style>' + CSS + '</style></head><body>' + header + '<div class="layout"><aside aria-label="Document navigation"><p id="search-status" role="status" aria-live="polite"></p><nav>' + "".join(navigation) + '</nav></aside><main>' + banner + "".join(sections) + '</main></div><script>' + SCRIPT + '</script></body></html>'
 
 
@@ -435,27 +436,16 @@ def package(options: argparse.Namespace) -> dict:
         rebased[relative]=data
     rebased[html_name]=standalone.encode()
     public_links=audit_static(site,files,report['site_url'])
-    instructions=f"""# CTR2WUP documentation export
+    instructions=f"""# CTR2WUP documentation
 
-Canonical source and website: `{options.public_repository}` · {public_url}
-Source commit: `{commit}` · project version `{version}`.
+Usage, build instructions and runtime contracts for CTR2WUP. Version {version};
+source commit {commit}. Canonical documentation: {public_url}
 
-This archive contains generated documentation only. No ROMs, keys, saves, game
-assets, translated game code, SDK or application binaries belong here. The
-Windows GUI and playable commercial-game WUP conversion remain unfinished.
+Open site/{html_name} for offline navigation, search and printing. External
+source links and the live project graph require internet access.
 
-Open `site/{html_name}` for offline navigation, search and printing. External
-source and issue links require internet. Project/runtime and site-engine
-licenses are retained; the raw ARM startup assembly/linker files stay in source.
-
-## Maintain and publish
-
-Maintain Markdown in the public source repository and regenerate with
-`tools/build-docs-site.py` and `tools/package-docs-site.py`. Its trusted-main
-`publish-docs.yml` workflow deploys the checked site through GitHub Pages; no premium plan or separate documentation repository is
-needed. Do not extract this archive over the source checkout or maintain a
-second generated article tree. Prior documentation links redirect to the
-canonical site. This export is suitable for independent offline review.
+Project/runtime and site-engine license notices are included. SHA256SUMS.txt
+contains the archive file checksums.
 """
     output.parent.mkdir(parents=True,exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='.docs-publication-',dir=output.parent) as temporary:

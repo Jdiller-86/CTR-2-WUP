@@ -1,0 +1,118 @@
+name: Project tracking
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Read tracking, update one issue, or restore the detailed board
+        type: choice
+        options: [snapshot, update, restore]
+        default: snapshot
+      issue:
+        description: Repository issue number (update only)
+        type: string
+        default: ''
+      status:
+        description: Project status (update only)
+        type: choice
+        options: [No change, Planned, In progress, Awaiting evidence, Blocked, Ready for review, Done, Closed, Accepted]
+        default: No change
+      waiting:
+        description: Waiting resource (update only)
+        type: choice
+        options: [No change, None, Console testing, Owned game input, Windows testing]
+        default: No change
+      apply:
+        description: Apply the selected update or restoration; otherwise preview
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: project-management-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  project:
+    if: github.repository == 'Jdiller-86/CTR-2-WUP' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Resolve immutable trusted main
+        id: trusted
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          CTR_TRUSTED_SHA="$(gh api repos/Jdiller-86/CTR-2-WUP/commits/main --jq .sha)"
+          [[ "$CTR_TRUSTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          printf 'sha=%s\n' "$CTR_TRUSTED_SHA" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.trusted.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Preview or apply the selected tracking operation
+        env:
+          GH_TOKEN: ${{ secrets.CTR2WUP_GITHUB_MANAGEMENT_TOKEN }}
+          CTR_OPERATION: ${{ inputs.operation }}
+          CTR_ISSUE: ${{ inputs.issue }}
+          CTR_STATUS: ${{ inputs.status }}
+          CTR_WAITING: ${{ inputs.waiting }}
+          CTR_APPLY: ${{ inputs.apply }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          import subprocess
+          from pathlib import Path
+          operation = os.environ['CTR_OPERATION']
+          apply = os.environ['CTR_APPLY'] == 'true'
+          Path('artifacts').mkdir(exist_ok=True)
+          if operation == 'update':
+              issue = os.environ['CTR_ISSUE']
+              if not issue.isdecimal() or int(issue) < 1:
+                  raise SystemExit('A positive repository issue number is required.')
+              command = ['python', 'tools/project.py', 'update', '--issue', issue,
+                         '--output', 'artifacts/project-operation.json']
+              for key, option in [('CTR_STATUS', '--status'), ('CTR_WAITING', '--waiting')]:
+                  if os.environ[key] != 'No change':
+                      command += [option, os.environ[key]]
+              if apply:
+                  command += ['--apply']
+              subprocess.run(command, check=True)
+          elif operation == 'restore':
+              command = ['python', 'tools/restore-project-tracking.py']
+              if apply:
+                  command += ['--apply']
+              subprocess.run(command, check=True)
+          elif operation != 'snapshot':
+              raise SystemExit('Unsupported operation.')
+          PY
+      - name: Export the current public tracking state
+        if: always() && steps.trusted.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.CTR2WUP_GITHUB_MANAGEMENT_TOKEN }}
+          CTR_SOURCE_COMMIT: ${{ steps.trusted.outputs.sha }}
+        run: python tools/project.py snapshot --output artifacts/project.json --source-commit "$CTR_SOURCE_COMMIT"
+      - name: Refresh the published graph
+        if: inputs.operation == 'snapshot' || inputs.apply
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run publish-docs.yml --repo Jdiller-86/CTR-2-WUP --ref main
+      - name: Retain public tracking receipts
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: project-tracking-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            artifacts/project.json
+            artifacts/project-operation.json
+            artifacts/project-restoration.json
+          retention-days: 14
+          if-no-files-found: warn

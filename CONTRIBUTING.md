@@ -39,12 +39,12 @@ Keep dependency signatures, checksums, TLS verification and sanitizers enabled.
 Use a focused branch. Explain the problem, resulting behavior and actual checks;
 link an existing issue when useful. Update only affected contracts, usage or
 [plans.md](plans.md). Merge after required hosted checks pass and delete the
-completed topic branch. No feature catalog or additional status report is needed.
+completed topic branch.
 
 Desktop tests, cross-builds and physical Wii U results prove different things.
-Reuse reviewed hardware evidence within its recorded scope. Request a console
-check only for a changed path or missing criterion, with one short package guide
-and one FTP return folder. A version change alone does not justify another run.
+Record hardware validation in the relevant issue, including source identity,
+environment, observations and diagnostic logs. Packages include deployment
+instructions and a result folder suitable for FTP transfer.
 
 Guest ARM memory is little-endian; Wii U PowerPC is big-endian. Use checked access,
 keep unsupported states explicit and preserve dependency licenses/notices.

@@ -24,8 +24,8 @@ parameters and padding to an eight-byte boundary. The header contains:
 | 31 | Increment register for each parameter, otherwise repeat it |
 
 Inspection supports the wire range without claiming those registers can execute.
-Padding is skipped and never becomes a write. Nonzero padding tolerance is our
-inspection contract; the audited libctru producer writes zero padding. It is not
+Padding is skipped and never becomes a write. The inspection API tolerates
+nonzero padding; the pinned libctru producer writes zero padding. This is not
 physical hardware evidence. Native/host budgets are at most 4 MiB and 65,536
 writes; callers may choose smaller budgets. Range overflow, truncated records,
 unused header bits and exceeded budgets fail visibly.

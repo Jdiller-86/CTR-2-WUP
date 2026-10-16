@@ -23,13 +23,12 @@ Stable program ID identifies future saves; executable/module hashes identify a
 revision. Profiles must match exact revisions and explicit supported behavior.
 Only the original `ctr2wup-framebuffer-fixture-v1` is enabled by the guest CLI.
 
-Reviewed hardware evidence is carried forward for unchanged controls, input,
-native tone, stability, save reload, transfers and bounded guest draws. Its exact
-scope and provenance are retained in the source
+Physical Wii U validation covers native controls/input, tone, stability, save
+reload, transfers and bounded guest draws. Exact source, environment and scope
+are recorded in the
 [hardware evidence ledger](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/tests/hardware-evidence.json).
-Later changes require evidence only for their changed behavior. Host tests and
-emulated PowerPC checks establish their stated contracts; physical picture,
-listening, installation and performance claims require console observations.
+Host tests and emulated PowerPC checks cover their stated contracts; they do not
+establish physical display/audio quality, installation or console performance.
 
 New 3DS exclusives, stereo output, online services, cameras, microphone, DLC/update
 merging and save import/export are outside the current scope.
