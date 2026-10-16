@@ -48,6 +48,25 @@ def check_draw_frames(folder):
                        'exact_match':True,'sha256':hashlib.sha256(data).hexdigest()})
     return checks
 
+def build_gx2_guest(folder, run, env):
+    """Cross-build the GX2 profile from an already generated original draw guest."""
+    destination=folder/'wiiu-gx2';destination.mkdir()
+    recipe=ROOT/'runtime/wiiu';(ROOT/'artifacts').mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='gx2-console-',dir=ROOT/'artifacts') as temporary:
+        work=Path(temporary);shutil.copytree(folder/'aot',work/'aot')
+        shutil.copy2(folder/'boot-image.h',work/'boot-image.h')
+        prefix=os.path.relpath(work,recipe)
+        run('draw-gx2-wiiu-build',['make','-C',str(recipe),'OUTPUT='+prefix+'/wiiu',
+            'TARGET=ctr2wup-gx2-guest','GX2_GUEST=1','PICA_HOMEBREW=1','GUEST_DEFAULT=2',
+            'EXTERNAL_AOT=1','COMPILED_HOMEBREW=1','COMPILED_IMAGE_DIR='+prefix,
+            'UPSTREAM_DIR='+prefix+'/aot'],env=env)
+        rpx=work/'wiiu/ctr2wup-gx2-guest.rpx';shortcut=rpx.with_suffix('.wuhb')
+        _validate_rpx(rpx)
+        if shortcut.read_bytes()[:4]!=b'WUHB':raise RuntimeError('Invalid GX2 guest WUHB')
+        shutil.copy2(rpx,destination/rpx.name);shutil.copy2(shortcut,destination/shortcut.name)
+    return [{'name':f.name,'size':f.stat().st_size,'sha256':hashlib.sha256(f.read_bytes()).hexdigest()}
+            for f in sorted(destination.iterdir())]
+
 def container(elf):
     data=elf.read_bytes()
     if data[:7]!=b'\x7fELF\x01\x01\x01' or struct.unpack_from('<HH',data,16)!=(2,40):raise ValueError('Require the original ARM32 little-endian executable')
@@ -70,11 +89,13 @@ def main():
     p.add_argument('--cc',default='gcc');p.add_argument('--cc-prefix',default='');p.add_argument('--run-prefix',default='');p.add_argument('--static',action='store_true');p.add_argument('--sanitize',action='store_true')
     p.add_argument('--application',choices=('boot','threaded','graphics','input','interactive','filesystem','romfs','transfer','draw'),help='Run only the selected original application')
     p.add_argument('--wiiu',action='store_true',help='Also build original interactive/filesystem applications as RPX/WUHB')
+    p.add_argument('--gx2',action='store_true',help='Also cross-build the distinct GX2 guest profile; requires --application draw --wiiu')
     p.add_argument('--wiiu-guarded',action='store_true',help='Also verify/build an interactive AOT comparison with call depth limited to 2')
     p.add_argument('--romfs-file',action='store_true',help='Build the RomFS console diagnostic using a verified external asset blob')
     p.add_argument('--live-input',action='store_true',help='Replay held/released A with varied host clocks and console-sized budgets')
     p.add_argument('--trace-startup',action='store_true',help='Capture every IPC at single-instruction boundaries for the original boot application')
     a=p.parse_args()
+    if a.gx2 and (not a.wiiu or a.application!='draw'):p.error('--gx2 requires --application draw --wiiu')
     if a.trace_startup and a.application!='boot':p.error('--trace-startup requires --application boot')
     if a.wiiu_guarded and (not a.wiiu or a.application!='interactive'):p.error('--wiiu-guarded requires --wiiu --application interactive')
     if a.romfs_file and (not a.wiiu or a.application!='romfs'):p.error('--romfs-file requires --wiiu --application romfs')
@@ -93,6 +114,14 @@ def main():
     if pin!=PIN or dirty:raise RuntimeError('Require the clean audited libctru pin')
     arm=a.devkitarm/'bin/arm-none-eabi-gcc';env=dict(os.environ,DEVKITARM=str(a.devkitarm),DEVKITPRO=str(a.devkitarm.parent))
     arm_version=run('arm-compiler',[str(arm),'--version'])
+    gx2_shaders=None
+    if a.gx2:
+        command=[sys.executable,str(ROOT/'tools/validate-gx2-shaders.py'),'--output',str(out/'gx2-shaders'),'--cc',a.cc]
+        if a.sanitize:command.append('--sanitize')
+        run('gx2-shader-validation',command)
+        gx2_shaders=json.loads((out/'gx2-shaders/report.json').read_text())
+        if gx2_shaders.get('ok') is not True or gx2_shaders.get('console_verified') is not False:
+            raise RuntimeError('Require successful portable GX2 shader validation with its hardware limit preserved')
     with tempfile.TemporaryDirectory(prefix='ctr2wup-libctru-') as temp:
         library=Path(temp)/'libctru';shutil.copytree(a.libctru_source/'libctru',library)
         run('libctru-build',['make','-C',str(library),'lib/libctru.a','-j','4'],env=env)
@@ -134,7 +163,9 @@ def main():
                     fields=dict(item.split('=',1) for item in line.split()[1:]);ipc.append({k:int(v,16) if k in ('header','result','pc') else int(v) if k=='request' else v for k,v in fields.items()})
             if a.trace_startup and sum(bool(event['result']) for event in ipc)!=result['ipc_failures']:raise RuntimeError('Incomplete startup failure trace')
             reports.append({'application':name,'guest':result,'frames':frames,'startup_ipc':ipc,'generation':generation,'allocated_bytes':image['allocated_bytes'],'executable_sha256':hashlib.sha256(image['code']).hexdigest()})
-            if name=='draw':reports[-1]['independent_frame_checks']=check_draw_frames(folder)
+            if name=='draw':
+                reports[-1]['independent_frame_checks']=check_draw_frames(folder)
+                reports[-1]['independent_frame_checks_backend']='software'
             if name=='romfs':
                 blob=folder/'romfs-level3.bin'
                 file_result=json.loads(run('romfs-file-execute',shlex.split(a.run_prefix)+[str(binary),'--romfs-file',str(blob)]).splitlines()[-1])
@@ -198,6 +229,10 @@ def main():
                     if shortcut.read_bytes()[:4]!=b'WUHB':raise RuntimeError('Invalid compiled WUHB')
                     shutil.copy2(rpx,wiiu/rpx.name);shutil.copy2(shortcut,wiiu/shortcut.name)
                 reports[-1]['wiiu_artifacts']=[{'name':f.name,'size':f.stat().st_size,'sha256':hashlib.sha256(f.read_bytes()).hexdigest()} for f in sorted(wiiu.glob('*.rp[x]*'))+sorted(wiiu.glob('*.wuhb'))]
+                if a.gx2:
+                    reports[-1]['wiiu_gx2_artifacts']=build_gx2_guest(folder,run,env)
+                    reports[-1]['gx2_guest']={'backend':'gx2','native_cross_build':True,
+                        'software_frame_checks':True,'gpu_hardware_verified':False}
                 if a.wiiu_guarded:
                     guarded_folder=folder/'wiiu-guarded';guarded_folder.mkdir()
                     with tempfile.TemporaryDirectory(prefix='guarded-console-',dir=ROOT/'artifacts') as temporary:
@@ -214,5 +249,6 @@ def main():
         raise RuntimeError('Source commit changed during validation; retain logs and run again')
     source_dirty=source_dirty or bool(run('source-state-after',['git','-C',str(ROOT),'status','--porcelain']))
     report={'ok':True,'version':__version__,'source_commit':source_commit,'source_dirty':source_dirty,'libctru_pin':pin,'library_sha256':library_hash,'arm_compiler':arm_version.splitlines()[0],'applications':reports,'checks':checks,'console_verified':False,'native_windows_verified':False,'complete_service_startup':False,'standalone_apt_and_fs_startup':True,'unavailable_startup_services':['APT:S','APT:A','ptm:sysm'],'powerpc_execution':'emulated Linux' if a.static else None}
+    if gx2_shaders is not None:report['gx2_shader_validation']=gx2_shaders
     (out/'report.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps({'ok':True,'applications':[{'name':r['application'],'instructions':r['guest']['instructions'],'ipc_failures':r['guest']['ipc_failures']} for r in reports],'report':str(out/'report.json')}));return 0
 if __name__=='__main__':raise SystemExit(main())

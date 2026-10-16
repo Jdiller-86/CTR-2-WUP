@@ -34,6 +34,11 @@
 #include "test_guide.h"
 #include "test_lifecycle.h"
 #include "diagnostic_audio.h"
+#ifdef CTR_GX2_GUEST
+#include "gx2_scene.h"
+static ctr_wiiu_gx2_scene gx2_scene;
+static ctr_scene_backend gx2_backend;
+#endif
 #if defined(CTR_M1_ONLY) || defined(CTR_INSTALL_ONLY)
 #include "m1_storage_probe.h"
 #if defined(CTR_STREAM_AUDIO) || defined(CTR_AUDIO_ONLY) || defined(CTR_SCENE_ONLY) || defined(CTR_COMPILED_HOMEBREW) || CTR_GUEST_DEFAULT != 0
@@ -194,7 +199,12 @@ static bool left_stick_seen,right_stick_seen,guest_fault_seen,allocation_checked
 static bool allocation_failure_seen;
 static int alloc_ok_for_report;
 static uint16_t touch_min_x=UINT16_MAX,touch_min_y=UINT16_MAX,touch_max_x,touch_max_y;
-#ifdef CTR_PICA_HOMEBREW
+#ifdef CTR_GX2_GUEST
+#define REPORT_APPLICATION "compiled-pica-gx2"
+#define PICA_REPORT_SCOPE "Guest GX2 draws (CPU parity reference)"
+#define PICA_REPORT_RENDERER "translated GPU shaders + exact readback guard"
+#define PICA_REPORT_METRICS "reference_fragments=%llu reference_shader_steps=%llu"
+#elif defined(CTR_PICA_HOMEBREW)
 #define REPORT_APPLICATION "compiled-pica-draws"
 #elif defined(CTR_GX_HOMEBREW)
 #define REPORT_APPLICATION "compiled-gx-transfer"
@@ -227,6 +237,11 @@ static uint16_t touch_min_x=UINT16_MAX,touch_min_y=UINT16_MAX,touch_max_x,touch_
 #define REPORT_APPLICATION "native"
 #endif
 #endif
+#ifndef PICA_REPORT_SCOPE
+#define PICA_REPORT_SCOPE "Guest software draws"
+#define PICA_REPORT_RENDERER "no GPU shader translation"
+#define PICA_REPORT_METRICS "fragments=%llu shader_steps=%llu"
+#endif
 static const uint32_t input_masks[]={VPAD_BUTTON_A,VPAD_BUTTON_B,VPAD_BUTTON_MINUS,VPAD_BUTTON_PLUS,
     VPAD_BUTTON_RIGHT,VPAD_BUTTON_LEFT,VPAD_BUTTON_UP,VPAD_BUTTON_DOWN,VPAD_BUTTON_R,VPAD_BUTTON_L,
     VPAD_BUTTON_X,VPAD_BUTTON_Y};
@@ -255,6 +270,42 @@ static ctr_guest frame_guest;
 static int guest_ready,guest_mode=CTR_GUEST_DEFAULT;
 static uint32_t presented_frames;
 static OSTime guest_origin;
+
+#ifdef CTR_GX2_GUEST
+static void gx2_readback_log(void *context,const ctr_scene_surface *surface) {
+    const ctr_wiiu_gx2_scene *scene=context;
+    const uint8_t *bytes=surface->bytes;
+    uint32_t hash=UINT32_C(2166136261);
+    for(size_t i=0;i<surface->size;++i)hash=(hash^bytes[i])*UINT32_C(16777619);
+    char grid[145];size_t used=0;
+    for(unsigned row=0;row<4;++row)for(unsigned col=0;col<4;++col) {
+        unsigned x=(2u*col+1u)*surface->width/8u,y=(2u*row+1u)*surface->height/8u;
+        const uint8_t *pixel=bytes+(size_t)y*surface->stride+x*4u;
+        int n=snprintf(grid+used,sizeof(grid)-used,"%s%02x%02x%02x%02x",used?" ":"",
+            (unsigned)pixel[0],(unsigned)pixel[1],(unsigned)pixel[2],(unsigned)pixel[3]);
+        if(n<0 || (size_t)n>=sizeof(grid)-used)return;
+        used+=(size_t)n;
+    }
+    WHBLogPrintf("GX2 READBACK sequence=%llu width=%u height=%u stride=%u bytes=%u fnv1a=%08x; GPU bytes before parity/commit; grid4x4=odd_eighths rows=bottom_to_top RGBA8",
+        (unsigned long long)(scene->readbacks+1u),surface->width,surface->height,
+        surface->stride,(unsigned)surface->size,hash);
+    WHBLogPrintf("GX2 GRID sequence=%llu rgba=%s",(unsigned long long)(scene->readbacks+1u),grid);
+}
+static void gx2_description(char *line,size_t capacity) {
+    snprintf(line,capacity,"GX2 backend: result=%s shader=%s begins=%llu draws=%llu submissions=%llu readbacks=%llu shader_ops=%llu waits=%llu wait_failures=%llu allocations=%llu releases=%llu quarantine=%u backend_stage=%u; CPU preflight and full GPU readback parity\n",
+        ctr_wiiu_gx2_scene_result_name(gx2_scene.result),ctr_gx2_shader_result_name(gx2_scene.shader_result),
+        (unsigned long long)gx2_scene.begins,(unsigned long long)gx2_scene.draws,
+        (unsigned long long)gx2_scene.submissions,(unsigned long long)gx2_scene.readbacks,
+        (unsigned long long)gx2_scene.shader_instructions,(unsigned long long)gx2_scene.waits,
+        (unsigned long long)gx2_scene.wait_failures,(unsigned long long)gx2_scene.allocations,
+        (unsigned long long)gx2_scene.releases,gx2_scene.quarantined,
+        final_guest.captured?final_guest.gx.last_scene_backend_stage:gsp_guest.gsp.last_scene_backend_stage);
+}
+static void gx2_log(const char *stage) {
+    char line[768];gx2_description(line,sizeof(line));
+    WHBLogPrintf("GX2 stage=%s %s",stage,line);
+}
+#endif
 
 static uint32_t home_button_exit(void *context) {
     (void)context;atomic_store(&home_exit_requested,1);return 0;
@@ -357,7 +408,7 @@ static bool result_snapshot(const char *stage) {
 #ifdef CTR_STREAM_AUDIO
     return stream_result_snapshot(stage);
 #endif
-    char body[CTR_TEST_RESULT_BYTES],guide_results[1536],scene_summary[384]="",phase_summary[1024],publication_summary[768];
+    char body[CTR_TEST_RESULT_BYTES],guide_results[1536],scene_summary[768]="",phase_summary[1024],publication_summary[768];
     size_t used=0;
     for(unsigned i=0;i<PH_COUNT;++i) {
         int length=snprintf(phase_summary+used,sizeof(phase_summary)-used,"Phase %s: calls=%llu total_us=%llu max_us=%llu\n",
@@ -388,6 +439,9 @@ static bool result_snapshot(const char *stage) {
         scene_reports[0].fragments,scene_reports[1].fragments,
         scene_reports[0].shader_instructions,scene_reports[1].shader_instructions);
 #endif
+#ifdef CTR_GX2_GUEST
+    gx2_description(scene_summary,sizeof(scene_summary));
+#endif
     if(!ctr_test_guide_results(&test_guide,guide_results,sizeof(guide_results))) {
         test_result.failed=true;test_result.error_code=EMSGSIZE;test_result.error_stage="guide_format";return false;
     }
@@ -404,7 +458,7 @@ static bool result_snapshot(const char *stage) {
         "Frames: host=%u guest=%llu | new_green_after_A=%u latency_ms=%llu\n"
         "GX: completed=%llu DMA=%llu fill=%llu display=%llu texture_copy=%llu cache=%llu last_header=%08x last_detail=%08x\n"
         "PICA: completed=%llu lists=%llu writes=%llu finalizers=%llu last_result=%u last_offset=%u last_register=%03x\n"
-        "Guest software draws: draws=%llu triangles=%llu fragments=%llu shader_steps=%llu scene_error=%u vertex_error=%u shader_error=%u; no GPU shader translation\n"
+        PICA_REPORT_SCOPE ": draws=%llu triangles=%llu " PICA_REPORT_METRICS " scene_error=%u vertex_error=%u shader_error=%u; " PICA_REPORT_RENDERER "\n"
         "Host frame us: min=%u mean=%llu max=%u (diagnostic overhead, not game performance)\n"
         "%s"
         "%s"
@@ -566,6 +620,9 @@ static void restart_guest(void) {
     guest_origin=OSGetTime(); presented_frames=0;
     WHBLogPrintf("guest_open ok=%u profile=ctr2wup-framebuffer-fixture-v1 mode=AOT custom_frame_io=1 GSP_PICA=unavailable",guest_ready);
     ctr_guest_close(&gsp_guest);
+#ifdef CTR_GX2_GUEST
+    ctr_wiiu_gx2_scene_abort(&gx2_scene);
+#endif
 #ifdef CTR_ROMFS_HOMEBREW
     if(romfs_view_ready)ctr_fs_romfs_close(&romfs_view);
     ctr_romfs_file_close(&romfs_file);
@@ -608,6 +665,10 @@ static void restart_guest(void) {
     gsp_ready=ctr_relay_fixture_open(&gsp_guest);
 #endif
     gsp_guest.debug=guest_debug;gsp_guest.debug_context=&gsp_guest;gsp_guest.cpu.log=guest_trace;
+#ifdef CTR_GX2_GUEST
+    if(gsp_ready)ctr_guest_set_scene_backend(&gsp_guest,&gx2_backend);
+    WHBLogPrintf("GUEST renderer=GX2 translated_MOV_ADD_MUL original_inputs=1 software_preflight=1 full_readback_parity=1 silent_fallback=0");
+#endif
 #ifdef CTR_FILESYSTEM_HOMEBREW
     gsp_ready=gsp_ready && diagnostic_save_ready && loaded!=CTR_FS_SNAPSHOT_ERROR && ctr_fs_mount(&gsp_guest,&diagnostic_save);
     if(!gsp_ready) { gsp_guest.state=CTR_GUEST_FAULTED;snprintf(filesystem_message,sizeof(filesystem_message),"SAVE LOAD / MOUNT FAIL"); }
@@ -617,6 +678,9 @@ static void restart_guest(void) {
     drawn_frame_submitted=false;draw_ready_serial=0;drawn_latency_ms=0;
     guest_green_frame=false;a_response_pending=false;green_response_seen=false;green_response_ms=0;
 #ifdef CTR_COMPILED_HOMEBREW
+#ifdef CTR_GX2_GUEST
+    WHBLogPrintf("gsp_guest_open ok=%u profile=original_compiled_libctru_draw mode=external_AOT PICA=GX2_readback_guarded",gsp_ready);
+#else
 #ifdef CTR_ROMFS_HOMEBREW
     WHBLogPrintf("gsp_guest_open ok=%u profile=original_compiled_libctru_romfs mode=external_AOT PICA=unavailable",gsp_ready);
 #else
@@ -624,6 +688,7 @@ static void restart_guest(void) {
     WHBLogPrintf("gsp_guest_open ok=%u profile=original_compiled_libctru_filesystem mode=external_AOT PICA=unavailable",gsp_ready);
 #else
     WHBLogPrintf("gsp_guest_open ok=%u profile=original_compiled_libctru_interactive mode=external_AOT PICA=unavailable",gsp_ready);
+#endif
 #endif
 #endif
 #else
@@ -1080,11 +1145,22 @@ static void cleanup_resources(void *context) {
     if(!audio_shutdown()) { result=1;exit->result=1;app_exit_result=1; }
     WHBLogPrintf("EXIT stage=audio_cleanup_done");
     WHBLogPrintf("EXIT stage=graphics_cleanup_begin");
+#ifdef CTR_GX2_GUEST
+    ctr_wiiu_gx2_scene_abort(&gx2_scene);gx2_log("cleanup_drained");
+#endif
     if (exit->gfx_ready && exit->foreground) GX2DrawDone();
+#ifdef CTR_GX2_GUEST
+    /* A failed wait can leave references to both guest and display storage.
+       Stop graphics before reclaiming either set of allocations. */
+    if (exit->gfx_ready) WHBGfxShutdown();
+    ctr_wiiu_gx2_scene_after_shutdown(&gx2_scene);
+#endif
     ctr_scale_cache_close(&tv_cache);ctr_scale_cache_close(&drc_cache);
     if (exit->tv->image) MEMFreeToDefaultHeap(exit->tv->image);
     if (exit->drc->image) MEMFreeToDefaultHeap(exit->drc->image);
+#ifndef CTR_GX2_GUEST
     if (exit->gfx_ready) WHBGfxShutdown();
+#endif
     ctr_scale_plan_close(&tv_scale);ctr_scale_plan_close(&drc_scale);
     WHBLogPrintf("EXIT stage=graphics_cleanup_done");
 #if CTR_DIAGNOSTIC_UDP
@@ -1209,6 +1285,8 @@ int main(int argc, char **argv) {
     /* The installed-title check has one prompt and no repeated native guide. */
 #elif defined(CTR_SCENE_ONLY)
     ctr_test_guide_init(&test_guide,CTR_GUIDE_SCENE,guide_log,NULL);
+#elif defined(CTR_GX2_GUEST)
+    ctr_test_guide_init(&test_guide,CTR_GUIDE_GX2,guide_log,NULL);
 #elif defined(CTR_PICA_HOMEBREW)
     ctr_test_guide_init(&test_guide,CTR_GUIDE_PICA,guide_log,NULL);
 #elif defined(CTR_AUDIO_ONLY)
@@ -1240,6 +1318,7 @@ int main(int argc, char **argv) {
 #else
     bool run_guest_diagnostics=true;
 #endif
+#ifndef CTR_GX2_GUEST
     if(run_guest_diagnostics) {
     OSTime cpu_start=OSGetTime();
     thread_test_result=ctr_thread_selftest();
@@ -1286,8 +1365,18 @@ int main(int argc, char **argv) {
 #endif
     selftests_done=true;result_snapshot("selftests_done");
     }
+#else
+    cpu_test_result=service_test_result=heap_test_result=kernel_test_result=-1;
+    hid_test_result=gsp_test_result=relay_test_result=stack_test_result=thread_test_result=-1;
+    WHBLogPrintf("GX2 scope=compiled_guest_GPU_translation_readback; unrelated_native_selftests=not_run");
+#endif
     if (!WHBGfxInit()) { WHBLogPrintf("FAIL WHBGfxInit"); goto cleanup; }
     gfx_ready=1;
+#ifdef CTR_GX2_GUEST
+    ctr_wiiu_gx2_scene_init(&gx2_scene,WHBGfxGetTVContextState());
+    gx2_scene.observe_readback=gx2_readback_log;gx2_scene.readback_context=&gx2_scene;
+    gx2_backend=ctr_wiiu_gx2_scene_backend(&gx2_scene);
+#endif
     GX2Surface *tv_target=&WHBGfxGetTVColourBuffer()->surface;
     GX2Surface *drc_target=&WHBGfxGetDRCColourBuffer()->surface;
     if (!surface_create(&tv_source,tv_target) || !surface_create(&drc_source,drc_target) ||
@@ -1305,7 +1394,7 @@ int main(int argc, char **argv) {
     WHBLogPrintf("DRC surface=%ux%u viewport=%u,%u %ux%u calibrated_space=1280x720 allocation_bytes=%u pitch=%u",
                   drc_view.output_width,drc_view.output_height,drc_view.x,drc_view.y,
                   drc_view.width,drc_view.height,drc_source.imageSize,drc_source.pitch);
-#ifdef CTR_INSTALL_ONLY
+#if defined(CTR_INSTALL_ONLY) || defined(CTR_GX2_GUEST)
     int alloc_ok=0;
 #else
     int alloc_ok=allocation_test();
@@ -1338,6 +1427,9 @@ int main(int argc, char **argv) {
             WHBLogPrintf("EXIT trigger=HBL_home_button");break;
         }
         if(status==CTR_PROC_RELEASE) {
+#ifdef CTR_GX2_GUEST
+            ctr_wiiu_gx2_scene_abort(&gx2_scene);gx2_log("foreground_release");
+#endif
 #ifdef CTR_STREAM_AUDIO
             ctr_stream_app_suspend(&stream_app);result_snapshot("foreground_release");report_commit("foreground_release");
 #endif
@@ -1351,6 +1443,10 @@ int main(int argc, char **argv) {
         bool reacquired=!foreground;
         foreground=true;
         if(reacquired) {
+#ifdef CTR_GX2_GUEST
+            gx2_scene.restore_context=WHBGfxGetTVContextState();
+            gx2_log("foreground_reacquired");
+#endif
             WHBLogPrintf("SCALE CACHE invalidate=foreground_reacquire next_update=full");
             ctr_scale_cache_invalidate(&tv_cache);ctr_scale_cache_invalidate(&drc_cache);
             if(!audio_init(foreground))goto cleanup;
@@ -1393,7 +1489,7 @@ int main(int argc, char **argv) {
 #ifndef CTR_PICA_HOMEBREW
         if(pad.trigger&(VPAD_BUTTON_A|VPAD_BUTTON_B|VPAD_BUTTON_PLUS))freeze_trace_frames=64;
 #endif
-        if(test_guide.kind!=CTR_GUIDE_PICA && (pad.trigger&VPAD_BUTTON_A)) {
+        if(test_guide.kind!=CTR_GUIDE_PICA && test_guide.kind!=CTR_GUIDE_GX2 && (pad.trigger&VPAD_BUTTON_A)) {
             a_request_time=OSGetTime();a_request_frame=gsp_presented;a_response_pending=true;
             WHBLogPrintf("A response pending: frame_before=%llu instructions_before=%llu",
                 (unsigned long long)gsp_presented,(unsigned long long)gsp_guest.cpu.instructions);
@@ -1403,7 +1499,7 @@ int main(int argc, char **argv) {
         if (run_guest_diagnostics && (pad.trigger&VPAD_BUTTON_A)) play_tone();
 #endif
         if (run_guest_diagnostics && (pad.trigger&VPAD_BUTTON_X)) alloc_ok=allocation_test();
-        if (run_guest_diagnostics && test_guide.done && test_guide.kind!=CTR_GUIDE_SCENE && test_guide.kind!=CTR_GUIDE_PICA && (pad.trigger&VPAD_BUTTON_Y)) {
+        if (run_guest_diagnostics && test_guide.done && test_guide.kind!=CTR_GUIDE_SCENE && test_guide.kind!=CTR_GUIDE_PICA && test_guide.kind!=CTR_GUIDE_GX2 && (pad.trigger&VPAD_BUTTON_Y)) {
 #ifdef CTR_COMPILED_HOMEBREW
             guest_mode=guest_mode==2?0:2;
 #else
@@ -1411,7 +1507,7 @@ int main(int argc, char **argv) {
 #endif
             WHBLogPrintf("display_mode=%s",guest_mode==2?"standard-hid-gsp":guest_mode==1?"guest-fixture":"native");
         }
-        if (run_guest_diagnostics && test_guide.done && test_guide.kind!=CTR_GUIDE_SCENE && test_guide.kind!=CTR_GUIDE_PICA && (pad.trigger&VPAD_BUTTON_PLUS)) restart_guest();
+        if (run_guest_diagnostics && test_guide.done && test_guide.kind!=CTR_GUIDE_SCENE && test_guide.kind!=CTR_GUIDE_PICA && test_guide.kind!=CTR_GUIDE_GX2 && (pad.trigger&VPAD_BUTTON_PLUS)) restart_guest();
         VPADTouchData touch={0}; uint16_t tx=0, ty=0;
         VPADGetTPCalibratedPointEx(VPAD_CHAN_0,VPAD_TP_1280X720,&touch,&pad.tpNormal);
         int inside=touch.touched && touch.validity==VPAD_VALID &&
@@ -1478,6 +1574,13 @@ int main(int argc, char **argv) {
 #endif
             phase_add(PH_GUEST,OSTicksToMicroseconds(OSGetTime()-guest_start));
             freeze_checkpoint("compiled_guest_done");
+#ifdef CTR_GX2_GUEST
+            if(gx2_scene.quarantined) {
+                gx2_log("gpu_wait_failed");result_snapshot("gpu_wait_failed");
+                WHBLogPrintf("FAIL GPU retirement; stopping before display submission");
+                result=1;goto cleanup;
+            }
+#endif
             if(!gsp_presented) { memset(top_image,0,sizeof(top_image));memset(bottom_image,0,sizeof(bottom_image)); }
             if(gsp_ready && !gsp_guest.gsp.black && gsp_guest.gsp.swaps[0] && gsp_guest.gsp.swaps[0]==gsp_guest.gsp.swaps[1] && gsp_guest.gsp.swaps[0]!=gsp_presented) {
                 freeze_checkpoint("guest_pixels_begin");
@@ -1528,7 +1631,11 @@ int main(int argc, char **argv) {
             snprintf(text,sizeof(text),"FRAME %llu / STATE %s",(unsigned long long)gsp_presented,ctr_guest_state_name(gsp_guest.state));
             image_text(top_image,TOP_W,11,text);
 #ifdef CTR_PICA_HOMEBREW
+#ifdef CTR_GX2_GUEST
+            image_text(top_image,TOP_W,12,"GX2 GUEST SHADERS / GPU PIXEL READBACK");
+#else
             image_text(top_image,TOP_W,12,"GUEST TRIANGLES / EXACT PIXEL READBACK");
+#endif
             snprintf(text,sizeof(text),"DRAWS %llu / SHADER STEPS %llu",(unsigned long long)gsp_guest.gsp.pica_draws,(unsigned long long)gsp_guest.gsp.pica_shader_instructions);
             image_text(top_image,TOP_W,13,text);
 #elif defined(CTR_GX_HOMEBREW)
@@ -1678,7 +1785,14 @@ int main(int argc, char **argv) {
         /* Draw prompts before scaling so they reach the actual outputs. */
         freeze_checkpoint("gx2_wait_begin");
         OSTime wait_start=OSGetTime();
+#ifdef CTR_GX2_GUEST
+        if(!GX2DrawDone()) {
+            ++gx2_scene.wait_failures;gx2_log("display_wait_failed");
+            result_snapshot("display_wait_failed");result=1;goto cleanup;
+        }
+#else
         GX2DrawDone();
+#endif
         phase_add(PH_WAIT,OSTicksToMicroseconds(OSGetTime()-wait_start));
         freeze_checkpoint("scale_begin");
         OSTime scale_start=OSGetTime();
@@ -1710,6 +1824,9 @@ int main(int argc, char **argv) {
                 (unsigned long long)(OSTicksToMicroseconds(OSGetTime()-session_started)/1000),
                 (unsigned long long)gsp_guest.gsp.pica_draws,(unsigned long long)gsp_guest.gsp.pica_triangles,
                 (unsigned long long)gsp_guest.gsp.pica_fragments,(unsigned long long)gsp_guest.gsp.pica_shader_instructions);
+#ifdef CTR_GX2_GUEST
+            gx2_log("drawn_frame_submitted");
+#endif
             phase_log();result_snapshot("drawn_frame_submitted");report_commit("drawn_frame_submitted");
         }
         freeze_checkpoint("render_done");
@@ -1723,6 +1840,9 @@ int main(int argc, char **argv) {
             phase_log();
 #ifdef CTR_STREAM_AUDIO
             stream_log_native("periodic");
+#endif
+#ifdef CTR_GX2_GUEST
+            gx2_log("periodic");
 #endif
 #ifdef CTR_INSTALL_ONLY
             WHBLogPrintf("INSTALL heartbeat frames=%u elapsed_ms=%llu title_match=%u storage=%s fresh_reload=%u input_errors=%u",
@@ -1767,6 +1887,12 @@ int main(int argc, char **argv) {
 #ifdef CTR_INSTALL_ONLY
     result=lifecycle.title_id==INSTALL_TITLE_ID && m1_storage.result==CTR_M1_STORAGE_PASS &&
         completed_frames>0 && !test_result.failed && !test_report.failed?0:1;
+#elif defined(CTR_GX2_GUEST)
+    result=gsp_ready && gsp_pass_seen && drawn_frame_submitted && gx2_scene.draws>=4u &&
+        gx2_scene.readbacks && gx2_scene.result==CTR_WIIU_GX2_SCENE_OK &&
+        !gx2_scene.wait_failures && !gx2_scene.quarantined && !guest_fault_seen &&
+        test_guide.done && test_guide.passed==2u && !test_guide.failed && !test_guide.skipped &&
+        !test_result.failed && !test_report.failed?0:1;
 #else
     result=0;
 #endif

@@ -9,8 +9,13 @@
 typedef enum {
     CTR_SCENE_OK, CTR_SCENE_ARGUMENT, CTR_SCENE_OVERFLOW, CTR_SCENE_ALIAS,
     CTR_SCENE_LIMIT, CTR_SCENE_NO_MEMORY, CTR_SCENE_WIRE, CTR_SCENE_UNSUPPORTED,
-    CTR_SCENE_LAYOUT, CTR_SCENE_VERTEX, CTR_SCENE_SHADER, CTR_SCENE_NUMERIC
+    CTR_SCENE_LAYOUT, CTR_SCENE_VERTEX, CTR_SCENE_SHADER, CTR_SCENE_NUMERIC,
+    CTR_SCENE_BACKEND
 } ctr_scene_result;
+typedef enum {
+    CTR_SCENE_BACKEND_NONE, CTR_SCENE_BACKEND_BEGIN, CTR_SCENE_BACKEND_DRAW,
+    CTR_SCENE_BACKEND_END, CTR_SCENE_BACKEND_PARITY
+} ctr_scene_backend_stage;
 typedef struct ctr_scene_state {
     uint32_t registers[CTR_PICA_REGISTER_COUNT];
     uint8_t register_defined[CTR_PICA_REGISTER_COUNT];
@@ -32,12 +37,29 @@ typedef struct {
     void *bytes;size_t size;
     unsigned width,height,stride;
 } ctr_scene_surface;
+/* Optional synchronous renderer. All commands, resources and software pixels
+ * are validated before begin. begin initializes private scratch from initial;
+ * draw receives decoded original inputs and the complete current PICA/shader
+ * state. Borrowed inputs remain valid only during the callback and must not be
+ * modified. end fills linear RGBA8 readback and releases renderer resources.
+ * abort must be safe after failed begin/draw/end and after successful end; it
+ * releases scratch without publishing pixels. The caller owns this descriptor
+ * and context and keeps them stable throughout execution. No callbacks run for
+ * configuration-only lists. */
+typedef struct ctr_scene_backend {
+    void *context;
+    bool (*begin)(void *context,const ctr_scene_surface *initial);
+    bool (*draw)(void *context,const ctr_scene_state *state,const ctr_vertex *vertices,unsigned count);
+    bool (*end)(void *context,const ctr_scene_surface *readback);
+    void (*abort)(void *context);
+} ctr_scene_backend;
 typedef struct {
     ctr_scene_result result;
     size_t byte_offset;
     unsigned reg,draws,triangles,fragments,shader_instructions;
     ctr_vertex_result vertex_result;
     ctr_shader_result shader_result;
+    ctr_scene_backend_stage backend_stage;
 } ctr_scene_report;
 
 void ctr_scene_init(ctr_scene_state *state);
@@ -50,8 +72,9 @@ void ctr_scene_init(ctr_scene_state *state);
  * Unknown/texture/TEV/depth/framebuffer registers, unsupported arithmetic and geometry fail.
  * Every list stages state and the complete target before any commit, so late
  * errors preserve previous state/pixels. Inputs must be owned/aligned/stable.
- * Reports may change on failure unless aliased. No guest address is followed,
- * no GPU draw is submitted, and generic guest GSP draws remain unsupported. */
+ * Reports may change on failure unless aliased. This software entry point never
+ * follows a guest address or submits GPU work; the guest adapter uses the
+ * explicit target/backend entry points below. */
 ctr_scene_result ctr_scene_execute(ctr_scene_state *state,const void *commands,
                                   size_t command_bytes,
                                   const ctr_scene_resources *resources,
@@ -67,5 +90,13 @@ ctr_scene_result ctr_scene_execute_target(ctr_scene_state *state,const void *com
                                          size_t command_bytes,const ctr_scene_resources *resources,
                                          const ctr_scene_surface *surface,uint32_t color_address,
                                          ctr_scene_report *report);
+/* Target execution with an optional native renderer. A complete software
+ * preflight precedes every callback. Native readback must match every staged
+ * target byte exactly before state or pixels commit; any backend failure or
+ * mismatch reports CTR_SCENE_BACKEND and aborts without software fallback. */
+ctr_scene_result ctr_scene_execute_target_backend(ctr_scene_state *state,const void *commands,
+                                                  size_t command_bytes,const ctr_scene_resources *resources,
+                                                  const ctr_scene_surface *surface,uint32_t color_address,
+                                                  const ctr_scene_backend *backend,ctr_scene_report *report);
 const char *ctr_scene_result_name(ctr_scene_result result);
 #endif

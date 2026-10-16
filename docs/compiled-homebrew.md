@@ -56,7 +56,10 @@ The applications test:
 
 - `draw`: standard GX/PICA lists, owned tiled targets, retained shader/state,
   exact target/transfer/display assertions and own PASS/exit. See
-  [compiled guest draws](guest-pica-draws.md) for the bounded fragment contract.
+  [compiled guest draws](guest-pica-draws.md) for the bounded fragment contract
+  and optional `--application draw --wiiu --gx2` profile. This also builds distinct
+  GX2 Guest binaries; host frame validation remains a software reference, with
+  physical GPU execution unverified.
 
 The validator runs all nine applications by default. Each must produce its own
 PASS, ExitProcess and zero fallback. Pixel checks inspect every pixel; input

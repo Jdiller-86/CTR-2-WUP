@@ -514,8 +514,81 @@ static void scene_errors(void) {
 #undef RESET
 #undef FAIL
 }
+typedef struct {
+    const uint8_t *expected;
+    size_t size,corrupt;
+    unsigned begins,draws,ends,aborts;
+} padded_backend;
+static bool padded_begin(void *context,const ctr_scene_surface *initial) {
+    padded_backend *p=context;++p->begins;
+    CHECK(initial->width==64 && initial->height==64 && initial->stride==260 && initial->size==p->size);
+    return true;
+}
+static bool padded_draw(void *context,const ctr_scene_state *state,const ctr_vertex *vertices,unsigned count) {
+    padded_backend *p=context;++p->draws;CHECK(count==3 && vertices[0].enabled==3);
+    CHECK(state->registers[0x11d]==UINT32_C(0x03002000));return true;
+}
+static bool padded_end(void *context,const ctr_scene_surface *readback) {
+    padded_backend *p=context;++p->ends;CHECK(readback->size==p->size && readback->stride==260);
+    memcpy(readback->bytes,p->expected,p->size);
+    if(p->corrupt)((uint8_t *)readback->bytes)[p->corrupt]^=1u;
+    return true;
+}
+static void padded_abort(void *context) { padded_backend *p=context;++p->aborts; }
+static void target_state(ctr_scene_state *state) {
+    ctr_scene_init(state);
+    const unsigned disabled[]={0x080,0x08f,0x100,0x104,0x105,0x106,0x112,0x114,0x115,0x117,0x11b};
+    for(unsigned i=0;i<sizeof(disabled)/sizeof(*disabled);++i)state->register_defined[disabled[i]]=15;
+    const unsigned regs[]={0x102,0x107,0x113,0x11d,0x11e};
+    const uint32_t values[]={3,0xf00,15,UINT32_C(0x03002000),UINT32_C(0x0103f040)};
+    for(unsigned i=0;i<sizeof(regs)/sizeof(*regs);++i) {
+        state->registers[regs[i]]=values[i];state->register_defined[regs[i]]=15;
+    }
+    const unsigned tev[]={0xc0,0xc8,0xd0,0xd8,0xf0,0xf8};
+    for(unsigned i=0;i<6;++i) {
+        state->registers[tev[i]]=i?0xf000f:0;
+        state->register_defined[tev[i]]=state->register_defined[tev[i]+1u]=
+            state->register_defined[tev[i]+2u]=state->register_defined[tev[i]+4u]=15;
+    }
+}
+static void backend_full_target(void) {
+    enum { SIZE=64u*260u+12u };
+    ctr_scene_fixture f;ctr_scene_fixture_make(&f,false);
+    ctr_scene_state initial,expected,state;target_state(&initial);expected=initial;
+    uint8_t pixels[SIZE],old[SIZE],reference[SIZE];ctr_scene_fixture_background(old,sizeof(old));
+    memcpy(reference,old,sizeof(old));
+    ctr_scene_resources resources={UINT32_C(0x18000000),f.resources,f.resource_bytes};
+    ctr_scene_surface surface={reference,sizeof(reference),64,64,260};ctr_scene_report report;
+    CHECK(ctr_scene_execute_target(&expected,f.commands,f.command_bytes,&resources,&surface,UINT32_C(0x18010000),&report)==CTR_SCENE_OK);
+    for(unsigned kind=0;kind<3;++kind) {
+        state=initial;memcpy(pixels,old,sizeof(pixels));surface.bytes=pixels;
+        padded_backend context={reference,sizeof(reference),kind==1u?256u:kind==2u?sizeof(reference)-1u:0u,0,0,0,0};
+        ctr_scene_backend backend={&context,padded_begin,padded_draw,padded_end,padded_abort};
+        CHECK(ctr_scene_execute_target_backend(&state,f.commands,f.command_bytes,&resources,&surface,
+              UINT32_C(0x18010000),&backend,&report)==(kind?CTR_SCENE_BACKEND:CTR_SCENE_OK));
+        CHECK(context.begins==1 && context.draws==2 && context.ends==1 && context.aborts==(kind?1u:0u));
+        CHECK(!memcmp(pixels,kind?old:reference,sizeof(pixels)));
+        CHECK(!memcmp(&state,kind?&initial:&expected,sizeof(state)));
+        CHECK(report.backend_stage==(kind?CTR_SCENE_BACKEND_PARITY:CTR_SCENE_BACKEND_NONE));
+    }
+    /* Backend descriptors are protected against writable output aliases and
+     * incomplete callback sets fail before any native invocation. */
+    padded_backend context={reference,sizeof(reference),0,0,0,0,0};
+    union { ctr_scene_backend backend;ctr_scene_report report; } alias;
+    alias.backend=(ctr_scene_backend){&context,padded_begin,padded_draw,padded_end,padded_abort};
+    ctr_scene_backend previous=alias.backend;
+    CHECK(ctr_scene_execute_target_backend(&state,f.commands,f.command_bytes,&resources,&surface,
+          UINT32_C(0x18010000),&alias.backend,&alias.report)==CTR_SCENE_ALIAS);
+    CHECK(!memcmp(&alias.backend,&previous,sizeof(previous)));
+    alias.backend.draw=NULL;
+    CHECK(ctr_scene_execute_target_backend(&state,f.commands,f.command_bytes,&resources,&surface,
+          UINT32_C(0x18010000),&alias.backend,&report)==CTR_SCENE_ARGUMENT);
+    CHECK(!context.begins && !context.draws && !context.ends && !context.aborts);
+    CHECK(ctr_scene_execute_target_backend(&state,f.commands,f.command_bytes,&resources,&surface,
+          UINT32_C(0x18010000),(const ctr_scene_backend *)(UINTPTR_MAX-3u),&report)==CTR_SCENE_OVERFLOW);
+}
 int main(void) {
     floats24();shader_patterns();shader_arithmetic();arithmetic_boundaries();shader_errors();shader_capacity();
-    scenes();arithmetic_scenes();scene_capacity();scene_errors();
+    scenes();arithmetic_scenes();scene_capacity();scene_errors();backend_full_target();
     printf("original shader/scene tests: %u assertions passed\n",assertions);return 0;
 }
