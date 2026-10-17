@@ -117,4 +117,16 @@ static void asynchronous(void) {
     CHECK(!ctr_install_capture_run(&c,&ops,&m,2));CHECK(!m.records);
 }
 
-int main(void) { payload();asynchronous();printf("Install capture: %u checks passed\n",assertions);return 0; }
+static void selection(void) {
+    bool armed=false;
+    CHECK(!ctr_install_capture_select(NULL,true,false,true));
+    CHECK(!ctr_install_capture_select(&armed,true,true,true));CHECK(!armed);
+    CHECK(!ctr_install_capture_select(&armed,false,false,false));CHECK(!armed);
+    CHECK(!ctr_install_capture_select(&armed,true,false,true));CHECK(!armed);
+    CHECK(!ctr_install_capture_select(&armed,true,false,false));CHECK(armed);
+    CHECK(!ctr_install_capture_select(&armed,false,true,true));CHECK(armed);
+    CHECK(ctr_install_capture_select(&armed,true,true,true));CHECK(!armed);
+    CHECK(!ctr_install_capture_select(&armed,true,true,true));CHECK(!armed);
+}
+
+int main(void) { payload();asynchronous();selection();printf("Install capture: %u checks passed\n",assertions);return 0; }

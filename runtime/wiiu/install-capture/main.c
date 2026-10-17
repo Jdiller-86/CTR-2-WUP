@@ -17,7 +17,6 @@
 #include <proc_ui/procui.h>
 #include <sysapp/launch.h>
 #include <vpad/input.h>
-#include <whb/gfx.h>
 #include <whb/log.h>
 #include <whb/log_console.h>
 #include <whb/proc.h>
@@ -34,9 +33,9 @@ static ctr_test_report report;
 static ctr_report_storage storage={.client=-1};
 static CtrInstallCapture capture;
 static int32_t mcp=-1;
-static bool exit_requested,exit_observed,foreground=true,gfx_ready,console_ready;
+static bool exit_requested,exit_observed,foreground=true,console_ready,input_valid;
 static ctr_test_lifecycle lifecycle;
-static uint32_t buttons;
+static uint32_t buttons,held_buttons;
 static MCPInstallInfo info __attribute__((aligned(64)));
 static MCPInstallProgress progress_info __attribute__((aligned(64)));
 static char install_path[0x280] __attribute__((aligned(64)))=MCP_PATH;
@@ -60,14 +59,16 @@ static bool record(void *unused,const char *event,int32_t result,
 }
 
 static bool pump(void *unused) {
-    (void)unused;buttons=0;
+    (void)unused;buttons=0;held_buttons=0;input_valid=false;
     ProcUIStatus status=ProcUIProcessMessages(TRUE);
     foreground=status==PROCUI_STATUS_IN_FOREGROUND;
     if(status==PROCUI_STATUS_EXITING) { exit_requested=true;exit_observed=true; }
     else if(status==PROCUI_STATUS_RELEASE_FOREGROUND)ProcUIDrawDoneRelease();
     if(foreground) {
         VPADStatus pad;VPADReadError error;
-        if(VPADRead(VPAD_CHAN_0,&pad,1,&error)>0 && error==VPAD_READ_SUCCESS)buttons=pad.trigger;
+        if(VPADRead(VPAD_CHAN_0,&pad,1,&error)>0 && error==VPAD_READ_SUCCESS) {
+            buttons=pad.trigger;held_buttons=pad.hold;input_valid=true;
+        }
         if(buttons&(VPAD_BUTTON_MINUS|VPAD_BUTTON_B))exit_requested=true;
         WHBLogConsoleDraw();
     }
@@ -87,7 +88,7 @@ static bool title_absent(void) {
     int32_t count=MCP_TitleCount(mcp);
     if(!record(NULL,"title_count",count,NULL) || count<0 || count>4096)return false;
     if(!count)return true;
-    uint32_t bytes=(uint32_t)count*sizeof(MCPTitleListType),found=0;
+    uint32_t bytes=(uint32_t)count*sizeof(MCPTitleListType),found=(uint32_t)count;
     MCPTitleListType *titles=MEMAllocFromDefaultHeapEx((bytes+63u)&~63u,64);
     if(!titles) { record(NULL,"title_list_allocation",-1,NULL);return false; }
     int32_t result=MCP_TitleList(mcp,&found,titles,bytes);
@@ -147,7 +148,6 @@ static void cleanup(void *unused) {
     (void)unused;
     if(mcp>=0) { MCP_Close(mcp);mcp=-1; }
     if(console_ready) { WHBLogConsoleFree();console_ready=false; }
-    if(gfx_ready) { WHBGfxShutdown();gfx_ready=false; }
     ctr_test_report_close(&report);
 }
 static void clear_callbacks(void *unused) {
@@ -184,10 +184,9 @@ int main(void) {
     lifecycle.title_id=OSGetTitleID();
     if(ctr_test_from_hbl(lifecycle.title_id))
         ProcUIRegisterCallback(PROCUI_CALLBACK_HOME_BUTTON_DENIED,home_exit,NULL,99);
-    gfx_ready=WHBGfxInit();
-    if(!gfx_ready)goto finish;
-    console_ready=WHBLogConsoleInit();
-    if(!console_ready)goto finish;
+    /* The pinned libwhb console owns OSScreen/MEM1 and returns FALSE even
+     * after initialization. It must not be combined with WHBGfx ownership. */
+    (void)WHBLogConsoleInit();console_ready=true;
     WHBLogPrintf("CTR2WUP Install Capture");
     WHBLogPrintf("Checking the existing M1 package. No files will be replaced.");
     WHBLogConsoleDraw();
@@ -211,8 +210,11 @@ int main(void) {
         WHBLogPrintf("Use the SAME destination as the failed GX2 attempt.");
         WHBLogPrintf("A: install to internal memory. X: install to USB.");
         WHBLogPrintf("Minus: exit. One attempt; the exact error is saved automatically.");
+        bool selection_armed=false;
         while(pump(NULL)) {
-            if(buttons&(VPAD_BUTTON_A|VPAD_BUTTON_X)) {
+            if(ctr_install_capture_select(&selection_armed,input_valid,
+                (held_buttons&(VPAD_BUTTON_A|VPAD_BUTTON_X))!=0,
+                (buttons&(VPAD_BUTTON_A|VPAD_BUTTON_X))!=0)) {
                 unsigned target=(buttons&VPAD_BUTTON_X)?1:0;
                 /* Recheck after waiting for the explicit selection. */
                 if(payload_ready() && title_absent()) {
@@ -238,7 +240,6 @@ int main(void) {
         if(!saved && !exit_observed)exit_requested=false;
     }
     while(!exit_requested && pump(NULL)) {}
-finish:
     if(!ctr_test_complete_exit(&lifecycle,exit_observed,&exit_ops,NULL))saved=false;
     ctr_report_storage_close(&storage);
     return saved?0:1;
