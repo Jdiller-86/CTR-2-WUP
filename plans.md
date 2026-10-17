@@ -15,11 +15,11 @@ Commercial games and the GUI are not supported yet.
 2. **Connect guest audio** ([#25](https://github.com/Jdiller-86/CTR-2-WUP/issues/25)).
    The checked CSTM/ADPCM stream mixer exists. Implement the guest DSP/service
    connection and timing; native tone playback does not cover guest audio.
-3. **Finish original-title installation** ([#37](https://github.com/Jdiller-86/CTR-2-WUP/issues/37)).
+3. **Finish installed-title launch** ([#15](https://github.com/Jdiller-86/CTR-2-WUP/issues/15)).
    The keyless, self-signed plaintext WUP candidate and automatic SD recovery
-   probe exist. Per-file plaintext installation succeeds; complete Menu metadata
-   and artwork validation, safely update the recognized original title, then
-   verify the two Menu launches. Reuse bounded MCP
+   probe exist. Per-file plaintext installation succeeds; use the independently
+   checked Menu metadata/artwork profile and guarded predecessor update to resolve
+   the Menu rejection, then verify the two Menu launches. Reuse bounded MCP
    enumeration and the reviewed
    SD logging and native display/audio/exit helpers.
    This hardware-only gap does not block CPU, graphics or audio development.
