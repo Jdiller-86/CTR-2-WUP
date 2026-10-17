@@ -172,12 +172,13 @@ settings, matching app/Menu identity, the RPX entry, platform permissions and fo
 uncompressed bottom-left TGA 2 images with their complete footer. Dimensions and
 depths are 128×128×32 (icon), 170×42×32 (logo), 854×480×24 (GamePad) and
 1280×720×24 (TV). ACP also loads `meta/bootMovie.h264` separately from the XML
-and images. The profile pins an original 170×42, 60-frame, two-second Annex B
+and images. The profile pins an original 256×128, 60-frame, two-second Annex B
 H.264 Constrained Baseline clip, bounded to ACP's 80,696-byte movie buffer.
 [`generate-boot-movie.py`](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/tools/generate-boot-movie.py)
 creates it from original checker pixels with FFmpeg/libx264; no input media is
 used. The encoded asset ships with the host package, so staging requires no
-encoder. Full independent decoding validates the pinned clip; a hash-only WUP
+encoder. Its geometry matches the pinned original channel reference below.
+Full independent decoding validates the pinned clip; a hash-only WUP
 round trip cannot establish that a missing launch resource is optional.
 Ordinary integrity-only verification remains available for
 historical packages and does not claim Menu compatibility.

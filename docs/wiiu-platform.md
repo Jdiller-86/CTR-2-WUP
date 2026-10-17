@@ -18,7 +18,8 @@ Require the independent `wup-menu-v2` check for new installation candidates:
 complete typed Menu metadata, unsigned COS `cmdFlags`, coherent title/group/OS
 identity, complete uncompressed TGA 2 artwork and the original `bootMovie.h264`.
 ACP reads the movie independently of XML and icons: verify its presence, bounded
-size and pinned decoded bytes in the WUP, installed read-back and distributed wheel.
+size and pinned bytes in the WUP, installed read-back and distributed wheel.
+Independently decode the original clip and match native channel movie geometry.
 Readable XML and a correct Menu tile do not establish complete launch resources.
 Preserve the historical
 integrity-only reader for older evidence. An installed title may be updated only

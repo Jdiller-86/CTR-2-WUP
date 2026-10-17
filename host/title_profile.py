@@ -17,7 +17,7 @@ ARTWORK = {
     'meta/bootDrcTex.tga': (854,480,24),
     'meta/bootTvTex.tga': (1280,720,24),
 }
-BOOT_MOVIE_SHA256='057344bb16e7bc6bc9e62c978d95803f76f756b518d3bb4e380111e2d7bd41e2'
+BOOT_MOVIE_SHA256='366b8d210cae7ee92f746b2a1f55359a359e5ad5281a9c3086d60acd84739040'
 LAUNCH_ASSETS=set(ARTWORK)|{'meta/bootMovie.h264'}
 
 
