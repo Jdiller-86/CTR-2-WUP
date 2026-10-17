@@ -1,7 +1,7 @@
 CC ?= cc
-CFLAGS := -std=c11 -O2 -g -Wall -Wextra -Wpedantic -Werror -I../../runtime/wiiu -I../../runtime/core
-SOURCES := test_install_capture.c ../../runtime/wiiu/install_capture.c ../../runtime/core/ctr_sha256.c
-HEADERS := ../../runtime/wiiu/install_capture.h ../../runtime/core/ctr_sha256.h
+CFLAGS := -std=c11 -O2 -g -Wall -Wextra -Wpedantic -Werror -I../../runtime/wiiu -I../../runtime/wiiu/install-capture -I../../runtime/core
+SOURCES := test_install_capture.c ../../runtime/wiiu/install_capture.c ../../runtime/wiiu/install-capture/log.c ../../runtime/core/ctr_sha256.c
+HEADERS := ../../runtime/wiiu/install_capture.h ../../runtime/wiiu/install-capture/log.h ../../runtime/core/ctr_sha256.h
 OUT := ../../artifacts/install-capture-tests
 .PHONY: check sanitize
 $(OUT):

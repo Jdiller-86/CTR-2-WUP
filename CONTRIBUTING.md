@@ -28,6 +28,8 @@ export DEVKITPPC="$DEVKITPRO/devkitPPC"
 make prototype
 ```
 
+Follow the [Wii U application protocol](docs/wiiu-platform.md) for native apps.
+
 See [Windows builds](docs/build-windows.md) for native Windows setup.
 Run tests relevant to the change. Runtime changes need `make check`, including
 ASan/UBSan; native code/build changes also need `make prototype`. For docs, run

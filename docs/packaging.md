@@ -41,6 +41,11 @@ content consistency while explicitly retaining an untrusted-root result.
 small Aroma app for diagnosing the pinned original M1 package. It requires the
 exact seven hashes in `packaging/install-capture.json`, a writable SD report and
 an absent title ID before one explicit target selection can start installation.
+Startup evidence precedes graphics. Each binary log record is closed and synced,
+then checked against its intended byte count and SHA-256 through stdio and a
+separate FSA read of `/vol/external01`. An unavailable or mismatched report blocks
+installation; filesystem acknowledgements do not prove power-loss durability.
+Native GX2 display and silent AX ownership follow the diagnostic frontend.
 Raw IOS submission/callback codes and MCP progress are saved under
 `sd:/ctr2wup/install-check/install-capture/`. Cancellation drains the callback
 before releasing buffers. The app preserves the WUP and existing titles; its

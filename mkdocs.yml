@@ -87,6 +87,7 @@ nav:
       - Windows builds: docs/build-windows.md
       - Testing: docs/testing.md
       - Architecture: docs/architecture.md
+      - Wii U application protocol: docs/wiiu-platform.md
       - First-title target: docs/first-title.md
   - Runtime:
       - CPU and threads: docs/cpu.md

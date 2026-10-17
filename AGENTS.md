@@ -2,6 +2,9 @@
 
 Read [plans.md](plans.md) for the next work and [README.md](README.md) for the
 source map. Read the affected technical contract in `docs/` before changing it.
+Before creating or changing a Wii U app, read and follow
+[the platform protocol](docs/wiiu-platform.md); reuse the linked native helpers
+for storage, AX, GX2 and ProcUI rather than reimplementing those fixes.
 
 - Build the shared execution/conversion engine toward a playable per-game WUP;
   the Windows GUI follows a working pipeline. Original diagnostics prove only

@@ -4,6 +4,9 @@
  * 0dce0a96818cae3c4a4aea0f9b722e2cfda2b5ac, InstallWindow.cpp. */
 #include "install_capture.h"
 #include "install_capture_package.h"
+#include "log.h"
+#include "display.h"
+#include "diagnostic_audio.h"
 #include "test_report.h"
 #include "test_lifecycle.h"
 #include "report_storage.h"
@@ -11,16 +14,16 @@
 #include <coreinit/mcp.h>
 #include <coreinit/memdefaultheap.h>
 #include <coreinit/foreground.h>
+#include <coreinit/debug.h>
 #include <coreinit/thread.h>
 #include <coreinit/time.h>
 #include <coreinit/title.h>
 #include <proc_ui/procui.h>
 #include <sysapp/launch.h>
 #include <vpad/input.h>
-#include <whb/log.h>
-#include <whb/log_console.h>
 #include <whb/proc.h>
 #include <errno.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -29,11 +32,13 @@
 #define MCP_PATH "/vol/app_sd/install/CTR2WUP-M1"
 #define LOG_ROOT "fs:/vol/external01/ctr2wup"
 #define LOG_DIRECTORY LOG_ROOT "/install-check/install-capture"
-static ctr_test_report report;
+static capture_log report;
 static ctr_report_storage storage={.client=-1};
+static ctr_diagnostic_audio audio;
 static CtrInstallCapture capture;
 static int32_t mcp=-1;
-static bool exit_requested,exit_observed,foreground=true,console_ready,input_valid;
+static atomic_bool exit_requested;
+static bool exit_observed,foreground=true,display_ready,input_valid,platform_failed;
 static ctr_test_lifecycle lifecycle;
 static uint32_t buttons,held_buttons;
 static MCPInstallInfo info __attribute__((aligned(64)));
@@ -41,9 +46,15 @@ static MCPInstallProgress progress_info __attribute__((aligned(64)));
 static char install_path[0x280] __attribute__((aligned(64)))=MCP_PATH;
 static IOSVec install_vector __attribute__((aligned(64)));
 
+static void notice(const char *format,...) {
+    char text[512];va_list args;va_start(args,format);
+    vsnprintf(text,sizeof(text),format,args);va_end(args);
+    OSReport("%s\n",text);capture_display_line(text);
+}
+
 static bool line(const char *text) {
-    WHBLogPrintf("%s",text);
-    return ctr_test_report_line(&report,text) && ctr_test_report_commit(&report);
+    OSReport("%s\n",text);
+    return capture_log_line(&report,text);
 }
 
 static bool record(void *unused,const char *event,int32_t result,
@@ -55,22 +66,51 @@ static bool record(void *unused,const char *event,int32_t result,
         n+=snprintf(text+n,sizeof(text)-(size_t)n," active=%u title=%016llx bytes=%llu/%llu contents=%u/%u",
             progress->active,(unsigned long long)progress->title,(unsigned long long)progress->bytes,
             (unsigned long long)progress->total,progress->contents,progress->total_contents);
+    if(progress)notice("MCP %s: 0x%08x / %llu of %llu bytes",event,(unsigned)(uint32_t)result,
+        (unsigned long long)progress->bytes,(unsigned long long)progress->total);
+    else notice("MCP %s: 0x%08x",event,(unsigned)(uint32_t)result);
     return n>0 && (size_t)n<sizeof(text) && line(text);
+}
+
+static bool audio_begin(void) {
+    bool ok=ctr_diagnostic_audio_begin(&audio,foreground);
+    char text[160];snprintf(text,sizeof(text),"AUDIO result=%s owned=%u inherited=%u resets=%u",
+        ctr_diagnostic_audio_result_name(audio.result),audio.owned,audio.last_inherited,audio.inherited_resets);
+    if(report.file)line(text);
+    return ok;
 }
 
 static bool pump(void *unused) {
     (void)unused;buttons=0;held_buttons=0;input_valid=false;
     ProcUIStatus status=ProcUIProcessMessages(TRUE);
+    bool was_foreground=foreground;
+    if(status==PROCUI_STATUS_EXITING) {
+        exit_requested=true;exit_observed=true;
+    } else if(status==PROCUI_STATUS_RELEASE_FOREGROUND) {
+        if(!ctr_diagnostic_audio_end(&audio,NULL,NULL))platform_failed=true;
+        report.sync=NULL;report.verify=NULL;ctr_report_storage_close(&storage);
+        ProcUIDrawDoneRelease();
+    }
     foreground=status==PROCUI_STATUS_IN_FOREGROUND;
-    if(status==PROCUI_STATUS_EXITING) { exit_requested=true;exit_observed=true; }
-    else if(status==PROCUI_STATUS_RELEASE_FOREGROUND)ProcUIDrawDoneRelease();
+    if(!foreground) {
+        /* IOS still owns an active install request. Preserve closed stdio
+         * checkpoints while draining it, without reopening an FSA client. */
+        report.sync=NULL;report.verify=NULL;ctr_report_storage_close(&storage);
+    }
     if(foreground) {
+        if(!was_foreground) {
+            report.sync=ctr_report_storage_sync;report.verify=ctr_report_storage_verify;
+            capture_display_invalidate();
+            if(!audio_begin())exit_requested=true;
+        }
         VPADStatus pad;VPADReadError error;
         if(VPADRead(VPAD_CHAN_0,&pad,1,&error)>0 && error==VPAD_READ_SUCCESS) {
             buttons=pad.trigger;held_buttons=pad.hold;input_valid=true;
         }
         if(buttons&(VPAD_BUTTON_MINUS|VPAD_BUTTON_B))exit_requested=true;
-        WHBLogConsoleDraw();
+        if(display_ready && !capture_display_draw()) {
+            line("DISPLAY draw=failed");platform_failed=true;exit_requested=true;
+        }
     }
     OSSleepTicks(OSMillisecondsToTicks(20));
     return !exit_requested;
@@ -79,6 +119,7 @@ static bool pump(void *unused) {
 static bool payload_ready(void) {
     const char *failed=NULL;
     bool ok=ctr_install_capture_verify(PAYLOAD,ctr_capture_files,7,&failed);
+    notice(ok?"Original M1 package verified.":"Package check failed: %s",failed?failed:"inventory");
     char text[192];snprintf(text,sizeof(text),"PAYLOAD exact_seven_files=%u failed=%s errno=%d",
         ok,failed?failed:"none",ok?0:errno);
     return line(text) && ok;
@@ -147,12 +188,19 @@ static uint32_t save_ready(void *unused) { (void)unused;OSSavesDone_ReadyToRelea
 static void cleanup(void *unused) {
     (void)unused;
     if(mcp>=0) { MCP_Close(mcp);mcp=-1; }
-    if(console_ready) { WHBLogConsoleFree();console_ready=false; }
-    ctr_test_report_close(&report);
+    bool audio_ok=ctr_diagnostic_audio_end(&audio,NULL,NULL);
+    if(!audio_ok)platform_failed=true;
+    if(report.path[0] && !report.failed) {
+        const char *text=audio_ok?"AUDIO release=complete":"AUDIO release=failed";
+        if(report.file)line(text);else capture_log_checkpoint(&report,text);
+    }
+    capture_display_close(foreground);display_ready=false;
+    capture_log_close(&report);
+    ctr_report_storage_close(&storage);
 }
 static void clear_callbacks(void *unused) {
     (void)unused;ProcUIClearCallbacks();
-    ctr_test_report_set_volume_sync(&report,NULL,NULL);
+    report.sync=NULL;report.verify=NULL;
     ctr_report_storage_close(&storage);
     ProcUISetSaveCallback(save_ready,NULL);
 }
@@ -173,7 +221,9 @@ static void shutdown_procui(void *unused) { (void)unused;ProcUIShutdown(); }
 static void shutdown_whb(void *unused) { (void)unused;WHBProcShutdown(); }
 static void checkpoint(void *unused,const char *message) {
     (void)unused;
-    if(report.path[0] && !report.failed)ctr_test_report_checkpoint(&report,message);
+    OSReport("%s\n",message);
+    if(report.path[0] && !report.failed)capture_log_checkpoint(&report,message);
+    ctr_report_storage_close(&storage);
 }
 static const ctr_exit_ops exit_ops={cleanup,clear_callbacks,request_menu,process_messages,
     release_foreground,wait_messages,shutdown_procui,shutdown_whb,checkpoint};
@@ -184,32 +234,39 @@ int main(void) {
     lifecycle.title_id=OSGetTitleID();
     if(ctr_test_from_hbl(lifecycle.title_id))
         ProcUIRegisterCallback(PROCUI_CALLBACK_HOME_BUTTON_DENIED,home_exit,NULL,99);
-    /* The pinned libwhb console owns OSScreen/MEM1 and returns FALSE even
-     * after initialization. It must not be combined with WHBGfx ownership. */
-    (void)WHBLogConsoleInit();console_ready=true;
-    WHBLogPrintf("CTR2WUP Install Capture");
-    WHBLogPrintf("Checking the existing M1 package. No files will be replaced.");
-    WHBLogConsoleDraw();
+    /* Establish checked startup evidence before graphics. Reuse WUT's mount;
+     * never create a competing WHB mount or unmount the process-wide SD. */
     char parent[512];struct stat directory_info;
     bool ready=ctr_test_report_directory(LOG_ROOT,true,parent,sizeof(parent)) &&
         (mkdir(LOG_DIRECTORY,0777)==0 || errno==EEXIST) &&
         lstat(LOG_DIRECTORY,&directory_info)==0 && S_ISDIR(directory_info.st_mode) &&
-        ctr_test_report_open(&report,LOG_DIRECTORY,"install-capture","0.27.0",(uint64_t)OSGetSystemTime());
+        capture_log_open(&report,LOG_DIRECTORY,(uint64_t)OSGetSystemTime(),
+            ctr_report_storage_sync,ctr_report_storage_verify,&storage);
+    if(!ready && !report.failed) {
+        report.failed=true;report.error=errno?errno:EIO;report.stage="directory";
+    }
     if(ready) {
-        ctr_test_report_set_volume_sync(&report,ctr_report_storage_sync,&storage);
         char text[256];snprintf(text,sizeof(text),
-            "IDENTITY capture_source=%s source_dirty=%u package_source=%s title=%s protocol=mcp-capture-v1",
+            "IDENTITY capture_source=%s source_dirty=%u package_source=%s title=%s protocol=mcp-capture-v2",
             CTR_SOURCE_COMMIT,CTR_SOURCE_DIRTY,CTR_CAPTURE_PACKAGE_SOURCE,CTR_CAPTURE_TITLE);
-        ready=line(text) && line("PACKAGE artifact_sha256=" CTR_CAPTURE_PACKAGE_SHA256) && payload_ready();
+        ready=line(text) && line("PACKAGE artifact_sha256=" CTR_CAPTURE_PACKAGE_SHA256);
+    }
+    bool audio_ready=audio_begin();
+    display_ready=capture_display_init();
+    platform_failed=!audio_ready || !display_ready;
+    notice("Checking the existing M1 package.");
+    if(report.file)line(display_ready?"DISPLAY native_GX2=ready":"DISPLAY native_GX2=failed");
+    if(ready) {
+        ready=audio_ready && display_ready && !report.failed && payload_ready();
         if(ready) {
             mcp=MCP_Open();
             ready=record(NULL,"mcp_open",mcp,NULL) && mcp>=0 && title_absent();
         }
     }
     if(ready) {
-        WHBLogPrintf("Use the SAME destination as the failed GX2 attempt.");
-        WHBLogPrintf("A: install to internal memory. X: install to USB.");
-        WHBLogPrintf("Minus: exit. One attempt; the exact error is saved automatically.");
+        notice("SD startup report: exact read-back verified.");
+        notice("Use the SAME destination as the failed GX2 attempt.");
+        notice("A: internal memory. X: USB. Minus: exit.");
         bool selection_armed=false;
         while(pump(NULL)) {
             if(ctr_install_capture_select(&selection_armed,input_valid,
@@ -220,27 +277,39 @@ int main(void) {
                 if(payload_ready() && title_absent()) {
                     static const CtrInstallCaptureOps ops={record,get_info,set_target,start,get_progress,abort_install,pump};
                     bool ok=ctr_install_capture_run(&capture,&ops,NULL,target);
-                    WHBLogPrintf(ok?"Installation succeeded.":"Installation stopped. Exact results are in the SD report.");
-                    if(capture.submitted)WHBLogPrintf("Raw MCP callback: 0x%08x",(unsigned)(uint32_t)capture.result);
-                } else WHBLogPrintf("Preflight changed; installation blocked.");
+                    notice(ok?"Installation succeeded.":"Installation stopped.");
+                    if(capture.submitted)notice("Raw MCP callback: 0x%08x",(unsigned)(uint32_t)capture.result);
+                } else notice("Preflight changed; installation blocked.");
                 break;
             }
         }
-    } else WHBLogPrintf("Preflight blocked installation. Check the report or take a photo.");
+    } else notice("Preflight blocked installation.");
+    /* Finish and verify the SD view in the foreground. A system exit may
+     * instead leave a partial stdio-only checkpoint; never call that saved. */
+    while(!foreground && !exit_requested && pump(NULL)) {}
     if(report.file) {
         line("CAPTURE scope=installation_diagnosis full_milestone_acceptance=0");
-        ctr_test_report_line(&report,"END OF REPORT");
+        line("END OF REPORT");
     }
-    saved=ctr_test_report_close(&report) && report.path[0];
-    if(saved)WHBLogPrintf("Report saved: sd:/ctr2wup/install-check/install-capture/");
-    else WHBLogPrintf("REPORT WRITE FAILED. Please photograph this screen.");
-    WHBLogPrintf("Minus: exit. Return the install-capture folder by FTP.");
+    saved=capture_log_close(&report) && report.verify!=NULL;
+    if(saved) {
+        notice("SD REPORT: CLOSED READ-BACK VERIFIED");
+        notice("sd:/ctr2wup/install-check/install-capture/");
+        notice("File: %s",report.filename);
+        notice("FTP: refresh the directory listing before copying.");
+    } else {
+        notice("SD REPORT FAILED. Photograph this screen.");
+        notice("Stage: %s / errno: %d / FSA: 0x%08x",report.stage?report.stage:"unknown",report.error,
+            (unsigned)(uint32_t)storage.last_status);
+    }
+    notice("Minus: exit. Return only the install-capture folder.");
     if(foreground) {
-        WHBLogConsoleDraw();
+        if(display_ready && !capture_display_draw())platform_failed=true;
         if(!saved && !exit_observed)exit_requested=false;
     }
+    if(!display_ready)exit_requested=true;
     while(!exit_requested && pump(NULL)) {}
     if(!ctr_test_complete_exit(&lifecycle,exit_observed,&exit_ops,NULL))saved=false;
     ctr_report_storage_close(&storage);
-    return saved?0:1;
+    return saved && !report.failed && !platform_failed?0:1;
 }
