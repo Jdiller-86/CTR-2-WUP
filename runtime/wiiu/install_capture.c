@@ -73,6 +73,16 @@ void ctr_install_capture_complete(CtrInstallCapture *capture,int32_t result) {
     atomic_store_explicit(&capture->complete,true,memory_order_release);
 }
 
+bool ctr_install_capture_select(bool *armed,bool valid,bool held,bool pressed) {
+    if(!armed || !valid)return false;
+    if(!*armed) {
+        if(!held && !pressed)*armed=true;
+        return false;
+    }
+    if(!pressed)return false;
+    *armed=false;return true;
+}
+
 static bool record(CtrInstallCapture *capture,const CtrInstallCaptureOps *ops,void *context,
                    const char *event,int32_t result,const CtrInstallCaptureProgress *progress) {
     if(!ops->record(context,event,result,progress))capture->log_failed=true;

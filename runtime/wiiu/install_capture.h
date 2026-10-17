@@ -31,6 +31,10 @@ typedef struct {
  * completion; all logging and UI remain on the application thread. */
 void ctr_install_capture_complete(CtrInstallCapture *capture,int32_t result);
 
+/* Require a neutral input sample before accepting a fresh selection. A launch
+ * button still held when the app opens must never authorize installation. */
+bool ctr_install_capture_select(bool *armed,bool valid,bool held,bool pressed);
+
 typedef struct {
     bool (*record)(void *,const char *event,int32_t result,
                    const CtrInstallCaptureProgress *progress);
