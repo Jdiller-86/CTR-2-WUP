@@ -24,6 +24,7 @@ void capture_display_line(const char *text) {
         memmove(rows,rows+1,sizeof(rows)-sizeof(rows[0]));
         size_t n=strlen(text);if(n>COLUMNS)n=COLUMNS;
         memcpy(rows[ROWS-1],text,n);rows[ROWS-1][n]=0;text+=n;
+        for(size_t i=0;i<n;++i)if(rows[ROWS-1][i]=='_')rows[ROWS-1][i]='-';
     } while(*text);
     dirty=true;
 }

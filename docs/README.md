@@ -20,6 +20,7 @@ Diagnostic packages include deployment instructions and result-folder details.
 Start with [Contributing](../CONTRIBUTING.md), [Windows builds](build-windows.md)
 and [Testing](testing.md). [Architecture](architecture.md) maps the source and
 execution pipeline.
+Wii U application changes follow the [platform protocol](wiiu-platform.md).
 
 [Project graph](https://jdiller-86.github.io/CTR-2-WUP/progress/) ·
 [Issues](https://github.com/Jdiller-86/CTR-2-WUP/issues) ·
