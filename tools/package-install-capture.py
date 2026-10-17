@@ -33,38 +33,69 @@ def identity():
 def configuration(path):
     data=audio.release.regular(Path(path),16384).read_bytes()
     document=json.loads(data)
-    if (not isinstance(document,dict) or set(document)!={'schema_version','title_id','package_source','package_artifact_sha256','files'}
-            or type(document['schema_version']) is not int or document['schema_version']!=1
+    validate_configuration(document)
+    return document,data
+
+
+def validate_configuration(document):
+    schema=document.get('schema_version') if isinstance(document,dict) else None
+    digest='package_manifest_sha256' if schema==2 else 'package_artifact_sha256'
+    if (not isinstance(document,dict) or set(document)!={'schema_version','title_id','package_source',digest,'files'}
+            or type(schema) is not int or schema not in (1,2)
             or document['title_id']!='0005000043543257'
             or not isinstance(document['package_source'],str) or not re.fullmatch('[0-9a-f]{40}',document['package_source'])
-            or not isinstance(document['package_artifact_sha256'],str)
-            or not re.fullmatch('[0-9a-f]{64}',document['package_artifact_sha256'])):
+            or not isinstance(document[digest],str)
+            or not re.fullmatch('[0-9a-f]{64}',document[digest])):
         raise ValueError('Require an explicit original M1 title, source and package digest')
     files=document['files']
-    if not isinstance(files,list) or len(files)!=7:
-        raise ValueError('Require exactly seven pinned installer files')
+    if not isinstance(files,list) or (len(files)!=7 if schema==1 else not 8<=len(files)<=64):
+        raise ValueError('Require a bounded complete pinned installer inventory')
+    names=NAMES if schema==1 else {f'{i:08x}.app' for i in range(len(files)-3)}|{'title.tmd','title.tik','title.cert'}
     seen=set()
     for row in files:
         if (not isinstance(row,dict) or set(row)!={'name','size','sha256'}
-                or not isinstance(row['name'],str) or row['name'] not in NAMES or row['name'] in seen
+                or not isinstance(row['name'],str) or row['name'] not in names or row['name'] in seen
                 or type(row['size']) is not int or not 0<row['size']<=16*1024*1024
                 or not isinstance(row['sha256'],str) or not re.fullmatch('[0-9a-f]{64}',row['sha256'])):
             raise ValueError('Require unique bounded installer filenames, sizes and SHA-256 digests')
         seen.add(row['name'])
-    return document,data
+    if seen!=names:
+        raise ValueError('Require every consecutive content stream and all title metadata')
 
 
 def header(document):
+    validate_configuration(document)
+    digest='package_manifest_sha256' if document['schema_version']==2 else 'package_artifact_sha256'
+    record='manifest_sha256' if document['schema_version']==2 else 'artifact_sha256'
     result=['/* Generated fixed-payload identity, not a user-editable SD manifest. */',
             '#define CTR_CAPTURE_TITLE "'+document['title_id']+'"',
             '#define CTR_CAPTURE_TITLE_ID UINT64_C(0x'+document['title_id']+')',
             '#define CTR_CAPTURE_PACKAGE_SOURCE "'+document['package_source']+'"',
-            '#define CTR_CAPTURE_PACKAGE_SHA256 "'+document['package_artifact_sha256']+'"',
-            'static const CtrInstallCaptureFile ctr_capture_files[7]={']
+            '#define CTR_CAPTURE_PACKAGE_SHA256 "'+document[digest]+'"',
+            '#define CTR_CAPTURE_PACKAGE_RECORD "'+record+'='+document[digest]+'"',
+            '#define CTR_CAPTURE_FILE_COUNT '+str(len(document['files'])),
+            '#define CTR_CAPTURE_M1_COMPLETION '+str(int(document['schema_version']==2)),
+            'static const CtrInstallCaptureFile ctr_capture_files[CTR_CAPTURE_FILE_COUNT]={']
     for row in document['files']:
         digest=','.join('0x'+row['sha256'][i:i+2] for i in range(0,64,2))
         result.append('    {"'+row['name']+'",'+str(row['size'])+', {'+digest+'}},')
     return '\n'.join(result+['};',''])
+
+
+def build_app(document,build,sdk):
+    """Compile the reviewed frontend with immutable in-binary payload pins."""
+    receipt=audio.release.regular(sdk/'ctr2wup-image-digest.txt',4096).read_bytes()
+    if receipt.decode().strip()!=audio.release.SDK_IMAGE:
+        raise ValueError('Require the pinned Wii U SDK receipt')
+    build.mkdir()
+    (build/'install_capture_package.h').write_text(header(document),encoding='ascii')
+    subprocess.run(['make','-C',str(ROOT/'runtime/wiiu/install-capture'),'-j','3',
+                    'OUTPUT='+str(build),'CONFIG='+str(build),'DEVKITPRO='+str(sdk),
+                    'DEVKITPPC='+str(sdk/'devkitPPC')],check=True)
+    app=build/'ctr2wup-install-capture.wuhb'
+    audio.release.validate_binary(app)
+    audio.release.validate_binary(build/'ctr2wup-install-capture.rpx')
+    return audio.release.regular(app).read_bytes()
 
 
 def package(output,sdk):
@@ -81,19 +112,13 @@ def package(output,sdk):
     output.parent.mkdir(parents=True,exist_ok=True)
     temporary=Path(tempfile.mkdtemp(prefix='.install-capture-',dir=output.parent))
     try:
-        build=temporary/'build';build.mkdir()
-        (build/'install_capture_package.h').write_text(header(document),encoding='ascii')
-        subprocess.run(['make','-C',str(ROOT/'runtime/wiiu/install-capture'),'-j','3',
-                        'OUTPUT='+str(build),'CONFIG='+str(build),'DEVKITPRO='+str(sdk),
-                        'DEVKITPPC='+str(sdk/'devkitPPC')],check=True)
+        build=temporary/'build'
+        app=build_app(document,build,sdk)
         if identity()!=commit:
             raise ValueError('Source changed during the capture build')
-        app=build/'ctr2wup-install-capture.wuhb'
-        audio.release.validate_binary(app)
-        audio.release.validate_binary(build/'ctr2wup-install-capture.rpx')
         entries={
             'START-HERE.md':(ROOT/'tools/templates/install-capture.md').read_bytes(),
-            'sd-card/wiiu/apps/ctr2wup-install-capture.wuhb':audio.release.regular(app).read_bytes(),
+            'sd-card/wiiu/apps/ctr2wup-install-capture.wuhb':app,
             'support/package-identity.json':config,
             'support/LICENSE':(ROOT/'LICENSE').read_bytes(),
             'support/THIRD_PARTY_NOTICES':(ROOT/'THIRD_PARTY_NOTICES').read_bytes(),

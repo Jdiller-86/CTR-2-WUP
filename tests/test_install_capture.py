@@ -1,5 +1,6 @@
 """The diagnostic package must be explicit, bounded and preserve its inputs."""
 import copy
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -48,6 +49,31 @@ class CapturePackageTests(unittest.TestCase):
             bad=copy.deepcopy(self.document);bad['files'][0]['sha256']=value;cases.append(bad)
         for bad in cases:
             with self.subTest(document=bad),self.assertRaises(ValueError):self.check_config(bad)
+
+    def test_new_candidate_binds_every_stream_and_manifest_without_sd_configuration(self):
+        document=copy.deepcopy(self.document)
+        document['schema_version']=2
+        document['package_manifest_sha256']=hashlib.sha256(b'Original candidate receipt').hexdigest()
+        del document['package_artifact_sha256']
+        original={r['name']:r for r in document['files']}
+        document['files']=[dict(name=f'{i:08x}.app',size=32768,sha256=f'{i:064x}') for i in range(9)]
+        document['files'] += [original[n] for n in ('title.tmd','title.tik','title.cert')]
+        checked,_=self.check_config(document)
+        generated=capture.header(checked)
+        self.assertIn('#define CTR_CAPTURE_FILE_COUNT 12',generated)
+        self.assertIn('#define CTR_CAPTURE_M1_COMPLETION 1',generated)
+        self.assertIn('manifest_sha256='+document['package_manifest_sha256'],generated)
+        self.assertNotIn('artifact_sha256=',generated)
+        for row in document['files']:
+            self.assertIn('"'+row['name']+'"',generated)
+        for mutate in ('gap','extra','duplicate','legacy-digest','oversized'):
+            bad=copy.deepcopy(document)
+            if mutate=='gap':bad['files'][4]['name']='000000ff.app'
+            elif mutate=='extra':bad['files'].append(dict(name='title.key',size=16,sha256='a'*64))
+            elif mutate=='duplicate':bad['files'][4]=bad['files'][3]
+            elif mutate=='legacy-digest':bad['package_artifact_sha256']=bad.pop('package_manifest_sha256')
+            else:bad['files']*=6
+            with self.subTest(mutate=mutate),self.assertRaises(ValueError):self.check_config(bad)
 
     def test_preexisting_output_is_preserved_without_invoking_the_compiler(self):
         sdk=self.root/'sdk';sdk.mkdir()

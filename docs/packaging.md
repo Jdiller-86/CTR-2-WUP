@@ -4,12 +4,17 @@
 
 `host.package_homebrew` adds original plaintext **`0x2000`** contents and a
 self-generated test-signing chain for a signature-patched homebrew environment.
+Each staged file has its own padded content stream and FST offset zero. The
+ticket grants the complete 1024-index homebrew bitmap; packages are bounded to
+1024 contents including the FST. Empty top-level folders retain an empty stream
+with their original ownership.
 It requires **no common key, production certificate, donor title or game input**.
 The independent verifier checks content/FST/XML/identity and the generated
 signature chain. This establishes package integrity and test-signature
 consistency; it does not establish Nintendo authenticity or physical installation.
 
-The candidate targets **WUP Installer GX2 under Aroma with signature patches**,
+The candidate targets **WUP Installer GX2 or the bundled MCP capture under Aroma
+with signature patches**,
 including `wiiu/environments/aroma/modules/setup/01_sigpatches.rpx`. The module
 is not bundled and its presence is not assumed. Physical installer acceptance
 and Wii U Menu launch/exit/relaunch are unverified.
@@ -24,8 +29,11 @@ publication (**RECOVERED**). Later launches only recheck completion. Source-boun
 `install-v2`/`snapshot-v2` receipts and recovery files stay under
 `sd:/ctr2wup/install-check/<source-commit>/`; return the whole parent folder over
 FTP. This proves deterministic software interruption recovery, not power-loss
-durability. The package supplies one guide and `sd-card/` tree; source, notices
-and checksums remain under `support/`.
+durability. The package supplies one guide, one `sd-card/` tree and the existing
+capture app compiled with the candidate's exact file hashes and manifest digest.
+One selected destination is sufficient. The capture records installation before
+the two Menu launches; an installation failure stops the sequence. Source,
+notices and checksums remain under `support/`.
 
 ```sh
 python -m host stage-title PATH.rpx --title-id YOUR_APPLICATION_ID --name "My title" --output private/staging
@@ -37,10 +45,12 @@ The producer generates an ephemeral RSA4096 Root and RSA2048 CA/CP/XS test chain
 No private key is serialized. The independent verifier checks signatures and
 content consistency while explicitly retaining an untrusted-root result.
 
-`tools/package-install-capture.py --output artifacts/install-capture` builds a
-small Aroma app for diagnosing the pinned original M1 package. It requires the
-exact seven hashes in `packaging/install-capture.json`, a writable SD report and
-an absent title ID before one explicit target selection can start installation.
+`tools/package-install-capture.py --output artifacts/install-capture` builds the
+standalone Aroma diagnostic for the historical seven-file package pinned in
+`packaging/install-capture.json`. The generated M1 handoff instead binds the same
+app to its current per-file package. Both require a complete compiled inventory,
+a writable SD report and an absent title ID before one explicit target selection
+can start installation. Package pins cannot be changed through an SD manifest.
 Read-only MCP package parsing runs independently of install eligibility. Title
 inventory reports `absent`, `present` or `inconclusive`, with before/returned/after
 counts and bounded capacity. Only an actual matching record establishes presence;
@@ -92,7 +102,7 @@ content with 1 MiB buffers; bounded FST/name metadata is held in memory. FST
 logical cluster placement, ownership, COS permissions/resources and metadata/
 artwork are research settings awaiting installer/console evidence.
 
-`host.package_integrity` independently reads the result without calling the
+`host.package_integrity` independently reads both profiles without calling the
 writer's FST, inventory or serialization functions. It unwraps the key, verifies
 every padded plaintext hash, bounds/tree/parents/names/content assignments/file
 ranges and zero padding, checks decrypted XML against TMD identity and launch
@@ -100,6 +110,11 @@ entry, and optionally compares every file hash and directory with source staging
 Certificate layout and CP/XS issuer agreement are checked; a trusted root and
 signature authentication are **not** established. The existing structural
 validator still works without a key, with an explicitly narrower result.
+The reader retains the historical four-content plaintext profile for existing
+evidence. New per-file plaintext packages require one file at offset zero in each
+file stream, exact padded lengths, path-derived ownership and complete ticket
+rights; the encrypted research writer retains its four grouped contents.
+Directory-only streams must be referenced, correctly owned and entirely zero.
 
 ## Local inputs and commands
 
@@ -182,6 +197,11 @@ Binary layout/alignment/hash facts were reviewed against makefst's `fst.h`,
 packer format descriptions. The writer/reader are original implementations;
 no source, binary, XML template, certificate or key from those packers is adopted.
 This is a scoped research profile, not a full Wii U package-format implementation.
+The per-file plaintext layout follows makefst's stream assignments in
+[`main.c`](https://github.com/shinyquagsire23/makefst/blob/e363897e29109e6f1125d60376822c3768d3c2d4/main.c#L250).
+NUSPacker also assigns `app.xml` and `cos.xml` to separate streams in its
+[content rules](https://github.com/ihaveamac/nuspacker/blob/797b84af32e5bb0c353577a7a3f67e236f7b7ee3/src/com/tim/nuspacker/nuspackage/packaging/ContentRules.java#L123).
+These are format references; neither packer's code or assets are incorporated.
 
 The MIT-root makefst candidate bundles GPLv2-or-later PolarSSL, MIT ezxml and
 Unlicense miniz. Its code was not incorporated or executed. The plaintext/test-signing route is an original implementation and supplies no

@@ -46,6 +46,7 @@ def candidate(native, output):
         report = dict(schema_version=1, ok=True, kind='ctr2wup-install-candidate',
                       version=__version__, source_commit=commit, source_dirty=False,
                       original_inputs_only=True, profile='wiiu_plaintext_homebrew',
+                      content_layout=proof['content_layout'],
                       title_id=TITLE_ID, title_name=TITLE_NAME, title_version=27,
                       rpx_sha256=hashlib.sha256(rpx.read_bytes()).hexdigest(),
                       install_test_ready=True, requires_signature_patches=True,

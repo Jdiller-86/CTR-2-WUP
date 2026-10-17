@@ -118,7 +118,7 @@ def _inventory(source):
     return nodes, groups, [0] + [max(BLOCK, _align(n, BLOCK)) for n in sizes[1:]]
 
 
-def _fst(nodes, sizes, title, group, *, plaintext=False):
+def _fst(nodes, sizes, title, group, *, plaintext=False, owners=None):
     strings = bytearray(b"\0")
     entries = bytearray()
     for number, node in enumerate(nodes):
@@ -131,20 +131,23 @@ def _fst(nodes, sizes, title, group, *, plaintext=False):
         second = node["end"] if node["directory"] else node["size"]
         entries += struct.pack(">IIIHH", offset | (int(node["directory"]) << 24), first, second,
                                0x666 if plaintext and number else 0, node["content"])
-    length = _align(0x20 + 4 * 0x20 + len(entries) + len(strings), BLOCK)
+    count = len(sizes)
+    length = _align(0x20 + count * 0x20 + len(entries) + len(strings), BLOCK)
     if length > MAX_FST:
         fail("staging_limit", "FST exceeds the supported 16 MiB bound")
     sizes[0] = length
-    header = bytearray(struct.pack(">4sII20x", b"FST\0", 32, 4))
+    header = bytearray(struct.pack(">4sII20x", b"FST\0", 32, count))
     if plaintext:
         header[12] = 1  # No hash tree: original nonhashed homebrew contents.
     # Logical cluster placement follows the documented research profile. Actual
     # filesystem/installer acceptance remains a physical-console check.
     header += struct.pack(">IIQI B11x", 0, 0 if plaintext else length // BLOCK, 0, 0, 0)
     sector = max(2, length // BLOCK) if plaintext else 2 + (length // BLOCK if length > BLOCK else 0)
-    for number in range(1, 4):
+    for number in range(1, count):
         owner = int(title, 16) if number == 2 else 0
         gid = group if number == 2 else 0x400 if number == 3 else 0
+        if owners is not None:
+            owner, gid = owners[number]
         header += struct.pack(">IIQI B11x", sector, sizes[number] // BLOCK, owner, gid, 1)
         sector += sizes[number] // BLOCK
     result = header + entries + strings
@@ -193,24 +196,27 @@ def _encrypt_group(source, files, size, output, key, index, *, fst=None, plainte
 
 
 def _tmd(title, version, group, os_version, app_type, sizes, hashes, issuer):
-    data = bytearray(CONTENT_START + 4 * 0x30)
+    count = len(sizes)
+    if not 1 <= count <= 1024 or len(hashes) != count:
+        fail("staging_limit", "The scoped ticket supports at most 1024 contents")
+    data = bytearray(CONTENT_START + count * 0x30)
     struct.pack_into(">I", data, 0, SIGNATURE_TYPE)
     data[0x140:0x140 + len(issuer)] = issuer.encode("ascii")
     data[0x180] = 1
     struct.pack_into(">QQIHI", data, 0x184, os_version, int(title, 16), 0x100, group, app_type)
     struct.pack_into(">I", data, 0x1A2, 0x019A0000)
-    struct.pack_into(">HHH", data, 0x1DC, version, 4, 0)
+    struct.pack_into(">HHH", data, 0x1DC, version, count, 0)
     for number, (size, digest) in enumerate(zip(sizes, hashes)):
         offset = CONTENT_START + number * 0x30
         struct.pack_into(">IHHQ", data, offset, number, number, 0x2001, size)
         data[offset + 16:offset + 48] = digest
-    struct.pack_into(">HH", data, 0x204, 0, 4)
+    struct.pack_into(">HH", data, 0x204, 0, count)
     data[0x208:0x228] = hashlib.sha256(data[CONTENT_START:]).digest()
     data[0x1E4:0x204] = hashlib.sha256(data[0x204:CONTENT_START]).digest()
     return data
 
 
-def _ticket(title, version, key, common, issuer):
+def _ticket(title, version, key, common, issuer, *, all_content_rights=False):
     data = bytearray(0x350)
     struct.pack_into(">I", data, 0, SIGNATURE_TYPE)
     data[0x140:0x140 + len(issuer)] = issuer.encode("ascii")
@@ -228,6 +234,9 @@ def _ticket(title, version, key, common, issuer):
     struct.pack_into(">IIIIHH", data, 0x2B8, 0x28, 1, 0x84, 0x84, 3, 0)
     for index in range(4):
         data[0x2D0 + index // 8] |= 1 << (index % 8)
+    if all_content_rights:
+        # One complete 1024-index homebrew access bitmap; no index-order guess.
+        data[0x2D0:0x350] = b"\xff" * 128
     return data
 
 

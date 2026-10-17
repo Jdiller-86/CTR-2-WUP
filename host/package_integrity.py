@@ -1,4 +1,4 @@
-"""Independent decrypting reader for CTR2WUP's original four-content profile.
+"""Independent reader for original per-file plaintext and grouped encrypted WUPs.
 
 The reader does not call the writer's FST, inventory or serialization functions.
 It verifies integrity, not a trusted signature or successful console install.
@@ -43,24 +43,28 @@ def _plaintext(path, key, index, expected, size):
 
 def _fst(data, records, title, group, *, plaintext=False):
     count = len(records)
+    per_file = plaintext and count != 4
     if len(data) < 0x20 + count * 0x20 + 16 or data[:4] != b"FST\0":
         fail("invalid_fst", "Boot content is not a supported FST")
     factor, declared = struct.unpack_from(">II", data, 4)
     if (factor != 32 or declared != count or data[12] != int(plaintext) or any(data[13:32])):
         fail("invalid_fst", "FST header is outside the supported unmodified application profile")
-    extents = []
+    extents, ownership = [], []
     for number in range(count):
         start, length, owner, gid, mode = struct.unpack_from(">IIQIB", data, 32 + 32 * number)
         tail = data[32 + 32 * number + 21:32 + 32 * (number + 1)]
         expected_owner = int(title, 16) if number == 2 else 0
         expected_group = group if number == 2 else 0x400 if number == 3 else 0
         expected_length = 0 if plaintext and number == 0 else records[number]["size"] // UNIT
-        if (length != expected_length or owner != expected_owner or gid != expected_group
+        if (length != expected_length or (not per_file and (owner != expected_owner or gid != expected_group))
                 or mode != (0 if number == 0 else 1) or any(tail)):
             fail("invalid_fst", "FST content descriptors do not match the scoped TMD/ownership profile")
         if number == 0 and start != 0 or number and start < extents[-1][1]:
             fail("invalid_fst", "FST logical content extents overlap")
         extents.append((start, start + length))
+        ownership.append((owner, gid))
+    if per_file and ownership[0] != (0, 0):
+        fail("invalid_fst", "The FST stream must not have a file owner")
     base = 32 + count * 32
     kind, parent, nodes, flags, content = struct.unpack_from(">IIIHH", data, base)
     if kind != 0x01000000 or parent or flags or content or not 4 <= nodes <= 100000:
@@ -71,6 +75,7 @@ def _fst(data, records, title, group, *, plaintext=False):
     stack = [(0, "", nodes)]
     paths = set()
     directories = set()
+    directory_streams = set()
     files = [[] for _ in records]
     root_names = set()
     names = [(0, 1)]
@@ -100,7 +105,7 @@ def _fst(data, records, title, group, *, plaintext=False):
         paths.add(path.casefold())
         top = path.split("/", 1)[0]
         expected_content = {"code": 1, "content": 2, "meta": 3}.get(top)
-        if content != expected_content:
+        if (not per_file and content != expected_content) or per_file and content >= count:
             fail("invalid_fst", "FST node is assigned to the wrong top-level content")
         if kind:
             if first != directory_number or not number < second <= limit or len(stack) > 65:
@@ -108,16 +113,35 @@ def _fst(data, records, title, group, *, plaintext=False):
             if not parent_path:
                 root_names.add(name)
             directories.add(path)
+            if per_file:
+                expected = (int(title, 16), group) if top == 'content' else (0, 0x400 if top == 'meta' else 0)
+                if not content or ownership[content] != expected:
+                    fail("invalid_fst", "Directory stream ownership must match its top-level folder")
+                directory_streams.add(content)
             stack.append((number, path, second))
         else:
             if not parent_path:
                 fail("invalid_fst", "Files must be inside code, content or meta")
             offset = first * factor
+            if per_file and (not content or offset or files[content]):
+                fail("invalid_fst", "Each plaintext file requires its own stream at offset zero")
             if offset + second > records[content]["size"]:
                 fail("invalid_fst", "FST file exceeds its decrypted content")
             files[content].append({"path": path, "offset": offset, "bytes": second})
     if root_names != {"code", "content", "meta"}:
         fail("invalid_fst", "FST requires exactly the code, content and meta roots")
+    if per_file:
+        for number in range(1, count):
+            if not files[number]:
+                if number not in directory_streams or records[number]['size'] != UNIT:
+                    fail("invalid_fst", "An empty plaintext stream requires an owned directory reference")
+                continue
+            item = files[number][0]
+            top = item['path'].split('/', 1)[0]
+            expected = (int(title, 16), group) if top == 'content' else (0, 0x400 if top == 'meta' else 0)
+            padded = max(UNIT, (item['bytes'] + UNIT - 1) // UNIT * UNIT)
+            if ownership[number] != expected or records[number]['size'] != padded:
+                fail("invalid_fst", "Plaintext stream ownership or padded file size is invalid")
     used = 0
     for start, end in sorted(names):
         if start > used and any(data[strings + used:strings + start]):
@@ -274,20 +298,23 @@ def verify_package(path, key_file=None, *, expected_staging=None):
         digest = tmd[base + 16:base + 36]
         if (flags != (0x2000 if plaintext else 0x2001) or index != number or identifier != number or size % UNIT
                 or any(tmd[base + 36:base + 48]) or size > 1024 * 1024 * 1024):
-            fail("unsupported_integrity_profile", "Deep verification supports ordered IDs 0..3, nonhashed padded SHA-1 contents, at most 1 GiB each")
+            fail("unsupported_integrity_profile", "Deep verification requires ordered content IDs, nonhashed padded SHA-1 streams, at most 1 GiB each")
         records.append({"path": path / f"{identifier:08x}.app", "index": index, "size": size, "digest": digest})
-    if len(records) != 4 or int.from_bytes(tmd[0x1E0:0x1E2], "big") != 0 or records[0]["size"] > 16 * 1024 * 1024:
-        fail("unsupported_integrity_profile", "Deep verification requires the original four-content FST boot profile")
+    if (not (4 <= len(records) <= 1024 if plaintext else len(records) == 4)
+            or int.from_bytes(tmd[0x1E0:0x1E2], "big") != 0 or records[0]["size"] > 16 * 1024 * 1024):
+        fail("unsupported_integrity_profile", "Deep verification requires a bounded original FST boot profile")
     if tuple(struct.unpack_from(">HHIIHHI", ticket, 0x2A4)) != (1, 0x14, 0xAC, 0x14, 1, 0x14, 0):
         fail("invalid_ticket_rights", "Ticket rights header is invalid")
     if tuple(struct.unpack_from(">IIIIHH", ticket, 0x2B8)) != (0x28, 1, 0x84, 0x84, 3, 0):
         fail("invalid_ticket_rights", "Ticket content-rights section is invalid")
     if any(ticket[0x2CC:0x2D0]) or ticket[0x2D0] & 15 != 15:
         fail("invalid_ticket_rights", "Ticket does not grant all four scoped content indices")
+    if plaintext and len(records) != 4 and ticket[0x2D0:0x350] != b'\xff' * 128:
+        fail("invalid_ticket_rights", "Per-file homebrew requires the complete content-access bitmap")
     boot = b"".join(_plaintext(records[0]["path"], title_key, 0, records[0]["digest"], records[0]["size"]))
     grouped, directories = _fst(boot, records, report["title_id"], int.from_bytes(tmd[0x198:0x19A], "big"), plaintext=plaintext)
     files, xml = [], {}
-    for number in range(1, 4):
+    for number in range(1, len(records)):
         record = records[number]
         files += _content_files(_plaintext(record["path"], title_key, number, record["digest"], record["size"]), grouped[number], xml)
     _title_metadata(xml, tmd, files)
@@ -296,6 +323,7 @@ def verify_package(path, key_file=None, *, expected_staging=None):
     for item in report["contents"]:
         item["plaintext_integrity"] = "padded_sha1_matches_tmd"
     return {**report, "validation": "plaintext_integrity" if plaintext else "decrypted_integrity", "files": files,
+            "content_layout": "one_file_per_content" if plaintext and len(records) != 4 else "legacy_grouped",
             "fst": "bounds/tree/names/ranges/zero-padding verified",
             "staging_comparison": "all files and directories match" if expected_staging is not None else "not_requested",
             "certificate_layout": "parsed; CP/XS subjects match metadata; trust chain unauthenticated",

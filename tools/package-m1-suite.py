@@ -7,6 +7,7 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import sys
+import tempfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -132,6 +133,7 @@ def install_payload(installed, commit, native, audio):
             or report.get('source_commit') != commit or report.get('source_dirty') is not False
             or report.get('original_inputs_only') is not True or report.get('install_test_ready') is not True
             or report.get('profile') != 'wiiu_plaintext_homebrew'
+            or report.get('content_layout') != 'one_file_per_content'
             or report.get('requires_signature_patches') is not True
             or report.get('title_name') != EXPECTED_TITLE_NAME
             or not isinstance(report.get('title_id'), str)
@@ -143,10 +145,11 @@ def install_payload(installed, commit, native, audio):
     files = verified.get('files')
     rpx = [row for row in files if isinstance(row, dict) and row.get('path') == 'code/ctr2wup.rpx'] if isinstance(files, list) else []
     if (verified.get('ok') is not True or verified.get('title_id') != report['title_id']
+            or verified.get('content_layout') != 'one_file_per_content'
             or len(rpx) != 1 or rpx[0].get('sha256') != report['rpx_sha256']):
         raise ValueError('Independent install-package validation failed')
     records = report.get('files')
-    if not isinstance(records, list) or not 4 <= len(records) <= 256:
+    if not isinstance(records, list) or not 8 <= len(records) <= 64:
         raise ValueError('Install payload inventory exceeds its bounds')
     entries = {}
     seen = set()
@@ -169,7 +172,25 @@ def install_payload(installed, commit, native, audio):
     return report, entries
 
 
-def package(native, audio_kit, output, installed=None, sdk_licenses=None, sdk_receipt=None):
+def capture_payload(candidate,entries,sdk):
+    """Bind the existing one-shot logger to this exact generated candidate."""
+    spec=importlib.util.spec_from_file_location('m1_capture',ROOT/'tools/package-install-capture.py')
+    capture=importlib.util.module_from_spec(spec);spec.loader.exec_module(capture)
+    manifest=entries['support/install-package.json']
+    if json.loads(manifest)!=candidate:
+        raise ValueError('Candidate manifest changed before capture binding')
+    document=dict(schema_version=2,title_id=candidate['title_id'],
+                  package_source=candidate['source_commit'],
+                  package_manifest_sha256=capture.audio.digest(manifest),
+                  files=[dict(name=r['path'],size=r['size'],sha256=r['sha256']) for r in candidate['files']])
+    capture.validate_configuration(document)
+    with tempfile.TemporaryDirectory(prefix='ctr2wup-m1-capture-') as tmp:
+        app=capture.build_app(document,Path(tmp)/'build',sdk)
+    return {'sd-card/wiiu/apps/ctr2wup-install-capture.wuhb':app,
+            'support/capture-package-identity.json':(json.dumps(document,indent=2)+'\n').encode()}
+
+
+def package(native, audio_kit, output, installed=None, sdk_licenses=None, sdk_receipt=None,capture_sdk=None):
     if installed is None:
         raise ValueError('No install payload; do not publish a kit that asks for accepted tests again')
     audio = helpers()
@@ -177,6 +198,8 @@ def package(native, audio_kit, output, installed=None, sdk_licenses=None, sdk_re
     report = native_receipt(native, commit, audio)
     candidate, entries = install_payload(installed, commit, report, audio)
     entries.update(provenance(audio_kit, sdk_licenses, sdk_receipt, commit, audio))
+    sdk=Path(capture_sdk or os.environ.get('DEVKITPRO','/workspace/ctr2wup-sdk')).absolute()
+    entries.update(capture_payload(candidate,entries,sdk))
     entries['support/build-report.json'] = audio.release.regular(native/'build-report.json').read_bytes()
     entries['START-HERE.md'] = audio.release.render_guide(
         ROOT/'tools/templates/install-check.md', VERSION, commit)
@@ -190,6 +213,9 @@ def package(native, audio_kit, output, installed=None, sdk_licenses=None, sdk_re
               recovery=dict(available=True, protocol='snapshot-v2'),
               install_check=dict(full_native_guide=False, storage_protocol='snapshot-v2',
                                  session_protocol='install-v2', log_directory=log_directory),
+              installation_capture=dict(available=True,protocol='mcp-capture-v2',
+                  package_manifest_sha256=audio.digest(entries['support/install-package.json']),
+                  log_directory='ctr2wup/install-check/install-capture'),
               package=dict(available=True, source_commit=commit, title_name=candidate['title_name'],
                            title_id=candidate['title_id'], install_test_ready=True,
                            requires_signature_patches=True, console_verified=False),
@@ -229,10 +255,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ('native', 'installed', 'output'):
         parser.add_argument('--'+name, type=Path, required=True)
-    for name in ('audio-kit', 'sdk-licenses', 'sdk-receipt'):
+    for name in ('audio-kit', 'sdk-licenses', 'sdk-receipt','capture-sdk'):
         parser.add_argument('--'+name, type=Path)
     args = parser.parse_args()
-    print(json.dumps(package(args.native, args.audio_kit, args.output, args.installed, args.sdk_licenses, args.sdk_receipt)))
+    print(json.dumps(package(args.native, args.audio_kit, args.output, args.installed, args.sdk_licenses, args.sdk_receipt,args.capture_sdk)))
 
 
 if __name__ == '__main__':

@@ -10,6 +10,11 @@ the precise return path and filename. Keep confirmed failure, observed presence
 and inconclusive preflight distinct; log the actual bounded evidence behind each
 classification. A successful API call alone does not establish its data's meaning.
 
+For plaintext WUPs, keep each file in its own padded content stream with FST
+offset zero, following the [packaging profile](packaging.md). Bind installation
+logging to the exact generated file inventory and candidate digest. Integrity
+checks alone do not establish MCP read compatibility or installed-title behavior.
+
 Use one graphics owner: the native GX2/font/scaling path. Avoid OSScreen and GX2
 ownership conflicts; check the pinned SDK's actual API semantics. Always acquire
 the [silent AX context](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/runtime/wiiu/diagnostic_audio.c)
