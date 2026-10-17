@@ -88,6 +88,7 @@ static bool pump(void *unused) {
         exit_requested=true;exit_observed=true;
     } else if(status==PROCUI_STATUS_RELEASE_FOREGROUND) {
         if(!ctr_diagnostic_audio_end(&audio,NULL,NULL))platform_failed=true;
+        report.sync=NULL;report.verify=NULL;ctr_report_storage_close(&storage);
         ProcUIDrawDoneRelease();
     }
     foreground=status==PROCUI_STATUS_IN_FOREGROUND;
