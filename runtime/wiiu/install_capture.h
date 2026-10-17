@@ -16,6 +16,25 @@ bool ctr_install_capture_verify(const char *directory,
                                 const CtrInstallCaptureFile *files,size_t count,
                                 const char **failed_file);
 
+#define CTR_CAPTURE_TITLE_LIMIT 4096u
+typedef enum {
+    CTR_CAPTURE_INVENTORY_INCONCLUSIVE,
+    CTR_CAPTURE_INVENTORY_ABSENT,
+    CTR_CAPTURE_INVENTORY_PRESENT
+} CtrInstallCaptureInventoryState;
+typedef struct {
+    CtrInstallCaptureInventoryState state;
+    const char *reason;
+    uint32_t match_index;
+} CtrInstallCaptureInventory;
+
+/* MCP entries begin with a big-endian title ID. Only successful, bounded
+ * entries can establish a match; absence additionally requires equal stable
+ * before/returned/after counts. Never interpret unknown as present or absent. */
+CtrInstallCaptureInventory ctr_install_capture_inventory(
+    const void *entries,size_t bytes,size_t stride,int32_t before,
+    int32_t result,uint32_t returned,int32_t after,uint64_t title);
+
 typedef struct {
     uint64_t title,bytes,total;
     uint32_t contents,total_contents,active;

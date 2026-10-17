@@ -68,6 +68,30 @@ bool ctr_install_capture_verify(const char *directory,
     return true;
 }
 
+CtrInstallCaptureInventory ctr_install_capture_inventory(
+    const void *entries,size_t bytes,size_t stride,int32_t before,
+    int32_t result,uint32_t returned,int32_t after,uint64_t title) {
+    CtrInstallCaptureInventory out={CTR_CAPTURE_INVENTORY_INCONCLUSIVE,"invalid_buffer",UINT32_MAX};
+    if(result) { out.reason="list_error";return out; }
+    if(!entries || stride<8 || bytes%stride || bytes/stride>CTR_CAPTURE_TITLE_LIMIT ||
+       returned>bytes/stride)return out;
+    const unsigned char *data=entries;
+    for(uint32_t i=0;i<returned;++i) {
+        uint64_t id=0;
+        for(unsigned j=0;j<8;++j)id=(id<<8)|data[(size_t)i*stride+j];
+        if(id==title) {
+            out.state=CTR_CAPTURE_INVENTORY_PRESENT;out.reason="target_match";
+            out.match_index=i;return out;
+        }
+    }
+    if(before<0 || after<0 || (uint32_t)before>CTR_CAPTURE_TITLE_LIMIT ||
+       (uint32_t)after>CTR_CAPTURE_TITLE_LIMIT)out.reason="count_error";
+    else if(before!=after)out.reason="count_changed";
+    else if(returned!=(uint32_t)before)out.reason="count_mismatch";
+    else { out.state=CTR_CAPTURE_INVENTORY_ABSENT;out.reason="complete_absence"; }
+    return out;
+}
+
 void ctr_install_capture_complete(CtrInstallCapture *capture,int32_t result) {
     capture->result=result;
     atomic_store_explicit(&capture->complete,true,memory_order_release);

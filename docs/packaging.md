@@ -41,6 +41,11 @@ content consistency while explicitly retaining an untrusted-root result.
 small Aroma app for diagnosing the pinned original M1 package. It requires the
 exact seven hashes in `packaging/install-capture.json`, a writable SD report and
 an absent title ID before one explicit target selection can start installation.
+Read-only MCP package parsing runs independently of install eligibility. Title
+inventory reports `absent`, `present` or `inconclusive`, with before/returned/after
+counts and bounded capacity. Only an actual matching record establishes presence;
+errors or incomplete/changing counts block writes without claiming a collision.
+Only the fixed target's matching metadata is logged, never unrelated titles.
 Startup evidence precedes graphics. Each binary log record is closed and synced,
 then checked against its intended byte count and SHA-256 through stdio and a
 separate FSA read of `/vol/external01`. An unavailable or mismatched report blocks

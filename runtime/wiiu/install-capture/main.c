@@ -127,17 +127,55 @@ static bool payload_ready(void) {
 
 static bool title_absent(void) {
     int32_t count=MCP_TitleCount(mcp);
-    if(!record(NULL,"title_count",count,NULL) || count<0 || count>4096)return false;
-    if(!count)return true;
-    uint32_t bytes=(uint32_t)count*sizeof(MCPTitleListType),found=(uint32_t)count;
+    if(!record(NULL,"title_count",count,NULL))return false;
+    if(count<0 || (uint32_t)count>CTR_CAPTURE_TITLE_LIMIT) {
+        line("INVENTORY state=inconclusive reason=count_error installation_blocked=1");
+        notice("Title inventory unavailable; installation blocked.");return false;
+    }
+    /* Leave bounded headroom for changes between count and list. A second
+     * count must agree before any absence claim, including an empty list. */
+    uint32_t capacity=(uint32_t)count+16;
+    if(capacity>CTR_CAPTURE_TITLE_LIMIT)capacity=CTR_CAPTURE_TITLE_LIMIT;
+    uint32_t bytes=capacity*sizeof(MCPTitleListType),found=capacity;
     MCPTitleListType *titles=MEMAllocFromDefaultHeapEx((bytes+63u)&~63u,64);
-    if(!titles) { record(NULL,"title_list_allocation",-1,NULL);return false; }
+    if(!titles) {
+        record(NULL,"title_list_allocation",-1,NULL);
+        line("INVENTORY state=inconclusive reason=allocation installation_blocked=1");return false;
+    }
+    memset(titles,0,bytes);
     int32_t result=MCP_TitleList(mcp,&found,titles,bytes);
-    bool absent=result==0 && found==(uint32_t)count;
-    if(absent)for(uint32_t i=0;i<found;++i)if(titles[i].titleId==CTR_CAPTURE_TITLE_ID)absent=false;
+    int32_t after=MCP_TitleCount(mcp);
+    CtrInstallCaptureInventory inventory=ctr_install_capture_inventory(
+        titles,bytes,sizeof(*titles),count,result,found,after,CTR_CAPTURE_TITLE_ID);
+    bool logged=record(NULL,"title_list",result,NULL) && record(NULL,"title_count_after",after,NULL);
+    char text[384];
+    if(inventory.state==CTR_CAPTURE_INVENTORY_PRESENT) {
+        const MCPTitleListType *match=&titles[inventory.match_index];
+        /* Only the fixed target's metadata is recorded, never the inventory
+         * of unrelated titles. Bound and sanitize MCP's fixed-width strings. */
+        char path[sizeof(match->path)+1],device[sizeof(match->indexedDevice)+1];
+        size_t i=0;
+        for(;i<sizeof(match->path) && match->path[i];++i)
+            path[i]=match->path[i]>=32 && match->path[i]<=126?match->path[i]:'?';
+        path[i]=0;i=0;
+        for(;i<sizeof(match->indexedDevice) && match->indexedDevice[i];++i)
+            device[i]=match->indexedDevice[i]>=32 && match->indexedDevice[i]<=126?match->indexedDevice[i]:'?';
+        device[i]=0;
+        snprintf(text,sizeof(text),"INVENTORY_MATCH title=%s index=%u version=%u device=%s path=%s",
+            CTR_CAPTURE_TITLE,inventory.match_index,match->titleVersion,device,path);
+        logged=line(text) && logged;
+    }
     MEMFreeToDefaultHeap(titles);
-    if(!record(NULL,"title_list",result,NULL))return false;
-    return line(absent?"COLLISION title_absent=1":"COLLISION title_absent=0 installation_blocked=1") && absent;
+    const char *state=inventory.state==CTR_CAPTURE_INVENTORY_ABSENT?"absent":
+        inventory.state==CTR_CAPTURE_INVENTORY_PRESENT?"present":"inconclusive";
+    snprintf(text,sizeof(text),
+        "INVENTORY state=%s reason=%s before=%ld returned=%u after=%ld capacity=%u installation_blocked=%u",
+        state,inventory.reason,(long)count,found,(long)after,capacity,
+        inventory.state!=CTR_CAPTURE_INVENTORY_ABSENT);
+    logged=line(text) && logged;
+    if(inventory.state==CTR_CAPTURE_INVENTORY_PRESENT)notice("Matching title record found; installation blocked.");
+    else if(inventory.state==CTR_CAPTURE_INVENTORY_INCONCLUSIVE)notice("Title inventory incomplete; installation blocked.");
+    return logged && inventory.state==CTR_CAPTURE_INVENTORY_ABSENT;
 }
 
 static int32_t get_info(void *unused) {
@@ -148,6 +186,9 @@ static int32_t get_info(void *unused) {
     /* MCP's get-info response begins with the big-endian title ID. */
     const unsigned char *bytes=(const unsigned char *)&info;uint64_t title=0;
     for(unsigned i=0;i<8;++i)title=(title<<8)|bytes[i];
+    char text[128];snprintf(text,sizeof(text),"PACKAGE_INFO title=%016llx expected=%s matches=%u",
+        (unsigned long long)title,CTR_CAPTURE_TITLE,title==CTR_CAPTURE_TITLE_ID);
+    if(!line(text))return -10002;
     return title==CTR_CAPTURE_TITLE_ID?0:-10001;
 }
 
@@ -260,7 +301,16 @@ int main(void) {
         ready=audio_ready && display_ready && !report.failed && payload_ready();
         if(ready) {
             mcp=MCP_Open();
-            ready=record(NULL,"mcp_open",mcp,NULL) && mcp>=0 && title_absent();
+            ready=record(NULL,"mcp_open",mcp,NULL) && mcp>=0;
+            if(ready) {
+                /* Read-only package parsing is useful even when inventory
+                 * cannot authorize an installation. It sets no target and
+                 * submits no installation request. Preserve both outcomes. */
+                int32_t package_result=get_info(NULL);
+                bool package_ok=record(NULL,"package_preflight",package_result,NULL) && package_result==0;
+                bool inventory_ok=!report.failed && title_absent();
+                ready=package_ok && inventory_ok;
+            }
         }
     }
     if(ready) {
