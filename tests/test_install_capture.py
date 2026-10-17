@@ -61,6 +61,7 @@ class CapturePackageTests(unittest.TestCase):
         checked,_=self.check_config(document)
         generated=capture.header(checked)
         self.assertIn('#define CTR_CAPTURE_FILE_COUNT 12',generated)
+        self.assertIn('#define CTR_CAPTURE_M1_COMPLETION 1',generated)
         self.assertIn('manifest_sha256='+document['package_manifest_sha256'],generated)
         self.assertNotIn('artifact_sha256=',generated)
         for row in document['files']:

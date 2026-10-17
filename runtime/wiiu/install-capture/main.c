@@ -322,7 +322,8 @@ int main(void) {
     }
     if(ready) {
         notice("SD startup report: exact read-back verified.");
-        notice("Use the SAME destination as the failed GX2 attempt.");
+        notice(CTR_CAPTURE_M1_COMPLETION?"One install attempt; either destination is sufficient.":
+            "Use the SAME destination as the failed GX2 attempt.");
         notice("A: internal memory. X: USB. Minus: exit.");
         bool selection_armed=false;
         while(pump(NULL)) {
@@ -359,7 +360,11 @@ int main(void) {
         notice("Stage: %s / errno: %d / FSA: 0x%08x",report.stage?report.stage:"unknown",report.error,
             (unsigned)(uint32_t)storage.last_status);
     }
-    notice("Minus: exit. Return only the install-capture folder.");
+    if(CTR_CAPTURE_M1_COMPLETION) {
+        if(capture.submitted && capture.result==0)
+            notice("Next: launch Install Check twice from Wii U Menu.");
+        notice("Minus: exit. FTP the whole install-check folder.");
+    } else notice("Minus: exit. Return only the install-capture folder.");
     if(foreground) {
         if(display_ready && !capture_display_draw())platform_failed=true;
         if(!saved && !exit_observed)exit_requested=false;

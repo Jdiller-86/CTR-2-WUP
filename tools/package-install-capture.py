@@ -74,6 +74,7 @@ def header(document):
             '#define CTR_CAPTURE_PACKAGE_SHA256 "'+document[digest]+'"',
             '#define CTR_CAPTURE_PACKAGE_RECORD "'+record+'='+document[digest]+'"',
             '#define CTR_CAPTURE_FILE_COUNT '+str(len(document['files'])),
+            '#define CTR_CAPTURE_M1_COMPLETION '+str(int(document['schema_version']==2)),
             'static const CtrInstallCaptureFile ctr_capture_files[CTR_CAPTURE_FILE_COUNT]={']
     for row in document['files']:
         digest=','.join('0x'+row['sha256'][i:i+2] for i in range(0,64,2))
