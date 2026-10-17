@@ -28,12 +28,19 @@ typedef struct {
     uint32_t match_index;
 } CtrInstallCaptureInventory;
 
-/* MCP entries begin with a big-endian title ID. Only successful, bounded
- * entries can establish a match; absence additionally requires equal stable
- * before/returned/after counts. Never interpret unknown as present or absent. */
+/* MCP entries begin with a big-endian title ID. Absence requires a successful
+ * underfilled list and stable global counts within capacity; the global and
+ * enumerated counts need not equal each other. Never scan outside returned. */
 CtrInstallCaptureInventory ctr_install_capture_inventory(
     const void *entries,size_t bytes,size_t stride,int32_t before,
     int32_t result,uint32_t returned,int32_t after,uint64_t title);
+
+/* Corroborating exact-ID lookup: a successful actual match always blocks;
+ * nonzero API results alone never establish absence. A lookup match uses
+ * UINT32_MAX as its index because its record is outside the list buffer. */
+CtrInstallCaptureInventory ctr_install_capture_confirm_inventory(
+    CtrInstallCaptureInventory inventory,const void *entry,size_t bytes,
+    int32_t result,uint64_t title);
 
 typedef struct {
     uint64_t title,bytes,total;

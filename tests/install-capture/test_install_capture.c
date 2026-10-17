@@ -141,7 +141,7 @@ static void inventory(void) {
     CHECK(!strcmp(result.reason,"complete_absence") && result.match_index==UINT32_MAX);
     result=ctr_install_capture_inventory(entries,3*0x61,0x61,157,0,2,157,title);
     CHECK(result.state==CTR_CAPTURE_INVENTORY_INCONCLUSIVE);
-    CHECK(!strcmp(result.reason,"count_mismatch")); /* Old code falsely called this a collision. */
+    CHECK(!strcmp(result.reason,"capacity_limit")); /* Global count exceeds this small buffer. */
     result=ctr_install_capture_inventory(entries,3*0x61,0x61,2,0,2,3,title);
     CHECK(result.state==CTR_CAPTURE_INVENTORY_INCONCLUSIVE && !strcmp(result.reason,"count_changed"));
     result=ctr_install_capture_inventory(entries,3*0x61,0x61,0,0,0,0,title);
@@ -186,6 +186,56 @@ static void inventory(void) {
         result=ctr_install_capture_inventory(entries,3*0x61,0x61,0,0,0,counts[i],title);
         CHECK(result.state==CTR_CAPTURE_INVENTORY_INCONCLUSIVE && !strcmp(result.reason,"count_error"));
     }
+
+    /* Replay the returned hardware values using original synthetic records.
+     * The global counter is not the number written by the list operation. */
+    static unsigned char titles[CTR_CAPTURE_TITLE_LIMIT*0x61];
+    for(unsigned i=0;i<152;++i) {
+        uint64_t id=UINT64_C(0x0005001010000000)+i;
+        for(unsigned j=0;j<8;++j)titles[i*0x61+j]=(unsigned char)(id>>(56-8*j));
+    }
+    result=ctr_install_capture_inventory(titles,173*0x61,0x61,157,0,152,157,title);
+    CHECK(result.state==CTR_CAPTURE_INVENTORY_ABSENT);
+    CHECK(!strcmp(result.reason,"complete_list_count_difference"));
+    result=ctr_install_capture_inventory(titles,sizeof(titles),0x61,157,0,152,157,title);
+    CHECK(result.state==CTR_CAPTURE_INVENTORY_ABSENT && result.match_index==UINT32_MAX);
+    CtrInstallCaptureInventory absent=result;
+    result=ctr_install_capture_inventory(titles,152*0x61,0x61,152,0,152,152,title);
+    CHECK(result.state==CTR_CAPTURE_INVENTORY_INCONCLUSIVE && !strcmp(result.reason,"capacity_limit"));
+    result=ctr_install_capture_inventory(titles,173*0x61,0x61,157,0,173,157,title);
+    CHECK(result.state==CTR_CAPTURE_INVENTORY_INCONCLUSIVE);
+    result=ctr_install_capture_inventory(titles,sizeof(titles),0x61,157,-1,152,157,title);
+    CHECK(result.state==CTR_CAPTURE_INVENTORY_INCONCLUSIVE);
+    CtrInstallCaptureInventory unknown=result;
+
+    /* Exact-ID lookup errors alone never authorize writing. A successful
+     * target lookup blocks even if the bulk list missed that target. */
+    for(unsigned j=0;j<8;++j)entries[j]=(unsigned char)(title>>(56-8*j));
+    result=ctr_install_capture_confirm_inventory(unknown,entries,0x61,-1,title);
+    CHECK(result.state==CTR_CAPTURE_INVENTORY_INCONCLUSIVE);
+    result=ctr_install_capture_confirm_inventory(absent,entries,0x61,-1,title);
+    CHECK(result.state==CTR_CAPTURE_INVENTORY_ABSENT);
+    result=ctr_install_capture_confirm_inventory(absent,entries,0x61,0,title);
+    CHECK(result.state==CTR_CAPTURE_INVENTORY_PRESENT && result.match_index==UINT32_MAX);
+    CHECK(!strcmp(result.reason,"target_lookup_match"));
+    CtrInstallCaptureInventory present=result;
+    result=ctr_install_capture_confirm_inventory(present,NULL,0,-1,title);
+    CHECK(result.state==CTR_CAPTURE_INVENTORY_PRESENT);
+    result=ctr_install_capture_confirm_inventory(absent,NULL,0,0,title);
+    CHECK(result.state==CTR_CAPTURE_INVENTORY_INCONCLUSIVE);
+    result=ctr_install_capture_confirm_inventory(absent,entries,7,0,title);
+    CHECK(result.state==CTR_CAPTURE_INVENTORY_INCONCLUSIVE);
+    entries[0]^=1;
+    result=ctr_install_capture_confirm_inventory(absent,entries,0x61,0,title);
+    CHECK(result.state==CTR_CAPTURE_INVENTORY_INCONCLUSIVE && !strcmp(result.reason,"lookup_invalid"));
+
+    /* A full verified list with the observed 157/152 discrepancy can now
+     * reach the existing one-shot raw MCP callback recorder. */
+    CtrInstallCapture c={0};Mock m={.immediate=true,.callback=(int32_t)UINT32_C(0xFFFBF442)};
+    CHECK(absent.state==CTR_CAPTURE_INVENTORY_ABSENT);
+    CHECK(!ctr_install_capture_run(&c,&ops,&m,0));
+    CHECK(c.attempted && c.submitted && m.starts==1 && m.callback_seen && m.ended);
+    CHECK((uint32_t)m.raw==UINT32_C(0xFFFBF442));
 }
 
 typedef struct {
