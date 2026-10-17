@@ -34,6 +34,7 @@ check-c:
 	$(MAKE) -C tests/audio-engine check sanitize
 	$(MAKE) -C tests/audio-stream-native check sanitize
 	$(MAKE) -C tests/m1-storage check sanitize
+	$(MAKE) -C tests/install-capture check sanitize
 	$(MAKE) -C tests/recomp-progress check sanitize
 check-c-portable:
 	@set -e; for suite in cpu guest services heap kernel hid gsp gx pica gx2-shader gx2-native vertex scenes guest-draws relay multiple threads filesystem assets textures apt report audio dsp-adpcm cstm audio-engine audio-stream-native recomp-progress; do $(MAKE) -C tests/$$suite check; done

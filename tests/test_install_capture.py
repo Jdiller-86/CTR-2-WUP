@@ -1,0 +1,66 @@
+"""The diagnostic package must be explicit, bounded and preserve its inputs."""
+import copy
+import importlib.util
+import json
+from pathlib import Path
+import tempfile
+import unittest
+from unittest.mock import patch
+
+ROOT=Path(__file__).resolve().parents[1]
+spec=importlib.util.spec_from_file_location('install_capture_package',ROOT/'tools/package-install-capture.py')
+capture=importlib.util.module_from_spec(spec)
+spec.loader.exec_module(capture)
+
+
+class CapturePackageTests(unittest.TestCase):
+    def setUp(self):
+        self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
+        self.root=Path(self.temp.name)
+        self.document=json.loads((ROOT/'packaging/install-capture.json').read_text())
+        self.path=self.root/'identity.json'
+
+    def check_config(self,document):
+        self.path.write_text(json.dumps(document))
+        return capture.configuration(self.path)
+
+    def test_exact_fixed_candidate_and_header_bind_all_seven_bytestrings(self):
+        document,data=self.check_config(self.document)
+        self.assertEqual(json.loads(data),self.document)
+        self.assertEqual(sum(row['size'] for row in document['files']),4397332)
+        generated=capture.header(document)
+        self.assertIn('UINT64_C(0x0005000043543257)',generated)
+        self.assertIn(document['package_source'],generated)
+        for row in document['files']:
+            expected=','.join(f'0x{byte:02x}' for byte in bytes.fromhex(row['sha256']))
+            self.assertIn('{"'+row['name']+'",'+str(row['size'])+', {'+expected+'}}',generated)
+
+    def test_other_titles_missing_duplicates_and_injected_paths_are_rejected(self):
+        bad=copy.deepcopy(self.document);bad['title_id']='0005001010040100'
+        cases=[bad]
+        for name in ('../../other.app','";bad();','title.key','extra.app'):
+            bad=copy.deepcopy(self.document);bad['files'][0]['name']=name;cases.append(bad)
+        bad=copy.deepcopy(self.document);bad['files'][0]=bad['files'][1];cases.append(bad)
+        bad=copy.deepcopy(self.document);bad['files'].pop();cases.append(bad)
+        for value in (-1,0,True,16*1024*1024+1):
+            bad=copy.deepcopy(self.document);bad['files'][0]['size']=value;cases.append(bad)
+        for value in ('0'*63,'x'*64,None):
+            bad=copy.deepcopy(self.document);bad['files'][0]['sha256']=value;cases.append(bad)
+        for bad in cases:
+            with self.subTest(document=bad),self.assertRaises(ValueError):self.check_config(bad)
+
+    def test_preexisting_output_is_preserved_without_invoking_the_compiler(self):
+        sdk=self.root/'sdk';sdk.mkdir()
+        (sdk/'ctr2wup-image-digest.txt').write_text(capture.audio.release.SDK_IMAGE+'\n')
+        output=self.root/'out';output.mkdir();(output/'keep').write_bytes(b'original')
+        with patch.object(capture,'identity',return_value='a'*40),patch.object(capture.subprocess,'run') as run:
+            with self.assertRaisesRegex(ValueError,'preserved'):capture.package(output,sdk)
+        run.assert_not_called();self.assertEqual((output/'keep').read_bytes(),b'original')
+
+    def test_sdk_mismatch_cannot_compile_and_guide_stays_three_short_paragraphs(self):
+        sdk=self.root/'sdk';sdk.mkdir();(sdk/'ctr2wup-image-digest.txt').write_text('unverified')
+        with patch.object(capture,'identity',return_value='a'*40),patch.object(capture.subprocess,'run') as run:
+            with self.assertRaisesRegex(ValueError,'pinned'):capture.package(self.root/'out',sdk)
+        run.assert_not_called();self.assertFalse((self.root/'out').exists())
+        paragraphs=(ROOT/'tools/templates/install-capture.md').read_text().strip().split('\n\n')
+        self.assertEqual(len(paragraphs),3);self.assertLess(sum(len(p.split()) for p in paragraphs),160)

@@ -17,8 +17,8 @@ Commercial games and the GUI are not supported yet.
    connection and timing; native tone playback does not cover guest audio.
 3. **Finish original-title installation** ([#37](https://github.com/Jdiller-86/CTR-2-WUP/issues/37)).
    The keyless, self-signed plaintext WUP candidate and automatic SD recovery
-   probe exist. Installation through WUP Installer GX2 and two Menu launches
-   are still unverified.
+   probe exist. Use the fixed-package MCP error capture to resolve installer
+   rejection, then verify the two Menu launches.
    This hardware-only gap does not block CPU, graphics or audio development.
 
 ## Milestones
