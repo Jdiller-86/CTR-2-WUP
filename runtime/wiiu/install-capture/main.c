@@ -5,12 +5,17 @@
 #include "install_capture.h"
 #include "install_capture_package.h"
 #include "test_report.h"
+#include "test_lifecycle.h"
 #include "report_storage.h"
 #include <coreinit/ios.h>
 #include <coreinit/mcp.h>
 #include <coreinit/memdefaultheap.h>
+#include <coreinit/foreground.h>
 #include <coreinit/thread.h>
 #include <coreinit/time.h>
+#include <coreinit/title.h>
+#include <proc_ui/procui.h>
+#include <sysapp/launch.h>
 #include <vpad/input.h>
 #include <whb/gfx.h>
 #include <whb/log.h>
@@ -29,7 +34,8 @@ static ctr_test_report report;
 static ctr_report_storage storage={.client=-1};
 static CtrInstallCapture capture;
 static int32_t mcp=-1;
-static bool exit_requested,ui_running=true;
+static bool exit_requested,exit_observed,foreground=true,gfx_ready,console_ready;
+static ctr_test_lifecycle lifecycle;
 static uint32_t buttons;
 static MCPInstallInfo info __attribute__((aligned(64)));
 static MCPInstallProgress progress_info __attribute__((aligned(64)));
@@ -55,9 +61,11 @@ static bool record(void *unused,const char *event,int32_t result,
 
 static bool pump(void *unused) {
     (void)unused;buttons=0;
-    ui_running=WHBProcIsRunning();
-    if(!ui_running)exit_requested=true;
-    else {
+    ProcUIStatus status=ProcUIProcessMessages(TRUE);
+    foreground=status==PROCUI_STATUS_IN_FOREGROUND;
+    if(status==PROCUI_STATUS_EXITING) { exit_requested=true;exit_observed=true; }
+    else if(status==PROCUI_STATUS_RELEASE_FOREGROUND)ProcUIDrawDoneRelease();
+    if(foreground) {
         VPADStatus pad;VPADReadError error;
         if(VPADRead(VPAD_CHAN_0,&pad,1,&error)>0 && error==VPAD_READ_SUCCESS)buttons=pad.trigger;
         if(buttons&(VPAD_BUTTON_MINUS|VPAD_BUTTON_B))exit_requested=true;
@@ -133,10 +141,53 @@ static int32_t get_progress(void *unused,CtrInstallCaptureProgress *out) {
 
 static int32_t abort_install(void *unused) { (void)unused;return MCP_InstallTitleAbort(mcp); }
 
+static uint32_t home_exit(void *unused) { (void)unused;exit_requested=true;return 0; }
+static uint32_t save_ready(void *unused) { (void)unused;OSSavesDone_ReadyToRelease();return 0; }
+static void cleanup(void *unused) {
+    (void)unused;
+    if(mcp>=0) { MCP_Close(mcp);mcp=-1; }
+    if(console_ready) { WHBLogConsoleFree();console_ready=false; }
+    if(gfx_ready) { WHBGfxShutdown();gfx_ready=false; }
+    ctr_test_report_close(&report);
+}
+static void clear_callbacks(void *unused) {
+    (void)unused;ProcUIClearCallbacks();
+    ctr_test_report_set_volume_sync(&report,NULL,NULL);
+    ctr_report_storage_close(&storage);
+    ProcUISetSaveCallback(save_ready,NULL);
+}
+static void request_menu(void *unused) { (void)unused;SYSLaunchMenu(); }
+static ctr_proc_status process_messages(void *unused) {
+    (void)unused;
+    switch(ProcUIProcessMessages(TRUE)) {
+        case PROCUI_STATUS_IN_FOREGROUND:return CTR_PROC_FOREGROUND;
+        case PROCUI_STATUS_IN_BACKGROUND:return CTR_PROC_BACKGROUND;
+        case PROCUI_STATUS_RELEASE_FOREGROUND:return CTR_PROC_RELEASE;
+        case PROCUI_STATUS_EXITING:return CTR_PROC_EXITING;
+        default:return (ctr_proc_status)-1;
+    }
+}
+static void release_foreground(void *unused) { (void)unused;ProcUIDrawDoneRelease(); }
+static void wait_messages(void *unused) { (void)unused;OSSleepTicks(OSMillisecondsToTicks(5)); }
+static void shutdown_procui(void *unused) { (void)unused;ProcUIShutdown(); }
+static void shutdown_whb(void *unused) { (void)unused;WHBProcShutdown(); }
+static void checkpoint(void *unused,const char *message) {
+    (void)unused;
+    if(report.path[0] && !report.failed)ctr_test_report_checkpoint(&report,message);
+}
+static const ctr_exit_ops exit_ops={cleanup,clear_callbacks,request_menu,process_messages,
+    release_foreground,wait_messages,shutdown_procui,shutdown_whb,checkpoint};
+
 int main(void) {
+    bool saved=false;
     WHBProcInit();
-    if(!WHBGfxInit()) { WHBProcShutdown();return 1; }
-    if(!WHBLogConsoleInit()) { WHBGfxShutdown();WHBProcShutdown();return 1; }
+    lifecycle.title_id=OSGetTitleID();
+    if(ctr_test_from_hbl(lifecycle.title_id))
+        ProcUIRegisterCallback(PROCUI_CALLBACK_HOME_BUTTON_DENIED,home_exit,NULL,99);
+    gfx_ready=WHBGfxInit();
+    if(!gfx_ready)goto finish;
+    console_ready=WHBLogConsoleInit();
+    if(!console_ready)goto finish;
     WHBLogPrintf("CTR2WUP Install Capture");
     WHBLogPrintf("Checking the existing M1 package. No files will be replaced.");
     WHBLogConsoleDraw();
@@ -178,17 +229,17 @@ int main(void) {
         line("CAPTURE scope=installation_diagnosis full_milestone_acceptance=0");
         ctr_test_report_line(&report,"END OF REPORT");
     }
-    bool saved=ctr_test_report_close(&report) && report.path[0];
+    saved=ctr_test_report_close(&report) && report.path[0];
     if(saved)WHBLogPrintf("Report saved: sd:/ctr2wup/install-check/install-capture/");
     else WHBLogPrintf("REPORT WRITE FAILED. Please photograph this screen.");
     WHBLogPrintf("Minus: exit. Return the install-capture folder by FTP.");
-    if(ui_running) {
+    if(foreground) {
         WHBLogConsoleDraw();
-        if(!saved)exit_requested=false;
+        if(!saved && !exit_observed)exit_requested=false;
     }
     while(!exit_requested && pump(NULL)) {}
-    if(mcp>=0)MCP_Close(mcp);
+finish:
+    if(!ctr_test_complete_exit(&lifecycle,exit_observed,&exit_ops,NULL))saved=false;
     ctr_report_storage_close(&storage);
-    WHBLogConsoleFree();WHBGfxShutdown();WHBProcShutdown();
     return saved?0:1;
 }
