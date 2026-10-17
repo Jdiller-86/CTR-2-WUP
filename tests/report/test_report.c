@@ -2,6 +2,7 @@
 #include "test_report.h"
 #include "test_result.h"
 #include "report_storage.h"
+#include "ctr_sha256.h"
 #include "test_guide.h"
 #include "test_lifecycle.h"
 #include "image_scale.h"
@@ -17,6 +18,31 @@ static unsigned checks;
 
 static int32_t storage_add_result=123,storage_flush_result,storage_delete_result;
 static unsigned storage_add_calls,storage_flush_calls,storage_delete_calls;
+static unsigned char sd_bytes[5001];
+static uint32_t sd_position,sd_size=sizeof(sd_bytes),sd_flags;
+static int32_t sd_stat_error,sd_open_error,sd_read_error,sd_close_error,sd_end_error;
+static unsigned sd_opens,sd_closes;
+FSError FSAGetStat(FSAClientHandle client,const char *path,FSAStat *stat) {
+    CHECK(client==123 && !strcmp(path,"/vol/external01/ctr2wup/capture.txt"));
+    *stat=(FSAStat){.size=sd_size,.flags=sd_flags};return sd_stat_error;
+}
+FSError FSAGetStatFile(FSAClientHandle client,FSAFileHandle file,FSAStat *stat) {
+    CHECK(client==123 && file==17);*stat=(FSAStat){.size=sd_size,.flags=sd_flags};return sd_end_error;
+}
+FSError FSAOpenFileEx(FSAClientHandle client,const char *path,const char *mode,uint32_t permissions,
+                       uint32_t flags,uint32_t size,FSAFileHandle *file) {
+    CHECK(client==123 && !strcmp(path,"/vol/external01/ctr2wup/capture.txt") && !strcmp(mode,"r"));
+    CHECK(!permissions && !flags && !size);*file=17;sd_position=0;++sd_opens;return sd_open_error;
+}
+FSError FSAReadFile(FSAClientHandle client,void *buffer,uint32_t size,uint32_t count,FSAFileHandle file,uint32_t flags) {
+    CHECK(client==123 && file==17 && size==1 && !flags && ((uintptr_t)buffer&63)==0);
+    CHECK(count<=4096 && count<=sizeof(sd_bytes)-sd_position);
+    if(sd_read_error)return sd_read_error;
+    memcpy(buffer,sd_bytes+sd_position,count);sd_position+=count;return (int32_t)count;
+}
+FSError FSACloseFile(FSAClientHandle client,FSAFileHandle file) {
+    CHECK(client==123 && file==17);++sd_closes;return sd_close_error;
+}
 FSAClientHandle FSAAddClient(FSAClientAttachAsyncData *data) {
     CHECK(data==NULL);++storage_add_calls;return storage_add_result;
 }
@@ -51,6 +77,41 @@ static void storage_tests(void) {
     CHECK(ctr_report_storage_sync(&storage));
     storage_delete_result=-17;ctr_report_storage_close(&storage);
     CHECK(storage.client==-1 && storage.last_status==-17 && storage_delete_calls==2);
+}
+
+static void storage_verify_tests(void) {
+    ctr_report_storage storage={.client=123};const char *path="fs:/vol/external01/ctr2wup/capture.txt";
+    for(unsigned i=0;i<sizeof(sd_bytes);++i)sd_bytes[i]=(unsigned char)(i*19);
+    ctr_sha256 hash;uint8_t digest[32];ctr_sha256_init(&hash);
+    CHECK(ctr_sha256_update(&hash,sd_bytes,sizeof(sd_bytes)) && ctr_sha256_final(&hash,digest));
+    CHECK(ctr_report_storage_verify(&storage,path,sizeof(sd_bytes),digest));
+    CHECK(sd_opens==1 && sd_closes==1 && storage.last_status==0);
+    sd_bytes[4900]^=1; /* Same-length corruption in the second FSA read. */
+    CHECK(!ctr_report_storage_verify(&storage,path,sizeof(sd_bytes),digest));sd_bytes[4900]^=1;
+    CHECK(errno==EIO && sd_opens==sd_closes);
+    for(unsigned failure=0;failure<7;++failure) {
+        if(failure==0)sd_stat_error=-6;
+        if(failure==1)sd_open_error=-9;
+        if(failure==2)sd_read_error=-17;
+        if(failure==3)sd_read_error=23; /* Short read must not acknowledge persistence. */
+        if(failure==4)sd_close_error=-18;
+        if(failure==5)sd_end_error=-4;
+        if(failure==6)sd_size=5000;
+        CHECK(!ctr_report_storage_verify(&storage,path,sizeof(sd_bytes),digest) && errno==EIO);
+        if(failure!=3 && failure!=6)CHECK(storage.last_status<0);
+        sd_stat_error=sd_open_error=sd_read_error=sd_close_error=sd_end_error=0;sd_size=sizeof(sd_bytes);
+    }
+    sd_flags=FS_STAT_DIRECTORY;CHECK(!ctr_report_storage_verify(&storage,path,sizeof(sd_bytes),digest));
+    sd_flags=FS_STAT_LINK;CHECK(!ctr_report_storage_verify(&storage,path,sizeof(sd_bytes),digest));sd_flags=0;
+    unsigned opens=sd_opens;
+    CHECK(!ctr_report_storage_verify(&storage,"sd:/ctr2wup/capture.txt",5001,digest) && errno==EINVAL);
+    CHECK(!ctr_report_storage_verify(&storage,"fs:/vol/storage_mlc01/capture.txt",5001,digest));
+    CHECK(!ctr_report_storage_verify(&storage,"fs:/vol/external01/../capture.txt",5001,digest));
+    CHECK(!ctr_report_storage_verify(&storage,path,0,digest));
+    CHECK(!ctr_report_storage_verify(&storage,path,UINT64_MAX,digest));
+    CHECK(!ctr_report_storage_verify(&storage,path,5001,NULL));
+    CHECK(!ctr_report_storage_verify(NULL,path,5001,digest));storage.client=-1;
+    CHECK(!ctr_report_storage_verify(&storage,path,5001,digest));CHECK(sd_opens==opens);
 }
 
 static char guide_log_text[32768];
@@ -708,6 +769,7 @@ int main(int argc,char **argv) {
     if(argc==4 && !strcmp(argv[1],"--ctr-test-child"))return interrupted_report(argv[2],argv[3]);
     checks+=test_audio_stream_app();
     storage_tests();
+    storage_verify_tests();
     return_directory_tests();
     slice_tests();guide_tests();
     lifecycle_tests();

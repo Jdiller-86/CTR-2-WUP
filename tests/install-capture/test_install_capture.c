@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 #include "install_capture.h"
 #include "ctr_sha256.h"
+#include "log.h"
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -129,4 +130,73 @@ static void selection(void) {
     CHECK(!ctr_install_capture_select(&armed,true,true,true));CHECK(!armed);
 }
 
-int main(void) { payload();asynchronous();selection();printf("Install capture: %u checks passed\n",assertions);return 0; }
+typedef struct {
+    capture_log *log;
+    unsigned syncs,verifications;
+    bool missing,corrupt,wrong_sd;
+    int sync_error;
+} LogProbe;
+
+static bool sync_log(void *context) {
+    LogProbe *p=context;++p->syncs;CHECK(!p->log->file);
+    if(p->sync_error) { errno=p->sync_error;return false; }
+    if(p->missing)CHECK(unlink(p->log->path)==0);
+    if(p->corrupt) {
+        FILE *f=fopen(p->log->path,"r+b");CHECK(f);
+        CHECK(fwrite("?",1,1,f)==1 && fclose(f)==0);
+    }
+    return true;
+}
+static bool verify_log(void *context,const char *path,uint64_t bytes,const uint8_t digest[32]) {
+    LogProbe *p=context;++p->verifications;
+    CHECK(!strcmp(path,p->log->path) && bytes==p->log->bytes && bytes>0 && digest);
+    if(p->wrong_sd) { errno=ENOENT;return false; }
+    return true;
+}
+static void logs(void) {
+    char directory[]="/tmp/ctr-capture-log-XXXXXX";CHECK(mkdtemp(directory));
+    capture_log log={0};LogProbe p={.log=&log};
+    CHECK(capture_log_open(&log,directory,1,sync_log,verify_log,&p));
+    CHECK(log.verified==1 && log.file && p.syncs==1 && p.verifications==1);
+    CHECK(capture_log_line(&log,"CAPTURE event=callback_raw code=0xfffbf442"));
+    char path[512];strcpy(path,log.path);
+    CHECK(capture_log_close(&log));CHECK(!log.file);
+    FILE *f=fopen(path,"rb");CHECK(f);char text[4096]={0};
+    CHECK(fread(text,1,sizeof(text)-1,f)==log.bytes && fclose(f)==0);
+    CHECK(strstr(text,"mcp-capture-v2\nCAPTURE event=callback_raw code=0xfffbf442\n"));
+    ctr_sha256 expected=log.expected;uint8_t a[32],b[32];
+    CHECK(ctr_sha256_final(&expected,a));ctr_sha256_init(&expected);
+    CHECK(ctr_sha256_update(&expected,text,strlen(text)) && ctr_sha256_final(&expected,b));
+    CHECK(!memcmp(a,b,32)); /* Written intent, not a digest derived from read-back. */
+    CHECK(capture_log_checkpoint(&log,"EXIT stage=main_return"));CHECK(!log.file);
+    log.sync=NULL;log.verify=NULL;unsigned syncs=p.syncs,verified=p.verifications;
+    CHECK(capture_log_checkpoint(&log,"EXIT after_system_transition"));
+    CHECK(p.syncs==syncs && p.verifications==verified); /* No new FSA client after transition. */
+    capture_log second={0};p=(LogProbe){.log=&second};
+    CHECK(capture_log_open(&second,directory,1,sync_log,verify_log,&p));
+    CHECK(strcmp(path,second.path)); /* Existing per-session evidence is preserved. */
+    CHECK(capture_log_close(&second));CHECK(unlink(second.path)==0 && unlink(path)==0);
+
+    for(unsigned failure=0;failure<5;++failure) {
+        log=(capture_log){0};p=(LogProbe){.log=&log};
+        CHECK(capture_log_open(&log,directory,2+failure,sync_log,verify_log,&p));
+        if(failure==0)p.missing=true;
+        if(failure==1)p.corrupt=true;
+        if(failure==2)p.sync_error=ENOSPC;
+        if(failure==3)p.wrong_sd=true;
+        if(failure==4) { CHECK(capture_log_close(&log));CHECK(unlink(log.path)==0); }
+        CHECK(!capture_log_close(&log));CHECK(log.failed && !log.file);
+        const char *stage=log.stage;int error=log.error;
+        CHECK(!capture_log_line(&log,"No false saved message"));
+        CHECK(!capture_log_close(&log) && log.stage==stage && log.error==error);
+        CHECK(!capture_log_checkpoint(&log,"Never recreate missing output"));
+        if(failure==0 || failure==4)CHECK(access(log.path,F_OK)!=0);
+        else CHECK(unlink(log.path)==0);
+    }
+    log=(capture_log){0};p=(LogProbe){.log=&log,.wrong_sd=true};
+    CHECK(!capture_log_open(&log,directory,99,sync_log,verify_log,&p));
+    CHECK(log.failed && !strcmp(log.stage,"sd_read_verify") && !log.file);
+    CHECK(unlink(log.path)==0);CHECK(rmdir(directory)==0);
+}
+
+int main(void) { payload();asynchronous();selection();logs();printf("Install capture: %u checks passed\n",assertions);return 0; }

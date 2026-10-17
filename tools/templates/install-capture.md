@@ -1,5 +1,5 @@
-Copy the contents of `sd-card/` to the SD root over FTP. Keep the existing `sd:/install/CTR2WUP-M1/` folder unchanged. This app captures the error hidden by WUP Installer GX2; it verifies the exact original package before allowing one installation attempt.
+FTP-copy the contents of `sd-card/` to the SD root, replacing the previous Install Capture app. Keep `sd:/install/CTR2WUP-M1/` unchanged. This app captures the error hidden by WUP Installer GX2.
 
-Open **CTR2WUP Install Capture** from the Wii U Menu in Aroma. Choose the same destination as before: **A** for internal memory or **X** for USB. The app saves the exact result automatically. Minus cancels an active attempt and waits for MCP to finish.
+Open **CTR2WUP Install Capture** in Aroma. After the SD read-back check passes, choose the same destination: **A** for internal memory or **X** for USB. The exact result appears onscreen and is logged automatically. Minus cancels and waits for MCP.
 
-When the result appears, press **Minus** to exit. FTP-copy `sd:/ctr2wup/install-check/install-capture/`, ZIP that folder and send it back. If the app says the report could not be saved, send a photo of its screen.
+When the result appears, press **Minus**. Refresh the FTP listing, copy `sd:/ctr2wup/install-check/install-capture/` and send that folder as a ZIP. If an SD check fails, send a photo showing its stage/error instead.

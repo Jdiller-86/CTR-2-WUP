@@ -103,7 +103,7 @@ def package(output,sdk):
         entries.update(('support/'+name,data) for name,data in audio.sdk_entries(sdk/'licenses').items())
         records=[{'path':name,'size':len(data),'sha256':hashlib.sha256(data).hexdigest()}
                  for name,data in sorted(entries.items())]
-        manifest={'schema_version':1,'kind':'ctr2wup-install-capture','protocol':'mcp-capture-v1',
+        manifest={'schema_version':1,'kind':'ctr2wup-install-capture','protocol':'mcp-capture-v2',
                   'source_commit':commit,'source_dirty':False,'package_source':document['package_source'],
                   'title_id':document['title_id'],'package_unchanged':True,'original_inputs_only':True,
                   'requires_signature_patches':True,'console_verified':False,'full_milestone_acceptance':False,
