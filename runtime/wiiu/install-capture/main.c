@@ -18,6 +18,7 @@
 #include <coreinit/thread.h>
 #include <coreinit/time.h>
 #include <coreinit/title.h>
+#include <nn/acp/title.h>
 #include <proc_ui/procui.h>
 #include <sysapp/launch.h>
 #include <vpad/input.h>
@@ -45,6 +46,9 @@ static MCPInstallInfo info __attribute__((aligned(64)));
 static MCPInstallProgress progress_info __attribute__((aligned(64)));
 static char install_path[0x280] __attribute__((aligned(64)))=MCP_PATH;
 static IOSVec install_vector __attribute__((aligned(64)));
+#if CTR_CAPTURE_CURRENT_FILE_COUNT
+static ACPMetaXml installed_meta __attribute__((aligned(64)));
+#endif
 
 static void notice(const char *format,...) {
     char text[512];va_list args;va_start(args,format);
@@ -125,7 +129,65 @@ static bool payload_ready(void) {
     return line(text) && ok;
 }
 
-static bool title_absent(void) {
+static unsigned repair_targets(void) {
+    unsigned targets=0;
+#if CTR_CAPTURE_REPAIR_FILE_COUNT
+    for(unsigned target=0;target<2;++target) {
+        bool same=true;
+        for(size_t i=0;i<CTR_CAPTURE_REPAIR_FILE_COUNT;++i) {
+            const CtrInstallCaptureFile *file=&ctr_capture_previous_files[i];
+            bool ok=ctr_report_storage_verify_title(&storage,target,CTR_CAPTURE_TITLE_ID,
+                                                     file->name,file->size,file->sha256);
+            char text[256];snprintf(text,sizeof(text),
+                "REPAIR_FILE target=%u path=%s match=%u fsa=0x%08x errno=%d",
+                target,file->name,ok,(unsigned)(uint32_t)storage.last_status,ok?0:errno);
+            if(!line(text))return 0;
+            if(!ok) { same=false;break; }
+        }
+        if(same)targets|=1u<<target;
+    }
+    char text[192];snprintf(text,sizeof(text),"REPAIR predecessor=%s version=%u target_mask=%u deletion=0",
+        CTR_CAPTURE_REPAIR_SOURCE,CTR_CAPTURE_REPAIR_VERSION,targets);
+    if(!line(text))return 0;
+#endif
+    return targets;
+}
+
+static bool installed_profile(unsigned target) {
+#if CTR_CAPTURE_CURRENT_FILE_COUNT
+    bool files_ok=true;
+    for(size_t i=0;i<CTR_CAPTURE_CURRENT_FILE_COUNT;++i) {
+        const CtrInstallCaptureFile *file=&ctr_capture_current_files[i];
+        bool ok=ctr_report_storage_verify_title(&storage,target,CTR_CAPTURE_TITLE_ID,
+                                                 file->name,file->size,file->sha256);
+        char text[256];snprintf(text,sizeof(text),
+            "INSTALLED_FILE target=%u path=%s match=%u fsa=0x%08x errno=%d",
+            target,file->name,ok,(unsigned)(uint32_t)storage.last_status,ok?0:errno);
+        if(!line(text))return false;
+        files_ok=files_ok && ok;
+    }
+    memset(&installed_meta,0,sizeof(installed_meta));
+    ACPResult result=ACPGetTitleMetaXml(CTR_CAPTURE_TITLE_ID,&installed_meta);
+    bool metadata_ok=result==ACP_RESULT_SUCCESS && installed_meta.title_id==CTR_CAPTURE_TITLE_ID &&
+        installed_meta.title_version==CTR_CAPTURE_CURRENT_VERSION && installed_meta.group_id==0x1337 &&
+        !installed_meta.app_launch_type && !installed_meta.invisible_flag && installed_meta.drc_use==1 &&
+        !strncmp(installed_meta.content_platform,"WUP",sizeof(installed_meta.content_platform)) &&
+        !strncmp(installed_meta.shortname_en,"CTR2WUP Install Check",sizeof(installed_meta.shortname_en));
+    char text[256];snprintf(text,sizeof(text),
+        "INSTALLED_META acp=0x%08x title=%016llx version=%u profile_matches=%u files_match=%u",
+        (unsigned)(uint32_t)result,(unsigned long long)installed_meta.title_id,
+        installed_meta.title_version,metadata_ok,files_ok);
+    bool logged=line(text);
+    notice(logged && files_ok && metadata_ok?"Installed files and Menu metadata: PASS.":
+        "Installed Menu checks failed; return this report.");
+    return logged && files_ok && metadata_ok;
+#else
+    (void)target;return true;
+#endif
+}
+
+static bool title_eligible(unsigned *targets) {
+    *targets=0;
     int32_t count=MCP_TitleCount(mcp);
     if(!record(NULL,"title_count",count,NULL))return false;
     if(count<0 || (uint32_t)count>CTR_CAPTURE_TITLE_LIMIT) {
@@ -155,6 +217,7 @@ static bool title_absent(void) {
     bool logged=record(NULL,"title_list",result,NULL) &&
         record(NULL,"target_lookup_api",lookup_result,NULL) && record(NULL,"title_count_after",after,NULL);
     char text[384];
+    bool predecessor=false;
     if(inventory.state==CTR_CAPTURE_INVENTORY_PRESENT) {
         const MCPTitleListType *match=inventory.match_index==UINT32_MAX?&lookup:&titles[inventory.match_index];
         /* Only the fixed target's metadata is recorded, never the inventory
@@ -171,6 +234,10 @@ static bool title_absent(void) {
             CTR_CAPTURE_TITLE,inventory.match_index==UINT32_MAX?"exact_lookup":"list",
             inventory.match_index,match->titleVersion,device,path);
         logged=line(text) && logged;
+#if CTR_CAPTURE_REPAIR_FILE_COUNT
+        predecessor=match->titleVersion==CTR_CAPTURE_REPAIR_VERSION && result==0 &&
+                    count==after && found<capacity;
+#endif
     }
     MEMFreeToDefaultHeap(titles);
     const char *state=inventory.state==CTR_CAPTURE_INVENTORY_ABSENT?"absent":
@@ -180,9 +247,17 @@ static bool title_absent(void) {
         state,inventory.reason,(long)count,found,(long)after,capacity,
         inventory.state!=CTR_CAPTURE_INVENTORY_ABSENT);
     logged=line(text) && logged;
-    if(inventory.state==CTR_CAPTURE_INVENTORY_PRESENT)notice("Matching title record found; installation blocked.");
+    if(inventory.state==CTR_CAPTURE_INVENTORY_PRESENT) {
+        if(logged && predecessor)*targets=repair_targets();
+        notice(*targets?"Previous CTR2WUP package recognized; update available.":
+            "Existing title is not a verified predecessor; writes blocked.");
+    }
     else if(inventory.state==CTR_CAPTURE_INVENTORY_INCONCLUSIVE)notice("Title inventory incomplete; installation blocked.");
-    return logged && inventory.state==CTR_CAPTURE_INVENTORY_ABSENT;
+    else *targets=3;
+    snprintf(text,sizeof(text),"ELIGIBILITY target_mask=%u verified_predecessor=%u deletion=0",
+        *targets,inventory.state==CTR_CAPTURE_INVENTORY_PRESENT && *targets!=0);
+    logged=line(text) && logged;
+    return logged && *targets!=0;
 }
 
 static int32_t get_info(void *unused) {
@@ -277,7 +352,8 @@ static const ctr_exit_ops exit_ops={cleanup,clear_callbacks,request_menu,process
     release_foreground,wait_messages,shutdown_procui,shutdown_whb,checkpoint};
 
 int main(void) {
-    bool saved=false,installed=false;
+    bool saved=false,installed=false,launch_ready=false;
+    unsigned eligible_targets=0;
     WHBProcInit();
     lifecycle.title_id=OSGetTitleID();
     if(ctr_test_from_hbl(lifecycle.title_id))
@@ -315,28 +391,36 @@ int main(void) {
                  * submits no installation request. Preserve both outcomes. */
                 int32_t package_result=get_info(NULL);
                 bool package_ok=record(NULL,"package_preflight",package_result,NULL) && package_result==0;
-                bool inventory_ok=!report.failed && title_absent();
+                bool inventory_ok=!report.failed && title_eligible(&eligible_targets);
                 ready=package_ok && inventory_ok;
             }
         }
     }
     if(ready) {
         notice("SD startup report: exact read-back verified.");
-        notice(CTR_CAPTURE_M1_COMPLETION?"One install attempt; either destination is sufficient.":
+        notice(CTR_CAPTURE_M1_COMPLETION?(eligible_targets==3?
+            "One install attempt; either destination is sufficient.":
+            "Update the recognized title on its existing device."):
             "Use the SAME destination as the failed GX2 attempt.");
-        notice("A: internal memory. X: USB. Minus: exit.");
+        if(eligible_targets==3)notice("A: internal memory. X: USB. Minus: exit.");
+        else notice(eligible_targets==2?"X: update existing USB title. Minus: exit.":
+            "A: update existing internal title. Minus: exit.");
         bool selection_armed=false;
         while(pump(NULL)) {
             if(ctr_install_capture_select(&selection_armed,input_valid,
                 (held_buttons&(VPAD_BUTTON_A|VPAD_BUTTON_X))!=0,
                 (buttons&(VPAD_BUTTON_A|VPAD_BUTTON_X))!=0)) {
                 unsigned target=(buttons&VPAD_BUTTON_X)?1:0;
+                if(!(eligible_targets&(1u<<target))) {
+                    notice("Use the recognized title's destination.");continue;
+                }
                 /* Recheck after waiting for the explicit selection. */
-                if(payload_ready() && title_absent()) {
+                if(payload_ready() && title_eligible(&eligible_targets) && (eligible_targets&(1u<<target))) {
                     static const CtrInstallCaptureOps ops={record,get_info,set_target,start,get_progress,abort_install,pump};
                     installed=ctr_install_capture_run(&capture,&ops,NULL,target);
                     notice(installed?"Installation succeeded.":"Installation stopped.");
                     if(capture.submitted)notice("Raw MCP callback: 0x%08x",(unsigned)(uint32_t)capture.result);
+                    if(installed && foreground && !exit_requested)launch_ready=installed_profile(target);
                 } else notice("Preflight changed; installation blocked.");
                 break;
             }
@@ -361,7 +445,7 @@ int main(void) {
             (unsigned)(uint32_t)storage.last_status);
     }
     if(CTR_CAPTURE_M1_COMPLETION) {
-        if(saved && installed)
+        if(saved && installed && launch_ready)
             notice("Next: launch Install Check twice from Wii U Menu.");
         notice("Minus: exit. FTP the whole install-check folder.");
     } else notice("Minus: exit. Return only the install-capture folder.");

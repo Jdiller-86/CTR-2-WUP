@@ -14,6 +14,15 @@ For plaintext WUPs, keep each file in its own padded content stream with FST
 offset zero, following the [packaging profile](packaging.md). Bind installation
 logging to the exact generated file inventory and candidate digest. Integrity
 checks alone do not establish MCP read compatibility or installed-title behavior.
+Require the independent `wup-menu-v1` check for new installation candidates:
+complete typed Menu metadata, unsigned COS `cmdFlags`, coherent title/group/OS
+identity and complete uncompressed TGA 2 artwork. Preserve the historical
+integrity-only reader for older evidence. An installed title may be updated only
+after its version and all eight compiled predecessor hashes match on the selected
+device; never infer ownership from a title ID or delete a title to bypass this check.
+After installation, read back all installed file hashes and log the raw ACP
+metadata result before prompting for Menu launch. Installation success and
+readable launch metadata are distinct from actual execution.
 
 Use one graphics owner: the native GX2/font/scaling path. Avoid OSScreen and GX2
 ownership conflicts; check the pinned SDK's actual API semantics. Always acquire

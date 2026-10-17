@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "title_id": "0005000043543257",
+  "source_commit": "caf509f9cc151335d4d34a199be505e1ea643ad0",
+  "title_version": 27,
+  "files": [
+    {
+      "name": "code/app.xml",
+      "size": 706,
+      "sha256": "63ec5ac72e8e53e9b93748b0e4eaf06e84336dd42454112c7b61288d72efbd9c"
+    },
+    {
+      "name": "code/cos.xml",
+      "size": 2227,
+      "sha256": "7fd878bb963e0c48d1c7f838554fe63bfae9a2bc0539cf56ee388e2695de71d5"
+    },
+    {
+      "name": "code/ctr2wup.rpx",
+      "size": 204770,
+      "sha256": "9a3d7114420ba1110b02d5fc3a3d02ebf697fc216c77f269a2b2b86cdcb9d48e"
+    },
+    {
+      "name": "meta/bootDrcTex.tga",
+      "size": 1229778,
+      "sha256": "7f3948e2b264bf6b54ed0dd968bd4702ff9bcab37e26c83fd5d66c4370d2c71e"
+    },
+    {
+      "name": "meta/bootLogoTex.tga",
+      "size": 28578,
+      "sha256": "ca7002fa05cd4f51ca15bafbb97fe8bbe220675c8cf6ffc9c2bbcd84c77727fc"
+    },
+    {
+      "name": "meta/bootTvTex.tga",
+      "size": 2764818,
+      "sha256": "5adeecb431022e419a47329ef0c4bb07dfa58cb45574205798502ce0d27f37eb"
+    },
+    {
+      "name": "meta/iconTex.tga",
+      "size": 65554,
+      "sha256": "da1c2ce91bec6dc42d25295d80fd5db5cd584a9cdb6afa4b3c85d5c14b4e16cd"
+    },
+    {
+      "name": "meta/meta.xml",
+      "size": 3489,
+      "sha256": "d5e54dace2d6232958df905e4553d00716bc261ef5cc7b5ce73566728f4a0de3"
+    }
+  ]
+}

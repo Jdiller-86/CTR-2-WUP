@@ -162,5 +162,26 @@ class PlainHomebrewTests(unittest.TestCase):
         groups={int(p.findtext('group')) for p in cos.find('permissions')}
         self.assertIn(11,groups)
         self.assertEqual(cos.find('argstr').get('length'),'4096')
-        report=pack_homebrew(staged,self.output)
+        report=pack_homebrew(staged,self.output,require_menu=True)
         self.assertTrue(report['ok'])
+        self.assertEqual(report['menu_profile'],'wup-menu-v1')
+        # A completely hashed/signed package can still be incompatible with
+        # Menu. The independent reader must examine types, not only digests.
+        path=self.output/'00000002.app';data=bytearray(path.read_bytes())
+        old=b'<cmdFlags type="unsignedInt" length="4">0</cmdFlags>'
+        new=b'<cmdFlags type="hexBinary" length="4">00000000</cmdFlags>'
+        size=(staged/'code/cos.xml').stat().st_size
+        xml=bytes(data[:size]).replace(old,new)
+        self.assertNotEqual(len(xml),size)
+        data[:len(xml)]=xml;path.write_bytes(data)
+        fst_path=self.output/'00000000.app';fst=bytearray(fst_path.read_bytes())
+        count=struct.unpack_from('>I',fst,8)[0]
+        struct.pack_into('>I',fst,32+count*32+3*16+8,len(xml))
+        fst_path.write_bytes(fst)
+        rehash_record(self.output,0,fst);rehash_record(self.output,2,data)
+        tmd=self.output/'title.tmd'
+        tmd.write_bytes(sign_document(tmd.read_bytes(),self.signing[1],kind='tmd'))
+        # Historical integrity review remains possible, with narrower scope.
+        self.assertEqual(verify_package(self.output)['menu_profile'],'not_requested')
+        with self.assertRaises(HostError) as error:verify_package(self.output,require_menu=True)
+        self.assertEqual(error.exception.code,'invalid_menu_profile')

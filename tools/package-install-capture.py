@@ -63,7 +63,7 @@ def validate_configuration(document):
         raise ValueError('Require every consecutive content stream and all title metadata')
 
 
-def header(document):
+def header(document,installed_files=None,title_version=None):
     validate_configuration(document)
     digest='package_manifest_sha256' if document['schema_version']==2 else 'package_artifact_sha256'
     record='manifest_sha256' if document['schema_version']==2 else 'artifact_sha256'
@@ -79,16 +79,59 @@ def header(document):
     for row in document['files']:
         digest=','.join('0x'+row['sha256'][i:i+2] for i in range(0,64,2))
         result.append('    {"'+row['name']+'",'+str(row['size'])+', {'+digest+'}},')
-    return '\n'.join(result+['};',''])
+    result.append('};')
+    if document['schema_version']==2:
+        previous=json.loads(audio.release.regular(ROOT/'packaging/install-predecessor.json',16384).read_bytes())
+        names={'code/app.xml','code/cos.xml','code/ctr2wup.rpx','meta/meta.xml',
+               'meta/iconTex.tga','meta/bootLogoTex.tga','meta/bootDrcTex.tga','meta/bootTvTex.tga'}
+        if (previous.get('schema_version')!=1 or previous.get('title_id')!=document['title_id']
+                or previous.get('source_commit')!='caf509f9cc151335d4d34a199be505e1ea643ad0'
+                or previous.get('title_version')!=27 or not isinstance(previous.get('files'),list)
+                or len(previous['files'])!=8 or {r.get('name') for r in previous['files']}!=names):
+            raise ValueError('Require the complete reviewed installed predecessor')
+        result += ['#define CTR_CAPTURE_REPAIR_FILE_COUNT 8',
+                   '#define CTR_CAPTURE_REPAIR_VERSION 27',
+                   '#define CTR_CAPTURE_REPAIR_SOURCE "'+previous['source_commit']+'"',
+                   'static const CtrInstallCaptureFile ctr_capture_previous_files[CTR_CAPTURE_REPAIR_FILE_COUNT]={']
+        for row in previous['files']:
+            if (type(row.get('size')) is not int or not 0<row['size']<=3*1024*1024
+                    or not isinstance(row.get('sha256'),str) or not re.fullmatch('[0-9a-f]{64}',row['sha256'])):
+                raise ValueError('Invalid installed predecessor file pin')
+            digest=','.join('0x'+row['sha256'][i:i+2] for i in range(0,64,2))
+            result.append('    {"'+row['name']+'",'+str(row['size'])+', {'+digest+'}},')
+        result.append('};')
+    else:
+        result.append('#define CTR_CAPTURE_REPAIR_FILE_COUNT 0')
+    if installed_files is not None:
+        names={'code/app.xml','code/cos.xml','code/ctr2wup.rpx','meta/meta.xml',
+               'meta/iconTex.tga','meta/bootLogoTex.tga','meta/bootDrcTex.tga','meta/bootTvTex.tga'}
+        if (document['schema_version']!=2 or type(title_version) is not int or not 28<=title_version<=65535
+                or not isinstance(installed_files,list)
+                or len(installed_files)!=8 or any(not isinstance(r,dict) for r in installed_files)
+                or {r.get('path') for r in installed_files}!=names):
+            raise ValueError('Require all independently verified original installed files')
+        result += ['#define CTR_CAPTURE_CURRENT_FILE_COUNT 8',
+                   '#define CTR_CAPTURE_CURRENT_VERSION '+str(title_version),
+                   'static const CtrInstallCaptureFile ctr_capture_current_files[CTR_CAPTURE_CURRENT_FILE_COUNT]={']
+        for row in installed_files:
+            if (type(row.get('bytes')) is not int or not 0<row['bytes']<=3*1024*1024
+                    or not isinstance(row.get('sha256'),str) or not re.fullmatch('[0-9a-f]{64}',row['sha256'])):
+                raise ValueError('Invalid installed current file pin')
+            digest=','.join('0x'+row['sha256'][i:i+2] for i in range(0,64,2))
+            result.append('    {"'+row['path']+'",'+str(row['bytes'])+', {'+digest+'}},')
+        result.append('};')
+    else:
+        result.append('#define CTR_CAPTURE_CURRENT_FILE_COUNT 0')
+    return '\n'.join(result+[''])
 
 
-def build_app(document,build,sdk):
+def build_app(document,build,sdk,*,installed_files=None,title_version=None):
     """Compile the reviewed frontend with immutable in-binary payload pins."""
     receipt=audio.release.regular(sdk/'ctr2wup-image-digest.txt',4096).read_bytes()
     if receipt.decode().strip()!=audio.release.SDK_IMAGE:
         raise ValueError('Require the pinned Wii U SDK receipt')
     build.mkdir()
-    (build/'install_capture_package.h').write_text(header(document),encoding='ascii')
+    (build/'install_capture_package.h').write_text(header(document,installed_files,title_version),encoding='ascii')
     subprocess.run(['make','-C',str(ROOT/'runtime/wiiu/install-capture'),'-j','3',
                     'OUTPUT='+str(build),'CONFIG='+str(build),'DEVKITPRO='+str(sdk),
                     'DEVKITPPC='+str(sdk/'devkitPPC')],check=True)

@@ -232,14 +232,15 @@ def review(folder, source, observations=None):
     if not isinstance(obs, dict): raise ValueError('Malformed observations')
     records = obs.get('runs', [])
     if not isinstance(obs, dict) or not isinstance(records, list) or any(not isinstance(r, dict) for r in records): raise ValueError('Malformed observations')
-    manual = [obs.get('suite_id') == kit.get('suite_id'), obs.get('installer') == 'WUP Installer GX2',
+    manual = [obs.get('suite_id') == kit.get('suite_id'),
+              obs.get('installer') in ('WUP Installer GX2','CTR2WUP Install Capture'),
               obs.get('environment_unchanged') is True or all(isinstance(obs.get(k), str) and obs[k].strip() for k in ('firmware', 'aroma')),
               obs.get('install_success'), obs.get('title_id_checked')]
     for run in runs:
         matches = [r for r in records if r.get('session') == run['session']]
         manual.extend(matches[0].get(k) for k in ('menu_launch', 'both_screens', 'minus_pressed', 'returned_to_menu', 'no_problem')) if len(matches) == 1 else manual.append(None)
     explicit_failure = obs.get('install_success') is False or obs.get('title_id_checked') is False or any(r.get(k) is False for r in records for k in ('menu_launch', 'both_screens', 'minus_pressed', 'returned_to_menu', 'no_problem'))
-    check('physical-observations', 'FAIL' if explicit_failure else 'PASS' if len(records) == len(runs) >= 2 and {r.get('session') for r in records} == set(sessions) and all(v is True for v in manual) else 'INCOMPLETE', 'Exact suite/environment/GX2 and both observed Menu launches/screens/Minus returns must be explicitly confirmed.')
+    check('physical-observations', 'FAIL' if explicit_failure else 'PASS' if len(records) == len(runs) >= 2 and {r.get('session') for r in records} == set(sessions) and all(v is True for v in manual) else 'INCOMPLETE', 'Exact suite/environment/supported installer and both observed Menu launches/screens/Minus returns must be explicitly confirmed.')
     ledger = load_json(read(ROOT/'tests/hardware-evidence.json', 1024*1024))
     baseline = [dict(issue=c['issue'], status=c['reviewed_status']) for c in ledger['criteria'] if c['issue'] in (12, 14)]
     check('retained-baseline', 'PASS' if baseline == [dict(issue=12, status='Done'), dict(issue=14, status='Done')] else 'INCOMPLETE', 'Carry reviewed collection and native controls/audio/stability evidence; no native guide repeat requested.')

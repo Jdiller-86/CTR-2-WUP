@@ -22,8 +22,9 @@ static unsigned char sd_bytes[5001];
 static uint32_t sd_position,sd_size=sizeof(sd_bytes),sd_flags;
 static int32_t sd_stat_error,sd_open_error,sd_read_error,sd_close_error,sd_end_error;
 static unsigned sd_opens,sd_closes;
+static const char *expected_fsa_path="/vol/external01/ctr2wup/capture.txt";
 FSError FSAGetStat(FSAClientHandle client,const char *path,FSAStat *stat) {
-    CHECK(client==123 && !strcmp(path,"/vol/external01/ctr2wup/capture.txt"));
+    CHECK(client==123 && !strcmp(path,expected_fsa_path));
     *stat=(FSAStat){.size=sd_size,.flags=sd_flags};return sd_stat_error;
 }
 FSError FSAGetStatFile(FSAClientHandle client,FSAFileHandle file,FSAStat *stat) {
@@ -31,7 +32,7 @@ FSError FSAGetStatFile(FSAClientHandle client,FSAFileHandle file,FSAStat *stat) 
 }
 FSError FSAOpenFileEx(FSAClientHandle client,const char *path,const char *mode,uint32_t permissions,
                        uint32_t flags,uint32_t size,FSAFileHandle *file) {
-    CHECK(client==123 && !strcmp(path,"/vol/external01/ctr2wup/capture.txt") && !strcmp(mode,"r"));
+    CHECK(client==123 && !strcmp(path,expected_fsa_path) && !strcmp(mode,"r"));
     CHECK(!permissions && !flags && !size);*file=17;sd_position=0;++sd_opens;return sd_open_error;
 }
 FSError FSAReadFile(FSAClientHandle client,void *buffer,uint32_t size,uint32_t count,FSAFileHandle file,uint32_t flags) {
@@ -112,6 +113,23 @@ static void storage_verify_tests(void) {
     CHECK(!ctr_report_storage_verify(&storage,path,5001,NULL));
     CHECK(!ctr_report_storage_verify(NULL,path,5001,digest));storage.client=-1;
     CHECK(!ctr_report_storage_verify(&storage,path,5001,digest));CHECK(sd_opens==opens);
+    storage.client=123;
+    const uint64_t title=UINT64_C(0x0005000043543257);
+    const char *relative="meta/meta.xml";
+    expected_fsa_path="/vol/storage_usb01/usr/title/00050000/43543257/meta/meta.xml";
+    CHECK(ctr_report_storage_verify_title(&storage,1,title,relative,5001,digest));
+    expected_fsa_path="/vol/storage_mlc01/usr/title/00050000/43543257/code/ctr2wup.rpx";
+    CHECK(ctr_report_storage_verify_title(&storage,0,title,"code/ctr2wup.rpx",5001,digest));
+    sd_bytes[4900]^=1;
+    CHECK(!ctr_report_storage_verify_title(&storage,0,title,"code/ctr2wup.rpx",5001,digest));
+    sd_bytes[4900]^=1;opens=sd_opens;
+    CHECK(!ctr_report_storage_verify_title(&storage,2,title,relative,5001,digest));
+    CHECK(!ctr_report_storage_verify_title(&storage,0,UINT64_C(0x0005001010040100),relative,5001,digest));
+    const char *bad[]={"../meta.xml","meta/../meta/meta.xml","save/meta.xml","meta/other.xml",NULL};
+    for(size_t i=0;i<sizeof(bad)/sizeof(*bad);++i)
+        CHECK(!ctr_report_storage_verify_title(&storage,0,title,bad[i],5001,digest));
+    CHECK(sd_opens==opens);
+    expected_fsa_path="/vol/external01/ctr2wup/capture.txt";
 }
 
 static char guide_log_text[32768];

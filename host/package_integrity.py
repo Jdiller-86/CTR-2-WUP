@@ -14,6 +14,7 @@ import xml.etree.ElementTree as ET
 from .errors import HostError
 from .package_crypto import certificate_subjects, cipher, common_key, fail
 from .package_validator import CONTENT_START, ValidatorError, validate_package
+from .title_profile import ARTWORK
 
 UNIT = 0x8000
 READ_SIZE = 1024 * 1024
@@ -159,7 +160,7 @@ def _fst(data, records, title, group, *, plaintext=False):
     return files, directories
 
 
-def _content_files(chunks, files, xml):
+def _content_files(chunks, files, xml, *, require_menu=False):
     results = []
     index = 0
     position = 0
@@ -185,8 +186,9 @@ def _content_files(chunks, files, xml):
                 size = min(len(chunk) - cursor, item["offset"] + item["bytes"] - position)
                 part = chunk[cursor:cursor + size]
                 digest.update(part)
-                if item["path"] in ("code/app.xml", "code/cos.xml", "meta/meta.xml"):
-                    if item["bytes"] > READ_SIZE:
+                artwork = require_menu and item['path'] in ARTWORK
+                if artwork or item["path"] in ("code/app.xml", "code/cos.xml", "meta/meta.xml"):
+                    if item["bytes"] > (3*1024*1024 if artwork else READ_SIZE):
                         fail("invalid_title_metadata", "Title XML exceeds its supported size")
                     xml.setdefault(item["path"], bytearray()).extend(part)
                 if position + size == item["offset"] + item["bytes"]:
@@ -260,7 +262,7 @@ def _compare_staging(source, files, directories):
         fail("staging_mismatch", "Decrypted package files or directories differ from expected staging")
 
 
-def verify_package(path, key_file=None, *, expected_staging=None):
+def verify_package(path, key_file=None, *, expected_staging=None, require_menu=False):
     path = Path(path)
     try:
         report = validate_package(path)
@@ -316,15 +318,22 @@ def verify_package(path, key_file=None, *, expected_staging=None):
     files, xml = [], {}
     for number in range(1, len(records)):
         record = records[number]
-        files += _content_files(_plaintext(record["path"], title_key, number, record["digest"], record["size"]), grouped[number], xml)
+        files += _content_files(_plaintext(record["path"], title_key, number, record["digest"], record["size"]), grouped[number], xml,
+                                require_menu=require_menu)
     _title_metadata(xml, tmd, files)
+    menu_profile = 'not_requested'
+    if require_menu:
+        from .title_profile import verify_menu_profile
+        menu_profile = verify_menu_profile({**{f['path']:b'' for f in files},**xml})
     if expected_staging is not None:
         _compare_staging(expected_staging, files, directories)
     for item in report["contents"]:
         item["plaintext_integrity"] = "padded_sha1_matches_tmd"
     return {**report, "validation": "plaintext_integrity" if plaintext else "decrypted_integrity", "files": files,
+            "title_version": int.from_bytes(tmd[0x1DC:0x1DE], "big"),
             "content_layout": "one_file_per_content" if plaintext and len(records) != 4 else "legacy_grouped",
             "fst": "bounds/tree/names/ranges/zero-padding verified",
             "staging_comparison": "all files and directories match" if expected_staging is not None else "not_requested",
             "certificate_layout": "parsed; CP/XS subjects match metadata; trust chain unauthenticated",
-            "test_signing": signing, "installation": "unverified", "console_verified": False}
+            "test_signing": signing, "menu_profile": menu_profile,
+            "installation": "unverified", "console_verified": False}
