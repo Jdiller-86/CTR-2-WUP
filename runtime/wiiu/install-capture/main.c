@@ -132,10 +132,10 @@ static bool title_absent(void) {
         line("INVENTORY state=inconclusive reason=count_error installation_blocked=1");
         notice("Title inventory unavailable; installation blocked.");return false;
     }
-    /* Leave bounded headroom for changes between count and list. A second
-     * count must agree before any absence claim, including an empty list. */
-    uint32_t capacity=(uint32_t)count+16;
-    if(capacity>CTR_CAPTURE_TITLE_LIMIT)capacity=CTR_CAPTURE_TITLE_LIMIT;
+    /* Reserve the entire supported bound, so a full response is never mistaken
+     * for a complete inventory. TitleCount and TitleList can differ on real
+     * hardware; completeness is determined by capacity, not their equality. */
+    uint32_t capacity=CTR_CAPTURE_TITLE_LIMIT;
     uint32_t bytes=capacity*sizeof(MCPTitleListType),found=capacity;
     MCPTitleListType *titles=MEMAllocFromDefaultHeapEx((bytes+63u)&~63u,64);
     if(!titles) {
@@ -144,13 +144,19 @@ static bool title_absent(void) {
     }
     memset(titles,0,bytes);
     int32_t result=MCP_TitleList(mcp,&found,titles,bytes);
+    MCPTitleListType lookup __attribute__((aligned(64)));
+    memset(&lookup,0,sizeof(lookup));
+    int32_t lookup_result=MCP_GetTitleInfo(mcp,CTR_CAPTURE_TITLE_ID,&lookup);
     int32_t after=MCP_TitleCount(mcp);
     CtrInstallCaptureInventory inventory=ctr_install_capture_inventory(
         titles,bytes,sizeof(*titles),count,result,found,after,CTR_CAPTURE_TITLE_ID);
-    bool logged=record(NULL,"title_list",result,NULL) && record(NULL,"title_count_after",after,NULL);
+    inventory=ctr_install_capture_confirm_inventory(
+        inventory,&lookup,sizeof(lookup),lookup_result,CTR_CAPTURE_TITLE_ID);
+    bool logged=record(NULL,"title_list",result,NULL) &&
+        record(NULL,"target_lookup_api",lookup_result,NULL) && record(NULL,"title_count_after",after,NULL);
     char text[384];
     if(inventory.state==CTR_CAPTURE_INVENTORY_PRESENT) {
-        const MCPTitleListType *match=&titles[inventory.match_index];
+        const MCPTitleListType *match=inventory.match_index==UINT32_MAX?&lookup:&titles[inventory.match_index];
         /* Only the fixed target's metadata is recorded, never the inventory
          * of unrelated titles. Bound and sanitize MCP's fixed-width strings. */
         char path[sizeof(match->path)+1],device[sizeof(match->indexedDevice)+1];
@@ -161,8 +167,9 @@ static bool title_absent(void) {
         for(;i<sizeof(match->indexedDevice) && match->indexedDevice[i];++i)
             device[i]=match->indexedDevice[i]>=32 && match->indexedDevice[i]<=126?match->indexedDevice[i]:'?';
         device[i]=0;
-        snprintf(text,sizeof(text),"INVENTORY_MATCH title=%s index=%u version=%u device=%s path=%s",
-            CTR_CAPTURE_TITLE,inventory.match_index,match->titleVersion,device,path);
+        snprintf(text,sizeof(text),"INVENTORY_MATCH title=%s via=%s index=%u version=%u device=%s path=%s",
+            CTR_CAPTURE_TITLE,inventory.match_index==UINT32_MAX?"exact_lookup":"list",
+            inventory.match_index,match->titleVersion,device,path);
         logged=line(text) && logged;
     }
     MEMFreeToDefaultHeap(titles);

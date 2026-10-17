@@ -44,7 +44,10 @@ an absent title ID before one explicit target selection can start installation.
 Read-only MCP package parsing runs independently of install eligibility. Title
 inventory reports `absent`, `present` or `inconclusive`, with before/returned/after
 counts and bounded capacity. Only an actual matching record establishes presence;
-errors or incomplete/changing counts block writes without claiming a collision.
+the global count and enumerated count need not match. Absence requires a successful
+list below capacity and stable global counts within the supported bound. A full
+buffer, invalid response or changing global count blocks writes. An exact-ID
+lookup additionally blocks an observed match; its errors alone cannot prove absence.
 Only the fixed target's matching metadata is logged, never unrelated titles.
 Startup evidence precedes graphics. Each binary log record is closed and synced,
 then checked against its intended byte count and SHA-256 through stdio and a

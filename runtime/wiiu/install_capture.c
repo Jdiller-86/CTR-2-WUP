@@ -68,6 +68,12 @@ bool ctr_install_capture_verify(const char *directory,
     return true;
 }
 
+static uint64_t title_id(const unsigned char *data) {
+    uint64_t id=0;
+    for(unsigned i=0;i<8;++i)id=(id<<8)|data[i];
+    return id;
+}
+
 CtrInstallCaptureInventory ctr_install_capture_inventory(
     const void *entries,size_t bytes,size_t stride,int32_t before,
     int32_t result,uint32_t returned,int32_t after,uint64_t title) {
@@ -77,9 +83,7 @@ CtrInstallCaptureInventory ctr_install_capture_inventory(
        returned>bytes/stride)return out;
     const unsigned char *data=entries;
     for(uint32_t i=0;i<returned;++i) {
-        uint64_t id=0;
-        for(unsigned j=0;j<8;++j)id=(id<<8)|data[(size_t)i*stride+j];
-        if(id==title) {
+        if(title_id(data+(size_t)i*stride)==title) {
             out.state=CTR_CAPTURE_INVENTORY_PRESENT;out.reason="target_match";
             out.match_index=i;return out;
         }
@@ -87,9 +91,29 @@ CtrInstallCaptureInventory ctr_install_capture_inventory(
     if(before<0 || after<0 || (uint32_t)before>CTR_CAPTURE_TITLE_LIMIT ||
        (uint32_t)after>CTR_CAPTURE_TITLE_LIMIT)out.reason="count_error";
     else if(before!=after)out.reason="count_changed";
-    else if(returned!=(uint32_t)before)out.reason="count_mismatch";
-    else { out.state=CTR_CAPTURE_INVENTORY_ABSENT;out.reason="complete_absence"; }
+    else if((uint32_t)before>bytes/stride || returned==bytes/stride)out.reason="capacity_limit";
+    else {
+        /* TitleCount sizes an allocation; TitleList's output is the number
+         * actually enumerated. A successful underfilled buffer is complete,
+         * even when its returned count differs from the global counter. */
+        out.state=CTR_CAPTURE_INVENTORY_ABSENT;
+        out.reason=returned==(uint32_t)before?"complete_absence":"complete_list_count_difference";
+    }
     return out;
+}
+
+CtrInstallCaptureInventory ctr_install_capture_confirm_inventory(
+    CtrInstallCaptureInventory inventory,const void *entry,size_t bytes,
+    int32_t result,uint64_t title) {
+    /* A nonzero GetTitleInfo result is not a reliable not-found code. It
+     * cannot establish absence or override an inconclusive list. */
+    if(inventory.state==CTR_CAPTURE_INVENTORY_PRESENT || result)return inventory;
+    if(!entry || bytes<8 || title_id(entry)!=title) {
+        return (CtrInstallCaptureInventory){CTR_CAPTURE_INVENTORY_INCONCLUSIVE,
+            "lookup_invalid",UINT32_MAX};
+    }
+    return (CtrInstallCaptureInventory){CTR_CAPTURE_INVENTORY_PRESENT,
+        "target_lookup_match",UINT32_MAX};
 }
 
 void ctr_install_capture_complete(CtrInstallCapture *capture,int32_t result) {
