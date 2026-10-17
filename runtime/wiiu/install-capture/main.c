@@ -277,7 +277,7 @@ static const ctr_exit_ops exit_ops={cleanup,clear_callbacks,request_menu,process
     release_foreground,wait_messages,shutdown_procui,shutdown_whb,checkpoint};
 
 int main(void) {
-    bool saved=false;
+    bool saved=false,installed=false;
     WHBProcInit();
     lifecycle.title_id=OSGetTitleID();
     if(ctr_test_from_hbl(lifecycle.title_id))
@@ -334,8 +334,8 @@ int main(void) {
                 /* Recheck after waiting for the explicit selection. */
                 if(payload_ready() && title_absent()) {
                     static const CtrInstallCaptureOps ops={record,get_info,set_target,start,get_progress,abort_install,pump};
-                    bool ok=ctr_install_capture_run(&capture,&ops,NULL,target);
-                    notice(ok?"Installation succeeded.":"Installation stopped.");
+                    installed=ctr_install_capture_run(&capture,&ops,NULL,target);
+                    notice(installed?"Installation succeeded.":"Installation stopped.");
                     if(capture.submitted)notice("Raw MCP callback: 0x%08x",(unsigned)(uint32_t)capture.result);
                 } else notice("Preflight changed; installation blocked.");
                 break;
@@ -361,7 +361,7 @@ int main(void) {
             (unsigned)(uint32_t)storage.last_status);
     }
     if(CTR_CAPTURE_M1_COMPLETION) {
-        if(capture.submitted && capture.result==0)
+        if(saved && installed)
             notice("Next: launch Install Check twice from Wii U Menu.");
         notice("Minus: exit. FTP the whole install-check folder.");
     } else notice("Minus: exit. Return only the install-capture folder.");
