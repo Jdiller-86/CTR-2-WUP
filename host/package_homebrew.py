@@ -22,27 +22,29 @@ from .package_writer import (_metadata, _inventory, _fst, _encrypt_group,
 def _file_contents(nodes, title, group):
     """One independently readable plaintext stream per file, as in makefst.
 
-    Keep tree order and all staged bytes. Directories have no data stream; their
-    cluster field refers to the following file, or zero after the final file.
+    Keep tree order and all staged bytes. An empty top-level folder retains an
+    empty stream with its own ownership; it must not inherit the next folder's.
     """
     groups, sizes, owners = [[]], [0], [(0, 0)]
-    for node in nodes[1:]:
-        if node['directory']:
-            continue
-        if len(groups) >= 1024:
-            fail('staging_limit', 'Plaintext homebrew supports at most 1023 files')
-        node['content'], node['offset'] = len(groups), 0
-        groups.append([node])
-        sizes.append(max(BLOCK, _align(node['size'], BLOCK)))
-        top = node['path'].split('/', 1)[0]
-        owners.append((int(title, 16), group) if top == 'content' else
-                      (0, 0x400 if top == 'meta' else 0))
-    following = 0
-    for node in reversed(nodes[1:]):
-        if node['directory']:
-            node['content'] = following
-        else:
-            following = node['content']
+    for top in ('code', 'content', 'meta'):
+        entries = [n for n in nodes[1:] if n['path'] == top or n['path'].startswith(top + '/')]
+        files = [n for n in entries if not n['directory']]
+        first = len(groups)
+        owner = (int(title, 16), group) if top == 'content' else (0, 0x400 if top == 'meta' else 0)
+        for node in files or [None]:
+            if len(groups) >= 1024:
+                fail('staging_limit', 'Plaintext homebrew supports at most 1024 contents including the FST')
+            if node is not None:
+                node['content'], node['offset'] = len(groups), 0
+            groups.append([node] if node is not None else [])
+            sizes.append(max(BLOCK, _align(node['size'], BLOCK)) if node is not None else BLOCK)
+            owners.append(owner)
+        following = first
+        for node in reversed(entries):
+            if node['directory']:
+                node['content'] = following
+            else:
+                following = node['content']
     return groups, sizes, owners
 
 

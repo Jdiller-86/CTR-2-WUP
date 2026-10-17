@@ -6,7 +6,8 @@
 self-generated test-signing chain for a signature-patched homebrew environment.
 Each staged file has its own padded content stream and FST offset zero. The
 ticket grants the complete 1024-index homebrew bitmap; packages are bounded to
-1023 files plus the FST. Directories retain their tree entries without data streams.
+1024 contents including the FST. Empty top-level folders retain an empty stream
+with their original ownership.
 It requires **no common key, production certificate, donor title or game input**.
 The independent verifier checks content/FST/XML/identity and the generated
 signature chain. This establishes package integrity and test-signature
@@ -111,8 +112,9 @@ signature authentication are **not** established. The existing structural
 validator still works without a key, with an explicitly narrower result.
 The reader retains the historical four-content plaintext profile for existing
 evidence. New per-file plaintext packages require one file at offset zero in each
-non-FST stream, exact padded lengths, path-derived ownership and complete ticket
+file stream, exact padded lengths, path-derived ownership and complete ticket
 rights; the encrypted research writer retains its four grouped contents.
+Directory-only streams must be referenced, correctly owned and entirely zero.
 
 ## Local inputs and commands
 

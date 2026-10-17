@@ -75,6 +75,7 @@ def _fst(data, records, title, group, *, plaintext=False):
     stack = [(0, "", nodes)]
     paths = set()
     directories = set()
+    directory_streams = set()
     files = [[] for _ in records]
     root_names = set()
     names = [(0, 1)]
@@ -112,6 +113,11 @@ def _fst(data, records, title, group, *, plaintext=False):
             if not parent_path:
                 root_names.add(name)
             directories.add(path)
+            if per_file:
+                expected = (int(title, 16), group) if top == 'content' else (0, 0x400 if top == 'meta' else 0)
+                if not content or ownership[content] != expected:
+                    fail("invalid_fst", "Directory stream ownership must match its top-level folder")
+                directory_streams.add(content)
             stack.append((number, path, second))
         else:
             if not parent_path:
@@ -126,8 +132,10 @@ def _fst(data, records, title, group, *, plaintext=False):
         fail("invalid_fst", "FST requires exactly the code, content and meta roots")
     if per_file:
         for number in range(1, count):
-            if len(files[number]) != 1:
-                fail("invalid_fst", "Each plaintext stream must contain exactly one file")
+            if not files[number]:
+                if number not in directory_streams or records[number]['size'] != UNIT:
+                    fail("invalid_fst", "An empty plaintext stream requires an owned directory reference")
+                continue
             item = files[number][0]
             top = item['path'].split('/', 1)[0]
             expected = (int(title, 16), group) if top == 'content' else (0, 0x400 if top == 'meta' else 0)

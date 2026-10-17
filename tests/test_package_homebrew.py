@@ -14,7 +14,7 @@ from host.package_integrity import verify_package
 from host.package_validator import CONTENT_START, ValidatorError, validate_package
 from host.package_test_signing import generate_chain, sign_document
 from host.title_stage import stage_title
-from tests.test_package_writer import original_inputs
+from tests.test_package_writer import original_inputs, rehash_record
 
 
 @unittest.skipUnless(importlib.util.find_spec('cryptography'), 'install packaging dependency')
@@ -83,7 +83,7 @@ class PlainHomebrewTests(unittest.TestCase):
         # placed both XML files in stream 1 (cos.xml at byte 736).
         fst=(self.output/'00000000.app').read_bytes()
         count=struct.unpack_from('>I',fst,8)[0]
-        self.assertEqual(count,9)
+        self.assertEqual(count,10)
         base=32+count*32
         nodes=struct.unpack_from('>I',fst,base+8)[0]
         strings=base+nodes*16
@@ -101,9 +101,24 @@ class PlainHomebrewTests(unittest.TestCase):
             data=(self.output/f'{stream:08x}.app').read_bytes()
             self.assertEqual(data[:size],path.read_bytes(),name)
             self.assertFalse(any(data[size:]),name)
-        self.assertEqual(seen,set(range(1,count)))
+        # The empty content/ directory keeps its original title/group ownership
+        # through a directory-only zero stream, rather than borrowing meta's.
+        empty=struct.unpack_from('>H',fst,base+5*16+14)[0]
+        self.assertEqual(seen,set(range(1,count))-{empty})
+        self.assertEqual(struct.unpack_from('>QIB',fst,32+empty*32+8),
+                         (0x0005000043543257,0x1337,1))
+        self.assertEqual((self.output/f'{empty:08x}.app').read_bytes(),bytes(32768))
         ticket=(self.output/'title.tik').read_bytes()
         self.assertEqual(ticket[0x2d0:0x350],b'\xff'*128)
+        # Reject a fully rehashed/resigned directory that borrows meta's owner.
+        changed=bytearray(fst)
+        struct.pack_into('>H',changed,base+5*16+14,empty+1)
+        (self.output/'00000000.app').write_bytes(changed)
+        rehash_record(self.output,0,changed)
+        path=self.output/'title.tmd'
+        path.write_bytes(sign_document(path.read_bytes(),self.signing[1],kind='tmd'))
+        with self.assertRaises(HostError) as error:verify_package(self.output)
+        self.assertEqual(error.exception.code,'invalid_fst')
 
     def test_shared_plaintext_stream_and_missing_rights_are_rejected_after_resigning(self):
         pack_homebrew(self.source,self.output)
