@@ -83,7 +83,7 @@ class PlainHomebrewTests(unittest.TestCase):
         # placed both XML files in stream 1 (cos.xml at byte 736).
         fst=(self.output/'00000000.app').read_bytes()
         count=struct.unpack_from('>I',fst,8)[0]
-        self.assertEqual(count,10)
+        self.assertEqual(count,11)
         base=32+count*32
         nodes=struct.unpack_from('>I',fst,base+8)[0]
         strings=base+nodes*16
@@ -164,7 +164,7 @@ class PlainHomebrewTests(unittest.TestCase):
         self.assertEqual(cos.find('argstr').get('length'),'4096')
         report=pack_homebrew(staged,self.output,require_menu=True)
         self.assertTrue(report['ok'])
-        self.assertEqual(report['menu_profile'],'wup-menu-v1')
+        self.assertEqual(report['menu_profile'],'wup-menu-v2')
         # A completely hashed/signed package can still be incompatible with
         # Menu. The independent reader must examine types, not only digests.
         path=self.output/'00000002.app';data=bytearray(path.read_bytes())
@@ -182,6 +182,15 @@ class PlainHomebrewTests(unittest.TestCase):
         tmd=self.output/'title.tmd'
         tmd.write_bytes(sign_document(tmd.read_bytes(),self.signing[1],kind='tmd'))
         # Historical integrity review remains possible, with narrower scope.
+        self.assertEqual(verify_package(self.output)['menu_profile'],'not_requested')
+        with self.assertRaises(HostError) as error:verify_package(self.output,require_menu=True)
+        self.assertEqual(error.exception.code,'invalid_menu_profile')
+
+    def test_validly_signed_package_without_movie_is_not_menu_complete(self):
+        staged=self.root/'title'
+        stage_title(self.source/'code/probe.rpx',staged,title_id='0005000043543257')
+        (staged/'meta/bootMovie.h264').unlink()
+        pack_homebrew(staged,self.output)
         self.assertEqual(verify_package(self.output)['menu_profile'],'not_requested')
         with self.assertRaises(HostError) as error:verify_package(self.output,require_menu=True)
         self.assertEqual(error.exception.code,'invalid_menu_profile')

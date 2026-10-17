@@ -2,7 +2,7 @@
   "schema_version": 1,
   "kind": "ctr2wup-m1-evidence-review",
   "reviewed_on": "2026-10-17",
-  "reviewed_against_source_commit": "caf509f9cc151335d4d34a199be505e1ea643ad0",
+  "reviewed_against_source_commit": "c2b4a9131204db8df21fcdf7424d7af3992c73b0",
   "milestone": "m1",
   "full_milestone_acceptance": false,
   "policy": "Reuse reviewed physical evidence within its recorded scope. A version change alone does not require a repeat. Later display-cache, stream/mixer and guest DSP behavior do not inherit earlier physical acceptance.",
@@ -67,6 +67,19 @@
       "evidence": "USB MCP callback 0; 4521984/4521984 bytes and 11/11 entries. User confirms installation. Menu displays a question-mark tile with ??? and rejects launch with a software-data error; installed execution is confirmed failed.",
       "artifact_sha256": "ebb239180d719a3d9ad32387e96738e77d16043f74383adab0eda6b54ae637b2",
       "capture_report_sha256": "0d835c42f7ef67901962287c36edc02dff6cdcc8cba5984341d28c030879e9a7"
+    },
+    {
+      "id": "original-wup-menu-c2b4a91",
+      "version": "0.27.0",
+      "source_commit": "c2b4a9131204db8df21fcdf7424d7af3992c73b0",
+      "identity_boundary": "Clean revision-28 package/capture and exact 13 installer files; fresh USB install after the predecessor was removed.",
+      "references": [
+        "https://github.com/Jdiller-86/CTR-2-WUP/issues/15",
+        "https://github.com/Jdiller-86/CTR-2-WUP/pull/143"
+      ],
+      "evidence": "Raw USB MCP callback 0, 4521984/4521984 bytes and 11/11 entries. All eight installed files match exact hashes through FSA. ACP metadata result 0 with expected identity/version/profile. User photos show correct title and original checker icon. Menu launch remains confirmed failed with 157-1101; no installed execution or snapshot recovery is accepted.",
+      "artifact_sha256": "9d738079da0514a9af7e17ae30cc15ed7e6263ecdc787125d8c0abd434f32062",
+      "capture_report_sha256": "c39499757d2d0328cc5327b844b56223409f2fa3eef3a78f710c30b3473ec92f"
     }
   ],
   "criteria": [
@@ -124,13 +137,15 @@
       "issue": 15,
       "reviewed_status": "In progress",
       "evidence_sources": [
-        "original-wup-usb-caf509f"
+        "original-wup-usb-caf509f",
+        "original-wup-menu-c2b4a91"
       ],
       "accepted_scope": [
-        "Original source-caf509f per-file plaintext WUP installation through the package-bound MCP capture on USB: successful raw callback and complete progress, corroborated by the user."
+        "Original source-caf509f per-file plaintext WUP installation through the package-bound MCP capture on USB: successful raw callback and complete progress, corroborated by the user.",
+        "Fresh source-c2b4a913 USB installation, exact eight-file installed read-back, successful ACP metadata read and correct Wii U Menu name/icon. Launch remains confirmed failed with 157-1101."
       ],
       "remaining": [
-        "Resolve the confirmed Menu metadata/launch rejection, then obtain two brief installed-title launch/exits and the production snapshot recovery pair. Retain the accepted installation and platform baseline; no second destination or broad baseline repeat."
+        "Resolve launch rejection, then obtain two brief installed-title launch/exits and the production snapshot recovery pair. Retain accepted installation, metadata/presentation and platform evidence; no second destination or broad baseline repeat."
       ]
     },
     {

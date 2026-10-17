@@ -4,6 +4,7 @@ Field/type facts: woominstaller_gx2 d2528e58, Flappy-Bird_GX2 43a541d9;
 ACP layout: pinned WUT nn/acp/title.h. No upstream template or asset is used.
 Historical integrity-only packages intentionally remain separately readable.
 """
+import hashlib
 import re
 import struct
 import xml.etree.ElementTree as ET
@@ -16,6 +17,8 @@ ARTWORK = {
     'meta/bootDrcTex.tga': (854,480,24),
     'meta/bootTvTex.tga': (1280,720,24),
 }
+BOOT_MOVIE_SHA256='366b8d210cae7ee92f746b2a1f55359a359e5ad5281a9c3086d60acd84739040'
+LAUNCH_ASSETS=set(ARTWORK)|{'meta/bootMovie.h264'}
 
 
 def _document(data, root):
@@ -46,7 +49,7 @@ def _field(doc, name, kind, size):
 
 
 def verify_menu_profile(files):
-    """Validate typed launch XML and all original uncompressed TGA 2 files."""
+    """Validate launch XML, original TGA 2 artwork and the pinned original clip."""
     app=_document(files.get('code/app.xml',b''),'app')
     cos=_document(files.get('code/cos.xml',b''),'app')
     meta=_document(files.get('meta/meta.xml',b''),'menu')
@@ -123,4 +126,10 @@ def verify_menu_profile(files):
         if (header!=(0,0,2,0,0,0,0,0,width,height,depth,8 if depth==32 else 0)
                 or data[-26:]!=bytes(8)+b'TRUEVISION-XFILE.\0'):
             fail('invalid_menu_profile','Artwork must use original uncompressed bottom-left TGA 2: '+name)
-    return 'wup-menu-v1'
+    # ACP loads the movie separately from XML and the icon. A well-formed XML
+    # profile cannot compensate for an absent/truncated launch resource. This
+    # scoped original profile accepts only our independently decoded clip.
+    movie=files.get('meta/bootMovie.h264',b'')
+    if not 0<len(movie)<=80696 or hashlib.sha256(movie).hexdigest()!=BOOT_MOVIE_SHA256:
+        fail('invalid_menu_profile','Require the complete original ACP launch movie')
+    return 'wup-menu-v2'

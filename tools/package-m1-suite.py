@@ -134,7 +134,7 @@ def install_payload(installed, commit, native, audio):
             or report.get('original_inputs_only') is not True or report.get('install_test_ready') is not True
             or report.get('profile') != 'wiiu_plaintext_homebrew'
             or report.get('content_layout') != 'one_file_per_content'
-            or report.get('menu_profile') != 'wup-menu-v1'
+            or report.get('menu_profile') != 'wup-menu-v2'
             or report.get('requires_signature_patches') is not True
             or report.get('title_name') != EXPECTED_TITLE_NAME
             or not isinstance(report.get('title_id'), str)
@@ -147,7 +147,7 @@ def install_payload(installed, commit, native, audio):
     rpx = [row for row in files if isinstance(row, dict) and row.get('path') == 'code/ctr2wup.rpx'] if isinstance(files, list) else []
     if (verified.get('ok') is not True or verified.get('title_id') != report['title_id']
             or verified.get('content_layout') != 'one_file_per_content'
-            or verified.get('menu_profile') != 'wup-menu-v1'
+            or verified.get('menu_profile') != 'wup-menu-v2'
             or verified.get('title_version') != report.get('title_version')
             or verified.get('files') != report.get('installed_files')
             or len(rpx) != 1 or rpx[0].get('sha256') != report['rpx_sha256']):

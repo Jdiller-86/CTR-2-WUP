@@ -37,7 +37,7 @@ def candidate(native, output):
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='.install-candidate-', dir=output.parent) as tmp:
         stage = Path(tmp)/'title'
-        stage_title(rpx, stage, title_id=TITLE_ID, name=TITLE_NAME, version=28)
+        stage_title(rpx, stage, title_id=TITLE_ID, name=TITLE_NAME, version=29)
         packed = Path(tmp)/'package'
         proof = pack_homebrew(stage, packed, require_menu=True)
         (packed/'pack-report.json').unlink()
@@ -47,7 +47,7 @@ def candidate(native, output):
                       version=__version__, source_commit=commit, source_dirty=False,
                       original_inputs_only=True, profile='wiiu_plaintext_homebrew',
                       content_layout=proof['content_layout'],
-                      title_id=TITLE_ID, title_name=TITLE_NAME, title_version=28,
+                      title_id=TITLE_ID, title_name=TITLE_NAME, title_version=29,
                       menu_profile=proof['menu_profile'],
                       installed_files=proof['files'],
                       rpx_sha256=hashlib.sha256(rpx.read_bytes()).hexdigest(),

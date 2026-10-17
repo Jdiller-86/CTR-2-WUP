@@ -23,8 +23,16 @@ class MenuProfileTests(unittest.TestCase):
                        for p in (root/'title').rglob('*') if p.is_file()}
 
     def test_full_original_profile_covers_acp_fields_and_tga2(self):
-        self.assertEqual(verify_menu_profile(self.files),'wup-menu-v1')
+        self.assertEqual(verify_menu_profile(self.files),'wup-menu-v2')
         self.assertEqual(len(ET.fromstring(self.files['meta/meta.xml'])),137)
+
+    def test_movie_is_required_even_when_every_xml_and_image_is_valid(self):
+        movie=self.files['meta/bootMovie.h264']
+        for broken in (b'',movie[:-1],movie+b'\0',bytes([movie[0]^1])+movie[1:],b'not H.264'):
+            with self.subTest(bytes=len(broken)),self.assertRaises(HostError):
+                verify_menu_profile({**self.files,'meta/bootMovie.h264':broken})
+        with self.assertRaises(HostError):
+            verify_menu_profile({p:d for p,d in self.files.items() if p!='meta/bootMovie.h264'})
 
     def test_old_metadata_shape_and_each_missing_acp_field_are_rejected(self):
         doc=ET.fromstring(self.files['meta/meta.xml'])

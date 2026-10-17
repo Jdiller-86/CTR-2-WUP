@@ -166,12 +166,21 @@ Its `installable_wup` field explicitly awaits installer and console validation.
 The report separates decrypted integrity, unauthenticated signatures and unrun
 installation. It never claims an authentic or proven installable title.
 
-New installation candidates require `wup-menu-v1` in both candidate creation and
+New installation candidates require `wup-menu-v2` in both candidate creation and
 independent handoff validation. This checks all 137 Menu/ACP fields, typed launch
 settings, matching app/Menu identity, the RPX entry, platform permissions and four
 uncompressed bottom-left TGA 2 images with their complete footer. Dimensions and
 depths are 128×128×32 (icon), 170×42×32 (logo), 854×480×24 (GamePad) and
-1280×720×24 (TV). Ordinary integrity-only verification remains available for
+1280×720×24 (TV). ACP also loads `meta/bootMovie.h264` separately from the XML
+and images. The profile pins an original 256×128, 60-frame, two-second Annex B
+H.264 Constrained Baseline clip, bounded to ACP's 80,696-byte movie buffer.
+[`generate-boot-movie.py`](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/tools/generate-boot-movie.py)
+creates it from original checker pixels with FFmpeg/libx264; no input media is
+used. The encoded asset ships with the host package, so staging requires no
+encoder. Its geometry matches the pinned original channel reference below.
+Full independent decoding validates the pinned clip; a hash-only WUP
+round trip cannot establish that a missing launch resource is optional.
+Ordinary integrity-only verification remains available for
 historical packages and does not claim Menu compatibility.
 
 Metadata and image-format facts were cross-checked against the original

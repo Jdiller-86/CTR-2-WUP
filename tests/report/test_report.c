@@ -120,6 +120,9 @@ static void storage_verify_tests(void) {
     CHECK(ctr_report_storage_verify_title(&storage,1,title,relative,5001,digest));
     expected_fsa_path="/vol/storage_mlc01/usr/title/00050000/43543257/code/ctr2wup.rpx";
     CHECK(ctr_report_storage_verify_title(&storage,0,title,"code/ctr2wup.rpx",5001,digest));
+    expected_fsa_path="/vol/storage_usb01/usr/title/00050000/43543257/meta/bootMovie.h264";
+    CHECK(ctr_report_storage_verify_title(&storage,1,title,"meta/bootMovie.h264",5001,digest));
+    expected_fsa_path="/vol/storage_mlc01/usr/title/00050000/43543257/code/ctr2wup.rpx";
     sd_bytes[4900]^=1;
     CHECK(!ctr_report_storage_verify_title(&storage,0,title,"code/ctr2wup.rpx",5001,digest));
     sd_bytes[4900]^=1;opens=sd_opens;
