@@ -14,7 +14,7 @@ import xml.etree.ElementTree as ET
 from .errors import HostError
 from .package_crypto import certificate_subjects, cipher, common_key, fail
 from .package_validator import CONTENT_START, ValidatorError, validate_package
-from .title_profile import ARTWORK
+from .title_profile import LAUNCH_ASSETS
 
 UNIT = 0x8000
 READ_SIZE = 1024 * 1024
@@ -186,7 +186,7 @@ def _content_files(chunks, files, xml, *, require_menu=False):
                 size = min(len(chunk) - cursor, item["offset"] + item["bytes"] - position)
                 part = chunk[cursor:cursor + size]
                 digest.update(part)
-                artwork = require_menu and item['path'] in ARTWORK
+                artwork = require_menu and item['path'] in LAUNCH_ASSETS
                 if artwork or item["path"] in ("code/app.xml", "code/cos.xml", "meta/meta.xml"):
                     if item["bytes"] > (3*1024*1024 if artwork else READ_SIZE):
                         fail("invalid_title_metadata", "Title XML exceeds its supported size")

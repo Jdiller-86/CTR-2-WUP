@@ -4,6 +4,7 @@ No donor title, upstream XML template, certificate or key is copied. Offline
 launch-profile validation does not establish physical Menu execution.
 """
 import json
+from importlib.resources import files
 from pathlib import Path
 import shutil
 import struct
@@ -120,6 +121,7 @@ def stage_title(rpx,output,*,title_id,name='CTR2WUP Prototype',version=0):
         for filename,width,height,alpha in [('iconTex.tga',128,128,True),('bootTvTex.tga',1280,720,False),
                 ('bootDrcTex.tga',854,480,False),('bootLogoTex.tga',170,42,True)]:
             (stage/'meta'/filename).write_bytes(_tga(width,height,alpha))
+        (stage/'meta/bootMovie.h264').write_bytes(files('host').joinpath('assets/bootMovie.h264').read_bytes())
         from .title_profile import verify_menu_profile
         verify_menu_profile({p.relative_to(stage).as_posix():p.read_bytes()
                              for p in stage.rglob('*') if p.is_file()})
@@ -129,7 +131,7 @@ def stage_title(rpx,output,*,title_id,name='CTR2WUP Prototype',version=0):
                 'rpx_sha256':_sha256(stage/'code/ctr2wup.rpx'),
                 'files':[{'path':str(p.relative_to(stage)).replace('\\','/'),'bytes':p.stat().st_size,'sha256':_sha256(p)}
                          for p in sorted(stage.rglob('*')) if p.is_file()],
-                'menu_profile':'wup-menu-v1',
+                'menu_profile':'wup-menu-v2',
                 'remaining':['Pack and independently verify the complete title',
                              'Verify Wii U Menu launch, rebuild identity and uninstall on console']}
         (stage/'stage-report.json').write_text(json.dumps(report,indent=2,ensure_ascii=True)+'\n')

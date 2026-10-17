@@ -15,8 +15,11 @@ do not establish commercial-game compatibility or installable WUP acceptance.
 - Add original plaintext `0x2000` WUP packaging with a generated test-signing
   chain and independent integrity/signature verification. No common key,
   production certificate, donor or owned game is needed for this profile.
-  Aroma signature patches are required; actual installer/Menu behavior remains
-  unverified and no Nintendo authenticity is claimed.
+  Aroma signature patches are required. Integrity, physical installation and
+  Menu execution are evaluated separately; no Nintendo authenticity is claimed.
+- Include an original H.264 launch movie in staged titles and installed-file
+  checks. Enforce the complete launch-resource profile independently of WUP
+  hashes/signatures, including the asset in installed Python wheels.
 - Replace the broad M1 retest with a standalone installed-title check: two brief
   new Menu launches include automatic SD recovery, with one guide, one FTP copy
   tree and one whole-folder return. Developer material moves under `support/`.

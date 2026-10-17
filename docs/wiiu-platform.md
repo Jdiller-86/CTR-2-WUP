@@ -14,9 +14,13 @@ For plaintext WUPs, keep each file in its own padded content stream with FST
 offset zero, following the [packaging profile](packaging.md). Bind installation
 logging to the exact generated file inventory and candidate digest. Integrity
 checks alone do not establish MCP read compatibility or installed-title behavior.
-Require the independent `wup-menu-v1` check for new installation candidates:
+Require the independent `wup-menu-v2` check for new installation candidates:
 complete typed Menu metadata, unsigned COS `cmdFlags`, coherent title/group/OS
-identity and complete uncompressed TGA 2 artwork. Preserve the historical
+identity, complete uncompressed TGA 2 artwork and the original `bootMovie.h264`.
+ACP reads the movie independently of XML and icons: verify its presence, bounded
+size and pinned decoded bytes in the WUP, installed read-back and distributed wheel.
+Readable XML and a correct Menu tile do not establish complete launch resources.
+Preserve the historical
 integrity-only reader for older evidence. An installed title may be updated only
 after its version and all eight compiled predecessor hashes match on the selected
 device; never infer ownership from a title ID or delete a title to bypass this check.

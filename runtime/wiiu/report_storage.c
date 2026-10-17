@@ -66,7 +66,8 @@ bool ctr_report_storage_verify_title(void *context,unsigned target,uint64_t titl
     /* Read-only recognition of original application files. Never accept a
      * device/path from SD metadata or traverse title/save/system namespaces. */
     static const char *const allowed[]={"code/app.xml","code/cos.xml","code/ctr2wup.rpx",
-        "meta/meta.xml","meta/iconTex.tga","meta/bootLogoTex.tga","meta/bootDrcTex.tga","meta/bootTvTex.tga"};
+        "meta/meta.xml","meta/iconTex.tga","meta/bootLogoTex.tga","meta/bootDrcTex.tga","meta/bootTvTex.tga",
+        "meta/bootMovie.h264"};
     bool valid=false;
     if(relative)for(size_t i=0;i<sizeof(allowed)/sizeof(*allowed);++i)
         if(!strcmp(relative,allowed[i]))valid=true;

@@ -18,11 +18,11 @@ Commercial games and the GUI are not supported yet.
 3. **Finish installed-title launch** ([#15](https://github.com/Jdiller-86/CTR-2-WUP/issues/15)).
    The keyless, self-signed plaintext WUP candidate and automatic SD recovery
    probe exist. Per-file plaintext installation succeeds; use the independently
-   checked Menu metadata/artwork profile and guarded predecessor update to resolve
-   the Menu rejection, then verify the two Menu launches. Reuse bounded MCP
+   checked XML/artwork/movie launch profile and guarded predecessor update to
+   resolve launch rejection, then verify the two Menu launches. Reuse bounded MCP
    enumeration and the reviewed
    SD logging and native display/audio/exit helpers.
-   This hardware-only gap does not block CPU, graphics or audio development.
+   Remaining console evidence does not block CPU, graphics or audio development.
 
 ## Milestones
 

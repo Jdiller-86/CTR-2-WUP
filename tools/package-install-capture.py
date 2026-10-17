@@ -85,12 +85,12 @@ def header(document,installed_files=None,title_version=None):
         names={'code/app.xml','code/cos.xml','code/ctr2wup.rpx','meta/meta.xml',
                'meta/iconTex.tga','meta/bootLogoTex.tga','meta/bootDrcTex.tga','meta/bootTvTex.tga'}
         if (previous.get('schema_version')!=1 or previous.get('title_id')!=document['title_id']
-                or previous.get('source_commit')!='caf509f9cc151335d4d34a199be505e1ea643ad0'
-                or previous.get('title_version')!=27 or not isinstance(previous.get('files'),list)
+                or previous.get('source_commit')!='c2b4a9131204db8df21fcdf7424d7af3992c73b0'
+                or previous.get('title_version')!=28 or not isinstance(previous.get('files'),list)
                 or len(previous['files'])!=8 or {r.get('name') for r in previous['files']}!=names):
             raise ValueError('Require the complete reviewed installed predecessor')
         result += ['#define CTR_CAPTURE_REPAIR_FILE_COUNT 8',
-                   '#define CTR_CAPTURE_REPAIR_VERSION 27',
+                   '#define CTR_CAPTURE_REPAIR_VERSION 28',
                    '#define CTR_CAPTURE_REPAIR_SOURCE "'+previous['source_commit']+'"',
                    'static const CtrInstallCaptureFile ctr_capture_previous_files[CTR_CAPTURE_REPAIR_FILE_COUNT]={']
         for row in previous['files']:
@@ -104,13 +104,14 @@ def header(document,installed_files=None,title_version=None):
         result.append('#define CTR_CAPTURE_REPAIR_FILE_COUNT 0')
     if installed_files is not None:
         names={'code/app.xml','code/cos.xml','code/ctr2wup.rpx','meta/meta.xml',
-               'meta/iconTex.tga','meta/bootLogoTex.tga','meta/bootDrcTex.tga','meta/bootTvTex.tga'}
-        if (document['schema_version']!=2 or type(title_version) is not int or not 28<=title_version<=65535
+               'meta/iconTex.tga','meta/bootLogoTex.tga','meta/bootDrcTex.tga','meta/bootTvTex.tga',
+               'meta/bootMovie.h264'}
+        if (document['schema_version']!=2 or type(title_version) is not int or not 29<=title_version<=65535
                 or not isinstance(installed_files,list)
-                or len(installed_files)!=8 or any(not isinstance(r,dict) for r in installed_files)
+                or len(installed_files)!=9 or any(not isinstance(r,dict) for r in installed_files)
                 or {r.get('path') for r in installed_files}!=names):
             raise ValueError('Require all independently verified original installed files')
-        result += ['#define CTR_CAPTURE_CURRENT_FILE_COUNT 8',
+        result += ['#define CTR_CAPTURE_CURRENT_FILE_COUNT 9',
                    '#define CTR_CAPTURE_CURRENT_VERSION '+str(title_version),
                    'static const CtrInstallCaptureFile ctr_capture_current_files[CTR_CAPTURE_CURRENT_FILE_COUNT]={']
         for row in installed_files:

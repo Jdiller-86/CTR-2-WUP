@@ -1,48 +1,48 @@
 {
   "schema_version": 1,
   "title_id": "0005000043543257",
-  "source_commit": "caf509f9cc151335d4d34a199be505e1ea643ad0",
-  "title_version": 27,
+  "source_commit": "c2b4a9131204db8df21fcdf7424d7af3992c73b0",
+  "title_version": 28,
   "files": [
     {
       "name": "code/app.xml",
       "size": 706,
-      "sha256": "63ec5ac72e8e53e9b93748b0e4eaf06e84336dd42454112c7b61288d72efbd9c"
+      "sha256": "27bccbfa17772c12af0b7eee12835fb419b91792e1055b78d7ee6fd63a5eded5"
     },
     {
       "name": "code/cos.xml",
-      "size": 2227,
-      "sha256": "7fd878bb963e0c48d1c7f838554fe63bfae9a2bc0539cf56ee388e2695de71d5"
+      "size": 2222,
+      "sha256": "a4bb4775ebd3dbfe42dd0367d2387c3e1eceda8a7bd50820d5aac0baa7abf34e"
     },
     {
       "name": "code/ctr2wup.rpx",
-      "size": 204770,
-      "sha256": "9a3d7114420ba1110b02d5fc3a3d02ebf697fc216c77f269a2b2b86cdcb9d48e"
+      "size": 204777,
+      "sha256": "d48918e2d9ebaca79d0065b6f6b72379cbb0e948686f7573e96486f93723da9e"
     },
     {
       "name": "meta/bootDrcTex.tga",
-      "size": 1229778,
-      "sha256": "7f3948e2b264bf6b54ed0dd968bd4702ff9bcab37e26c83fd5d66c4370d2c71e"
+      "size": 1229804,
+      "sha256": "9535b1e2a33305b3ed683a7fc42ba8b5c5b40c1c578543e8412c4793aeddde3b"
     },
     {
       "name": "meta/bootLogoTex.tga",
-      "size": 28578,
-      "sha256": "ca7002fa05cd4f51ca15bafbb97fe8bbe220675c8cf6ffc9c2bbcd84c77727fc"
+      "size": 28604,
+      "sha256": "c59c2aff8c1930ba537ac14380621e5dd3789d15c049aa74edb7e5289976d2f1"
     },
     {
       "name": "meta/bootTvTex.tga",
-      "size": 2764818,
-      "sha256": "5adeecb431022e419a47329ef0c4bb07dfa58cb45574205798502ce0d27f37eb"
+      "size": 2764844,
+      "sha256": "d782315819290e18c36327a55b6c46713a07f03dd1fa3ad12fbaff6b7b2efd49"
     },
     {
       "name": "meta/iconTex.tga",
-      "size": 65554,
-      "sha256": "da1c2ce91bec6dc42d25295d80fd5db5cd584a9cdb6afa4b3c85d5c14b4e16cd"
+      "size": 65580,
+      "sha256": "13379f65fc2641992836b7598d74879cc2b5a30294e0a2b22b1c3baf0093d476"
     },
     {
       "name": "meta/meta.xml",
-      "size": 3489,
-      "sha256": "d5e54dace2d6232958df905e4553d00716bc261ef5cc7b5ce73566728f4a0de3"
+      "size": 10038,
+      "sha256": "e7e17ba2dd6325f8209e4b220157d85cfe29d296d8b5091c4eb557d11c91bf0c"
     }
   ]
 }

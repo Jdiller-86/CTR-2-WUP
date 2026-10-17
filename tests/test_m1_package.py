@@ -72,8 +72,8 @@ class M1PackageTests(unittest.TestCase):
                               source_dirty=False, original_inputs_only=True,
                               profile='wiiu_plaintext_homebrew', title_id=tool.EXPECTED_TITLE_ID,
                               content_layout='one_file_per_content',
-                              menu_profile='wup-menu-v1',
-                              title_version=28,
+                              menu_profile='wup-menu-v2',
+                              title_version=29,
                               title_name='CTR2WUP Install Check', install_test_ready=True,
                               requires_signature_patches=True, console_verified=False,
                               rpx_sha256=audio.digest(bytes(header)),
@@ -81,8 +81,8 @@ class M1PackageTests(unittest.TestCase):
         self.write_candidate()
         self.verified = dict(ok=True, title_id=self.candidate['title_id'],
                              content_layout='one_file_per_content',
-                             menu_profile='wup-menu-v1',
-                             title_version=28,
+                             menu_profile='wup-menu-v2',
+                             title_version=29,
                              files=[dict(path='code/ctr2wup.rpx', bytes=len(header), sha256=self.candidate['rpx_sha256'])],
                              installation='unverified')
         self.candidate['installed_files']=self.verified['files']

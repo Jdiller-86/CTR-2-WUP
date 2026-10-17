@@ -83,6 +83,12 @@ jobs:
           "$RUNNER_TEMP/ctr2wup-wheel/bin/python" -m pip install --no-deps artifacts/ci/python/dist/*.whl
           cd "$RUNNER_TEMP"
           "$RUNNER_TEMP/ctr2wup-wheel/bin/ctr2wup" --help
+          "$RUNNER_TEMP/ctr2wup-wheel/bin/python" - <<'PY'
+          import hashlib
+          from importlib.resources import files
+          from host.title_profile import BOOT_MOVIE_SHA256
+          assert hashlib.sha256(files('host').joinpath('assets/bootMovie.h264').read_bytes()).hexdigest() == BOOT_MOVIE_SHA256
+          PY
       - name: Upload wheel and host test logs
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
