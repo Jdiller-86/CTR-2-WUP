@@ -16,7 +16,34 @@ import tempfile
 from .atomic import publish_directory
 from .package_crypto import fail
 from .package_writer import (_metadata, _inventory, _fst, _encrypt_group,
-                             _tmd, _ticket)
+                             _tmd, _ticket, _align, BLOCK)
+
+
+def _file_contents(nodes, title, group):
+    """One independently readable plaintext stream per file, as in makefst.
+
+    Keep tree order and all staged bytes. Directories have no data stream; their
+    cluster field refers to the following file, or zero after the final file.
+    """
+    groups, sizes, owners = [[]], [0], [(0, 0)]
+    for node in nodes[1:]:
+        if node['directory']:
+            continue
+        if len(groups) >= 1024:
+            fail('staging_limit', 'Plaintext homebrew supports at most 1023 files')
+        node['content'], node['offset'] = len(groups), 0
+        groups.append([node])
+        sizes.append(max(BLOCK, _align(node['size'], BLOCK)))
+        top = node['path'].split('/', 1)[0]
+        owners.append((int(title, 16), group) if top == 'content' else
+                      (0, 0x400 if top == 'meta' else 0))
+    following = 0
+    for node in reversed(nodes[1:]):
+        if node['directory']:
+            node['content'] = following
+        else:
+            following = node['content']
+    return groups, sizes, owners
 
 
 def pack_homebrew(source, output):
@@ -28,8 +55,9 @@ def pack_homebrew(source, output):
     if output.resolve().is_relative_to(source.resolve()):
         fail('unsafe_output', 'Package output must be outside the staging tree')
     identity = _metadata(source)
-    nodes, groups, sizes = _inventory(source)
-    fst = _fst(nodes, sizes, identity[0], identity[2], plaintext=True)
+    nodes, _, _ = _inventory(source)
+    groups, sizes, owners = _file_contents(nodes, identity[0], identity[2])
+    fst = _fst(nodes, sizes, identity[0], identity[2], plaintext=True, owners=owners)
     output.parent.mkdir(parents=True, exist_ok=True)
     if shutil.disk_usage(output.parent).free < sum(sizes) + 64*1024*1024:
         fail('insufficient_disk', 'Packaging needs content space and a 64 MiB working margin')
@@ -39,16 +67,17 @@ def pack_homebrew(source, output):
         certificates, cp_key, xs_key = generate_chain()
         hashes = [_encrypt_group(source, groups[n], sizes[n], stage/f'{n:08x}.app',
                                  None, n, fst=fst if n == 0 else None, plaintext=True)
-                  for n in range(4)]
+                  for n in range(len(groups))]
         tmd = _tmd(*identity, sizes, hashes, 'Root-CA00000003-CP0000000b')
-        for n in range(4):
+        for n in range(len(groups)):
             from .package_validator import CONTENT_START
             struct.pack_into('>H', tmd, CONTENT_START+n*48+6, 0x2000)
         # Recompute the authenticated table hashes after changing content flags.
         import hashlib
         tmd[0x208:0x228] = hashlib.sha256(tmd[CONTENT_START:]).digest()
         tmd[0x1E4:0x204] = hashlib.sha256(tmd[0x204:CONTENT_START]).digest()
-        ticket = _ticket(identity[0], identity[1], bytes(16), bytes(16), 'Root-CA00000003-XS0000000c')
+        ticket = _ticket(identity[0], identity[1], bytes(16), bytes(16),
+                         'Root-CA00000003-XS0000000c', all_content_rights=True)
         ticket[0x1BF:0x1CF] = bytes(16)  # Unused for unencrypted contents.
         (stage/'title.tmd').write_bytes(sign_document(tmd, cp_key, kind='tmd'))
         (stage/'title.tik').write_bytes(sign_document(ticket, xs_key, kind='ticket'))
@@ -56,6 +85,7 @@ def pack_homebrew(source, output):
         from .package_integrity import verify_package
         report = verify_package(stage, None, expected_staging=source)
         report.update(schema_version=1, stage='pack-homebrew', profile='wiiu_plaintext_homebrew',
+                      content_layout='one_file_per_content',
                       signature_policy='original_self_signed', requires_signature_patches=True,
                       common_key_required=False, production_certificates_required=False,
                       install_test_ready=True, installable_wup='physical_installer_validation_pending',

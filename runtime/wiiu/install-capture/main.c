@@ -118,10 +118,10 @@ static bool pump(void *unused) {
 
 static bool payload_ready(void) {
     const char *failed=NULL;
-    bool ok=ctr_install_capture_verify(PAYLOAD,ctr_capture_files,7,&failed);
+    bool ok=ctr_install_capture_verify(PAYLOAD,ctr_capture_files,CTR_CAPTURE_FILE_COUNT,&failed);
     notice(ok?"Original M1 package verified.":"Package check failed: %s",failed?failed:"inventory");
-    char text[192];snprintf(text,sizeof(text),"PAYLOAD exact_seven_files=%u failed=%s errno=%d",
-        ok,failed?failed:"none",ok?0:errno);
+    char text[192];snprintf(text,sizeof(text),"PAYLOAD exact_files=%u count=%u failed=%s errno=%d",
+        ok,(unsigned)CTR_CAPTURE_FILE_COUNT,failed?failed:"none",ok?0:errno);
     return line(text) && ok;
 }
 
@@ -297,7 +297,7 @@ int main(void) {
         char text[256];snprintf(text,sizeof(text),
             "IDENTITY capture_source=%s source_dirty=%u package_source=%s title=%s protocol=mcp-capture-v2",
             CTR_SOURCE_COMMIT,CTR_SOURCE_DIRTY,CTR_CAPTURE_PACKAGE_SOURCE,CTR_CAPTURE_TITLE);
-        ready=line(text) && line("PACKAGE artifact_sha256=" CTR_CAPTURE_PACKAGE_SHA256);
+        ready=line(text) && line("PACKAGE " CTR_CAPTURE_PACKAGE_RECORD);
     }
     bool audio_ready=audio_begin();
     display_ready=capture_display_init();

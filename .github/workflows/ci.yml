@@ -456,6 +456,7 @@ jobs:
           python3 tools/package-install-candidate.py --native artifacts/ci/install-check --output artifacts/ci/install-candidate
           python3 tools/package-m1-suite.py --native artifacts/ci/install-check \
             --installed artifacts/ci/install-candidate \
+            --capture-sdk "$DEVKITPRO" \
             --sdk-receipt "$DEVKITPRO/ctr2wup-image-digest.txt" \
             --sdk-licenses "$DEVKITPRO/licenses" --output artifacts/ci/m1-suite
       - name: Upload the focused installed-title check

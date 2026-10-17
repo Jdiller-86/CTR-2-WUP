@@ -64,24 +64,29 @@ class M1PackageTests(unittest.TestCase):
                                       console_verified=False, full_milestone_acceptance=False))
         (self.native/'build-report.json').write_text(json.dumps(self.native_report))
         payload = {'title.tmd': b'Original TMD fixture', 'title.tik': b'Original ticket fixture',
-                   'title.cert': b'Original certificate fixture', '00000000.app': bytes(header)}
+                   'title.cert': b'Original certificate fixture',
+                   **{f'{i:08x}.app':bytes(header) for i in range(9)}}
         for name, data in payload.items():
             (self.installed/name).write_bytes(data)
         self.candidate = dict(ok=True, kind='ctr2wup-install-candidate', source_commit=COMMIT,
                               source_dirty=False, original_inputs_only=True,
                               profile='wiiu_plaintext_homebrew', title_id=tool.EXPECTED_TITLE_ID,
+                              content_layout='one_file_per_content',
                               title_name='CTR2WUP Install Check', install_test_ready=True,
                               requires_signature_patches=True, console_verified=False,
                               rpx_sha256=audio.digest(bytes(header)),
                               files=[dict(path=n, size=len(d), sha256=audio.digest(d)) for n, d in payload.items()])
         self.write_candidate()
         self.verified = dict(ok=True, title_id=self.candidate['title_id'],
+                             content_layout='one_file_per_content',
                              files=[dict(path='code/ctr2wup.rpx', bytes=len(header), sha256=self.candidate['rpx_sha256'])],
                              installation='unverified')
         for mocked in (patch.object(tool, 'ROOT', self.source),
                        patch.object(tool, 'helpers', return_value=audio),
                        patch.object(audio, 'identity', return_value=COMMIT),
                        patch.object(audio, 'checked_source', return_value=b'Original exact source fixture'),
+                       patch.object(tool,'capture_payload',return_value={
+                           'sd-card/wiiu/apps/ctr2wup-install-capture.wuhb':b'WUHBoriginal capture fixture'}),
                        patch('host.package_integrity.verify_package', return_value=self.verified)):
             mocked.start()
             self.addCleanup(mocked.stop)
@@ -97,7 +102,7 @@ class M1PackageTests(unittest.TestCase):
         report = self.package()
         stage = self.root/'out/stage'
         self.assertEqual({p.name for p in stage.iterdir()}, {'START-HERE.md', 'sd-card', 'support'})
-        self.assertFalse(list((stage/'sd-card').rglob('*.wuhb')))
+        self.assertEqual([p.name for p in (stage/'sd-card').rglob('*.wuhb')],['ctr2wup-install-capture.wuhb'])
         self.assertFalse(list(stage.rglob('*.rpx')))
         self.assertFalse(list(stage.rglob('*.wav')))
         self.assertFalse((stage/'AUDIO-STREAMS.md').exists())
@@ -115,6 +120,9 @@ class M1PackageTests(unittest.TestCase):
         self.assertTrue(manifest['package']['available'])
         self.assertFalse(manifest['console_verified'])
         self.assertFalse(manifest['full_milestone_acceptance'])
+        self.assertTrue(manifest['installation_capture']['available'])
+        self.assertEqual(manifest['installation_capture']['package_manifest_sha256'],
+                         hashlib.sha256((stage/'support/install-package.json').read_bytes()).hexdigest())
         self.assertEqual((stage/'support/manifest.json').read_bytes(),
                          (stage/'sd-card/ctr2wup/install-check'/COMMIT/'kit.json').read_bytes())
         self.assertEqual({p.name for p in (stage/'sd-card/ctr2wup/install-check').iterdir()}, {COMMIT})
@@ -128,6 +136,9 @@ class M1PackageTests(unittest.TestCase):
         self.assertIn('**PREPARED**', guide)
         self.assertIn('**RECOVERED**', guide)
         self.assertIn('whole `sd:/ctr2wup/install-check/` folder', guide)
+        self.assertIn('one destination is sufficient',guide)
+        self.assertIn('Stop if installation fails',guide)
+        self.assertLess(len(guide.split()),160)
         for row in manifest['files']:
             data = (stage/row['path']).read_bytes()
             self.assertEqual(len(data), row['size'])
@@ -141,6 +152,13 @@ class M1PackageTests(unittest.TestCase):
     def test_no_payload_means_no_empty_retest_kit(self):
         with self.assertRaisesRegex(ValueError, 'No install payload'):
             tool.package(self.native, None, self.root/'out')
+        self.assertFalse((self.root/'out').exists())
+
+    def test_old_grouped_candidate_cannot_be_mislabeled_as_per_file(self):
+        self.candidate['content_layout']='legacy_grouped'
+        self.write_candidate()
+        with self.assertRaisesRegex(ValueError,'source-bound'):
+            self.package()
         self.assertFalse((self.root/'out').exists())
 
     def test_old_or_mismatched_native_recovery_witness_never_gets_completion_claims(self):
