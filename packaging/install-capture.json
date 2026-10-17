@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "title_id": "0005000043543257",
+  "package_source": "070ddc00ef38fb1e06d434070c7247140a51d09b",
+  "package_artifact_sha256": "bfc6ea8e229e60ec44df7c62a13280830fafb2044e19c89202e039e658c11c5d",
+  "files": [
+    {"name": "00000000.app", "size": 32768, "sha256": "2f047b30e9c266ba4c89e8b7b25a75731ed51ad6d7d58f7b4bd0c1f77cb2794b"},
+    {"name": "00000001.app", "size": 229376, "sha256": "a70d0a27dbcf10e454dad3251a59b22df08b7f3cd1ab71241947f764570a04ef"},
+    {"name": "00000002.app", "size": 32768, "sha256": "c35020473aed1b4642cd726cad727b63fff2824ad68cedd7ffb73c7cbd890479"},
+    {"name": "00000003.app", "size": 4096000, "sha256": "de2eca7e46be61135d18b310161ffd282ba3804ff04c84e60ed9352ea98cbee4"},
+    {"name": "title.tmd", "size": 3012, "sha256": "6388ab336d70559a0eabcfdc14ea45fb3327d4865283a2e2b864bfa692353877"},
+    {"name": "title.tik", "size": 848, "sha256": "faec11c13cae4a6e48af39553dfb18016c0b1d6c6e950b0647b68324fe4bcc09"},
+    {"name": "title.cert", "size": 2560, "sha256": "2dcd7502e5828660781ca04aab76fe1fb2a0c30ac2cfd7a57aed334329d87dae"}
+  ]
+}

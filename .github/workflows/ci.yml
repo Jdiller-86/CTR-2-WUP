@@ -466,6 +466,16 @@ jobs:
           include-hidden-files: true
           retention-days: 30
           if-no-files-found: error
+      - name: Build the fixed-package MCP error capture
+        run: python3 tools/package-install-capture.py --output artifacts/ci/install-capture
+      - name: Upload the focused installation error capture
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wiiu-install-capture-${{ github.sha }}
+          path: artifacts/ci/install-capture/stage/
+          include-hidden-files: true
+          retention-days: 30
+          if-no-files-found: error
       - name: Upload checked compiled guest draws and source provenance
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

@@ -37,6 +37,15 @@ The producer generates an ephemeral RSA4096 Root and RSA2048 CA/CP/XS test chain
 No private key is serialized. The independent verifier checks signatures and
 content consistency while explicitly retaining an untrusted-root result.
 
+`tools/package-install-capture.py --output artifacts/install-capture` builds a
+small Aroma app for diagnosing the pinned original M1 package. It requires the
+exact seven hashes in `packaging/install-capture.json`, a writable SD report and
+an absent title ID before one explicit target selection can start installation.
+Raw IOS submission/callback codes and MCP progress are saved under
+`sd:/ctr2wup/install-check/install-capture/`. Cancellation drains the callback
+before releasing buffers. The app preserves the WUP and existing titles; its
+receipt establishes installation diagnostics, not M1 completion.
+
 ## Encrypted research profile
 
 The encrypted `0x2001` writer remains supported with its separately configured
