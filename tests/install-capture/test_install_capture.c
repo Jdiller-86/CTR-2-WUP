@@ -172,6 +172,9 @@ static void logs(void) {
     log.sync=NULL;log.verify=NULL;unsigned syncs=p.syncs,verified=p.verifications;
     CHECK(capture_log_checkpoint(&log,"EXIT after_system_transition"));
     CHECK(p.syncs==syncs && p.verifications==verified); /* No new FSA client after transition. */
+    log.sync=sync_log;log.verify=verify_log;
+    CHECK(capture_log_checkpoint(&log,"Foreground reacquired; verify all preceding bytes"));
+    CHECK(p.syncs>syncs && p.verifications>verified);
     capture_log second={0};p=(LogProbe){.log=&second};
     CHECK(capture_log_open(&second,directory,1,sync_log,verify_log,&p));
     CHECK(strcmp(path,second.path)); /* Existing per-session evidence is preserved. */

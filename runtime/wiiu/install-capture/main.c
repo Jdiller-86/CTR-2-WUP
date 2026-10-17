@@ -85,15 +85,20 @@ static bool pump(void *unused) {
     ProcUIStatus status=ProcUIProcessMessages(TRUE);
     bool was_foreground=foreground;
     if(status==PROCUI_STATUS_EXITING) {
-        exit_requested=true;exit_observed=true;report.sync=NULL;report.verify=NULL;
-        ctr_report_storage_close(&storage);
+        exit_requested=true;exit_observed=true;
     } else if(status==PROCUI_STATUS_RELEASE_FOREGROUND) {
         if(!ctr_diagnostic_audio_end(&audio,NULL,NULL))platform_failed=true;
-        ctr_report_storage_close(&storage);ProcUIDrawDoneRelease();
+        ProcUIDrawDoneRelease();
     }
     foreground=status==PROCUI_STATUS_IN_FOREGROUND;
+    if(!foreground) {
+        /* IOS still owns an active install request. Preserve closed stdio
+         * checkpoints while draining it, without reopening an FSA client. */
+        report.sync=NULL;report.verify=NULL;ctr_report_storage_close(&storage);
+    }
     if(foreground) {
         if(!was_foreground) {
+            report.sync=ctr_report_storage_sync;report.verify=ctr_report_storage_verify;
             capture_display_invalidate();
             if(!audio_begin())exit_requested=true;
         }
@@ -278,11 +283,14 @@ int main(void) {
             }
         }
     } else notice("Preflight blocked installation.");
+    /* Finish and verify the SD view in the foreground. A system exit may
+     * instead leave a partial stdio-only checkpoint; never call that saved. */
+    while(!foreground && !exit_requested && pump(NULL)) {}
     if(report.file) {
         line("CAPTURE scope=installation_diagnosis full_milestone_acceptance=0");
         line("END OF REPORT");
     }
-    saved=capture_log_close(&report);
+    saved=capture_log_close(&report) && report.verify!=NULL;
     if(saved) {
         notice("SD REPORT: CLOSED READ-BACK VERIFIED");
         notice("sd:/ctr2wup/install-check/install-capture/");
