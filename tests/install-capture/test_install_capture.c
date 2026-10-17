@@ -130,6 +130,64 @@ static void selection(void) {
     CHECK(!ctr_install_capture_select(&armed,true,true,true));CHECK(!armed);
 }
 
+static void inventory(void) {
+    /* Original MCP-shaped byte records, including deliberately unaligned IDs.
+     * This is the production classifier, independent of host byte order. */
+    const uint64_t title=UINT64_C(0x0005000043543257);
+    unsigned char buffer[1+3*0x61]={0},*entries=buffer+1;
+    CtrInstallCaptureInventory result;
+    result=ctr_install_capture_inventory(entries,3*0x61,0x61,2,0,2,2,title);
+    CHECK(result.state==CTR_CAPTURE_INVENTORY_ABSENT);
+    CHECK(!strcmp(result.reason,"complete_absence") && result.match_index==UINT32_MAX);
+    result=ctr_install_capture_inventory(entries,3*0x61,0x61,157,0,2,157,title);
+    CHECK(result.state==CTR_CAPTURE_INVENTORY_INCONCLUSIVE);
+    CHECK(!strcmp(result.reason,"count_mismatch")); /* Old code falsely called this a collision. */
+    result=ctr_install_capture_inventory(entries,3*0x61,0x61,2,0,2,3,title);
+    CHECK(result.state==CTR_CAPTURE_INVENTORY_INCONCLUSIVE && !strcmp(result.reason,"count_changed"));
+    result=ctr_install_capture_inventory(entries,3*0x61,0x61,0,0,0,0,title);
+    CHECK(result.state==CTR_CAPTURE_INVENTORY_ABSENT);
+    result=ctr_install_capture_inventory(entries,3*0x61,0x61,0,0,0,1,title);
+    CHECK(result.state==CTR_CAPTURE_INVENTORY_INCONCLUSIVE);
+
+    /* An entry beyond returned count is never examined. */
+    for(unsigned i=0;i<8;++i)entries[0x61+i]=(unsigned char)(title>>(56-8*i));
+    result=ctr_install_capture_inventory(entries,3*0x61,0x61,1,0,1,1,title);
+    CHECK(result.state==CTR_CAPTURE_INVENTORY_ABSENT);
+    result=ctr_install_capture_inventory(entries,3*0x61,0x61,2,0,2,2,title);
+    CHECK(result.state==CTR_CAPTURE_INVENTORY_PRESENT && result.match_index==1);
+    CHECK(!strcmp(result.reason,"target_match"));
+    /* A valid observed match blocks writes even if the global count changed. */
+    result=ctr_install_capture_inventory(entries,3*0x61,0x61,157,0,2,156,title);
+    CHECK(result.state==CTR_CAPTURE_INVENTORY_PRESENT && result.match_index==1);
+    result=ctr_install_capture_inventory(entries,3*0x61,0x61,2,-1,2,2,title);
+    CHECK(result.state==CTR_CAPTURE_INVENTORY_INCONCLUSIVE && !strcmp(result.reason,"list_error"));
+    result=ctr_install_capture_inventory(entries,3*0x61,0x61,2,1,2,2,title);
+    CHECK(result.state==CTR_CAPTURE_INVENTORY_INCONCLUSIVE);
+    /* Bounds are validated before looking at even a matching prefix. */
+    result=ctr_install_capture_inventory(entries,3*0x61,0x61,2,0,4,2,title);
+    CHECK(result.state==CTR_CAPTURE_INVENTORY_INCONCLUSIVE && !strcmp(result.reason,"invalid_buffer"));
+    result=ctr_install_capture_inventory(entries,3*0x61,0x61,2,0,UINT32_MAX,2,title);
+    CHECK(result.state==CTR_CAPTURE_INVENTORY_INCONCLUSIVE);
+    result=ctr_install_capture_inventory(entries,3*0x61-1,0x61,2,0,2,2,title);
+    CHECK(result.state==CTR_CAPTURE_INVENTORY_INCONCLUSIVE);
+    result=ctr_install_capture_inventory(NULL,3*0x61,0x61,0,0,0,0,title);
+    CHECK(result.state==CTR_CAPTURE_INVENTORY_INCONCLUSIVE);
+    result=ctr_install_capture_inventory(entries,3*0x61,0,0,0,0,0,title);
+    CHECK(result.state==CTR_CAPTURE_INVENTORY_INCONCLUSIVE);
+    result=ctr_install_capture_inventory(entries,3*0x61,7,0,0,0,0,title);
+    CHECK(result.state==CTR_CAPTURE_INVENTORY_INCONCLUSIVE);
+    result=ctr_install_capture_inventory(entries,(CTR_CAPTURE_TITLE_LIMIT+1)*0x61,0x61,0,0,0,0,title);
+    CHECK(result.state==CTR_CAPTURE_INVENTORY_INCONCLUSIVE);
+    memset(entries,0,3*0x61);
+    const int32_t counts[]={-1,4097,INT32_MAX};
+    for(unsigned i=0;i<sizeof(counts)/sizeof(counts[0]);++i) {
+        result=ctr_install_capture_inventory(entries,3*0x61,0x61,counts[i],0,0,0,title);
+        CHECK(result.state==CTR_CAPTURE_INVENTORY_INCONCLUSIVE && !strcmp(result.reason,"count_error"));
+        result=ctr_install_capture_inventory(entries,3*0x61,0x61,0,0,0,counts[i],title);
+        CHECK(result.state==CTR_CAPTURE_INVENTORY_INCONCLUSIVE && !strcmp(result.reason,"count_error"));
+    }
+}
+
 typedef struct {
     capture_log *log;
     unsigned syncs,verifications;
@@ -202,4 +260,4 @@ static void logs(void) {
     CHECK(unlink(log.path)==0);CHECK(rmdir(directory)==0);
 }
 
-int main(void) { payload();asynchronous();selection();logs();printf("Install capture: %u checks passed\n",assertions);return 0; }
+int main(void) { payload();asynchronous();selection();inventory();logs();printf("Install capture: %u checks passed\n",assertions);return 0; }

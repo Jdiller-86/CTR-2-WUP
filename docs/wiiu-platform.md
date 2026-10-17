@@ -6,7 +6,9 @@ WUT owns the SD mount: never add a competing mount or unmount it. Use binary
 writes, checked sync/close and exact read-back; installation diagnostics also
 verify the physical `/vol/external01` file through FSA. Preserve the first error,
 show its stage/code and block dependent operations when logging fails. Display
-the precise return path and filename.
+the precise return path and filename. Keep confirmed failure, observed presence
+and inconclusive preflight distinct; log the actual bounded evidence behind each
+classification. A successful API call alone does not establish its data's meaning.
 
 Use one graphics owner: the native GX2/font/scaling path. Avoid OSScreen and GX2
 ownership conflicts; check the pinned SDK's actual API semantics. Always acquire

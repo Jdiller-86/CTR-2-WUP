@@ -17,9 +17,9 @@ Commercial games and the GUI are not supported yet.
    connection and timing; native tone playback does not cover guest audio.
 3. **Finish original-title installation** ([#37](https://github.com/Jdiller-86/CTR-2-WUP/issues/37)).
    The keyless, self-signed plaintext WUP candidate and automatic SD recovery
-   probe exist. Finish verified SD logging and native display/audio handling in
-   the fixed-package MCP capture, resolve installer rejection, then verify the
-   two Menu launches.
+   probe exist. Correct fixed-package MCP inventory classification, capture the
+   installer rejection, then verify the two Menu launches. Reuse the reviewed
+   SD logging and native display/audio/exit helpers.
    This hardware-only gap does not block CPU, graphics or audio development.
 
 ## Milestones
