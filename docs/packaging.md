@@ -16,8 +16,8 @@ consistency; it does not establish Nintendo authenticity or physical installatio
 The candidate targets **WUP Installer GX2 or the bundled MCP capture under Aroma
 with signature patches**,
 including `wiiu/environments/aroma/modules/setup/01_sigpatches.rpx`. The module
-is not bundled and its presence is not assumed. Physical installer acceptance
-and Wii U Menu launch/exit/relaunch are unverified.
+is not bundled and its presence is not assumed. Package integrity, installer
+acceptance and Wii U Menu launch/exit/relaunch are separate checks.
 The explicit diagnostic ID **`0005000043543257`** is not a reserved safe range:
 check the console for an unrelated title with that ID before installation.
 
@@ -48,9 +48,17 @@ content consistency while explicitly retaining an untrusted-root result.
 `tools/package-install-capture.py --output artifacts/install-capture` builds the
 standalone Aroma diagnostic for the historical seven-file package pinned in
 `packaging/install-capture.json`. The generated M1 handoff instead binds the same
-app to its current per-file package. Both require a complete compiled inventory,
-a writable SD report and an absent title ID before one explicit target selection
-can start installation. Package pins cannot be changed through an SD manifest.
+app to its current per-file package. Both require a complete compiled inventory
+and a writable SD report before one explicit target selection. Fresh installation
+requires an absent title ID. Package pins cannot be changed through an SD manifest.
+The completion handoff can also update the reviewed predecessor in place. It
+requires its recorded title version and exact lengths/SHA-256 of all eight
+installed files, read through FSA on the selected device. The compiled
+[`install-predecessor.json`](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/packaging/install-predecessor.json)
+pins cannot be redirected through SD metadata. It never deletes titles, writes
+save data or overwrites an unrecognized installation.
+After MCP success, it verifies the new installed files and records the raw
+`ACPGetTitleMetaXml` result and expected identity before offering Menu launches.
 Read-only MCP package parsing runs independently of install eligibility. Title
 inventory reports `absent`, `present` or `inconclusive`, with before/returned/after
 counts and bounded capacity. Only an actual matching record establishes presence;
@@ -157,6 +165,19 @@ certificate and report only after successful independent decrypted/file checks.
 Its `installable_wup` field explicitly awaits installer and console validation.
 The report separates decrypted integrity, unauthenticated signatures and unrun
 installation. It never claims an authentic or proven installable title.
+
+New installation candidates require `wup-menu-v1` in both candidate creation and
+independent handoff validation. This checks all 137 Menu/ACP fields, typed launch
+settings, matching app/Menu identity, the RPX entry, platform permissions and four
+uncompressed bottom-left TGA 2 images with their complete footer. Dimensions and
+depths are 128×128×32 (icon), 170×42×32 (logo), 854×480×24 (GamePad) and
+1280×720×24 (TV). Ordinary integrity-only verification remains available for
+historical packages and does not claim Menu compatibility.
+
+Metadata and image-format facts were cross-checked against the original
+[woominstaller channel](https://github.com/shinyquagsire23/woominstaller_gx2/tree/d2528e58c4e18df0034ee938b817e29be0ff625b/woominstaller_gx2)
+and [Flappy Bird channel](https://github.com/rw-r-r-0644/Flappy-Bird_GX2/tree/43a541d98fea4cd4dc892f4b9eb125432cbea78d/channel),
+and the pinned WUT `ACPMetaXml` structure. No template or artwork is incorporated.
 
 ## Title identity
 

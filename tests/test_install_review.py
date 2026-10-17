@@ -212,6 +212,13 @@ class InstallReviewTests(unittest.TestCase):
         self.observations['runs'][1]['returned_to_menu'] = False
         self.assertEqual(reviewer.review(self.folder, SOURCE, self.observations)['status'], 'FAIL')
 
+    def test_bound_mcp_capture_is_a_supported_installer_without_accepting_unknown_tools(self):
+        self.completion_kit()
+        self.observations['installer']='CTR2WUP Install Capture'
+        self.assertTrue(reviewer.review(self.folder,SOURCE,self.observations)['m1_completion_ready'])
+        self.observations['installer']='Unknown'
+        self.assertFalse(reviewer.review(self.folder,SOURCE,self.observations)['m1_completion_ready'])
+
     def test_whole_ftp_parent_selects_exact_source_without_reading_older_sources(self):
         self.completion_kit()
         parent = self.folder/'ftp-return'; parent.mkdir()
