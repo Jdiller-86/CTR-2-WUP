@@ -160,7 +160,7 @@ def _fst(data, records, title, group, *, plaintext=False):
     return files, directories
 
 
-def _content_files(chunks, files, xml, *, require_menu=False):
+def _content_files(chunks, files, xml, *, require_menu=False, require_startup=False):
     results = []
     index = 0
     position = 0
@@ -187,9 +187,13 @@ def _content_files(chunks, files, xml, *, require_menu=False):
                 part = chunk[cursor:cursor + size]
                 digest.update(part)
                 artwork = require_menu and item['path'] in LAUNCH_ASSETS
-                if artwork or item["path"] in ("code/app.xml", "code/cos.xml", "meta/meta.xml"):
-                    if item["bytes"] > (3*1024*1024 if artwork else READ_SIZE):
-                        fail("invalid_title_metadata", "Title XML exceeds its supported size")
+                executable = require_startup and item['path'].startswith('code/') and item['path'].endswith('.rpx')
+                if artwork or executable or item["path"] in ("code/app.xml", "code/cos.xml", "meta/meta.xml"):
+                    limit=64*1024*1024 if executable else 3*1024*1024 if artwork else READ_SIZE
+                    if item["bytes"] > limit:
+                        fail("invalid_title_metadata", "Title launch resource exceeds its supported size")
+                    if executable and sum(len(v) for p,v in xml.items() if p.endswith('.rpx'))+len(part)>limit:
+                        fail("invalid_native_startup", "Combined RPX startup inputs exceed 64 MiB")
                     xml.setdefault(item["path"], bytearray()).extend(part)
                 if position + size == item["offset"] + item["bytes"]:
                     finish(item)
@@ -262,7 +266,7 @@ def _compare_staging(source, files, directories):
         fail("staging_mismatch", "Decrypted package files or directories differ from expected staging")
 
 
-def verify_package(path, key_file=None, *, expected_staging=None, require_menu=False):
+def verify_package(path, key_file=None, *, expected_staging=None, require_menu=False, require_startup=False):
     path = Path(path)
     try:
         report = validate_package(path)
@@ -323,12 +327,12 @@ def verify_package(path, key_file=None, *, expected_staging=None, require_menu=F
     for number in range(1, len(records)):
         record = records[number]
         files += _content_files(_plaintext(record["path"], title_key, number, record["digest"], record["size"]), grouped[number], xml,
-                                require_menu=require_menu)
+                                require_menu=require_menu or require_startup,require_startup=require_startup)
     _title_metadata(xml, tmd, files)
     menu_profile = 'not_requested'
-    if require_menu:
+    if require_menu or require_startup:
         from .title_profile import verify_menu_profile
-        menu_profile = verify_menu_profile({**{f['path']:b'' for f in files},**xml})
+        menu_profile = verify_menu_profile({**{f['path']:b'' for f in files},**xml},require_startup=require_startup)
     if expected_staging is not None:
         _compare_staging(expected_staging, files, directories)
     for item in report["contents"]:

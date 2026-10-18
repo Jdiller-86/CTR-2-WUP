@@ -8,6 +8,7 @@ import struct
 import subprocess
 import tempfile
 import unittest
+import zlib
 from unittest.mock import patch
 
 from host.errors import HostError
@@ -39,14 +40,21 @@ def original_inputs(root):
     (source / "code/app.xml").write_text(app, encoding="utf-8")
     (source / "code/cos.xml").write_text('<app><argstr>probe.rpx</argstr></app>')
     (source / "meta/meta.xml").write_text('<menu><title_id>00050000cf520001</title_id><title_version>7</title_version></menu>')
-    # Header-only original ELF fixture, deliberately not runnable homebrew.
-    rpx = bytearray(92)
+    # Original structural fixture with WUT FILEINFO/CRC; no executable code.
+    rpx = bytearray(280)
     rpx[:7] = b"\x7fELF\x01\x02\x01"
     rpx[7] = 0xCA
     struct.pack_into(">HHI", rpx, 16, 0xFE01, 20, 1)
     struct.pack_into(">I", rpx, 32, 52)
     struct.pack_into(">H", rpx, 40, 52)
-    struct.pack_into(">HH", rpx, 46, 40, 1)
+    struct.pack_into(">HH", rpx, 46, 40, 3)
+    struct.pack_into('>10I',rpx,92,0,0x80000004,0,0,172,96,0,0,4,0)
+    struct.pack_into('>10I',rpx,132,0,0x80000003,0,0,268,12,0,0,4,4)
+    struct.pack_into('>I',rpx,172,0xcafe0402)
+    struct.pack_into('>I',rpx,172+0x34,2)
+    struct.pack_into('>I',rpx,172+0x40,0x5078)
+    struct.pack_into('>I',rpx,172+0x50,0x5335)
+    struct.pack_into('>I',rpx,272,zlib.crc32(rpx[172:268]))
     (source / "code/probe.rpx").write_bytes(rpx)
     (source / "content/sub/bytes.bin").write_bytes(bytes(range(256)) * 9000 + b"unaligned")
     (source / "content/zero.bin").write_bytes(b"")

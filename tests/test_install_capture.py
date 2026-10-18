@@ -62,7 +62,7 @@ class CapturePackageTests(unittest.TestCase):
         generated=capture.header(checked)
         self.assertIn('#define CTR_CAPTURE_FILE_COUNT 12',generated)
         self.assertIn('#define CTR_CAPTURE_M1_COMPLETION 1',generated)
-        self.assertIn('#define CTR_CAPTURE_REPAIR_VERSION 30',generated)
+        self.assertIn('#define CTR_CAPTURE_REPAIR_VERSION 31',generated)
         self.assertIn('#define CTR_CAPTURE_REPAIR_FILE_COUNT 9',generated)
         previous=json.loads((ROOT/'packaging/install-predecessor.json').read_bytes())
         self.assertIn(previous['source_commit'],generated)

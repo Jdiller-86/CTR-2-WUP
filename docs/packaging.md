@@ -182,8 +182,11 @@ Its `installable_wup` field explicitly awaits installer and console validation.
 The report separates decrypted integrity, unauthenticated signatures and unrun
 installation. It never claims an authentic or proven installable title.
 
-New installation candidates require `wup-menu-v2` in both candidate creation and
-independent handoff validation. This checks all 137 Menu/ACP fields, typed launch
+New installation candidates require `wup-menu-v3` in both candidate creation and
+independent handoff validation. This checks the native RPX FILEINFO/CRC and requires
+`app.xml` to carry the executable's declared nonzero SDK version. RPX inputs are
+bounded to 64 MiB. Historical `wup-menu-v2` and integrity-only reviews retain their
+original scope. The new check also covers all 137 Menu/ACP fields, typed launch
 settings, matching app/Menu identity, the RPX entry, platform permissions and four
 uncompressed bottom-left TGA 2 images with their complete footer. Dimensions and
 depths are 128×128×32 (icon), 170×42×32 (logo), 854×480×24 (GamePad) and
@@ -203,6 +206,11 @@ Metadata and image-format facts were cross-checked against the original
 [woominstaller channel](https://github.com/shinyquagsire23/woominstaller_gx2/tree/d2528e58c4e18df0034ee938b817e29be0ff625b/woominstaller_gx2)
 and [Flappy Bird channel](https://github.com/rw-r-r-0644/Flappy-Bird_GX2/tree/43a541d98fea4cd4dc892f4b9eb125432cbea78d/channel),
 and the pinned WUT `ACPMetaXml` structure. No template or artwork is incorporated.
+The SDK record follows pinned WUT
+[`elf2rpl`](https://github.com/devkitPro/wut-tools/blob/b22de1a3c0c8950c4ad4b4df170c89c05d3196aa/src/elf2rpl/main.cpp#L184).
+[UWUVCI AIO](https://github.com/stuff-by-3-random-dudes/UWUVCI-AIO-WPF/blob/d03b559bbac53642506557519108e5967d5fbd25/UWUVCI%20AIO%20WPF/Classes/Injection.cs#L1596)
+preserves its base title's startup configuration and packs through CNUSPACKER.
+Its base-dependent runtime is not incorporated into this original native title.
 
 ## Title identity
 

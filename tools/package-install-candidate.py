@@ -16,7 +16,7 @@ from host.title_stage import stage_title
 
 TITLE_ID = '0005000043543257'
 TITLE_NAME = 'CTR2WUP Install Check'
-TITLE_VERSION = 31
+TITLE_VERSION = 32
 
 
 def candidate(native, output):
@@ -40,7 +40,7 @@ def candidate(native, output):
         stage = Path(tmp)/'title'
         stage_title(rpx, stage, title_id=TITLE_ID, name=TITLE_NAME, version=TITLE_VERSION)
         packed = Path(tmp)/'package'
-        proof = pack_homebrew(stage, packed, require_menu=True, content_id_base=TITLE_VERSION << 16)
+        proof = pack_homebrew(stage, packed, require_startup=True, content_id_base=TITLE_VERSION << 16)
         (packed/'pack-report.json').unlink()
         files = [dict(path=p.name, size=p.stat().st_size, sha256=hashlib.sha256(p.read_bytes()).hexdigest())
                  for p in sorted(packed.iterdir())]

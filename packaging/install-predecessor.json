@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "title_id": "0005000043543257",
-  "source_commit": "28c51efc0bc5592babe51ef6a57ded98634086f5",
-  "title_version": 30,
+  "source_commit": "fe4acafeb19609d55a63484b45f2b9d0521b22e9",
+  "title_version": 31,
   "files": [
     {
       "name": "code/app.xml",
       "size": 706,
-      "sha256": "867e11a21a7eaea448cda09b11b20eef62c7b4dc20d93baa2101110ca354d26a"
+      "sha256": "90fa7bcd882e7985d9f25aa873f8853abca2ba11efb9f4e8ee920fdefb487421"
     },
     {
       "name": "code/cos.xml",
@@ -16,8 +16,8 @@
     },
     {
       "name": "code/ctr2wup.rpx",
-      "size": 205170,
-      "sha256": "9c4ddd69bf19651867eaaf1565941c0b9307996a7492d01747894de1adff862e"
+      "size": 115768,
+      "sha256": "5516730e74142c7259361102b7507c187e185a726fac2ad0fc0e08dd07af4ac6"
     },
     {
       "name": "meta/bootDrcTex.tga",
@@ -47,7 +47,7 @@
     {
       "name": "meta/meta.xml",
       "size": 10038,
-      "sha256": "e7c762206697696364816c8e845b54b06800d679e53686622b4e1d7ad4dbc6d5"
+      "sha256": "349104e74657303c2d7abc2f880692f3afab5bfcdb3c9586fc27c6537bcc87f0"
     }
   ]
 }

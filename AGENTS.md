@@ -21,6 +21,8 @@ for storage, AX, GX2 and ProcUI rather than reimplementing those fixes.
 - Before changing platform ownership or shutdown, compare the accepted tool's
   exact source and returned evidence. Share its implementation; do not replace
   it with an unverified workaround or promote a failed hypothesis into protocol.
+- Native title XML must carry the RPX FILEINFO SDK. Check the packed executable
+  and metadata independently; a valid hash roundtrip does not prove startup compatibility.
 - Reuse reviewed hardware evidence within its scope. A version bump is no reason
   to retest. Request hardware work only for a specific changed path or unresolved
   criterion; explain why existing evidence cannot answer it. Put one short guide

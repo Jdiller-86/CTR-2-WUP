@@ -133,7 +133,7 @@ def install_payload(installed, commit, native, audio):
             or report.get('original_inputs_only') is not True or report.get('install_test_ready') is not True
             or report.get('profile') != 'wiiu_plaintext_homebrew'
             or report.get('content_layout') != 'one_file_per_content'
-            or report.get('menu_profile') != 'wup-menu-v2'
+            or report.get('menu_profile') != 'wup-menu-v3'
             or report.get('content_id_policy') != 'revision_scoped'
             or type(report.get('title_version')) is not int or not 30<=report['title_version']<=65535
             or report.get('content_id_base') != report['title_version']<<16
@@ -144,12 +144,12 @@ def install_payload(installed, commit, native, audio):
         raise ValueError('Require a clean source-bound original install candidate')
     if report.get('rpx_sha256') != next(r['sha256'] for r in native['artifacts'] if r['name'].endswith('.rpx')):
         raise ValueError('Installed payload RPX differs from its clean native build')
-    verified = verify_package(installed, None, require_menu=True)
+    verified = verify_package(installed, None, require_startup=True)
     files = verified.get('files')
     rpx = [row for row in files if isinstance(row, dict) and row.get('path') == 'code/ctr2wup.rpx'] if isinstance(files, list) else []
     if (verified.get('ok') is not True or verified.get('title_id') != report['title_id']
             or verified.get('content_layout') != 'one_file_per_content'
-            or verified.get('menu_profile') != 'wup-menu-v2'
+            or verified.get('menu_profile') != 'wup-menu-v3'
             or verified.get('title_version') != report.get('title_version')
             or verified.get('content_id_policy') != report['content_id_policy']
             or verified.get('content_id_base') != report['content_id_base']

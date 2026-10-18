@@ -48,7 +48,7 @@ def _file_contents(nodes, title, group):
     return groups, sizes, owners
 
 
-def pack_homebrew(source, output, *, require_menu=False, content_id_base=0):
+def pack_homebrew(source, output, *, require_menu=False, require_startup=False, content_id_base=0):
     source, output = Path(source).absolute(), Path(output).absolute()
     if source.is_symlink() or not source.is_dir():
         fail('unsafe_staging', 'Homebrew staging must be a regular directory')
@@ -89,7 +89,7 @@ def pack_homebrew(source, output, *, require_menu=False, content_id_base=0):
         (stage/'title.tik').write_bytes(sign_document(ticket, xs_key, kind='ticket'))
         (stage/'title.cert').write_bytes(certificates)
         from .package_integrity import verify_package
-        report = verify_package(stage, None, expected_staging=source, require_menu=require_menu)
+        report = verify_package(stage, None, expected_staging=source, require_menu=require_menu,require_startup=require_startup)
         report.update(schema_version=1, stage='pack-homebrew', profile='wiiu_plaintext_homebrew',
                       content_layout='one_file_per_content',
                       signature_policy='original_self_signed', requires_signature_patches=True,

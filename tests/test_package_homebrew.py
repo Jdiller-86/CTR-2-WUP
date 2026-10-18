@@ -1,6 +1,7 @@
 """Original plaintext candidates; no console installation is inferred."""
 import hashlib
 import importlib.util
+import shutil
 from pathlib import Path
 import struct
 import tempfile
@@ -114,7 +115,7 @@ class PlainHomebrewTests(unittest.TestCase):
         staged=self.root/'title'
         stage_title(self.source/'code/probe.rpx',staged,title_id='0005000043543257',
                     name='CTR2WUP Install Check',version=27)
-        self.assertEqual((staged/'code/app.xml').stat().st_size,706)
+        self.assertEqual((staged/'code/app.xml').stat().st_size,710)
         pack_homebrew(staged,self.output)
         # Decode independently of the writer and deep verifier. The old layout
         # placed both XML files in stream 1 (cos.xml at byte 736).
@@ -231,3 +232,21 @@ class PlainHomebrewTests(unittest.TestCase):
         self.assertEqual(verify_package(self.output)['menu_profile'],'not_requested')
         with self.assertRaises(HostError) as error:verify_package(self.output,require_menu=True)
         self.assertEqual(error.exception.code,'invalid_menu_profile')
+
+    def test_startup_verifier_reads_packaged_rpx_and_rejects_signed_sdk_mismatch(self):
+        staged=self.root/'title'
+        stage_title(self.source/'code/probe.rpx',staged,title_id='0005000043543257')
+        report=pack_homebrew(staged,self.output,require_startup=True)
+        self.assertEqual(report['menu_profile'],'wup-menu-v3')
+        self.assertEqual(verify_package(self.output,require_startup=True)['menu_profile'],'wup-menu-v3')
+        # Repack with valid hashes/signatures and the historical zero SDK.
+        # The independent check must read the WUP, rather than trust a receipt
+        # or need access to the staging tree.
+        path=staged/'code/app.xml';app=ET.parse(path);app.getroot().find('sdk_version').text='0'
+        app.write(path,encoding='utf-8',xml_declaration=True)
+        old=self.root/'historical'
+        pack_homebrew(staged,old,require_menu=True)
+        shutil.rmtree(staged)
+        self.assertEqual(verify_package(old,require_menu=True)['menu_profile'],'wup-menu-v2')
+        with self.assertRaises(HostError) as error:verify_package(old,require_startup=True)
+        self.assertEqual(error.exception.code,'invalid_native_startup')

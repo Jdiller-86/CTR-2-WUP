@@ -48,7 +48,7 @@ def _field(doc, name, kind, size):
     return value
 
 
-def verify_menu_profile(files):
+def verify_menu_profile(files, *, require_startup=False):
     """Validate launch XML, original TGA 2 artwork and the pinned original clip."""
     app=_document(files.get('code/app.xml',b''),'app')
     cos=_document(files.get('code/cos.xml',b''),'app')
@@ -63,6 +63,10 @@ def verify_menu_profile(files):
     entry=_field(cos,'argstr','string',4096)
     if not re.fullmatch(r'[A-Za-z0-9_-]+\.rpx',entry) or 'code/'+entry not in files:
         fail('invalid_menu_profile','COS must select a staged native RPX')
+    if require_startup:
+        from .rpx_startup import rpx_sdk
+        if int(app.findtext('sdk_version'))!=rpx_sdk(files['code/'+entry]):
+            fail('invalid_native_startup','App SDK must match the selected RPX startup record')
     for name in ('avail_size','codegen_size','codegen_core','max_size','max_codesize'):
         _field(cos,name,'hexBinary',4)
     if int(cos.findtext('codegen_core'),16) not in (1,2,4):
@@ -132,4 +136,4 @@ def verify_menu_profile(files):
     movie=files.get('meta/bootMovie.h264',b'')
     if not 0<len(movie)<=80696 or hashlib.sha256(movie).hexdigest()!=BOOT_MOVIE_SHA256:
         fail('invalid_menu_profile','Require the complete original ACP launch movie')
-    return 'wup-menu-v2'
+    return 'wup-menu-v3' if require_startup else 'wup-menu-v2'
