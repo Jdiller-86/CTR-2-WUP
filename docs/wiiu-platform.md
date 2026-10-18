@@ -1,7 +1,7 @@
 # Wii U application protocol
 
-Start from the compact [installed application](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/runtime/wiiu/install_check.c)
-and reuse its platform helpers. Install Check and Capture share
+Reuse the compact [installed application's](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/runtime/wiiu/install_check.c)
+platform helpers. Install Check and Capture share
 [display](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/runtime/wiiu/diagnostic_display.c),
 silent AX and the [live ProcUI adapter](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/runtime/wiiu/test_lifecycle_wiiu.h).
 Initialize checked SD evidence before graphics; initialize silent audio and the
@@ -22,9 +22,11 @@ For plaintext WUPs, keep each file in its own padded content stream with FST
 offset zero, following the [packaging profile](packaging.md). Bind installation
 logging to the exact generated file inventory and candidate digest. Integrity
 checks alone do not establish MCP read compatibility or installed-title behavior.
-Require the independent `wup-menu-v2` check for new installation candidates:
+Require the independent `wup-menu-v3` check for new installation candidates:
 complete typed Menu metadata, unsigned COS `cmdFlags`, coherent title/group/OS
 identity, complete uncompressed TGA 2 artwork and the original `bootMovie.h264`.
+Carry the RPX FILEINFO SDK into `app.xml`; verify its CRC and executable/XML
+agreement from the packed bytes. A zero placeholder is not a native startup profile.
 ACP reads the movie independently of XML and icons: verify its presence, bounded
 size and pinned bytes in the WUP, installed read-back and distributed wheel.
 Independently decode the original clip and match native channel movie geometry.

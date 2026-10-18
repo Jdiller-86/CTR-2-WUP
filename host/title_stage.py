@@ -14,6 +14,7 @@ from .atomic import publish_directory
 from .build import _validate_rpx,_sha256,MIN_BUILD_FREE
 from .errors import HostError
 from .package_validator import _title_id,ValidatorError
+from .rpx_startup import MAX_RPX_SIZE,rpx_sdk
 
 
 def _xml(root,fields):
@@ -47,6 +48,10 @@ def stage_title(rpx,output,*,title_id,name='CTR2WUP Prototype',version=0):
     rpx=Path(rpx).absolute()
     if rpx.is_symlink(): raise HostError('unsafe_file','RPX input must be a regular file',stage='packaging')
     _validate_rpx(rpx)
+    if rpx.stat().st_size>MAX_RPX_SIZE:
+        raise HostError('invalid_native_startup','Native RPX exceeds the 64 MiB startup profile',stage='packaging')
+    with rpx.open('rb') as handle:
+        sdk=rpx_sdk(handle.read(MAX_RPX_SIZE+1))
     output=Path(output).absolute()
     if output.exists():raise HostError('output_exists','Title staging output already exists',stage='prepare')
     output.parent.mkdir(parents=True,exist_ok=True)
@@ -61,7 +66,7 @@ def stage_title(rpx,output,*,title_id,name='CTR2WUP Prototype',version=0):
             raise HostError('input_changed','RPX changed while staging',stage='packaging')
         app=[('version','unsignedInt',4,16),('os_version','hexBinary',8,'000500101000400a'),
              ('title_id','hexBinary',8,title_id),('title_version','hexBinary',2,f'{version:04x}'),
-             ('sdk_version','unsignedInt',4,0),('app_type','hexBinary',4,'80000000'),
+             ('sdk_version','unsignedInt',4,sdk),('app_type','hexBinary',4,'80000000'),
              ('group_id','hexBinary',4,'00001337'),('os_mask','hexBinary',32,'0'*64),
              ('common_id','hexBinary',8,title_id)]
         cos=[('version','unsignedInt',4,18),('cmdFlags','unsignedInt',4,0),
@@ -124,14 +129,14 @@ def stage_title(rpx,output,*,title_id,name='CTR2WUP Prototype',version=0):
         (stage/'meta/bootMovie.h264').write_bytes(files('host').joinpath('assets/bootMovie.h264').read_bytes())
         from .title_profile import verify_menu_profile
         verify_menu_profile({p.relative_to(stage).as_posix():p.read_bytes()
-                             for p in stage.rglob('*') if p.is_file()})
+                             for p in stage.rglob('*') if p.is_file()},require_startup=True)
         report={'schema_version':1,'ok':True,'stage':'title-staging','title_id':title_id,'title_version':version,
                 'title_name':name,'package_format':'code-content-meta staging','installable_wup':False,'console_verified':False,
                 'identity_allocation':'explicit user ID; no console inventory/collision proof or registry reservation',
                 'rpx_sha256':_sha256(stage/'code/ctr2wup.rpx'),
                 'files':[{'path':str(p.relative_to(stage)).replace('\\','/'),'bytes':p.stat().st_size,'sha256':_sha256(p)}
                          for p in sorted(stage.rglob('*')) if p.is_file()],
-                'menu_profile':'wup-menu-v2',
+                'menu_profile':'wup-menu-v3','sdk_version':sdk,
                 'remaining':['Pack and independently verify the complete title',
                              'Verify Wii U Menu launch, rebuild identity and uninstall on console']}
         (stage/'stage-report.json').write_text(json.dumps(report,indent=2,ensure_ascii=True)+'\n')

@@ -108,6 +108,17 @@
         "https://github.com/Jdiller-86/CTR-2-WUP/issues/13"
       ],
       "evidence": "Installed-title Minus and HOME return still hang indefinitely at the loading screen. During the same attempt, Install Capture returned normally. The installed app SD check displayed PASS with PREPARED or RECOVERED. This observation supersedes the earlier displayed directory failure for the reported attempt, but does not identify which phase occurred or establish a source-bound PREPARED/RECOVERED pair. The early WUT finalizer change did not establish a working native exit. Existing installed boot, fresh installation and scoped earlier lifecycle/save/control/audio/stability evidence remain accepted."
+    },
+    {
+      "id": "installed-shared-frontend-return-failure",
+      "version": null,
+      "source_commit": null,
+      "identity_boundary": "User report after delivery of canonical revision 31/source fe4acafeb19609d55a63484b45f2b9d0521b22e9. No new raw return files bind the observed binary, checkpoint, process SDK or recovery phase; the delivery identity is retained separately from observed execution.",
+      "references": [
+        "https://github.com/Jdiller-86/CTR-2-WUP/issues/15",
+        "https://github.com/Jdiller-86/CTR-2-WUP/pull/147"
+      ],
+      "evidence": "The replacement still shows the Wii U Menu loading screen and plays loading music indefinitely. Sharing Capture display/audio/live ProcUI did not establish a working native return. Native exit is confirmed failed, not merely unverified. Earlier installation/installed boot, same-attempt normal Capture return, displayed SD PASS and accepted platform criteria remain credited. No identical rerun is requested."
     }
   ],
   "criteria": [
@@ -132,7 +143,8 @@
         "save-v0146",
         "lifecycle-v0241",
         "original-wup-boot-74835eb",
-        "installed-exit-follow-up-observation"
+        "installed-exit-follow-up-observation",
+        "installed-shared-frontend-return-failure"
       ],
       "accepted_scope": [
         "Repeated normal launches and observed Minus/HOME returns in the recorded environment.",
@@ -170,7 +182,8 @@
         "original-wup-usb-caf509f",
         "original-wup-menu-c2b4a91",
         "original-wup-boot-74835eb",
-        "installed-exit-follow-up-observation"
+        "installed-exit-follow-up-observation",
+        "installed-shared-frontend-return-failure"
       ],
       "accepted_scope": [
         "Original source-caf509f per-file plaintext WUP installation through the package-bound MCP capture on USB: successful raw callback and complete progress, corroborated by the user.",
@@ -178,7 +191,7 @@
         "Revision-29/source-74835eb fresh USB installation, all nine installed hashes, successful ACP metadata and actual installed-title boot: native identity match, 1318 rendered frames and user confirmation."
       ],
       "remaining": [
-        "Resolve the confirmed installed-title Minus/HOME return hang using the compact frontend shared with the working Capture tool. The prior requested files are unavailable; no identical rerun is requested. Verify native handoff and the automatic recovery pair for this changed path, retaining accepted boot, fresh installation and prior platform evidence."
+        "Resolve the confirmed native return hang after the shared-Capture frontend also failed. Correct source-demonstrated native packaging/startup defects and distinguish those corrections from physical exit acceptance. Preserve accepted installation, boot and platform evidence; do not require unavailable earlier files or repeat unchanged runs."
       ]
     },
     {

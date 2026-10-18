@@ -2,12 +2,15 @@
 import copy
 from pathlib import Path
 import tempfile
+import struct
 import unittest
 import xml.etree.ElementTree as ET
+import zlib
 
 from host.errors import HostError
 from host.title_stage import stage_title
 from host.title_profile import verify_menu_profile
+from host.rpx_startup import rpx_sdk
 from tests.test_package_writer import original_inputs
 
 
@@ -24,7 +27,41 @@ class MenuProfileTests(unittest.TestCase):
 
     def test_full_original_profile_covers_acp_fields_and_tga2(self):
         self.assertEqual(verify_menu_profile(self.files),'wup-menu-v2')
+        self.assertEqual(verify_menu_profile(self.files,require_startup=True),'wup-menu-v3')
+        self.assertEqual(ET.fromstring(self.files['code/app.xml']).findtext('sdk_version'),'21301')
         self.assertEqual(len(ET.fromstring(self.files['meta/meta.xml'])),137)
+
+    def test_new_profile_rejects_zero_or_other_sdk_without_rewriting_historical_profile(self):
+        for sdk in ('0','20811','21302'):
+            app=ET.fromstring(self.files['code/app.xml']);app.find('sdk_version').text=sdk
+            files={**self.files,'code/app.xml':ET.tostring(app)}
+            self.assertEqual(verify_menu_profile(files),'wup-menu-v2')
+            with self.subTest(sdk=sdk),self.assertRaises(HostError) as caught:
+                verify_menu_profile(files,require_startup=True)
+            self.assertEqual(caught.exception.code,'invalid_native_startup')
+
+    def test_sdk_read_requires_unique_bounded_uncompressed_record_and_its_crc(self):
+        original=self.files['code/ctr2wup.rpx']
+        cases=[original[:-1]]
+        for offset,value in ((96,0),(56,0x80000004),(108,0xfffffff0),
+                             (100,0x08000000),(112,95),(272,1),(252,0)):
+            changed=bytearray(original);struct.pack_into('>I',changed,offset,value);cases.append(changed)
+        for changed in cases:
+            with self.subTest(bytes=len(changed)),self.assertRaises(HostError):rpx_sdk(changed)
+        # A repaired CRC must not make a zero/unsupported SDK record acceptable.
+        for offset,value in ((172,0xcafe0401),(224,0),(236,0),(252,0),(252,0x5000)):
+            changed=bytearray(original);struct.pack_into('>I',changed,offset,value)
+            struct.pack_into('>I',changed,272,zlib.crc32(changed[172:268]))
+            with self.subTest(offset=offset,value=value),self.assertRaises(HostError):rpx_sdk(changed)
+
+    def test_staging_preserves_output_when_rpx_has_no_native_startup_record(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);rpx=root/'bad.rpx'
+            original=bytearray(self.files['code/ctr2wup.rpx'])
+            struct.pack_into('>I',original,96,0);rpx.write_bytes(original)
+            with self.assertRaises(HostError):
+                stage_title(rpx,root/'title',title_id='0005000043543257')
+            self.assertFalse((root/'title').exists())
 
     def test_movie_is_required_even_when_every_xml_and_image_is_valid(self):
         movie=self.files['meta/bootMovie.h264']
