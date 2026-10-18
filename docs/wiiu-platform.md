@@ -51,16 +51,27 @@ read VPAD and draw only in the foreground. Keep IOS buffers aligned and alive,
 publish callback results atomically, and drain accepted asynchronous requests
 after cancellation before releasing resources.
 
-Reuse [exit handling](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/runtime/wiiu/test_lifecycle.c):
-release audio/graphics, close reports/FSA clients, clear application callbacks,
-retain save acknowledgement, request the correct Menu/HBL route, drain ProcUI
-and then shut it down. Open no FSA clients during the system transition.
+The shared [exit helper](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/runtime/wiiu/test_lifecycle.c)
+has scoped acceptance through the Aroma-managed route; native installed-title
+return remains unresolved. Its early graphics cleanup must not be treated as a
+proven native ordering contract. The maintained [Wii U SDL driver](https://github.com/devkitPro/SDL/blob/a8f1e43a4a9d70cbae397433e1a3dd40113679aa/src/video/wiiu/SDL_wiiuvideo.c)
+retains graphics/release callbacks while draining ProcUI, then shuts down GX2 and
+ProcUI. This difference is an investigation lead, not an established hang cause.
+Request the correct Menu/HBL route once, acknowledge saves, process foreground
+release and wait for EXITING. Close application reports/FSA clients before the
+transition; do not reopen them during it.
 Leave process-wide filesystem finalization to WUT's CRT; application cleanup
 closes only its own files and clients. Persist the final application I/O barrier
 before the transition; later native checkpoints use OSReport only. A cleanup
 marker never proves actual Menu return. Compare the complete startup/cleanup
 path against the accepted tool's exact source before changing platform behavior;
 keep route-specific hypotheses out of the reusable protocol until established.
+When the saved application trace ends before a native stall, inspect retained
+system logs rather than requiring another identical failure.
+[WiiUCrashLogDumper](https://github.com/wiiu-env/WiiUCrashLogDumper/tree/3bb31ca67a6b015cf79f6ef9397f4d039ae60192)
+reads SLC `/sys/logs` and copies logs to `sd:/wiiu/crash_logs/`; it does not require
+reinstalling or rerunning the failed title. Logs can contain unrelated console
+data and remain private. Their absence does not establish a successful exit.
 Before delivery, run required runtime/sanitizer/native checks and verify the
 source-bound artifact. Cross-builds and API doubles do not establish hardware
 behavior. Request only evidence for changed or unresolved paths, with one short
