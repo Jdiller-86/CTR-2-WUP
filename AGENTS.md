@@ -18,6 +18,9 @@ for storage, AX, GX2 and ProcUI rather than reimplementing those fixes.
 - Keep ROMs, keys, commercial assets/code/saves/traces and credentials in ignored
   `private/`, never in commits, logs, issues or public artifacts. Fixtures must be
   original. Preserve dependency pins, licenses and notices.
+- Before changing platform ownership or shutdown, compare the accepted tool's
+  exact source and returned evidence. Share its implementation; do not replace
+  it with an unverified workaround or promote a failed hypothesis into protocol.
 - Reuse reviewed hardware evidence within its scope. A version bump is no reason
   to retest. Request hardware work only for a specific changed path or unresolved
   criterion; explain why existing evidence cannot answer it. Put one short guide

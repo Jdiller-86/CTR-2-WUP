@@ -1232,19 +1232,16 @@ static void wait_proc_messages(void *context) { (void)context;OSSleepTicks(OSMil
 static void shutdown_procui(void *context) { (void)context;ProcUIShutdown(); }
 static void shutdown_whb(void *context) { (void)context;WHBProcShutdown(); }
 #ifdef CTR_INSTALL_ONLY
-/* Use the owner hook used by WUT's CRT. Its later automatic call is a no-op:
-   finish SD unmount/client removal while ProcUI is still alive, after the final
-   durable checkpoint. Do not add a competing mount or reopen it during exit. */
-extern void __fini_wut_devoptab(void);
-static void finalize_native_io(void *context) {
+/* Close application checkpoint logging before the transition. WUT retains
+   ownership of the process-wide filesystem and its normal CRT finalization. */
+static void finish_native_logging(void *context) {
     native_exit_context *exit=context;exit->io_closed=true;
-    __fini_wut_devoptab();
 }
 #endif
 static const ctr_exit_ops exit_ops={cleanup_resources,clear_proc_callbacks,request_system_menu,
     process_proc_messages,release_foreground,wait_proc_messages,shutdown_procui,shutdown_whb,exit_checkpoint,
 #ifdef CTR_INSTALL_ONLY
-    finalize_native_io
+    finish_native_logging
 #else
     NULL
 #endif

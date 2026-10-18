@@ -21,8 +21,9 @@ typedef struct {
     void (*shutdown_procui)(void *context);
     void (*shutdown_whb)(void *context);
     void (*checkpoint)(void *context,const char *message);
-    /* Optional WUT-owned I/O barrier, before the system transition. After this
-       callback checkpoints must use OSReport only, never reopen SD clients. */
+    /* Optional application I/O barrier, before the system transition. Close
+       checkpoint logging; leave WUT's process-wide filesystem to its CRT.
+       Later checkpoints must use OSReport only, never reopen SD clients. */
     void (*finalize_io)(void *context);
 } ctr_exit_ops;
 /* Runs after rendering stops. Clean up before requesting menu transition or

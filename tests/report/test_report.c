@@ -795,8 +795,8 @@ static void exit_order_tests(void) {
     state=(ctr_test_lifecycle){0};
     CHECK(!ctr_test_complete_exit(&state,false,&bad,&p));
     CHECK(!state.requested && !state.finished);
-    /* Installed-title CRT I/O is finalized before Menu/ProcUI, even when HOME
-       has already delivered EXITING. Loader-managed profiles keep their hook. */
+    /* Installed-title application logging stops before Menu/ProcUI, even when
+       HOME has already delivered EXITING. This does not model CRT finalizers. */
     ctr_exit_ops native=ops;native.finalize_io=fake_finalize_io;
     for(unsigned observed=0;observed<2;++observed) {
         p=(fake_platform){.states=states,.count=7,.proc_alive=true,.graphics_alive=true,

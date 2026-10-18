@@ -97,6 +97,17 @@
       "result_sha256": "43a2d9ec92b598ed0b00a631a7f3e1a16eb182b5014ecd2d27f94bd1485cb858",
       "failed_update_capture_sha256": "4bad9a88a092b079df08023f3416cd234904999eeb3837fa7338849e919cba2b",
       "fresh_install_capture_sha256": "943fc0e3d513a051c06dc0c40a0afbae0f75da0253301661a00566ecd3439f16"
+    },
+    {
+      "id": "installed-exit-follow-up-observation",
+      "version": null,
+      "source_commit": null,
+      "identity_boundary": "User observations after the revision-30 delivery; current-run source/session receipts have not been returned. Do not assign an exact tested binary, phase pair or final trace stage from the earlier revision-29 archive.",
+      "references": [
+        "https://github.com/Jdiller-86/CTR-2-WUP/issues/15",
+        "https://github.com/Jdiller-86/CTR-2-WUP/issues/13"
+      ],
+      "evidence": "Installed-title Minus and HOME return still hang indefinitely at the loading screen. During the same attempt, Install Capture returned normally. The installed app SD check displayed PASS with PREPARED or RECOVERED. This observation supersedes the earlier displayed directory failure for the reported attempt, but does not identify which phase occurred or establish a source-bound PREPARED/RECOVERED pair. The early WUT finalizer change did not establish a working native exit. Existing installed boot, fresh installation and scoped earlier lifecycle/save/control/audio/stability evidence remain accepted."
     }
   ],
   "criteria": [
@@ -120,14 +131,15 @@
       "evidence_sources": [
         "save-v0146",
         "lifecycle-v0241",
-        "original-wup-boot-74835eb"
+        "original-wup-boot-74835eb",
+        "installed-exit-follow-up-observation"
       ],
       "accepted_scope": [
         "Repeated normal launches and observed Minus/HOME returns in the recorded environment.",
         "Successful SD save publication and exact fresh-process reload."
       ],
       "remaining": [
-        "Repair the confirmed native SD directory rejection, then obtain the production snapshot PREPARED/RECOVERED pair during the focused installed-title exits. Earlier scoped lifecycle and successful-save evidence remains accepted."
+        "Review the latest source/session-bound production snapshot receipts to verify the PREPARED/RECOVERED pair. SD PASS is observed; earlier successful save and scoped lifecycle evidence remains accepted."
       ]
     },
     {
@@ -157,7 +169,8 @@
       "evidence_sources": [
         "original-wup-usb-caf509f",
         "original-wup-menu-c2b4a91",
-        "original-wup-boot-74835eb"
+        "original-wup-boot-74835eb",
+        "installed-exit-follow-up-observation"
       ],
       "accepted_scope": [
         "Original source-caf509f per-file plaintext WUP installation through the package-bound MCP capture on USB: successful raw callback and complete progress, corroborated by the user.",
@@ -165,7 +178,7 @@
         "Revision-29/source-74835eb fresh USB installation, all nine installed hashes, successful ACP metadata and actual installed-title boot: native identity match, 1318 rendered frames and user confirmation."
       ],
       "remaining": [
-        "Repair the confirmed installed-title Minus/HOME return hang and failed predecessor update; obtain focused native exit/relaunch and production snapshot recovery evidence. No second destination or broad baseline repeat."
+        "Resolve the still-confirmed installed-title Minus/HOME return hang. Capture returns normally in the same attempt, and the installed app reports SD PASS. Inspect current-run receipts before another platform change; verify guarded predecessor update separately. No broad baseline repeat or second destination."
       ]
     },
     {
