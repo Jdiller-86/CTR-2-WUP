@@ -48,22 +48,6 @@ static void record(uint8_t d[RECORD_BYTES],const char *source,uint64_t producer,
 static bool make_path(char output[PATH_BYTES],const char *directory,const char *name) {
     int n=snprintf(output,PATH_BYTES,"%s/%s",directory,name);return n>=0 && (size_t)n<PATH_BYTES;
 }
-static bool directory_safe(const char *path) {
-    if(!path || !*path || strlen(path)>384)return false;
-    size_t start=path[0]=='/'?1:!strncmp(path,"fs:/",4)?4:0;
-    if(!start || !path[start])return false;
-    char part[PATH_BYTES];strcpy(part,path);
-    for(size_t at=start;;++at)if(path[at]=='/' || !path[at]) {
-        if(at==start || (at-start==1 && path[start]=='.') ||
-           (at-start==2 && path[start]=='.' && path[start+1]=='.'))return false;
-        for(size_t i=start;i<at;++i)
-            if(path[i]=='\\' || path[i]==':' || (unsigned char)path[i]<32)return false;
-        part[at]='\0';struct stat st;
-        if(lstat(part,&st)!=0 || !S_ISDIR(st.st_mode) || S_ISLNK(st.st_mode))return false;
-        if(!path[at])return true;
-        part[at]='/';start=at+1;
-    }
-}
 static bool absent(Probe *p,const char *path,const char *stage) {
     struct stat st;
     if(lstat(path,&st)==0)return fail(p,CTR_M1_STORAGE_CONTENTS,stage,EEXIST);
@@ -230,7 +214,7 @@ bool ctr_m1_snapshot_probe(const char *directory,const char *source,uint64_t ses
     Probe p={0};p.out=out;p.source=source;
     if(!source || strlen(source)!=40 || strspn(source,"0123456789abcdef")!=40 || !session)
         return fail(&p,CTR_M1_STORAGE_ARGUMENT,"identity",EINVAL);
-    if(!directory_safe(directory))return fail(&p,CTR_M1_STORAGE_PATH,"directory",EINVAL);
+    if(!ctr_m1_directory_safe(directory,lstat))return fail(&p,CTR_M1_STORAGE_PATH,"directory",errno?errno:EINVAL);
     char name[80];snprintf(name,sizeof(name),"m1-snapshot-v2-%s",source);
     if(!make_path(p.root,directory,name) || !make_path(p.lock,p.root,".active") ||
        !make_path(p.producer,p.root,"producer.bin") || !make_path(p.complete,p.root,"complete.bin") ||

@@ -2,6 +2,11 @@
 #define CTR_M1_STORAGE_PROBE_H
 #include <stdbool.h>
 #include <stdint.h>
+#include <sys/stat.h>
+
+/* Inspect a real mount root and its descendants, not virtual /vol ancestors.
+ * The injected inspector also permits faithful devoptab namespace tests. */
+bool ctr_m1_directory_safe(const char *path,int (*inspect)(const char *,struct stat *));
 
 typedef enum {
     CTR_M1_STORAGE_PASS=0, CTR_M1_STORAGE_ARGUMENT, CTR_M1_STORAGE_PATH,

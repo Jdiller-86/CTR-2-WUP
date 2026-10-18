@@ -16,6 +16,7 @@ from host.title_stage import stage_title
 
 TITLE_ID = '0005000043543257'
 TITLE_NAME = 'CTR2WUP Install Check'
+TITLE_VERSION = 30
 
 
 def candidate(native, output):
@@ -37,9 +38,9 @@ def candidate(native, output):
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='.install-candidate-', dir=output.parent) as tmp:
         stage = Path(tmp)/'title'
-        stage_title(rpx, stage, title_id=TITLE_ID, name=TITLE_NAME, version=29)
+        stage_title(rpx, stage, title_id=TITLE_ID, name=TITLE_NAME, version=TITLE_VERSION)
         packed = Path(tmp)/'package'
-        proof = pack_homebrew(stage, packed, require_menu=True)
+        proof = pack_homebrew(stage, packed, require_menu=True, content_id_base=TITLE_VERSION << 16)
         (packed/'pack-report.json').unlink()
         files = [dict(path=p.name, size=p.stat().st_size, sha256=hashlib.sha256(p.read_bytes()).hexdigest())
                  for p in sorted(packed.iterdir())]
@@ -47,7 +48,8 @@ def candidate(native, output):
                       version=__version__, source_commit=commit, source_dirty=False,
                       original_inputs_only=True, profile='wiiu_plaintext_homebrew',
                       content_layout=proof['content_layout'],
-                      title_id=TITLE_ID, title_name=TITLE_NAME, title_version=29,
+                      title_id=TITLE_ID, title_name=TITLE_NAME, title_version=TITLE_VERSION,
+                      content_id_base=proof['content_id_base'], content_id_policy=proof['content_id_policy'],
                       menu_profile=proof['menu_profile'],
                       installed_files=proof['files'],
                       rpx_sha256=hashlib.sha256(rpx.read_bytes()).hexdigest(),

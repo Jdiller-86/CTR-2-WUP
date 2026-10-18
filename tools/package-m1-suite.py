@@ -15,7 +15,6 @@ sys.path.insert(0, str(ROOT))
 VERSION = '0.27.0'
 NAMES = ('ctr2wup-install-check.rpx', 'ctr2wup-install-check.wuhb')
 MAX_TOTAL = 24 * 1024 * 1024
-INSTALL_FOLDER = 'CTR2WUP-M1'
 EXPECTED_TITLE_ID = '0005000043543257'
 EXPECTED_TITLE_NAME = 'CTR2WUP Install Check'
 
@@ -48,7 +47,7 @@ def native_receipt(native, commit, audio):
     witness = report.get('install_check')
     if (not isinstance(witness, dict)
             or witness.get('storage_protocol') != 'snapshot-v2'
-            or witness.get('session_protocol') != 'install-v2'
+            or witness.get('session_protocol') != 'install-v3'
             or witness.get('production_snapshot_adapter') is not True
             or witness.get('cross_launch_recovery') is not True
             or witness.get('process_session_trace') is not True
@@ -135,6 +134,9 @@ def install_payload(installed, commit, native, audio):
             or report.get('profile') != 'wiiu_plaintext_homebrew'
             or report.get('content_layout') != 'one_file_per_content'
             or report.get('menu_profile') != 'wup-menu-v2'
+            or report.get('content_id_policy') != 'revision_scoped'
+            or type(report.get('title_version')) is not int or not 30<=report['title_version']<=65535
+            or report.get('content_id_base') != report['title_version']<<16
             or report.get('requires_signature_patches') is not True
             or report.get('title_name') != EXPECTED_TITLE_NAME
             or not isinstance(report.get('title_id'), str)
@@ -149,6 +151,8 @@ def install_payload(installed, commit, native, audio):
             or verified.get('content_layout') != 'one_file_per_content'
             or verified.get('menu_profile') != 'wup-menu-v2'
             or verified.get('title_version') != report.get('title_version')
+            or verified.get('content_id_policy') != report['content_id_policy']
+            or verified.get('content_id_base') != report['content_id_base']
             or verified.get('files') != report.get('installed_files')
             or len(rpx) != 1 or rpx[0].get('sha256') != report['rpx_sha256']):
         raise ValueError('Independent install-package validation failed')
@@ -166,7 +170,7 @@ def install_payload(installed, commit, native, audio):
         data = audio.release.regular(installed/name, MAX_TOTAL).read_bytes()
         if type(row.get('size')) is not int or len(data) != row['size'] or audio.digest(data) != row.get('sha256'):
             raise ValueError('Install payload differs from its receipt')
-        entries['sd-card/install/'+INSTALL_FOLDER+'/'+name] = data
+        entries['sd-card/install/CTR2WUP-M1-r'+str(report['title_version'])+'/'+name] = data
         if sum(map(len, entries.values())) > MAX_TOTAL:
             raise ValueError('Install payload exceeds 24 MiB')
     if {p.name for p in installed.iterdir()} != seen | {'report.json'}:
@@ -210,14 +214,14 @@ def package(native, audio_kit, output, installed=None, sdk_licenses=None, sdk_re
         ROOT/'tools/templates/install-check.md', VERSION, commit)
     log_directory = 'ctr2wup/install-check/'+commit
     m1 = dict(schema_version=1, kind='ctr2wup-m1-acceptance',
-              acceptance_profile='m1-completion-v2',
+              acceptance_profile='m1-completion-v3',
               suite_id='m1-completion-'+VERSION+'-'+commit[:12], version=VERSION,
               source_commit=commit, source_dirty=False, native_app='native-install',
               original_inputs_only=True, console_verified=False, full_milestone_acceptance=False,
               scope='installed-title-and-production-snapshot-recovery', prior_native_evidence_carried_forward=True,
               recovery=dict(available=True, protocol='snapshot-v2'),
               install_check=dict(full_native_guide=False, storage_protocol='snapshot-v2',
-                                 session_protocol='install-v2', log_directory=log_directory),
+                                 session_protocol='install-v3', log_directory=log_directory),
               installation_capture=dict(available=True,protocol='mcp-capture-v2',
                   package_manifest_sha256=audio.digest(entries['support/install-package.json']),
                   log_directory='ctr2wup/install-check/install-capture'),

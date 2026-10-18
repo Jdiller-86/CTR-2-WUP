@@ -36,10 +36,21 @@ static void original(uint8_t d[SENTINEL_BYTES],const char *source) {
 static bool make_path(char output[PATH_BYTES],const char *directory,const char *name) {
     int n=snprintf(output,PATH_BYTES,"%s/%s",directory,name);return n>=0 && (size_t)n<PATH_BYTES;
 }
-static bool directory_safe(const char *path) {
-    if(!path || !*path || strlen(path)>384)return false;
-    size_t start=path[0]=='/'?1:!strncmp(path,"fs:/",4)?4:0;
-    if(!start || !path[start])return false;
+bool ctr_m1_directory_safe(const char *path,int (*inspect)(const char *,struct stat *)) {
+    errno=EINVAL;
+    if(!path || !*path || strlen(path)>384 || !inspect)return false;
+    const char *sd="fs:/vol/external01";
+    size_t start=1;
+    if(!strncmp(path,"fs:",3)) {
+        size_t root=strlen(sd);
+        if(strncmp(path,sd,root) || (path[root] && path[root]!='/'))return false;
+        char mount[PATH_BYTES];memcpy(mount,path,root);mount[root]=0;
+        struct stat st;
+        if(inspect(mount,&st)!=0 || !S_ISDIR(st.st_mode) || S_ISLNK(st.st_mode))return false;
+        if(!path[root])return true;
+        start=root+1;
+    } else if(path[0]!='/')return false;
+    if(!path[start])return false;
     char part[PATH_BYTES];strcpy(part,path);
     for(size_t at=start;;++at)if(path[at]=='/' || !path[at]) {
         if(at==start || (at-start==1 && path[start]=='.') ||
@@ -47,7 +58,7 @@ static bool directory_safe(const char *path) {
         for(size_t i=start;i<at;++i)
             if(path[i]=='\\' || path[i]==':' || (unsigned char)path[i]<32)return false;
         part[at]='\0';struct stat st;
-        if(lstat(part,&st)!=0 || !S_ISDIR(st.st_mode) || S_ISLNK(st.st_mode))return false;
+        if(inspect(part,&st)!=0 || !S_ISDIR(st.st_mode) || S_ISLNK(st.st_mode))return false;
         if(!path[at])return true;
         part[at]='/';start=at+1;
     }
@@ -139,7 +150,7 @@ bool ctr_m1_storage_probe(const char *directory,const char *source,CtrM1StorageE
     Probe p={0};p.out=out;
     if(!source || strlen(source)!=40 || strspn(source,"0123456789abcdef")!=40)
         return fail(&p,CTR_M1_STORAGE_ARGUMENT,"source",EINVAL);
-    if(!directory_safe(directory))return fail(&p,CTR_M1_STORAGE_PATH,"directory",EINVAL);
+    if(!ctr_m1_directory_safe(directory,lstat))return fail(&p,CTR_M1_STORAGE_PATH,"directory",errno?errno:EINVAL);
     char namespace_name[80];snprintf(namespace_name,sizeof(namespace_name),"m1-scratch-v1-%s",source);
     if(!make_path(p.root,directory,namespace_name) || !make_path(p.lock,p.root,".active") ||
        !make_path(p.sentinel,p.root,"sentinel.bin") || !make_path(p.good,p.root,"recovery.good") ||

@@ -29,8 +29,8 @@
 #include <string.h>
 #include <sys/stat.h>
 
-#define PAYLOAD "fs:/vol/external01/install/CTR2WUP-M1"
-#define MCP_PATH "/vol/app_sd/install/CTR2WUP-M1"
+#define PAYLOAD "fs:/vol/external01/install/" CTR_CAPTURE_DIRECTORY
+#define MCP_PATH "/vol/app_sd/install/" CTR_CAPTURE_DIRECTORY
 #define LOG_ROOT "fs:/vol/external01/ctr2wup"
 #define LOG_DIRECTORY LOG_ROOT "/install-check/install-capture"
 static capture_log report;
@@ -67,9 +67,11 @@ static bool record(void *unused,const char *event,int32_t result,
     int n=snprintf(text,sizeof(text),"CAPTURE event=%s code=0x%08x signed=%ld target_title=%s",
         event,(unsigned)(uint32_t)result,(long)result,CTR_CAPTURE_TITLE);
     if(progress && n>0 && (size_t)n<sizeof(text))
-        n+=snprintf(text+n,sizeof(text)-(size_t)n," active=%u title=%016llx bytes=%llu/%llu contents=%u/%u",
+        n+=snprintf(text+n,sizeof(text)-(size_t)n," active=%u title=%016llx bytes=%llu/%llu contents=%u/%u contents_bounded=%u expected_max=%u",
             progress->active,(unsigned long long)progress->title,(unsigned long long)progress->bytes,
-            (unsigned long long)progress->total,progress->contents,progress->total_contents);
+            (unsigned long long)progress->total,progress->contents,progress->total_contents,
+            progress->contents<=progress->total_contents && progress->total_contents<=CTR_CAPTURE_FILE_COUNT-2,
+            CTR_CAPTURE_FILE_COUNT-2);
     if(progress)notice("MCP %s: 0x%08x / %llu of %llu bytes",event,(unsigned)(uint32_t)result,
         (unsigned long long)progress->bytes,(unsigned long long)progress->total);
     else notice("MCP %s: 0x%08x",event,(unsigned)(uint32_t)result);
@@ -349,7 +351,7 @@ static void checkpoint(void *unused,const char *message) {
     ctr_report_storage_close(&storage);
 }
 static const ctr_exit_ops exit_ops={cleanup,clear_callbacks,request_menu,process_messages,
-    release_foreground,wait_messages,shutdown_procui,shutdown_whb,checkpoint};
+    release_foreground,wait_messages,shutdown_procui,shutdown_whb,checkpoint,NULL};
 
 int main(void) {
     bool saved=false,installed=false,launch_ready=false;

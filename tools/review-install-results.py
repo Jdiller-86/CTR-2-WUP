@@ -3,10 +3,11 @@
 
 FOLDER is the completed FTP copy of the kit's source-specific results folder,
 including kit.json. Historical install-v1 folders remain readable, but do not
-prove the production snapshot-v2 recovery required by m1-completion-v2.
+prove the production snapshot-v2 recovery required by completion profiles.
 Observations identify suite_id, installer, firmware/aroma (or environment_unchanged), install_success,
-title_id_checked and runs [{session, menu_launch, both_screens, minus_pressed,
-returned_to_menu, no_problem}]. Unknown observations stay incomplete; raw notes
+title_id_checked and runs [{session, menu_launch, both_screens, exit_action,
+returned_to_menu, no_problem}]. v3 requires Minus and HOME; older profiles use
+minus_pressed. Unknown observations stay incomplete; raw notes
 are never copied into the candidate JSON. This tool cannot accept a milestone.
 """
 import argparse
@@ -153,18 +154,20 @@ def review(folder, source, observations=None):
             or not re.fullmatch(r'[A-Za-z0-9._-]{1,80}', kit.get('suite_id', ''))
             or kit.get('package', {}).get('title_id') != TITLE or kit.get('package', {}).get('available') is not True):
         raise ValueError('Require the exact clean installed-title kit identity')
-    completion = kit.get('acceptance_profile') == 'm1-completion-v2'
-    if kit.get('acceptance_profile') not in (None, 'm1-completion-v2'):
+    profile = kit.get('acceptance_profile')
+    io_barrier = profile == 'm1-completion-v3'
+    completion = profile in ('m1-completion-v2','m1-completion-v3')
+    if profile not in (None, 'm1-completion-v2', 'm1-completion-v3'):
         raise ValueError('Unknown installed-title acceptance profile')
+    protocol = 'install-v3' if io_barrier else 'install-v2' if completion else 'install-v1'
     if completion and (not isinstance(kit.get('recovery'), dict)
             or not isinstance(kit.get('install_check'), dict)
             or kit['recovery'].get('available') is not True
             or kit['recovery'].get('protocol') != 'snapshot-v2'
             or kit['install_check'].get('storage_protocol') != 'snapshot-v2'
-            or kit['install_check'].get('session_protocol') != 'install-v2'
+            or kit['install_check'].get('session_protocol') != protocol
             or kit['install_check'].get('log_directory') != 'ctr2wup/install-check/'+source):
         raise ValueError('Completion kits must identify the production snapshot-v2 protocol')
-    protocol = 'install-v2' if completion else 'install-v1'
     checks, runs, used, total = [], [], set(), 0
     def check(identifier, status, detail):
         checks.append(dict(id=identifier, status=status, detail=detail))
@@ -185,13 +188,13 @@ def review(folder, source, observations=None):
         if len(data) != 8192 or any(text.count(value) != 1 for value in wanted): errors.append('result identity/size mismatch')
         if one(text, r'^Host exit result: (-?[0-9]+) .*') != '0': errors.append('unsuccessful exit result')
         counters = one(text, r'^Frames: host=([0-9]+) \| Input: samples=([0-9]+) errors=([0-9]+) Minus_presses=([0-9]+)$')
-        if not counters or int(counters[0]) == 0 or int(counters[1]) == 0 or counters[2] != '0' or int(counters[3]) == 0: errors.append('display/input/Minus counters failed')
+        if not counters or int(counters[0]) == 0 or int(counters[1]) == 0 or counters[2] != '0' or not io_barrier and int(counters[3]) == 0: errors.append('display/input/exit counters failed')
         if not (one(text, r'^Previous result writes verified: ([0-9]+)$') or '').strip('0'): missing.append('closed read-back counter')
         trace_name = one(text, r'^Full trace: SAVING \| file=(native-install-'+session+r'-[0-9]{2}\.txt) errno=0 operation=none FSA=-?[0-9]+ commits=[0-9]+$')
         storage = one(text, r'^(M1_STORAGE .*)$')
         probe = snapshot_receipt(storage, session) if completion else STORAGE.fullmatch(storage or '')
         if not probe: errors.append('automatic SD recovery failed or receipt malformed')
-        trace_digest, trace_bytes = None, 0
+        trace_digest, trace_bytes, exit_action = None, 0, None
         if not trace_name or not (folder/trace_name).exists(): missing.append('paired trace')
         else:
             raw = read(folder/trace_name); total += len(raw)
@@ -203,20 +206,32 @@ def review(folder, source, observations=None):
                     or one(trace, r'^BUILD .*$',) != 'BUILD source_commit='+source+' source_dirty=0 evidence_schema=2 result_bytes=8192'
                     or one(trace, r'^Platform .*$',) != 'Platform title_id='+TITLE+' exit_route=system_menu SD_owner=WUT_devoptab'
                     or one(trace, r'^Application: (.*)$') != 'native-install | Build: 0.27.0'): errors.append('trace source/session/installed route mismatch')
-            positions = [one(trace, r'^(EXIT stage='+stage+r'(?:;[^\n]*)?)$') for stage in STAGES]
+            stages = STAGES[:STAGES.index('request_menu_begin')]+('runtime_io_finalize_begin',) if io_barrier else STAGES
+            positions = [one(trace, r'^(EXIT stage='+stage+r'(?:;[^\n]*)?)$') for stage in stages]
             positions = [trace.find(value) if value is not None else -1 for value in positions]
             if -1 in positions: missing.append('complete exit checkpoints')
             elif positions != sorted(set(positions)): errors.append('exit checkpoint order')
-            if 'EXIT trigger=Minus; cleaning resources before system transition' not in trace or 'EXIT status=EXITING' not in trace: missing.append('Minus and Menu transition')
+            minus = trace.count('EXIT trigger=Minus; cleaning resources before system transition')
+            home = trace.count('EXIT trigger=system_exit; ProcUI EXITING observed before cleanup')
+            if io_barrier:
+                if (minus,home)==(1,0) and counters and int(counters[3])>0:exit_action='minus'
+                elif (minus,home)==(0,1) and counters and counters[3]=='0' and 'APP ProcUI status=3' in trace:exit_action='home'
+                else:errors.append('unambiguous Minus or observed system-exit route missing')
+                if exit_action and trace.find('EXIT trigger=')>trace.find('EXIT stage=guest_cleanup_begin'):
+                    errors.append('exit trigger follows resource cleanup')
+            elif not minus or 'EXIT status=EXITING' not in trace:missing.append('Minus and Menu transition')
+            if io_barrier and re.search(r'^EXIT (?:stage=(?:request_menu|procui_|whb_proc_|main_return|draw_done)|status=)',trace,re.MULTILINE):
+                errors.append('SD logging continued past the runtime I/O barrier')
             marker = one(trace, r'^(===== END OF REPORT: application resource cleanup reached; result=0 =====)$')
             if marker is None: missing.append('successful cleanup marker')
             elif not trace.find('EXIT stage=graphics_cleanup_done') < trace.find(marker) < trace.find('EXIT stage=report_close_begin'): errors.append('cleanup marker order')
             if not storage or set(re.findall(r'^M1_STORAGE .*$', trace, re.MULTILINE)) != {storage}: errors.append('trace/result recovery differs')
             if re.search(r'\bFAIL(?:ED)?\b', trace): errors.append('trace records failure')
-        check('launch-'+session, 'FAIL' if errors else 'INCOMPLETE' if missing else 'PASS', '; '.join(errors+missing) or 'Installed source/session, display frames, SD recovery, read-back and ordered Minus cleanup corroborated.')
+        check('launch-'+session, 'FAIL' if errors else 'INCOMPLETE' if missing else 'PASS', '; '.join(errors+missing) or 'Installed source/session, display frames, SD recovery, read-back and ordered resource cleanup corroborated; physical Menu return is reviewed separately.')
         runs.append(dict(session=session, result=path.name, trace=trace_name,
                          sha256=hashlib.sha256(data).hexdigest(),
                          result_bytes=len(data), trace_sha256=trace_digest, trace_bytes=trace_bytes,
+                         exit_action=exit_action,
                          fresh_reload=bool(probe and (probe['fresh_reload'] if completion else probe[1]) == '1'),
                          storage=probe if completion else None))
     if total > 24*1024*1024: raise ValueError('Evidence exceeds review budget')
@@ -226,6 +241,9 @@ def review(folder, source, observations=None):
     if completion:
         check('fresh-processes', 'FAIL' if len(set(sessions)) != len(sessions) else 'PASS' if len(runs) >= 2 else 'INCOMPLETE', 'Each returned attempt must identify a distinct process session.')
         check('production-snapshot-recovery', *recovery_chain(runs))
+        if io_barrier:
+            check('installed-exit-routes','PASS' if {r['exit_action'] for r in runs}=={'minus','home'} else 'INCOMPLETE',
+                  'Both changed installed-title exit routes require distinct observed launches; no baseline guide repeat.')
     else:
         check('fresh-processes', 'FAIL' if len(set(sessions)) != len(sessions) else 'PASS' if len(runs) >= 2 and all(r['fresh_reload'] for r in runs[1:]) else 'INCOMPLETE', 'Historical scratch-v1 fresh-process evidence; this does not prove production snapshot recovery.')
     obs = {} if observations is None else observations
@@ -236,18 +254,22 @@ def review(folder, source, observations=None):
               obs.get('installer') in ('WUP Installer GX2','CTR2WUP Install Capture'),
               obs.get('environment_unchanged') is True or all(isinstance(obs.get(k), str) and obs[k].strip() for k in ('firmware', 'aroma')),
               obs.get('install_success'), obs.get('title_id_checked')]
+    observed_fields=('menu_launch','both_screens','returned_to_menu','no_problem') if io_barrier else ('menu_launch','both_screens','minus_pressed','returned_to_menu','no_problem')
     for run in runs:
         matches = [r for r in records if r.get('session') == run['session']]
-        manual.extend(matches[0].get(k) for k in ('menu_launch', 'both_screens', 'minus_pressed', 'returned_to_menu', 'no_problem')) if len(matches) == 1 else manual.append(None)
-    explicit_failure = obs.get('install_success') is False or obs.get('title_id_checked') is False or any(r.get(k) is False for r in records for k in ('menu_launch', 'both_screens', 'minus_pressed', 'returned_to_menu', 'no_problem'))
-    check('physical-observations', 'FAIL' if explicit_failure else 'PASS' if len(records) == len(runs) >= 2 and {r.get('session') for r in records} == set(sessions) and all(v is True for v in manual) else 'INCOMPLETE', 'Exact suite/environment/supported installer and both observed Menu launches/screens/Minus returns must be explicitly confirmed.')
+        if len(matches)==1:
+            manual.extend(matches[0].get(k) for k in observed_fields)
+            if io_barrier:manual.append(matches[0].get('exit_action')==run['exit_action'] and run['exit_action'] in ('minus','home'))
+        else:manual.append(None)
+    explicit_failure = obs.get('install_success') is False or obs.get('title_id_checked') is False or any(r.get(k) is False for r in records for k in observed_fields)
+    check('physical-observations', 'FAIL' if explicit_failure else 'PASS' if len(records) == len(runs) >= 2 and {r.get('session') for r in records} == set(sessions) and all(v is True for v in manual) else 'INCOMPLETE', 'Exact suite/environment/supported installer and both observed Menu launches/screens/exit routes/returns must be explicitly confirmed.')
     ledger = load_json(read(ROOT/'tests/hardware-evidence.json', 1024*1024))
     baseline = [dict(issue=c['issue'], status=c['reviewed_status']) for c in ledger['criteria'] if c['issue'] in (12, 14)]
     check('retained-baseline', 'PASS' if baseline == [dict(issue=12, status='Done'), dict(issue=14, status='Done')] else 'INCOMPLETE', 'Carry reviewed collection and native controls/audio/stability evidence; no native guide repeat requested.')
     status = next((s for s in ('FAIL', 'INCOMPLETE') if any(c['status'] == s for c in checks)), 'PASS')
     return dict(schema_version=1, kind='ctr2wup-install-review', source_commit=source,
                 suite_id=kit['suite_id'], status=status, candidate_only=True,
-                acceptance_profile='m1-completion-v2' if completion else 'legacy-install-v1',
+                acceptance_profile=profile if completion else 'legacy-install-v1',
                 m1_completion_ready=completion and status == 'PASS',
                 full_milestone_acceptance=False, physical_review_required=True,
                 retained_evidence=baseline, checks=checks, runs=runs)

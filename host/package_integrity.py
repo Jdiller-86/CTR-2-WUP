@@ -294,13 +294,17 @@ def verify_package(path, key_file=None, *, expected_staging=None, require_menu=F
         title_key = decryptor.update(ticket[0x1BF:0x1CF]) + decryptor.finalize()
         signing = None
     records = []
+    title_version = int.from_bytes(tmd[0x1DC:0x1DE], 'big')
+    content_id_base = struct.unpack_from('>I', tmd, CONTENT_START)[0]
+    if content_id_base not in ((0, title_version << 16) if plaintext else (0,)):
+        fail('unsupported_integrity_profile', 'Content IDs require a legacy or title-revision base')
     for number in range(report["content_count"]):
         base = CONTENT_START + number * 48
         identifier, index, flags, size = struct.unpack_from(">IHHQ", tmd, base)
         digest = tmd[base + 16:base + 36]
-        if (flags != (0x2000 if plaintext else 0x2001) or index != number or identifier != number or size % UNIT
+        if (flags != (0x2000 if plaintext else 0x2001) or index != number or identifier != content_id_base+number or size % UNIT
                 or any(tmd[base + 36:base + 48]) or size > 1024 * 1024 * 1024):
-            fail("unsupported_integrity_profile", "Deep verification requires ordered content IDs, nonhashed padded SHA-1 streams, at most 1 GiB each")
+            fail("unsupported_integrity_profile", "Deep verification requires ordered indices/revision content IDs, nonhashed padded SHA-1 streams, at most 1 GiB each")
         records.append({"path": path / f"{identifier:08x}.app", "index": index, "size": size, "digest": digest})
     if (not (4 <= len(records) <= 1024 if plaintext else len(records) == 4)
             or int.from_bytes(tmd[0x1E0:0x1E2], "big") != 0 or records[0]["size"] > 16 * 1024 * 1024):
@@ -330,7 +334,9 @@ def verify_package(path, key_file=None, *, expected_staging=None, require_menu=F
     for item in report["contents"]:
         item["plaintext_integrity"] = "padded_sha1_matches_tmd"
     return {**report, "validation": "plaintext_integrity" if plaintext else "decrypted_integrity", "files": files,
-            "title_version": int.from_bytes(tmd[0x1DC:0x1DE], "big"),
+            "title_version": title_version,
+            "content_id_base": content_id_base,
+            "content_id_policy": "revision_scoped" if content_id_base else "legacy_index",
             "content_layout": "one_file_per_content" if plaintext and len(records) != 4 else "legacy_grouped",
             "fst": "bounds/tree/names/ranges/zero-padding verified",
             "staging_comparison": "all files and directories match" if expected_staging is not None else "not_requested",

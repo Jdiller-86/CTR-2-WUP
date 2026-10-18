@@ -8,6 +8,10 @@ Each staged file has its own padded content stream and FST offset zero. The
 ticket grants the complete 1024-index homebrew bitmap; packages are bounded to
 1024 contents including the FST. Empty top-level folders retain an empty stream
 with their original ownership.
+Installation candidates use content IDs `(title_version << 16) + index`, keeping
+changed revisions distinct while preserving logical FST/ticket indices. The
+independent reader requires one coherent revision base, hashes and signatures;
+it retains legacy index-based IDs for historical packages.
 It requires **no common key, production certificate, donor title or game input**.
 The independent verifier checks content/FST/XML/identity and the generated
 signature chain. This establishes package integrity and test-signature
@@ -26,11 +30,15 @@ The `native-install` diagnostic checks its actual title identity and the product
 leaves a deliberately interrupted publication (**PREPARED**); the second recovers
 the committed `.previous`, rejects the uncommitted `.pending` and verifies a new
 publication (**RECOVERED**). Later launches only recheck completion. Source-bound
-`install-v2`/`snapshot-v2` receipts and recovery files stay under
+`install-v3`/`snapshot-v2` receipts and recovery files stay under
 `sd:/ctr2wup/install-check/<source-commit>/`; return the whole parent folder over
 FTP. This proves deterministic software interruption recovery, not power-loss
 durability. The package supplies one guide, one `sd-card/` tree and the existing
 capture app compiled with the candidate's exact file hashes and manifest digest.
+The v3 trace ends at the durable WUT I/O-finalization barrier before the Menu
+transition; later checkpoints use OSReport. Review requires observed Minus and
+HOME Menu returns and both recovery phases. Earlier v1/v2 evidence retains its
+original exit-checkpoint requirements.
 One selected destination is sufficient. The capture records installation before
 the two Menu launches; an installation failure stops the sequence. Source,
 notices and checksums remain under `support/`.
@@ -52,11 +60,15 @@ app to its current per-file package. Both require a complete compiled inventory
 and a writable SD report before one explicit target selection. Fresh installation
 requires an absent title ID. Package pins cannot be changed through an SD manifest.
 The completion handoff can also update the reviewed predecessor in place. It
-requires its recorded title version and exact lengths/SHA-256 of all eight
+requires its recorded title version and exact lengths/SHA-256 of all nine
 installed files, read through FSA on the selected device. The compiled
 [`install-predecessor.json`](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/packaging/install-predecessor.json)
 pins cannot be redirected through SD metadata. It never deletes titles, writes
 save data or overwrites an unrecognized installation.
+The candidate's compiled `install/CTR2WUP-M1-r<title_version>/` directory isolates
+new content IDs from old FTP payloads. Raw callback failure remains failure even
+after accepted submission; progress totals outside the compiled inventory bound
+are recorded as invalid, without replacing the raw values.
 After MCP success, it verifies the new installed files and records the raw
 `ACPGetTitleMetaXml` result and expected identity before offering Menu launches.
 Read-only MCP package parsing runs independently of install eligibility. Title

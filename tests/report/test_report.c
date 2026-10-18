@@ -702,6 +702,8 @@ typedef struct {
     const ctr_proc_status *states;
     unsigned count,polls,cleanups,menus,releases,waits,shutdowns,relaunches;
     bool proc_alive,graphics_alive,audio_alive,report_open,callbacks_cleared;
+    bool native_io,io_alive;
+    unsigned io_finalizers,sd_checkpoints;
     char checkpoints[8192];
 } fake_platform;
 static void fake_cleanup(void *context) {
@@ -719,6 +721,7 @@ static void fake_menu(void *context) {
     fake_platform *p=context;
     CHECK(p->proc_alive && p->callbacks_cleared && !p->graphics_alive && !p->audio_alive && !p->report_open);
     CHECK(!p->menus);++p->menus;
+    CHECK(!p->native_io || !p->io_alive);
 }
 static ctr_proc_status fake_poll(void *context) {
     fake_platform *p=context;
@@ -739,6 +742,7 @@ static void fake_shutdown(void *context) {
     fake_platform *p=context;
     CHECK(p->proc_alive && !p->graphics_alive && !p->audio_alive && !p->report_open && p->callbacks_cleared);
     CHECK(!p->menus || (p->polls==p->count && p->states[p->polls-1]==CTR_PROC_EXITING));
+    CHECK(!p->native_io || (!p->io_alive && p->io_finalizers==1));
     p->proc_alive=false;++p->shutdowns;
 }
 static void fake_whb(void *context) {
@@ -748,11 +752,19 @@ static void fake_whb(void *context) {
 static void fake_checkpoint(void *context,const char *message) {
     fake_platform *p=context;size_t used=strlen(p->checkpoints),n=strlen(message);
     CHECK(!p->report_open && used+n+2<sizeof(p->checkpoints));
+    if(p->native_io && p->io_alive)++p->sd_checkpoints;
     memcpy(p->checkpoints+used,message,n);p->checkpoints[used+n]='\n';
+}
+static void fake_finalize_io(void *context) {
+    fake_platform *p=context;
+    CHECK(p->native_io && p->io_alive && p->proc_alive && p->callbacks_cleared);
+    CHECK(!p->report_open && !p->graphics_alive && !p->audio_alive && !p->menus);
+    CHECK(strstr(p->checkpoints,"EXIT stage=runtime_io_finalize_begin")!=NULL);
+    p->io_alive=false;++p->io_finalizers;
 }
 static void exit_order_tests(void) {
     const ctr_exit_ops ops={fake_cleanup,fake_clear,fake_menu,fake_poll,fake_release,
-        fake_wait,fake_shutdown,fake_whb,fake_checkpoint};
+        fake_wait,fake_shutdown,fake_whb,fake_checkpoint,NULL};
     const ctr_proc_status states[]={CTR_PROC_FOREGROUND,CTR_PROC_FOREGROUND,
         CTR_PROC_RELEASE,CTR_PROC_BACKGROUND,CTR_PROC_BACKGROUND,(ctr_proc_status)7,CTR_PROC_EXITING};
     fake_platform p={.states=states,.count=7,.proc_alive=true,.graphics_alive=true,.audio_alive=true,.report_open=true};
@@ -783,6 +795,19 @@ static void exit_order_tests(void) {
     state=(ctr_test_lifecycle){0};
     CHECK(!ctr_test_complete_exit(&state,false,&bad,&p));
     CHECK(!state.requested && !state.finished);
+    /* Installed-title CRT I/O is finalized before Menu/ProcUI, even when HOME
+       has already delivered EXITING. Loader-managed profiles keep their hook. */
+    ctr_exit_ops native=ops;native.finalize_io=fake_finalize_io;
+    for(unsigned observed=0;observed<2;++observed) {
+        p=(fake_platform){.states=states,.count=7,.proc_alive=true,.graphics_alive=true,
+            .audio_alive=true,.report_open=true,.native_io=true,.io_alive=true};
+        state=(ctr_test_lifecycle){.title_id=UINT64_C(0x0005000043543257)};
+        CHECK(ctr_test_complete_exit(&state,observed!=0,&native,&p));
+        CHECK(p.io_finalizers==1 && !p.io_alive && p.sd_checkpoints==3);
+        CHECK(strstr(p.checkpoints,"EXIT stage=main_return")!=NULL);
+        CHECK(ctr_test_complete_exit(&state,observed!=0,&native,&p));
+        CHECK(p.io_finalizers==1 && p.sd_checkpoints==3);
+    }
 }
 
 unsigned test_audio_stream_app(void);
