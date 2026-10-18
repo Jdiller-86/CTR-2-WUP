@@ -21,6 +21,10 @@ for storage, AX, GX2 and ProcUI rather than reimplementing those fixes.
 - Before changing platform ownership or shutdown, compare the accepted tool's
   exact source and returned evidence. Share its implementation; do not replace
   it with an unverified workaround or promote a failed hypothesis into protocol.
+- A successful Aroma-managed return does not accept the installed native route.
+  Locate the failing handoff stage before requesting another repair test; when
+  application traces end earlier, collect retained system logs without replaying
+  the failure. Record unsuccessful hypotheses so they are not requested again.
 - Native title XML must carry the RPX FILEINFO SDK. Check the packed executable
   and metadata independently; a valid hash roundtrip does not prove startup compatibility.
 - Reuse reviewed hardware evidence within its scope. A version bump is no reason

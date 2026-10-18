@@ -2,7 +2,7 @@
   "schema_version": 1,
   "kind": "ctr2wup-m1-evidence-review",
   "reviewed_on": "2026-10-18",
-  "reviewed_against_source_commit": "74835eb6232071ce998113ce10eb4b8c6a2a1320",
+  "reviewed_against_source_commit": "c0ef6f0ba09fe21eadf1235a9ef87f7258f77ae4",
   "milestone": "m1",
   "full_milestone_acceptance": false,
   "policy": "Reuse reviewed physical evidence within its recorded scope. A version change alone does not require a repeat. Later display-cache, stream/mixer and guest DSP behavior do not inherit earlier physical acceptance.",
@@ -119,6 +119,24 @@
         "https://github.com/Jdiller-86/CTR-2-WUP/pull/147"
       ],
       "evidence": "The replacement still shows the Wii U Menu loading screen and plays loading music indefinitely. Sharing Capture display/audio/live ProcUI did not establish a working native return. Native exit is confirmed failed, not merely unverified. Earlier installation/installed boot, same-attempt normal Capture return, displayed SD PASS and accepted platform criteria remain credited. No identical rerun is requested."
+    },
+    {
+      "id": "installed-sdk-corrected-return-failure",
+      "version": "0.27.0",
+      "source_commit": "c0ef6f0ba09fe21eadf1235a9ef87f7258f77ae4",
+      "identity_boundary": "Returned kit exactly matches the canonical delivered revision-32 archive. Native source/session/title identity and Capture package digest agree. The supplementary revision-31 Capture is historical installation evidence, not another revision-32 native attempt.",
+      "references": [
+        "https://github.com/Jdiller-86/CTR-2-WUP/issues/15",
+        "https://github.com/Jdiller-86/CTR-2-WUP/pull/148"
+      ],
+      "evidence": "Fresh USB revision-32 installation succeeds: raw MCP callback 0, 4456448/4456448 bytes, 12/12 entries, all nine installed files match through FSA, ACP metadata result 0/version32/profile_matches1. Actual native title 0005000043543257 runs with process SDK 21301, 247 frames over 8177 ms, zero input errors and one Minus press. Independent 8192-byte SD result read-back succeeds; production snapshot PREPARED passes with two writes, seven readbacks and no error. Application audio/graphics/report cleanup completes. The saved trace ends at runtime_io_finalize_begin before SYSLaunchMenu; it does not identify a later native checkpoint. The user reports the same indefinite exit hang. SDK correction is confirmed unsuccessful as an exit repair. No RECOVERED process or successful native return is inferred, and no further installation/repeated hang test is requested.",
+      "artifact_sha256": "054e21a7ddda27af1e0e62956ed18762666c4e511467291ecd308351e2e5a415",
+      "returned_archive_sha256": "5c8a1c9887af81038e4e7a719d54d2a756ac216fba4949c5ff5141211b7f8fa1",
+      "kit_sha256": "80354de508b57a71e5dff11c3c7897070e707fd91919533e93ac15f656193840",
+      "native_session": "00babd6799d0a090",
+      "native_trace_sha256": "8151bcd91aa15f6a8ffdfcd5acaf68383fd6e5263d454b79975caa34d2be3c25",
+      "result_sha256": "0dc1857b3aa94a56eafd7768abc53b7d1686026f31ed2d59dd0946249c5a82e0",
+      "fresh_install_capture_sha256": "e88cc51bff879f9649aa935fd6222272ee37a972a96e9b4279b924aa7ca4ce42"
     }
   ],
   "criteria": [
@@ -144,14 +162,16 @@
         "lifecycle-v0241",
         "original-wup-boot-74835eb",
         "installed-exit-follow-up-observation",
-        "installed-shared-frontend-return-failure"
+        "installed-shared-frontend-return-failure",
+        "installed-sdk-corrected-return-failure"
       ],
       "accepted_scope": [
         "Repeated normal launches and observed Minus/HOME returns in the recorded environment.",
-        "Successful SD save publication and exact fresh-process reload."
+        "Successful SD save publication and exact fresh-process reload.",
+        "Revision-32 production snapshot PREPARED and independent physical result read-back; this single process does not accept recovery."
       ],
       "remaining": [
-        "Review a source/session-bound production recovery pair when obtained with the changed native exit path. The latest display observation is SD PASS; its unavailable return files are not a development prerequisite. Earlier scoped lifecycle and successful save evidence remains accepted."
+        "Resolve the confirmed native return hang before collecting a distinct-process RECOVERED receipt. Revision-32 preparation is source/session-bound and accepted within that scope; unavailable prior files, another installation and repeated hang tests are not prerequisites."
       ]
     },
     {
@@ -183,21 +203,23 @@
         "original-wup-menu-c2b4a91",
         "original-wup-boot-74835eb",
         "installed-exit-follow-up-observation",
-        "installed-shared-frontend-return-failure"
+        "installed-shared-frontend-return-failure",
+        "installed-sdk-corrected-return-failure"
       ],
       "accepted_scope": [
         "Original source-caf509f per-file plaintext WUP installation through the package-bound MCP capture on USB: successful raw callback and complete progress, corroborated by the user.",
         "Fresh source-c2b4a913 USB installation, exact eight-file installed read-back, successful ACP metadata read and correct Wii U Menu name/icon. Launch remains confirmed failed with 157-1101.",
-        "Revision-29/source-74835eb fresh USB installation, all nine installed hashes, successful ACP metadata and actual installed-title boot: native identity match, 1318 rendered frames and user confirmation."
+        "Revision-29/source-74835eb fresh USB installation, all nine installed hashes, successful ACP metadata and actual installed-title boot: native identity match, 1318 rendered frames and user confirmation.",
+        "Revision-32/source-c0ef6f0 fresh USB installation, all nine installed hashes, expected ACP metadata and actual SDK-21301 native boot with verified SD result and PREPARED."
       ],
       "remaining": [
-        "Resolve the confirmed native return hang after the shared-Capture frontend also failed. Correct source-demonstrated native packaging/startup defects and distinguish those corrections from physical exit acceptance. Preserve accepted installation, boot and platform evidence; do not require unavailable earlier files or repeat unchanged runs."
+        "Locate the native handoff stall from retained system logs; the revision-32 SDK correction did not repair the confirmed return hang. The saved SD trace stops before SYSLaunchMenu and cannot identify a later checkpoint. Preserve accepted installation/boot/platform evidence; no reinstall or unchanged rerun is requested."
       ]
     },
     {
       "id": "m1-platform-acceptance",
       "issue": 16,
-      "reviewed_status": "Awaiting evidence",
+      "reviewed_status": "Blocked",
       "evidence_sources": [
         "native-v0141",
         "save-v0146",

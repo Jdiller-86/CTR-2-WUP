@@ -10,10 +10,12 @@ Commercial games and the GUI are not supported yet.
    Fresh installation and actual installed boot are proven. The installed-title
    Minus/HOME return still hangs, including the dedicated frontend that shares
    Capture's display/audio/live ProcUI implementation. Capture's normal return
-   and the earlier SD PASS remain credited. Compare native startup/handoff with
-   established channels; generated XML must carry the RPX's declared SDK rather
-   than zero. That packaging correction does not prove a repaired hardware exit.
-   Do not request another unchanged run or repeat accepted platform checks.
+   remain credited. The source-bound revision-32 return confirms SDK 21301,
+   physical SD read-back and PREPARED, followed by the same Minus hang; the SDK
+   correction did not repair it. Inspect retained system logs before selecting
+   another fix: the SD trace stops before the handoff. Compare native callback,
+   graphics and CRT ordering with maintained channels, without promoting a
+   difference into a proven cause. No reinstall, identical rerun or baseline repeat.
 2. **Extend GX2 guest rendering** ([#29](https://github.com/Jdiller-86/CTR-2-WUP/issues/29)).
    Bounded vertex translation, Texture0 sampling and replace/modulate TEV are
    implemented. Extend filtering, combiner and depth/blend coverage, then address
