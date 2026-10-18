@@ -8,7 +8,7 @@
 static char native_root[512];
 static const char *scenario;
 static unsigned native_checks,polls,menu_calls,releases,shutdowns,draws,audio_ends;
-static bool display_alive,callbacks_cleared,proc_alive;
+static bool display_alive,callbacks_cleared,proc_alive,logging_error_shown;
 static uint64_t ticks;
 #define NATIVE_CHECK(c) do { ++native_checks;if(!(c)) { fprintf(stderr,"native frontend line %d: %s\n",__LINE__,#c);exit(1); } } while(0)
 #define DATA_ROOT native_root
@@ -17,6 +17,7 @@ static uint64_t ticks;
 #define CTR_APP_VERSION "0.27.0"
 #define ctr_report_storage_sync native_storage_sync
 #define ctr_report_storage_close native_storage_close
+#define ctr_report_storage_verify native_storage_verify
 #define ctr_m1_snapshot_probe native_snapshot_probe
 #define ctr_m1_storage_result_name native_storage_result_name
 #define main native_app_entry
@@ -80,7 +81,11 @@ bool ctr_diagnostic_audio_end(ctr_diagnostic_audio *a,void (*voices)(void *),voi
 const char *ctr_diagnostic_audio_result_name(ctr_diagnostic_audio_result state) { (void)state;return "READY"; }
 void ctr_diagnostic_display_labels(const char *title,const char *hint) { NATIVE_CHECK(title && hint); }
 bool ctr_diagnostic_display_init(void) { NATIVE_CHECK(audio.owned && !display_alive);display_alive=true;return true; }
-bool ctr_diagnostic_display_row(unsigned row,const char *text) { NATIVE_CHECK(row<14 && text);return true; }
+bool ctr_diagnostic_display_row(unsigned row,const char *text) {
+    NATIVE_CHECK(row<14 && text);
+    if(row==6 && strstr(text,"LOGGING ERROR"))logging_error_shown=true;
+    return true;
+}
 bool ctr_diagnostic_display_draw(void) { NATIVE_CHECK(display_alive && audio.owned && foreground);++draws;return true; }
 void ctr_diagnostic_display_invalidate(void) { NATIVE_CHECK(display_alive); }
 void ctr_diagnostic_display_close(bool fg) { (void)fg;NATIVE_CHECK(!audio.owned);display_alive=false; }
@@ -91,6 +96,17 @@ bool native_storage_sync(void *context) {
     return true;
 }
 void native_storage_close(ctr_report_storage *s) { s->client=-1; }
+bool native_storage_verify(void *context,const char *path,uint64_t bytes,const uint8_t digest[32]) {
+    ctr_report_storage *s=context;uint8_t data[CTR_TEST_RESULT_BYTES],actual[32];
+    NATIVE_CHECK(!io_closed && foreground && bytes==sizeof(data));
+    FILE *f=fopen(path,"rb");NATIVE_CHECK(f!=NULL);
+    NATIVE_CHECK(fread(data,1,sizeof(data),f)==sizeof(data) && fclose(f)==0);
+    ctr_sha256 hash;ctr_sha256_init(&hash);
+    NATIVE_CHECK(ctr_sha256_update(&hash,data,sizeof(data)) && ctr_sha256_final(&hash,actual));
+    NATIVE_CHECK(!memcmp(actual,digest,32));
+    if(!strcmp(scenario,"physical-error")) { s->last_status=-6;errno=EIO;return false; }
+    return true;
+}
 const char *native_storage_result_name(CtrM1StorageResult state) { return state==CTR_M1_STORAGE_PASS?"PASS":"ARGUMENT"; }
 bool native_snapshot_probe(const char *directory,const char *source,uint64_t id,CtrM1SnapshotEvidence *out) {
     NATIVE_CHECK(directory && strlen(source)==40 && display_alive && audio.owned && frames==1);
@@ -114,7 +130,7 @@ int test_installed_frontend_child(const char *mode,const char *directory) {
     NATIVE_CHECK(snprintf(native_root,sizeof(native_root),"%s/data",directory)>0);
     if(!strcmp(scenario,"logging-error")) { FILE *f=fopen(native_root,"wb");NATIVE_CHECK(f!=NULL);fclose(f); }
     int returned=native_app_entry();
-    bool expected_failure=!strcmp(scenario,"input-error") || !strcmp(scenario,"probe-error") || !strcmp(scenario,"commit-error") ||
+    bool expected_failure=!strcmp(scenario,"input-error") || !strcmp(scenario,"probe-error") || !strcmp(scenario,"commit-error") || !strcmp(scenario,"physical-error") ||
         !strcmp(scenario,"logging-error") || !strcmp(scenario,"wrong-route");
     NATIVE_CHECK(returned==(expected_failure?1:0));
     NATIVE_CHECK(shutdowns==1 && !proc_alive && !display_alive && !audio.owned && audio_ends>=1);
@@ -124,9 +140,14 @@ int test_installed_frontend_child(const char *mode,const char *directory) {
         FILE *f=fopen(result.path,"rb");NATIVE_CHECK(f!=NULL);
         char text[CTR_TEST_RESULT_BYTES+1];size_t bytes=fread(text,1,sizeof(text)-1,f);text[bytes]=0;
         NATIVE_CHECK(bytes==CTR_TEST_RESULT_BYTES && fclose(f)==0);
-        NATIVE_CHECK(strstr(text,"Stage: resources_closed_before_system_transition\n"));
-        NATIVE_CHECK(strstr(text,expected_failure?"Host exit result: 1 ":"Host exit result: 0 "));
-        NATIVE_CHECK(result.verified_writes>=3);
+        if(strcmp(scenario,"physical-error")) {
+            NATIVE_CHECK(strstr(text,"Stage: resources_closed_before_system_transition\n"));
+            NATIVE_CHECK(strstr(text,expected_failure?"Host exit result: 1 ":"Host exit result: 0 "));
+        } else {
+            NATIVE_CHECK(result.failed && !sd_verified && platform_failed && logging_error_shown);
+            NATIVE_CHECK(strstr(text,"Host exit result: -1 ") && !strstr(text,"readback: VERIFIED"));
+        }
+        NATIVE_CHECK(result.verified_writes>=(!strcmp(scenario,"physical-error")?2u:3u));
         f=fopen(report.path,"rb");NATIVE_CHECK(f!=NULL);
         char trace_text[12000];bytes=fread(trace_text,1,sizeof(trace_text)-1,f);trace_text[bytes]=0;NATIVE_CHECK(fclose(f)==0);
         char *barrier=strstr(trace_text,"EXIT stage=runtime_io_finalize_begin");
@@ -152,7 +173,7 @@ int test_installed_frontend_child(const char *mode,const char *directory) {
 }
 
 unsigned test_installed_frontend(void) {
-    const char *modes[]={"native-minus","native-home","native-reacquire","native-input-error", "native-probe-error","native-logging-error","native-commit-error","native-wrong-route"};
+    const char *modes[]={"native-minus","native-home","native-reacquire","native-input-error", "native-probe-error","native-logging-error","native-commit-error","native-physical-error","native-wrong-route"};
     unsigned checks=0;
     for(unsigned i=0;i<sizeof(modes)/sizeof(modes[0]);++i) {
         char directory[512];if(!ctr_test_temp_directory(directory,sizeof(directory),"ctr-native"))abort();

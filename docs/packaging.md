@@ -28,7 +28,9 @@ check the console for an unrelated title with that ID before installation.
 The `native-install` diagnostic checks its actual title identity and the production
 `ctr_fs_snapshot_*` adapter using isolated original data. Its compact frontend
 shares Capture's native display, silent AX and live ProcUI adapter; it initializes
-no guest execution, tone voice or prototype display cache. The first Menu launch
+no guest execution, tone voice or prototype display cache. Startup logging must
+also match the physical SD result file through independent FSA/SHA-256 read-back.
+The first Menu launch
 leaves a deliberately interrupted publication (**PREPARED**); the second recovers
 the committed `.previous`, rejects the uncommitted `.pending` and verifies a new
 publication (**RECOVERED**). Later launches only recheck completion. Source-bound

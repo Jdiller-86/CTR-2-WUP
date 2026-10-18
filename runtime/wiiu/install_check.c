@@ -7,6 +7,7 @@
 #include "test_lifecycle_wiiu.h"
 #include "test_report.h"
 #include "test_result.h"
+#include "ctr_sha256.h"
 #include <coreinit/debug.h>
 #include <coreinit/foreground.h>
 #include <coreinit/systeminfo.h>
@@ -29,7 +30,7 @@ static ctr_test_lifecycle lifecycle;
 static CtrM1SnapshotEvidence snapshot={.storage={.result=CTR_M1_STORAGE_ARGUMENT,
     .error_stage="not_run"},.phase="NONE"};
 static atomic_bool exit_requested;
-static bool foreground=true,exit_observed,io_closed,platform_failed;
+static bool foreground=true,exit_observed,io_closed,platform_failed,sd_verified;
 static uint64_t session;
 static uint32_t frames,input_samples,input_errors,minus_presses;
 static int exit_result=-1;
@@ -68,6 +69,7 @@ static bool write_result(const char *stage) {
         "Native audio context: result=%s owned=%u attempts=%u successes=%u failures=%u releases=%u\n"
         "Full trace: %s | file=%s errno=%d operation=%s FSA=%d commits=%llu\n"
         "Previous result writes verified: %llu\n"
+        "Independent physical SD result readback: %s\n"
         "Frontend: shared Capture display, silent AX and live ProcUI adapter; no guest execution.\n"
         "Scope: installed Menu route and production SD recovery; actual Menu return requires observation.\n",
         CTR_SOURCE_COMMIT,CTR_SOURCE_DIRTY,stage,exit_result,
@@ -77,7 +79,8 @@ static bool write_result(const char *stage) {
         audio.successes,audio.failures,audio.releases,
         report.path[0]&&!report.failed?"SAVING":"FAILED",report.filename,report.error_code,
         report.error_stage?report.error_stage:"none",storage.last_status,
-        (unsigned long long)report.commits,(unsigned long long)result.verified_writes);
+        (unsigned long long)report.commits,(unsigned long long)result.verified_writes,
+        sd_verified?"VERIFIED":"UNCONFIRMED");
     if(n<0 || (size_t)n>=sizeof(body)) { platform_failed=true;return false; }
     return ctr_test_result_update(&result,body);
 }
@@ -86,6 +89,32 @@ static bool commit(const char *stage) {
     bool ok=trace("REPORT COMMIT stage=%s sequence=%llu policy=file_sync_close_volume_sync",
         stage,(unsigned long long)(report.commits+1)) && ctr_test_report_commit(&report);
     if(!write_result(stage))ok=false;
+    return ok;
+}
+
+static bool verify_physical_result(void) {
+    uint8_t data[CTR_TEST_RESULT_BYTES],digest[32];
+    errno=0;FILE *file=fopen(result.path,"rb");bool ok=false;int error=0;
+    if(file) {
+        size_t got=fread(data,1,sizeof(data),file);int end=fgetc(file);
+        ok=got==sizeof(data) && end==EOF && !ferror(file);
+        if(!ok)error=errno?errno:EIO;
+        if(fclose(file)!=0) { if(!error)error=errno?errno:EIO;ok=false; }
+    } else error=errno?errno:EIO;
+    if(ok) {
+        ctr_sha256 hash;ctr_sha256_init(&hash);
+        ok=ctr_sha256_update(&hash,data,sizeof(data)) && ctr_sha256_final(&hash,digest);
+        if(ok) {
+            errno=0;
+            ok=ctr_report_storage_verify(&storage,result.path,sizeof(data),digest);
+            if(!ok)error=errno?errno:EIO;
+        } else error=EIO;
+    }
+    if(!ok && !result.failed) {
+        result.failed=true;result.error_code=error?error:EIO;result.error_stage="physical_readback";
+    }
+    trace("SD physical_result_readback verified=%u bytes=%u fsa=0x%08x errno=%d",
+        ok,CTR_TEST_RESULT_BYTES,(unsigned)(uint32_t)storage.last_status,ok?0:result.error_code);
     return ok;
 }
 
@@ -168,6 +197,10 @@ int main(void) {
             trace("FRONTEND shared_capture_display=1 shared_silent_AX=1 shared_ProcUI=1 prototype_guest_cache_tone=0 process_sdk=%u",
                 __OSGetProcessSDKVersion());
         if(ready)ready=commit("startup");
+        if(ready) {
+            sd_verified=verify_physical_result();
+            ready=sd_verified && commit("physical_sd_verified");
+        }
     }
     bool audio_ready=audio_begin();
     ctr_diagnostic_display_labels("CTR2WUP INSTALL CHECK","MINUS: MENU / HOME: WII U MENU");
@@ -188,7 +221,7 @@ int main(void) {
     snprintf(status_line,sizeof(status_line),"SD %s / %s",
         ctr_m1_storage_result_name(snapshot.storage.result),snapshot.phase);
     ctr_diagnostic_display_row(4,status_line);
-    ctr_diagnostic_display_row(6,!ready || report.failed || result.failed?"LOGGING ERROR - PHOTOGRAPH THIS SCREEN":
+    ctr_diagnostic_display_row(6,!ready || !sd_verified || report.failed || result.failed?"LOGGING ERROR - PHOTOGRAPH THIS SCREEN":
         "FTP return: sd:/ctr2wup/install-check/");
     ctr_diagnostic_display_row(8,"PREPARED: MINUS / RECOVERED: HOME THEN MENU");
     if(!ready || report.failed || result.failed)show_log_error();
@@ -240,7 +273,7 @@ int main(void) {
         }
         OSSleepTicks(OSMillisecondsToTicks(20));
     }
-    exit_result=!platform_failed && ready && lifecycle.title_id==TITLE_ID &&
+    exit_result=!platform_failed && ready && sd_verified && lifecycle.title_id==TITLE_ID &&
         snapshot.storage.result==CTR_M1_STORAGE_PASS && frames && input_samples && !input_errors &&
         !report.failed && !result.failed?0:1;
     if(!ctr_test_complete_exit(&lifecycle,exit_observed,&exit_ops,NULL))exit_result=1;
