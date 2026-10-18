@@ -95,12 +95,12 @@ def header(document,installed_files=None,title_version=None):
                'meta/iconTex.tga','meta/bootLogoTex.tga','meta/bootDrcTex.tga','meta/bootTvTex.tga',
                'meta/bootMovie.h264'}
         if (previous.get('schema_version')!=1 or previous.get('title_id')!=document['title_id']
-                or previous.get('source_commit')!='74835eb6232071ce998113ce10eb4b8c6a2a1320'
-                or previous.get('title_version')!=29 or not isinstance(previous.get('files'),list)
+                or previous.get('source_commit')!='28c51efc0bc5592babe51ef6a57ded98634086f5'
+                or previous.get('title_version')!=30 or not isinstance(previous.get('files'),list)
                 or len(previous['files'])!=9 or {r.get('name') for r in previous['files']}!=names):
             raise ValueError('Require the complete reviewed installed predecessor')
         result += ['#define CTR_CAPTURE_REPAIR_FILE_COUNT 9',
-                   '#define CTR_CAPTURE_REPAIR_VERSION 29',
+                   '#define CTR_CAPTURE_REPAIR_VERSION 30',
                    '#define CTR_CAPTURE_REPAIR_SOURCE "'+previous['source_commit']+'"',
                    'static const CtrInstallCaptureFile ctr_capture_previous_files[CTR_CAPTURE_REPAIR_FILE_COUNT]={']
         for row in previous['files']:

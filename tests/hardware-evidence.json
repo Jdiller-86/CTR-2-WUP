@@ -102,7 +102,7 @@
       "id": "installed-exit-follow-up-observation",
       "version": null,
       "source_commit": null,
-      "identity_boundary": "User observations after the revision-30 delivery; current-run source/session receipts have not been returned. Do not assign an exact tested binary, phase pair or final trace stage from the earlier revision-29 archive.",
+      "identity_boundary": "User observations after the revision-30 delivery. The requested latest return is unavailable following deletion; do not require its upload. Do not assign an exact tested binary, phase pair or final trace stage from the earlier revision-29 archive.",
       "references": [
         "https://github.com/Jdiller-86/CTR-2-WUP/issues/15",
         "https://github.com/Jdiller-86/CTR-2-WUP/issues/13"
@@ -139,7 +139,7 @@
         "Successful SD save publication and exact fresh-process reload."
       ],
       "remaining": [
-        "Review the latest source/session-bound production snapshot receipts to verify the PREPARED/RECOVERED pair. SD PASS is observed; earlier successful save and scoped lifecycle evidence remains accepted."
+        "Review a source/session-bound production recovery pair when obtained with the changed native exit path. The latest display observation is SD PASS; its unavailable return files are not a development prerequisite. Earlier scoped lifecycle and successful save evidence remains accepted."
       ]
     },
     {
@@ -178,7 +178,7 @@
         "Revision-29/source-74835eb fresh USB installation, all nine installed hashes, successful ACP metadata and actual installed-title boot: native identity match, 1318 rendered frames and user confirmation."
       ],
       "remaining": [
-        "Resolve the still-confirmed installed-title Minus/HOME return hang. Capture returns normally in the same attempt, and the installed app reports SD PASS. Inspect current-run receipts before another platform change; verify guarded predecessor update separately. No broad baseline repeat or second destination."
+        "Resolve the confirmed installed-title Minus/HOME return hang using the compact frontend shared with the working Capture tool. The prior requested files are unavailable; no identical rerun is requested. Verify native handoff and the automatic recovery pair for this changed path, retaining accepted boot, fresh installation and prior platform evidence."
       ]
     },
     {

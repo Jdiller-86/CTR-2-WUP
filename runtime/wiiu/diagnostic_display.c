@@ -1,4 +1,4 @@
-#include "display.h"
+#include "diagnostic_display.h"
 #include "diagnostic_font.h"
 #include "image_scale.h"
 #include <coreinit/cache.h>
@@ -17,8 +17,23 @@ static char rows[ROWS][COLUMNS+1];
 static GX2Surface surfaces[2];
 static ctr_scale_plan plans[2];
 static bool initialized,ready,dirty=true,presented;
+static char heading[64]="CTR2WUP INSTALL CAPTURE";
+static char footer[84]="MINUS: EXIT / CANCEL AND WAIT FOR MCP";
 
-void capture_display_line(const char *text) {
+void ctr_diagnostic_display_labels(const char *title,const char *hint) {
+    if(title)snprintf(heading,sizeof(heading),"%s",title);
+    if(hint)snprintf(footer,sizeof(footer),"%s",hint);
+    dirty=true;
+}
+
+bool ctr_diagnostic_display_row(unsigned row,const char *text) {
+    if(row>=ROWS || !text)return false;
+    snprintf(rows[row],sizeof(rows[row]),"%s",text);
+    for(char *c=rows[row];*c;++c)if(*c=='_')*c='-';
+    dirty=true;return true;
+}
+
+void ctr_diagnostic_display_line(const char *text) {
     if(!text)return;
     do {
         memmove(rows,rows+1,sizeof(rows)-sizeof(rows[0]));
@@ -29,7 +44,7 @@ void capture_display_line(const char *text) {
     dirty=true;
 }
 
-bool capture_display_init(void) {
+bool ctr_diagnostic_display_init(void) {
     if(initialized)return ready;
     if(!WHBGfxInit())return false;
     initialized=true;
@@ -50,16 +65,16 @@ bool capture_display_init(void) {
     ready=true;dirty=true;return true;
 }
 
-bool capture_display_draw(void) {
+bool ctr_diagnostic_display_draw(void) {
     if(!ready)return false;
     if(dirty) {
         if(presented)GX2DrawDone();
         for(unsigned i=0;i<WIDTH*HEIGHT;++i)pixels[i]=UINT32_C(0x102238ff);
-        char title[84];snprintf(title,sizeof(title),"CTR2WUP INSTALL CAPTURE / %.12s",CTR_SOURCE_COMMIT);
+        char title[84];snprintf(title,sizeof(title),"%s / %.12s",heading,CTR_SOURCE_COMMIT);
         ctr_draw_text(pixels,WIDTH,HEIGHT,8,10,title,UINT32_C(0x74ceffff));
         for(unsigned i=0;i<ROWS;++i)
             ctr_draw_text(pixels,WIDTH,HEIGHT,8,34+i*16,rows[i],UINT32_C(0xffffffff));
-        ctr_draw_text(pixels,WIDTH,HEIGHT,8,HEIGHT-14,"MINUS: EXIT / CANCEL AND WAIT FOR MCP",UINT32_C(0x74ceffff));
+        ctr_draw_text(pixels,WIDTH,HEIGHT,8,HEIGHT-14,footer,UINT32_C(0x74ceffff));
         for(unsigned i=0;i<2;++i) {
             GX2Surface *s=&surfaces[i];
             if(!ctr_scale_rgba(&plans[i],pixels,WIDTH*HEIGHT,s->image,s->imageSize,s->pitch))return false;
@@ -79,9 +94,9 @@ bool capture_display_draw(void) {
     presented=true;return true;
 }
 
-void capture_display_invalidate(void) { dirty=true; }
+void ctr_diagnostic_display_invalidate(void) { dirty=true; }
 
-void capture_display_close(bool foreground) {
+void ctr_diagnostic_display_close(bool foreground) {
     if(initialized && foreground)GX2DrawDone();
     for(unsigned i=0;i<2;++i) {
         ctr_scale_plan_close(&plans[i]);

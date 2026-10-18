@@ -9,9 +9,11 @@ Commercial games and the GUI are not supported yet.
 1. **Finish installed-title lifecycle** ([#15](https://github.com/Jdiller-86/CTR-2-WUP/issues/15)).
    Fresh installation and actual installed boot are proven. The installed-title
    Minus/HOME return still hangs; the latest observation reports SD PASS while
-   Install Capture returns normally. Compare exact accepted startup/cleanup and
-   current source-bound receipts before another platform change. Verify the
-   production recovery pair and guarded predecessor update without repeating
+   Install Capture returns normally. The dedicated installed frontend now shares
+   Capture's display/audio/live ProcUI implementation and omits prototype guest,
+   tone and cache state. Use this focused route to isolate native handoff and
+   collect its automatic production recovery pair. The last run's requested
+   files are unavailable; do not make them a development prerequisite or repeat
    accepted controls/audio/stability/save checks.
 2. **Extend GX2 guest rendering** ([#29](https://github.com/Jdiller-86/CTR-2-WUP/issues/29)).
    Bounded vertex translation, Texture0 sampling and replace/modulate TEV are

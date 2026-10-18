@@ -16,7 +16,7 @@ from host.title_stage import stage_title
 
 TITLE_ID = '0005000043543257'
 TITLE_NAME = 'CTR2WUP Install Check'
-TITLE_VERSION = 30
+TITLE_VERSION = 31
 
 
 def candidate(native, output):

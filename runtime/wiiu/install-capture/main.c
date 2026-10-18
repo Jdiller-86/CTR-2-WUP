@@ -5,10 +5,10 @@
 #include "install_capture.h"
 #include "install_capture_package.h"
 #include "log.h"
-#include "display.h"
+#include "diagnostic_display.h"
 #include "diagnostic_audio.h"
 #include "test_report.h"
-#include "test_lifecycle.h"
+#include "test_lifecycle_wiiu.h"
 #include "report_storage.h"
 #include <coreinit/ios.h>
 #include <coreinit/mcp.h>
@@ -53,7 +53,7 @@ static ACPMetaXml installed_meta __attribute__((aligned(64)));
 static void notice(const char *format,...) {
     char text[512];va_list args;va_start(args,format);
     vsnprintf(text,sizeof(text),format,args);va_end(args);
-    OSReport("%s\n",text);capture_display_line(text);
+    OSReport("%s\n",text);ctr_diagnostic_display_line(text);
 }
 
 static bool line(const char *text) {
@@ -106,7 +106,7 @@ static bool pump(void *unused) {
     if(foreground) {
         if(!was_foreground) {
             report.sync=ctr_report_storage_sync;report.verify=ctr_report_storage_verify;
-            capture_display_invalidate();
+            ctr_diagnostic_display_invalidate();
             if(!audio_begin())exit_requested=true;
         }
         VPADStatus pad;VPADReadError error;
@@ -114,7 +114,7 @@ static bool pump(void *unused) {
             buttons=pad.trigger;held_buttons=pad.hold;input_valid=true;
         }
         if(buttons&(VPAD_BUTTON_MINUS|VPAD_BUTTON_B))exit_requested=true;
-        if(display_ready && !capture_display_draw()) {
+        if(display_ready && !ctr_diagnostic_display_draw()) {
             line("DISPLAY draw=failed");platform_failed=true;exit_requested=true;
         }
     }
@@ -319,7 +319,7 @@ static void cleanup(void *unused) {
         const char *text=audio_ok?"AUDIO release=complete":"AUDIO release=failed";
         if(report.file)line(text);else capture_log_checkpoint(&report,text);
     }
-    capture_display_close(foreground);display_ready=false;
+    ctr_diagnostic_display_close(foreground);display_ready=false;
     capture_log_close(&report);
     ctr_report_storage_close(&storage);
 }
@@ -329,29 +329,14 @@ static void clear_callbacks(void *unused) {
     ctr_report_storage_close(&storage);
     ProcUISetSaveCallback(save_ready,NULL);
 }
-static void request_menu(void *unused) { (void)unused;SYSLaunchMenu(); }
-static ctr_proc_status process_messages(void *unused) {
-    (void)unused;
-    switch(ProcUIProcessMessages(TRUE)) {
-        case PROCUI_STATUS_IN_FOREGROUND:return CTR_PROC_FOREGROUND;
-        case PROCUI_STATUS_IN_BACKGROUND:return CTR_PROC_BACKGROUND;
-        case PROCUI_STATUS_RELEASE_FOREGROUND:return CTR_PROC_RELEASE;
-        case PROCUI_STATUS_EXITING:return CTR_PROC_EXITING;
-        default:return (ctr_proc_status)-1;
-    }
-}
-static void release_foreground(void *unused) { (void)unused;ProcUIDrawDoneRelease(); }
-static void wait_messages(void *unused) { (void)unused;OSSleepTicks(OSMillisecondsToTicks(5)); }
-static void shutdown_procui(void *unused) { (void)unused;ProcUIShutdown(); }
-static void shutdown_whb(void *unused) { (void)unused;WHBProcShutdown(); }
 static void checkpoint(void *unused,const char *message) {
     (void)unused;
     OSReport("%s\n",message);
     if(report.path[0] && !report.failed)capture_log_checkpoint(&report,message);
     ctr_report_storage_close(&storage);
 }
-static const ctr_exit_ops exit_ops={cleanup,clear_callbacks,request_menu,process_messages,
-    release_foreground,wait_messages,shutdown_procui,shutdown_whb,checkpoint,NULL};
+static const ctr_exit_ops exit_ops={cleanup,clear_callbacks,ctr_procui_request_menu,ctr_procui_messages,
+    ctr_procui_release,ctr_procui_wait,ctr_procui_shutdown,ctr_procui_shutdown_whb,checkpoint,NULL};
 
 int main(void) {
     bool saved=false,installed=false,launch_ready=false;
@@ -378,7 +363,7 @@ int main(void) {
         ready=line(text) && line("PACKAGE " CTR_CAPTURE_PACKAGE_RECORD);
     }
     bool audio_ready=audio_begin();
-    display_ready=capture_display_init();
+    display_ready=ctr_diagnostic_display_init();
     platform_failed=!audio_ready || !display_ready;
     notice("Checking the existing M1 package.");
     if(report.file)line(display_ready?"DISPLAY native_GX2=ready":"DISPLAY native_GX2=failed");
@@ -452,7 +437,7 @@ int main(void) {
         notice("Minus: exit. FTP the whole install-check folder.");
     } else notice("Minus: exit. Return only the install-capture folder.");
     if(foreground) {
-        if(display_ready && !capture_display_draw())platform_failed=true;
+        if(display_ready && !ctr_diagnostic_display_draw())platform_failed=true;
         if(!saved && !exit_observed)exit_requested=false;
     }
     if(!display_ready)exit_requested=true;

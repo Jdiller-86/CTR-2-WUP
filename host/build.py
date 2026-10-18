@@ -218,7 +218,9 @@ def prototype(output: str | Path, guest_path=None, *, backend="original", audio_
             manifest["stages"].append({"name":"original_cstm_mixing_native_pcm_human_hearing","state":"awaiting_console_test"})
             manifest["limitations"].append("Original checked CSTM, two portable voices and fixed finite native PCM; guest DSP IPC, asynchronous streaming and audible hardware output remain unverified")
         if install_only:
+            manifest["display"]={"panel_size":[512,288],"top_output":"TV","bottom_output":"GamePad"}
             manifest["install_check"]={"full_native_guide":False,"storage_protocol":"snapshot-v2",
+                "frontend":"shared-capture","prototype_guest_cache_tone":False,
                 "session_protocol":"install-v3","production_snapshot_adapter":True,
                 "cross_launch_recovery":True,"process_session_trace":True,
                 "log_directory":"ctr2wup/install-check/"+source_commit,

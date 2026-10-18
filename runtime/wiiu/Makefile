@@ -120,6 +120,9 @@ ifeq ($(INSTALL_ONLY),1)
 M1_SOURCES += m1_snapshot_probe.c
 endif
 SOURCES := $(M1_SOURCES) main.c viewport.c diagnostic_font.c test_report.c test_guide.c test_lifecycle.c image_scale.c report_storage.c test_result.c diagnostic_audio.c guest_slice.c
+ifeq ($(INSTALL_ONLY),1)
+SOURCES := install_check.c diagnostic_display.c diagnostic_font.c diagnostic_audio.c viewport.c image_scale.c test_lifecycle.c test_report.c test_result.c report_storage.c m1_storage_probe.c m1_snapshot_probe.c
+endif
 ifeq ($(STREAM_AUDIO),1)
 SOURCES += audio_stream_app.c audio_stream_diagnostic.c
 endif
@@ -154,6 +157,9 @@ CORE_SOURCES += ../recomp/ctr_recomp.c $(UPSTREAM_DIR)/entries.c $(wildcard $(UP
 endif
 ifeq ($(STREAM_AUDIO),1)
 CORE_SOURCES += ../core/ctr_audio_fixture.c
+endif
+ifeq ($(INSTALL_ONLY),1)
+CORE_SOURCES := $(CTR_RUNTIME_SOURCES) ../core/ctr_fs_snapshot.c ../core/ctr_sha256.c
 endif
 CORE_OBJECTS := $(addprefix $(BUILD)/,$(notdir $(CORE_SOURCES:.c=.o)))
 OBJECTS += $(CORE_OBJECTS)
