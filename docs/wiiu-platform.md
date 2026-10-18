@@ -48,10 +48,12 @@ Reuse [exit handling](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/runtime/
 release audio/graphics, close reports/FSA clients, clear application callbacks,
 retain save acknowledgement, request the correct Menu/HBL route, drain ProcUI
 and then shut it down. Open no FSA clients during the system transition.
-For native installed titles, invoke WUT's own idempotent devoptab finalizer after
-closing reports and before the transition, rather than deferring SD work until
-CRT exit after ProcUI shutdown. Persist the final I/O barrier first; later
-checkpoints use OSReport only. A cleanup marker never proves actual Menu return.
+Leave process-wide filesystem finalization to WUT's CRT; application cleanup
+closes only its own files and clients. Persist the final application I/O barrier
+before the transition; later native checkpoints use OSReport only. A cleanup
+marker never proves actual Menu return. Compare the complete startup/cleanup
+path against the accepted tool's exact source before changing platform behavior;
+keep route-specific hypotheses out of the reusable protocol until established.
 Before delivery, run required runtime/sanitizer/native checks and verify the
 source-bound artifact. Cross-builds and API doubles do not establish hardware
 behavior. Request only evidence for changed or unresolved paths, with one short

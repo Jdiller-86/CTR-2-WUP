@@ -6,24 +6,24 @@ Commercial games and the GUI are not supported yet.
 
 ## Current work
 
-1. **Extend GX2 guest rendering** ([#29](https://github.com/Jdiller-86/CTR-2-WUP/issues/29)).
+1. **Finish installed-title lifecycle** ([#15](https://github.com/Jdiller-86/CTR-2-WUP/issues/15)).
+   Fresh installation and actual installed boot are proven. The installed-title
+   Minus/HOME return still hangs; the latest observation reports SD PASS while
+   Install Capture returns normally. Compare exact accepted startup/cleanup and
+   current source-bound receipts before another platform change. Verify the
+   production recovery pair and guarded predecessor update without repeating
+   accepted controls/audio/stability/save checks.
+2. **Extend GX2 guest rendering** ([#29](https://github.com/Jdiller-86/CTR-2-WUP/issues/29)).
    Bounded vertex translation, Texture0 sampling and replace/modulate TEV are
    implemented. Extend filtering, combiner and depth/blend coverage, then address
    observed first-game requirements. Keep exact software preflight/readback while
    expanding; physical parity and resource-cache costs remain unverified
    ([#78](https://github.com/Jdiller-86/CTR-2-WUP/issues/78)).
-2. **Connect guest audio** ([#25](https://github.com/Jdiller-86/CTR-2-WUP/issues/25)).
+3. **Connect guest audio** ([#25](https://github.com/Jdiller-86/CTR-2-WUP/issues/25)).
    The checked CSTM/ADPCM stream mixer exists. Implement the guest DSP/service
    connection and timing; native tone playback does not cover guest audio.
-3. **Finish installed-title lifecycle** ([#15](https://github.com/Jdiller-86/CTR-2-WUP/issues/15)).
-   The keyless, self-signed plaintext WUP candidate and automatic SD recovery
-   probe exist. Fresh installation and actual installed boot are proven with the
-   complete XML/artwork/movie profile. Resolve native exit finalization, SD mount
-   path validation and predecessor-update failure, then verify the two focused
-   exit/recovery launches. Reuse bounded MCP
-   enumeration and the reviewed
-   SD logging and native display/audio/exit helpers.
-   Remaining console evidence does not block CPU, graphics or audio development.
+
+Remaining console evidence does not block CPU, graphics or audio development.
 
 ## Milestones
 
