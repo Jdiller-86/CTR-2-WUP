@@ -15,11 +15,12 @@ Commercial games and the GUI are not supported yet.
 2. **Connect guest audio** ([#25](https://github.com/Jdiller-86/CTR-2-WUP/issues/25)).
    The checked CSTM/ADPCM stream mixer exists. Implement the guest DSP/service
    connection and timing; native tone playback does not cover guest audio.
-3. **Finish installed-title launch** ([#15](https://github.com/Jdiller-86/CTR-2-WUP/issues/15)).
+3. **Finish installed-title lifecycle** ([#15](https://github.com/Jdiller-86/CTR-2-WUP/issues/15)).
    The keyless, self-signed plaintext WUP candidate and automatic SD recovery
-   probe exist. Per-file plaintext installation succeeds; use the independently
-   checked XML/artwork/movie launch profile and guarded predecessor update to
-   resolve launch rejection, then verify the two Menu launches. Reuse bounded MCP
+   probe exist. Fresh installation and actual installed boot are proven with the
+   complete XML/artwork/movie profile. Resolve native exit finalization, SD mount
+   path validation and predecessor-update failure, then verify the two focused
+   exit/recovery launches. Reuse bounded MCP
    enumeration and the reviewed
    SD logging and native display/audio/exit helpers.
    Remaining console evidence does not block CPU, graphics or audio development.
@@ -32,7 +33,7 @@ Detailed scope, dependencies and evidence are tracked in the linked issues and
 
 | Milestone | Existing foundation | Remaining outcome |
 | --- | --- | --- |
-| [M1: Platform](https://github.com/Jdiller-86/CTR-2-WUP/issues/1) | Reviewed screens, input, tone, stability, exit and save/reload | Installed-title launch and automatic SD recovery evidence |
+| [M1: Platform](https://github.com/Jdiller-86/CTR-2-WUP/issues/1) | Reviewed screens, input, tone, stability, scoped exit/save, original installation and installed boot | Installed-title exit/relaunch and automatic SD recovery |
 | [M2: CPU](https://github.com/Jdiller-86/CTR-2-WUP/issues/2) | ARM/Thumb/VFP AOT, checked ABI/memory and original fixtures | Exercised instruction coverage, fallback/traces and useful Espresso performance |
 | [M3: Runtime](https://github.com/Jdiller-86/CTR-2-WUP/issues/3) | Compiled original guests, kernel/services, filesystem and mixer | Required services/modules, guest DSP and runtime acceptance |
 | [M4: Graphics](https://github.com/Jdiller-86/CTR-2-WUP/issues/4) | GSP/PICA, software reference, GX2 vertex translation, base textures and replace/modulate TEV | Physical GPU parity, broader filtering/fragment state, coherency and measured costs |

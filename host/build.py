@@ -219,7 +219,7 @@ def prototype(output: str | Path, guest_path=None, *, backend="original", audio_
             manifest["limitations"].append("Original checked CSTM, two portable voices and fixed finite native PCM; guest DSP IPC, asynchronous streaming and audible hardware output remain unverified")
         if install_only:
             manifest["install_check"]={"full_native_guide":False,"storage_protocol":"snapshot-v2",
-                "session_protocol":"install-v2","production_snapshot_adapter":True,
+                "session_protocol":"install-v3","production_snapshot_adapter":True,
                 "cross_launch_recovery":True,"process_session_trace":True,
                 "log_directory":"ctr2wup/install-check/"+source_commit,
                 "console_verified":False,"full_milestone_acceptance":False}

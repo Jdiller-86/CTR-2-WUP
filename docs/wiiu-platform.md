@@ -9,6 +9,9 @@ show its stage/code and block dependent operations when logging fails. Display
 the precise return path and filename. Keep confirmed failure, observed presence
 and inconclusive preflight distinct; log the actual bounded evidence behind each
 classification. A successful API call alone does not establish its data's meaning.
+Validate native paths from the real `fs:/vol/external01` mount root, then each
+descendant; devoptab's virtual `fs:/vol` ancestor need not support directory stat.
+Keep traversal, symlink and wrong-device rejection enabled.
 
 For plaintext WUPs, keep each file in its own padded content stream with FST
 offset zero, following the [packaging profile](packaging.md). Bind installation
@@ -23,8 +26,11 @@ Independently decode the original clip and match native channel movie geometry.
 Readable XML and a correct Menu tile do not establish complete launch resources.
 Preserve the historical
 integrity-only reader for older evidence. An installed title may be updated only
-after its version and all eight compiled predecessor hashes match on the selected
+after its version and every compiled predecessor hash match on the selected
 device; never infer ownership from a title ID or delete a title to bypass this check.
+Changed revisions use distinct TMD content IDs; FST streams and ticket rights use
+the separate content indices. Keep both independently verified. Put each payload
+revision in a compiled directory so FTP merging cannot mix old stream filenames.
 After installation, read back all installed file hashes and log the raw ACP
 metadata result before prompting for Menu launch. Installation success and
 readable launch metadata are distinct from actual execution.
@@ -42,6 +48,10 @@ Reuse [exit handling](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/runtime/
 release audio/graphics, close reports/FSA clients, clear application callbacks,
 retain save acknowledgement, request the correct Menu/HBL route, drain ProcUI
 and then shut it down. Open no FSA clients during the system transition.
+For native installed titles, invoke WUT's own idempotent devoptab finalizer after
+closing reports and before the transition, rather than deferring SD work until
+CRT exit after ProcUI shutdown. Persist the final I/O barrier first; later
+checkpoints use OSReport only. A cleanup marker never proves actual Menu return.
 Before delivery, run required runtime/sanitizer/native checks and verify the
 source-bound artifact. Cross-builds and API doubles do not establish hardware
 behavior. Request only evidence for changed or unresolved paths, with one short

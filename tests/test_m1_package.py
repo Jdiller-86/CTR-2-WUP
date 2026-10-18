@@ -57,7 +57,7 @@ class M1PackageTests(unittest.TestCase):
                                   runtime_version=tool.VERSION, source_commit=COMMIT,
                                   source_dirty=False, input_identity=None, artifacts=artifacts,
                                   install_check=dict(full_native_guide=False,
-                                      storage_protocol='snapshot-v2', session_protocol='install-v2',
+                                      storage_protocol='snapshot-v2', session_protocol='install-v3',
                                       production_snapshot_adapter=True, cross_launch_recovery=True,
                                       process_session_trace=True,
                                       log_directory='ctr2wup/install-check/'+COMMIT,
@@ -65,7 +65,7 @@ class M1PackageTests(unittest.TestCase):
         (self.native/'build-report.json').write_text(json.dumps(self.native_report))
         payload = {'title.tmd': b'Original TMD fixture', 'title.tik': b'Original ticket fixture',
                    'title.cert': b'Original certificate fixture',
-                   **{f'{i:08x}.app':bytes(header) for i in range(9)}}
+                   **{f'{(30<<16)+i:08x}.app':bytes(header) for i in range(9)}}
         for name, data in payload.items():
             (self.installed/name).write_bytes(data)
         self.candidate = dict(ok=True, kind='ctr2wup-install-candidate', source_commit=COMMIT,
@@ -73,7 +73,7 @@ class M1PackageTests(unittest.TestCase):
                               profile='wiiu_plaintext_homebrew', title_id=tool.EXPECTED_TITLE_ID,
                               content_layout='one_file_per_content',
                               menu_profile='wup-menu-v2',
-                              title_version=29,
+                              title_version=30, content_id_base=30<<16, content_id_policy='revision_scoped',
                               title_name='CTR2WUP Install Check', install_test_ready=True,
                               requires_signature_patches=True, console_verified=False,
                               rpx_sha256=audio.digest(bytes(header)),
@@ -82,7 +82,7 @@ class M1PackageTests(unittest.TestCase):
         self.verified = dict(ok=True, title_id=self.candidate['title_id'],
                              content_layout='one_file_per_content',
                              menu_profile='wup-menu-v2',
-                             title_version=29,
+                             title_version=30, content_id_base=30<<16, content_id_policy='revision_scoped',
                              files=[dict(path='code/ctr2wup.rpx', bytes=len(header), sha256=self.candidate['rpx_sha256'])],
                              installation='unverified')
         self.candidate['installed_files']=self.verified['files']
@@ -116,12 +116,12 @@ class M1PackageTests(unittest.TestCase):
         self.assertTrue((stage/'support/licenses/sdk/LICENSE.txt').is_file())
         manifest = json.loads((stage/'support/manifest.json').read_text())
         self.assertEqual(manifest['scope'], 'installed-title-and-production-snapshot-recovery')
-        self.assertEqual(manifest['acceptance_profile'], 'm1-completion-v2')
+        self.assertEqual(manifest['acceptance_profile'], 'm1-completion-v3')
         self.assertTrue(manifest['prior_native_evidence_carried_forward'])
         self.assertFalse(manifest['install_check']['full_native_guide'])
         self.assertEqual(manifest['recovery'], dict(available=True, protocol='snapshot-v2'))
         self.assertEqual(manifest['install_check']['storage_protocol'], 'snapshot-v2')
-        self.assertEqual(manifest['install_check']['session_protocol'], 'install-v2')
+        self.assertEqual(manifest['install_check']['session_protocol'], 'install-v3')
         self.assertEqual(manifest['install_check']['log_directory'], 'ctr2wup/install-check/'+COMMIT)
         self.assertTrue(manifest['package']['available'])
         self.assertFalse(manifest['console_verified'])
@@ -204,7 +204,7 @@ class M1PackageTests(unittest.TestCase):
         self.assertFalse((self.root/'out').exists())
 
     def test_payload_changes_unknown_files_and_traversal_never_get_published(self):
-        path = self.installed/'00000000.app'
+        path = self.installed/'001e0000.app'
         original = path.read_bytes()
         path.write_bytes(b'Changed original fixture')
         with self.assertRaisesRegex(ValueError, 'differs'):

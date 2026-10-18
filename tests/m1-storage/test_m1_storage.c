@@ -1,4 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
+#define _XOPEN_SOURCE 700
 #include "m1_storage_probe.h"
 #include <errno.h>
 #include <stdio.h>
@@ -54,6 +55,37 @@ static void arguments(void) {
     for(int i=0;i<=CTR_M1_STORAGE_RECOVERY;++i)CHECK(strcmp(ctr_m1_storage_result_name((CtrM1StorageResult)i),"INVALID"));
     CHECK(!strcmp(ctr_m1_storage_result_name((CtrM1StorageResult)100),"INVALID"));
 }
+static unsigned inspected;
+static const char *bad_node;
+static int bad_error;
+static int inspect_sd(const char *name,struct stat *st) {
+    /* Virtual devoptab ancestors are not mounted directories. */
+    CHECK(strncmp(name,"fs:/vol/external01",18)==0);
+    ++inspected;memset(st,0,sizeof(*st));
+    if(bad_node && !strcmp(name,bad_node)) {
+        if(bad_error) { errno=bad_error;return -1; }
+        st->st_mode=S_IFLNK;return 0;
+    }
+    st->st_mode=S_IFDIR;return 0;
+}
+static void native_directories(void) {
+    const char *mount="fs:/vol/external01";
+    inspected=0;CHECK(ctr_m1_directory_safe(mount,inspect_sd));CHECK(inspected==1);
+    inspected=0;CHECK(ctr_m1_directory_safe("fs:/vol/external01/ctr2wup/install-check/source",inspect_sd));
+    CHECK(inspected==4);
+    const char *bad[]={"fs:/vol","fs:/vol/external010/test","fs:/vol/storage_mlc01/test",
+        "fs:/vol/external01/","fs:/vol/external01//x","fs:/vol/external01/../x",
+        "fs:/vol/external01/./x","fs:/vol/external01/x:y","fs:/vol/external01/x\\y"};
+    for(unsigned i=0;i<sizeof(bad)/sizeof(*bad);++i) {
+        errno=EIO;CHECK(!ctr_m1_directory_safe(bad[i],inspect_sd));CHECK(errno==EINVAL);
+    }
+    bad_node=mount;CHECK(!ctr_m1_directory_safe(mount,inspect_sd));
+    bad_node="fs:/vol/external01/linked";
+    CHECK(!ctr_m1_directory_safe("fs:/vol/external01/linked/child",inspect_sd));
+    bad_error=EACCES;CHECK(!ctr_m1_directory_safe(bad_node,inspect_sd));CHECK(errno==EACCES);
+    bad_node=NULL;bad_error=0;
+    CHECK(!ctr_m1_directory_safe(mount,NULL));CHECK(errno==EINVAL);
+}
 static void corrupt_sentinel(void) {
     char directory[64];temp(directory);CtrM1StorageEvidence e;CHECK(ctr_m1_storage_probe(directory,source,&e));
     char base[1024],name[1024];root(base,directory);path(name,base,"sentinel.bin");uint8_t before[128],after[128];read_bytes(name,before,128);
@@ -93,6 +125,6 @@ static void locked_and_interrupted(void) {
     cleanup(directory);
 }
 int main(void) {
-    success();arguments();corrupt_sentinel();symlinks();locked_and_interrupted();
+    success();arguments();native_directories();corrupt_sentinel();symlinks();locked_and_interrupted();
     printf("M1 storage: %u checks passed\n",checks);return 0;
 }

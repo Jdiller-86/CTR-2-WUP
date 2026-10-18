@@ -58,6 +58,43 @@ class PlainHomebrewTests(unittest.TestCase):
         with self.assertRaises(HostError) as error:verify_package(self.output)
         self.assertEqual(error.exception.code,'invalid_test_signature')
 
+    def test_revisions_get_disjoint_content_ids_with_stable_fst_indices(self):
+        staged=self.root/'title'
+        identifiers=[]
+        for version in (29,30):
+            title=staged/str(version)
+            stage_title(self.source/'code/probe.rpx',title,title_id='0005000043543257',version=version)
+            output=self.root/str(version)
+            report=pack_homebrew(title,output,require_menu=True,content_id_base=version<<16)
+            self.assertEqual(report['content_id_policy'],'revision_scoped')
+            self.assertEqual(verify_package(output,expected_staging=title,require_menu=True)['content_id_base'],version<<16)
+            tmd=(output/'title.tmd').read_bytes()
+            ids=[]
+            for n in range(report['content_count']):
+                cid,index,flags=struct.unpack_from('>IHH',tmd,CONTENT_START+n*48)
+                self.assertEqual((index,flags),(n,0x2000));self.assertEqual(cid,(version<<16)+n)
+                self.assertTrue((output/f'{cid:08x}.app').is_file());ids.append(cid)
+            fst=(output/f'{ids[0]:08x}.app').read_bytes()
+            self.assertEqual(struct.unpack_from('>I',fst,8)[0],len(ids))
+            identifiers.append(set(ids))
+        self.assertFalse(identifiers[0]&identifiers[1])
+        # Even valid test signatures cannot hide mixed revision identities.
+        output=self.root/'30';path=output/'title.tmd';tmd=bytearray(path.read_bytes())
+        old=(30<<16)+1;new=(29<<16)+1
+        (output/f'{old:08x}.app').rename(output/f'{new:08x}.app')
+        struct.pack_into('>I',tmd,CONTENT_START+48,new)
+        tmd[0x208:0x228]=hashlib.sha256(tmd[CONTENT_START:]).digest()
+        tmd[0x1e4:0x204]=hashlib.sha256(tmd[0x204:CONTENT_START]).digest()
+        path.write_bytes(sign_document(tmd,self.signing[1],kind='tmd'))
+        with self.assertRaises(HostError) as error:verify_package(output)
+        self.assertEqual(error.exception.code,'unsupported_integrity_profile')
+
+    def test_content_base_must_identify_the_actual_revision(self):
+        for base in (True,-1,1,28<<16,1<<32):
+            with self.subTest(base=base),self.assertRaises(HostError):
+                pack_homebrew(self.source,self.output,content_id_base=base)
+        self.assertFalse(self.output.exists())
+
     def test_repaired_metadata_does_not_hide_a_bad_fst_path(self):
         pack_homebrew(self.source,self.output)
         path=self.output/'00000000.app';data=bytearray(path.read_bytes())

@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "title_id": "0005000043543257",
-  "source_commit": "c2b4a9131204db8df21fcdf7424d7af3992c73b0",
-  "title_version": 28,
+  "source_commit": "74835eb6232071ce998113ce10eb4b8c6a2a1320",
+  "title_version": 29,
   "files": [
     {
       "name": "code/app.xml",
       "size": 706,
-      "sha256": "27bccbfa17772c12af0b7eee12835fb419b91792e1055b78d7ee6fd63a5eded5"
+      "sha256": "9e589a81c3348cf270ceb93efe6706f73d7827f07ed73c2f42823be763715f67"
     },
     {
       "name": "code/cos.xml",
@@ -16,8 +16,8 @@
     },
     {
       "name": "code/ctr2wup.rpx",
-      "size": 204777,
-      "sha256": "d48918e2d9ebaca79d0065b6f6b72379cbb0e948686f7573e96486f93723da9e"
+      "size": 204775,
+      "sha256": "8413734e50608b2e562d8b21c9be4c61a30f5bd97a13bea30c2daf2fac885faa"
     },
     {
       "name": "meta/bootDrcTex.tga",
@@ -28,6 +28,11 @@
       "name": "meta/bootLogoTex.tga",
       "size": 28604,
       "sha256": "c59c2aff8c1930ba537ac14380621e5dd3789d15c049aa74edb7e5289976d2f1"
+    },
+    {
+      "name": "meta/bootMovie.h264",
+      "size": 1619,
+      "sha256": "366b8d210cae7ee92f746b2a1f55359a359e5ad5281a9c3086d60acd84739040"
     },
     {
       "name": "meta/bootTvTex.tga",
@@ -42,7 +47,7 @@
     {
       "name": "meta/meta.xml",
       "size": 10038,
-      "sha256": "e7e17ba2dd6325f8209e4b220157d85cfe29d296d8b5091c4eb557d11c91bf0c"
+      "sha256": "adcb0238c4039740e593e439c92cf5ac2e51d98eb96bcc797f6ac8edc481e229"
     }
   ]
 }

@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "kind": "ctr2wup-m1-evidence-review",
-  "reviewed_on": "2026-10-17",
-  "reviewed_against_source_commit": "c2b4a9131204db8df21fcdf7424d7af3992c73b0",
+  "reviewed_on": "2026-10-18",
+  "reviewed_against_source_commit": "74835eb6232071ce998113ce10eb4b8c6a2a1320",
   "milestone": "m1",
   "full_milestone_acceptance": false,
   "policy": "Reuse reviewed physical evidence within its recorded scope. A version change alone does not require a repeat. Later display-cache, stream/mixer and guest DSP behavior do not inherit earlier physical acceptance.",
@@ -80,6 +80,23 @@
       "evidence": "Raw USB MCP callback 0, 4521984/4521984 bytes and 11/11 entries. All eight installed files match exact hashes through FSA. ACP metadata result 0 with expected identity/version/profile. User photos show correct title and original checker icon. Menu launch remains confirmed failed with 157-1101; no installed execution or snapshot recovery is accepted.",
       "artifact_sha256": "9d738079da0514a9af7e17ae30cc15ed7e6263ecdc787125d8c0abd434f32062",
       "capture_report_sha256": "c39499757d2d0328cc5327b844b56223409f2fa3eef3a78f710c30b3473ec92f"
+    },
+    {
+      "id": "original-wup-boot-74835eb",
+      "version": "0.27.0",
+      "source_commit": "74835eb6232071ce998113ce10eb4b8c6a2a1320",
+      "identity_boundary": "Clean revision-29 kit, source/session/title-bound native result and trace, and exact fourteen-file package captures. Returned ZIP and all five file hashes retained in issue #15.",
+      "references": [
+        "https://github.com/Jdiller-86/CTR-2-WUP/issues/15",
+        "https://github.com/Jdiller-86/CTR-2-WUP/pull/144"
+      ],
+      "evidence": "Fresh USB installation succeeds: MCP callback 0, 4554752/4554752 bytes, 12/12 entries, all nine installed file hashes match through FSA, and ACP metadata returns 0. User confirms actual installed boot. Native title identity matches, 1318 frames over 22867 ms, zero input errors. Minus reaches main_return but actual Menu return hangs; HOME hang separately reported. Recovery fails before I/O with PATH/errno22/directory. The predecessor update is confirmed failed after accepted submission with callback 0xFFFCFFDD (FS_ERROR_INVALID_BUFFER); user removed the prior revision and freshly installed. Boot and fresh installation are accepted; native exit/relaunch, production recovery and in-place update remain unaccepted.",
+      "artifact_sha256": "8c5a6cf5cbddb5379854972c55162d1b3ddee63f1c49213e7498d8992c264525",
+      "returned_archive_sha256": "a45c6e7d638992c998c22e3aad1f087b281e943f01950d4b5297acf659c591e0",
+      "native_trace_sha256": "b7ea6b29f23ec355addf10c57a63aebb823b338962a649713ee8bee8466176cc",
+      "result_sha256": "43a2d9ec92b598ed0b00a631a7f3e1a16eb182b5014ecd2d27f94bd1485cb858",
+      "failed_update_capture_sha256": "4bad9a88a092b079df08023f3416cd234904999eeb3837fa7338849e919cba2b",
+      "fresh_install_capture_sha256": "943fc0e3d513a051c06dc0c40a0afbae0f75da0253301661a00566ecd3439f16"
     }
   ],
   "criteria": [
@@ -99,17 +116,18 @@
     {
       "id": "m1-lifecycle",
       "issue": 13,
-      "reviewed_status": "Awaiting evidence",
+      "reviewed_status": "In progress",
       "evidence_sources": [
         "save-v0146",
-        "lifecycle-v0241"
+        "lifecycle-v0241",
+        "original-wup-boot-74835eb"
       ],
       "accepted_scope": [
         "Repeated normal launches and observed Minus/HOME returns in the recorded environment.",
         "Successful SD save publication and exact fresh-process reload."
       ],
       "remaining": [
-        "Physical automatic interrupted-publication/error-recovery probe on the SD path. Combine this with the eventual installed-title run; no separate ordinary lifecycle or successful-save repeat is requested."
+        "Repair the confirmed native SD directory rejection, then obtain the production snapshot PREPARED/RECOVERED pair during the focused installed-title exits. Earlier scoped lifecycle and successful-save evidence remains accepted."
       ]
     },
     {
@@ -138,14 +156,16 @@
       "reviewed_status": "In progress",
       "evidence_sources": [
         "original-wup-usb-caf509f",
-        "original-wup-menu-c2b4a91"
+        "original-wup-menu-c2b4a91",
+        "original-wup-boot-74835eb"
       ],
       "accepted_scope": [
         "Original source-caf509f per-file plaintext WUP installation through the package-bound MCP capture on USB: successful raw callback and complete progress, corroborated by the user.",
-        "Fresh source-c2b4a913 USB installation, exact eight-file installed read-back, successful ACP metadata read and correct Wii U Menu name/icon. Launch remains confirmed failed with 157-1101."
+        "Fresh source-c2b4a913 USB installation, exact eight-file installed read-back, successful ACP metadata read and correct Wii U Menu name/icon. Launch remains confirmed failed with 157-1101.",
+        "Revision-29/source-74835eb fresh USB installation, all nine installed hashes, successful ACP metadata and actual installed-title boot: native identity match, 1318 rendered frames and user confirmation."
       ],
       "remaining": [
-        "Resolve launch rejection, then obtain two brief installed-title launch/exits and the production snapshot recovery pair. Retain accepted installation, metadata/presentation and platform evidence; no second destination or broad baseline repeat."
+        "Repair the confirmed installed-title Minus/HOME return hang and failed predecessor update; obtain focused native exit/relaunch and production snapshot recovery evidence. No second destination or broad baseline repeat."
       ]
     },
     {

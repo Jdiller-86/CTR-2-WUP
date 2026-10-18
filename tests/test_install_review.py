@@ -17,6 +17,7 @@ class InstallReviewTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
         self.folder = Path(self.tmp.name)
         self.completion = False
+        self.io_barrier = False
         self.kit = dict(schema_version=1, kind='ctr2wup-m1-acceptance', source_commit=SOURCE,
                         source_dirty=False, version='0.27.0', native_app='native-install', suite_id='original-test',
                         package=dict(available=True, title_id=reviewer.TITLE))
@@ -43,38 +44,64 @@ class InstallReviewTests(unittest.TestCase):
                        ' software_recovery_not_power_loss=1')
         else:
             storage = STORAGE.format(fresh=fresh)
-        protocol = 'install-v2' if self.completion else 'install-v1'
+        protocol = 'install-v3' if self.io_barrier else 'install-v2' if self.completion else 'install-v1'
+        home=self.io_barrier and number==2
         body = (f'CTR2WUP result report\nApplication: native-install | Build: 0.27.0\nSession ticks: {session}\nFile: {result}\n'
                 f'Source: {SOURCE} dirty=0 | Evidence schema: 2\nStage: resources_closed_before_system_transition\n'
                 f'Host exit result: 0 (-1 means still running)\nActual title ID: {reviewer.TITLE} | Expected title ID: {reviewer.TITLE} | Match: 1\n'
-                f'Session: {session} | Protocol: {protocol}\nFrames: host=20 | Input: samples=20 errors=0 Minus_presses=1\n{storage}\n'
+                f'Session: {session} | Protocol: {protocol}\nFrames: host=20 | Input: samples=20 errors=0 Minus_presses={0 if home else 1}\n{storage}\n'
                 f'Full trace: SAVING | file={trace} errno=0 operation=none FSA=0 commits=3\nPrevious result writes verified: 3\n')
         (self.folder/result).write_bytes(body.encode().ljust(8191, b' ')+b'\n')
         lines = ['CTR2WUP Wii U test report', 'Application: native-install | Build: 0.27.0',
                  f'BUILD source_commit={SOURCE} source_dirty=0 evidence_schema=2 result_bytes=8192',
                  f'INSTALL_SESSION ticks={session} source_commit={SOURCE} version=0.27.0 protocol={protocol} title_id={reviewer.TITLE} expected_title_id={reviewer.TITLE} title_match=1',
                  f'Platform title_id={reviewer.TITLE} exit_route=system_menu SD_owner=WUT_devoptab', storage,
-                 'EXIT trigger=Minus; cleaning resources before system transition', storage]
-        for stage in reviewer.STAGES:
+                 'EXIT trigger=system_exit; ProcUI EXITING observed before cleanup' if home else 'EXIT trigger=Minus; cleaning resources before system transition', storage]
+        if home:lines.append('APP ProcUI status=3')
+        stages = reviewer.STAGES[:reviewer.STAGES.index('request_menu_begin')]+('runtime_io_finalize_begin',) if self.io_barrier else reviewer.STAGES
+        for stage in stages:
             if stage == 'report_close_begin': lines.append('===== END OF REPORT: application resource cleanup reached; result=0 =====')
             lines.append('EXIT stage='+stage)
-        lines.append('EXIT status=EXITING')
+        if not self.io_barrier:lines.append('EXIT status=EXITING')
         (self.folder/trace).write_text('\n'.join(lines)+'\n')
-        self.observations['runs'].append(dict(session=session, menu_launch=True, both_screens=True, minus_pressed=True,
+        self.observations['runs'].append(dict(session=session, menu_launch=True, both_screens=True, minus_pressed=not home,exit_action='home' if home else 'minus',
                                                returned_to_menu=True, no_problem=True))
         return self.folder/trace
 
-    def completion_kit(self):
+    def completion_kit(self,io_barrier=False):
         self.completion = True
-        self.kit.update(acceptance_profile='m1-completion-v2',
+        self.io_barrier = io_barrier
+        self.kit.update(acceptance_profile='m1-completion-v3' if io_barrier else 'm1-completion-v2',
                         recovery=dict(available=True, protocol='snapshot-v2'),
-                        install_check=dict(storage_protocol='snapshot-v2', session_protocol='install-v2',
+                        install_check=dict(storage_protocol='snapshot-v2', session_protocol='install-v3' if io_barrier else 'install-v2',
                                            log_directory='ctr2wup/install-check/'+SOURCE))
         (self.folder/'kit.json').write_text(json.dumps(self.kit))
         for path in self.folder.glob('*.txt'):
             path.unlink()
         self.observations['runs'] = []
         self.add_run(1, 0); self.add_run(2, 1)
+
+    def test_io_barrier_requires_real_menu_observations_and_never_accepts_a_hang(self):
+        self.completion_kit(io_barrier=True)
+        result=reviewer.review(self.folder,SOURCE,self.observations)
+        self.assertEqual(result['status'],'PASS',result['checks'])
+        self.assertEqual(result['acceptance_profile'],'m1-completion-v3')
+        self.assertTrue(result['m1_completion_ready'])
+        self.assertEqual(reviewer.review(self.folder,SOURCE)['status'],'INCOMPLETE')
+        self.observations['runs'][0]['returned_to_menu']=False
+        self.assertEqual(reviewer.review(self.folder,SOURCE,self.observations)['status'],'FAIL')
+
+    def test_io_barrier_missing_reordered_or_late_sd_io_is_not_completion(self):
+        for mutation in ('missing','order','late'):
+            with self.subTest(mutation=mutation):
+                self.completion_kit(io_barrier=True)
+                trace=self.folder/'native-install-0000000000000001-00.txt'
+                text=trace.read_text()
+                if mutation=='missing':text=text.replace('EXIT stage=runtime_io_finalize_begin\n','')
+                elif mutation=='order':text=text.replace('EXIT stage=callbacks_cleared\n','').replace('EXIT stage=runtime_io_finalize_begin\n','EXIT stage=runtime_io_finalize_begin\nEXIT stage=callbacks_cleared\n')
+                else:text+='EXIT stage=main_return\n'
+                trace.write_text(text)
+                self.assertNotEqual(reviewer.review(self.folder,SOURCE,self.observations)['status'],'PASS')
 
     def replace_run(self, number, before, after):
         session = f'{number:016x}'

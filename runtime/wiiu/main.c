@@ -400,7 +400,7 @@ static bool install_result_snapshot(const char *stage) {
         "Stage: %s\nHost exit result: %d (-1 means still running)\n"
         "Install Check title: CTR2WUP Install Check\n"
         "Actual title ID: %016llx | Expected title ID: %016llx | Match: %u\n"
-        "Session: %016llx | Protocol: install-v2\n"
+        "Session: %016llx | Protocol: install-v3\n"
         "Frames: host=%u | Input: samples=%u errors=%u Minus_presses=%u\n"
         "%s\n"
         "Native audio context: result=%s owned=%u attempts=%u successes=%u failures=%u releases=%u\n"
@@ -1117,12 +1117,14 @@ static void diagnostic_images(unsigned frame, const VPADStatus *pad,
 typedef struct {
     int result, gfx_ready, udp_ready;
     bool foreground;
+    bool io_closed;
     GX2Surface *tv,*drc;
 } native_exit_context;
 
 static void exit_checkpoint(void *context,const char *message) {
-    (void)context;
+    native_exit_context *exit=context;
     OSReport("%s\n",message);
+    if(exit->io_closed)return;
     if(!ctr_test_report_checkpoint(&test_report,message))
         OSReport("CTR2WUP exit checkpoint FAILED errno=%d\n",test_report.error_code);
     /* No diagnostic-owned FSA client crosses a ProcUI/system transition. */
@@ -1229,8 +1231,24 @@ static void release_foreground(void *context) { (void)context;ProcUIDrawDoneRele
 static void wait_proc_messages(void *context) { (void)context;OSSleepTicks(OSMillisecondsToTicks(5)); }
 static void shutdown_procui(void *context) { (void)context;ProcUIShutdown(); }
 static void shutdown_whb(void *context) { (void)context;WHBProcShutdown(); }
+#ifdef CTR_INSTALL_ONLY
+/* Use the owner hook used by WUT's CRT. Its later automatic call is a no-op:
+   finish SD unmount/client removal while ProcUI is still alive, after the final
+   durable checkpoint. Do not add a competing mount or reopen it during exit. */
+extern void __fini_wut_devoptab(void);
+static void finalize_native_io(void *context) {
+    native_exit_context *exit=context;exit->io_closed=true;
+    __fini_wut_devoptab();
+}
+#endif
 static const ctr_exit_ops exit_ops={cleanup_resources,clear_proc_callbacks,request_system_menu,
-    process_proc_messages,release_foreground,wait_proc_messages,shutdown_procui,shutdown_whb,exit_checkpoint};
+    process_proc_messages,release_foreground,wait_proc_messages,shutdown_procui,shutdown_whb,exit_checkpoint,
+#ifdef CTR_INSTALL_ONLY
+    finalize_native_io
+#else
+    NULL
+#endif
+};
 
 int main(int argc, char **argv) {
     (void)argc; (void)argv;
@@ -1277,7 +1295,7 @@ int main(int argc, char **argv) {
                   CTR_APP_VERSION,REPORT_APPLICATION,(unsigned)(8*sizeof(void *)),udp_ready,report_handler_added);
     WHBLogPrintf("BUILD source_commit=%s source_dirty=%u evidence_schema=2 result_bytes=%u",CTR_SOURCE_COMMIT,CTR_SOURCE_DIRTY,CTR_TEST_RESULT_BYTES);
 #ifdef CTR_INSTALL_ONLY
-    WHBLogPrintf("INSTALL_SESSION ticks=%016llx source_commit=%s version=%s protocol=install-v2 title_id=%016llx expected_title_id=%016llx title_match=%u",
+    WHBLogPrintf("INSTALL_SESSION ticks=%016llx source_commit=%s version=%s protocol=install-v3 title_id=%016llx expected_title_id=%016llx title_match=%u",
         (unsigned long long)session_started,CTR_SOURCE_COMMIT,CTR_APP_VERSION,
         (unsigned long long)lifecycle.title_id,(unsigned long long)INSTALL_TITLE_ID,lifecycle.title_id==INSTALL_TITLE_ID);
     if(lifecycle.title_id!=INSTALL_TITLE_ID)WHBLogPrintf("INSTALL_ROUTE FAIL expected_installed_title_not_running; homebrew launch cannot establish installed-title acceptance");
@@ -1445,6 +1463,7 @@ int main(int argc, char **argv) {
             WHBLogPrintf("APP ProcUI status=%d",(int)status);prior_status=status;
         }
         if(status==CTR_PROC_EXITING) {
+            WHBLogPrintf("EXIT trigger=system_exit; ProcUI EXITING observed before cleanup");
             ctr_test_report_set_volume_sync(&test_report,NULL,NULL);
             ctr_report_storage_close(&report_storage);
             exit_observed=true;break;
@@ -1741,7 +1760,7 @@ int main(int argc, char **argv) {
 #ifdef CTR_INSTALL_ONLY
         char guide_rows[7][72]={{0}};
         snprintf(guide_rows[0],72,"CTR2WUP INSTALL CHECK / TV");
-        snprintf(guide_rows[1],72,"Check both screens, then press MINUS");
+        snprintf(guide_rows[1],72,"Check screens, HOME, then Wii U Menu");
         snprintf(guide_rows[2],72,"Actual title: %016llX",(unsigned long long)lifecycle.title_id);
         snprintf(guide_rows[3],72,"Expected:     %016llX",(unsigned long long)INSTALL_TITLE_ID);
         snprintf(guide_rows[4],72,"%s / LIVE FRAME %u",lifecycle.title_id==INSTALL_TITLE_ID?"INSTALLED TITLE MATCH":"WRONG ROUTE - NOT INSTALLED TITLE",frame);
@@ -1935,7 +1954,8 @@ int main(int argc, char **argv) {
 #endif
 cleanup:
     {
-        native_exit_context exit={result,gfx_ready,udp_ready,foreground,&tv_source,&drc_source};
+        native_exit_context exit={.result=result,.gfx_ready=gfx_ready,.udp_ready=udp_ready,
+            .foreground=foreground,.tv=&tv_source,.drc=&drc_source};
         if(!ctr_test_complete_exit(&lifecycle,exit_observed,&exit_ops,&exit))result=1;
         else result=exit.result;
     }

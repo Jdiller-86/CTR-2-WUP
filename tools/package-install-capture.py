@@ -50,7 +50,11 @@ def validate_configuration(document):
     files=document['files']
     if not isinstance(files,list) or (len(files)!=7 if schema==1 else not 8<=len(files)<=64):
         raise ValueError('Require a bounded complete pinned installer inventory')
-    names=NAMES if schema==1 else {f'{i:08x}.app' for i in range(len(files)-3)}|{'title.tmd','title.tik','title.cert'}
+    apps=[r.get('name') for r in files if isinstance(r,dict) and isinstance(r.get('name'),str) and re.fullmatch('[0-9a-f]{8}\\.app',r['name'])]
+    base=min(int(n[:8],16) for n in apps) if apps else 0
+    if schema==2 and base & 0xffff:
+        raise ValueError('Require a revision-aligned content identity base')
+    names=NAMES if schema==1 else {f'{base+i:08x}.app' for i in range(len(files)-3)}|{'title.tmd','title.tik','title.cert'}
     seen=set()
     for row in files:
         if (not isinstance(row,dict) or set(row)!={'name','size','sha256'}
@@ -65,6 +69,10 @@ def validate_configuration(document):
 
 def header(document,installed_files=None,title_version=None):
     validate_configuration(document)
+    if (installed_files is None)!=(title_version is None):
+        raise ValueError('Installed file pins and title revision must be supplied together')
+    if title_version is not None and (document['schema_version']!=2 or type(title_version) is not int or not 30<=title_version<=65535):
+        raise ValueError('Require a bounded original installed title revision')
     digest='package_manifest_sha256' if document['schema_version']==2 else 'package_artifact_sha256'
     record='manifest_sha256' if document['schema_version']==2 else 'artifact_sha256'
     result=['/* Generated fixed-payload identity, not a user-editable SD manifest. */',
@@ -75,6 +83,7 @@ def header(document,installed_files=None,title_version=None):
             '#define CTR_CAPTURE_PACKAGE_RECORD "'+record+'='+document[digest]+'"',
             '#define CTR_CAPTURE_FILE_COUNT '+str(len(document['files'])),
             '#define CTR_CAPTURE_M1_COMPLETION '+str(int(document['schema_version']==2)),
+            '#define CTR_CAPTURE_DIRECTORY "'+('CTR2WUP-M1-r'+str(title_version) if title_version is not None else 'CTR2WUP-M1')+'"',
             'static const CtrInstallCaptureFile ctr_capture_files[CTR_CAPTURE_FILE_COUNT]={']
     for row in document['files']:
         digest=','.join('0x'+row['sha256'][i:i+2] for i in range(0,64,2))
@@ -83,14 +92,15 @@ def header(document,installed_files=None,title_version=None):
     if document['schema_version']==2:
         previous=json.loads(audio.release.regular(ROOT/'packaging/install-predecessor.json',16384).read_bytes())
         names={'code/app.xml','code/cos.xml','code/ctr2wup.rpx','meta/meta.xml',
-               'meta/iconTex.tga','meta/bootLogoTex.tga','meta/bootDrcTex.tga','meta/bootTvTex.tga'}
+               'meta/iconTex.tga','meta/bootLogoTex.tga','meta/bootDrcTex.tga','meta/bootTvTex.tga',
+               'meta/bootMovie.h264'}
         if (previous.get('schema_version')!=1 or previous.get('title_id')!=document['title_id']
-                or previous.get('source_commit')!='c2b4a9131204db8df21fcdf7424d7af3992c73b0'
-                or previous.get('title_version')!=28 or not isinstance(previous.get('files'),list)
-                or len(previous['files'])!=8 or {r.get('name') for r in previous['files']}!=names):
+                or previous.get('source_commit')!='74835eb6232071ce998113ce10eb4b8c6a2a1320'
+                or previous.get('title_version')!=29 or not isinstance(previous.get('files'),list)
+                or len(previous['files'])!=9 or {r.get('name') for r in previous['files']}!=names):
             raise ValueError('Require the complete reviewed installed predecessor')
-        result += ['#define CTR_CAPTURE_REPAIR_FILE_COUNT 8',
-                   '#define CTR_CAPTURE_REPAIR_VERSION 28',
+        result += ['#define CTR_CAPTURE_REPAIR_FILE_COUNT 9',
+                   '#define CTR_CAPTURE_REPAIR_VERSION 29',
                    '#define CTR_CAPTURE_REPAIR_SOURCE "'+previous['source_commit']+'"',
                    'static const CtrInstallCaptureFile ctr_capture_previous_files[CTR_CAPTURE_REPAIR_FILE_COUNT]={']
         for row in previous['files']:
@@ -106,11 +116,14 @@ def header(document,installed_files=None,title_version=None):
         names={'code/app.xml','code/cos.xml','code/ctr2wup.rpx','meta/meta.xml',
                'meta/iconTex.tga','meta/bootLogoTex.tga','meta/bootDrcTex.tga','meta/bootTvTex.tga',
                'meta/bootMovie.h264'}
-        if (document['schema_version']!=2 or type(title_version) is not int or not 29<=title_version<=65535
+        if (document['schema_version']!=2 or type(title_version) is not int or not 30<=title_version<=65535
                 or not isinstance(installed_files,list)
                 or len(installed_files)!=9 or any(not isinstance(r,dict) for r in installed_files)
                 or {r.get('path') for r in installed_files}!=names):
             raise ValueError('Require all independently verified original installed files')
+        app_ids=[int(r['name'][:8],16) for r in document['files'] if r['name'].endswith('.app')]
+        if min(app_ids) not in (0,title_version<<16):
+            raise ValueError('Content identity base differs from the installed title revision')
         result += ['#define CTR_CAPTURE_CURRENT_FILE_COUNT 9',
                    '#define CTR_CAPTURE_CURRENT_VERSION '+str(title_version),
                    'static const CtrInstallCaptureFile ctr_capture_current_files[CTR_CAPTURE_CURRENT_FILE_COUNT]={']

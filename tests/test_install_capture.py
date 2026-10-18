@@ -62,25 +62,34 @@ class CapturePackageTests(unittest.TestCase):
         generated=capture.header(checked)
         self.assertIn('#define CTR_CAPTURE_FILE_COUNT 12',generated)
         self.assertIn('#define CTR_CAPTURE_M1_COMPLETION 1',generated)
-        self.assertIn('#define CTR_CAPTURE_REPAIR_VERSION 28',generated)
-        self.assertIn('#define CTR_CAPTURE_REPAIR_FILE_COUNT 8',generated)
+        self.assertIn('#define CTR_CAPTURE_REPAIR_VERSION 29',generated)
+        self.assertIn('#define CTR_CAPTURE_REPAIR_FILE_COUNT 9',generated)
         previous=json.loads((ROOT/'packaging/install-predecessor.json').read_bytes())
         self.assertIn(previous['source_commit'],generated)
         for row in previous['files']:
             self.assertIn('"'+row['name']+'"',generated)
             self.assertIn(','.join(f'0x{byte:02x}' for byte in bytes.fromhex(row['sha256'])),generated)
         current=[dict(path=r['name'],bytes=r['size'],sha256=r['sha256']) for r in previous['files']]
-        movie=ROOT/'host/assets/bootMovie.h264'
-        current.append(dict(path='meta/bootMovie.h264',bytes=movie.stat().st_size,
-                            sha256=hashlib.sha256(movie.read_bytes()).hexdigest()))
-        installed_header=capture.header(checked,current,29)
+        installed_header=capture.header(checked,current,30)
         self.assertIn('#define CTR_CAPTURE_CURRENT_FILE_COUNT 9',installed_header)
-        self.assertIn('#define CTR_CAPTURE_CURRENT_VERSION 29',installed_header)
+        self.assertIn('#define CTR_CAPTURE_CURRENT_VERSION 30',installed_header)
+        self.assertIn('#define CTR_CAPTURE_DIRECTORY "CTR2WUP-M1-r30"',installed_header)
         for malformed in (current[:-1],[{**r,'path':'../'+r['path']} for r in current],
                           [{**r,'sha256':'bad'} for r in current]):
-            with self.assertRaises(ValueError):capture.header(checked,malformed,29)
-        for version in (None,28,True,65536):
+            with self.assertRaises(ValueError):capture.header(checked,malformed,30)
+        for version in (None,29,True,65536):
             with self.assertRaises(ValueError):capture.header(checked,current,version)
+        for version in ('30"\n#error injected',30,True):
+            with self.assertRaises(ValueError):capture.header(checked,title_version=version)
+        scoped=copy.deepcopy(checked)
+        for row in scoped['files']:
+            if row['name'].endswith('.app'):row['name']=f'{(30<<16)+int(row["name"][:8],16):08x}.app'
+        capture.validate_configuration(scoped)
+        self.assertIn('001e0000.app',capture.header(scoped,current,30))
+        with self.assertRaises(ValueError):capture.header(scoped,current,31)
+        for value in ('001e000f.app','001d0001.app','001e0001.app'):
+            bad=copy.deepcopy(scoped);bad['files'][0]['name']=value
+            with self.assertRaises(ValueError):capture.validate_configuration(bad)
         self.assertIn('manifest_sha256='+document['package_manifest_sha256'],generated)
         self.assertNotIn('artifact_sha256=',generated)
         for row in document['files']:

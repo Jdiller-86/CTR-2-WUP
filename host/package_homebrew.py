@@ -48,7 +48,7 @@ def _file_contents(nodes, title, group):
     return groups, sizes, owners
 
 
-def pack_homebrew(source, output, *, require_menu=False):
+def pack_homebrew(source, output, *, require_menu=False, content_id_base=0):
     source, output = Path(source).absolute(), Path(output).absolute()
     if source.is_symlink() or not source.is_dir():
         fail('unsafe_staging', 'Homebrew staging must be a regular directory')
@@ -57,6 +57,8 @@ def pack_homebrew(source, output, *, require_menu=False):
     if output.resolve().is_relative_to(source.resolve()):
         fail('unsafe_output', 'Package output must be outside the staging tree')
     identity = _metadata(source)
+    if type(content_id_base) is not int or content_id_base not in (0, identity[1] << 16):
+        fail('invalid_content_identity', 'Content IDs must use the legacy base or the staged title revision')
     nodes, _, _ = _inventory(source)
     groups, sizes, owners = _file_contents(nodes, identity[0], identity[2])
     fst = _fst(nodes, sizes, identity[0], identity[2], plaintext=True, owners=owners)
@@ -67,14 +69,16 @@ def pack_homebrew(source, output, *, require_menu=False):
     try:
         from .package_test_signing import generate_chain, sign_document
         certificates, cp_key, xs_key = generate_chain()
-        hashes = [_encrypt_group(source, groups[n], sizes[n], stage/f'{n:08x}.app',
+        hashes = [_encrypt_group(source, groups[n], sizes[n], stage/f'{content_id_base+n:08x}.app',
                                  None, n, fst=fst if n == 0 else None, plaintext=True)
                   for n in range(len(groups))]
         tmd = _tmd(*identity, sizes, hashes, 'Root-CA00000003-CP0000000b')
         for n in range(len(groups)):
             from .package_validator import CONTENT_START
+            struct.pack_into('>I', tmd, CONTENT_START+n*48, content_id_base+n)
             struct.pack_into('>H', tmd, CONTENT_START+n*48+6, 0x2000)
-        # Recompute the authenticated table hashes after changing content flags.
+        # IDs name revisions; indices still select FST streams/ticket rights.
+        # Recompute authenticated table hashes after changing IDs and flags.
         import hashlib
         tmd[0x208:0x228] = hashlib.sha256(tmd[CONTENT_START:]).digest()
         tmd[0x1E4:0x204] = hashlib.sha256(tmd[0x204:CONTENT_START]).digest()

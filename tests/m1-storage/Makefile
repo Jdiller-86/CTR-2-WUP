@@ -4,7 +4,7 @@ include $(ROOT)/runtime/core/sources.mk
 CFLAGS := -std=c11 -O2 -g -Wall -Wextra -Wpedantic -Werror -I../../runtime/wiiu -I../../runtime/core
 SOURCES := test_m1_storage.c ../../runtime/wiiu/m1_storage_probe.c
 HEADERS := ../../runtime/wiiu/m1_storage_probe.h
-SNAPSHOT_SOURCES := test_m1_snapshot.c ../../runtime/wiiu/m1_snapshot_probe.c ../../runtime/core/ctr_fs_snapshot.c $(CTR_RUNTIME_SOURCES)
+SNAPSHOT_SOURCES := test_m1_snapshot.c ../../runtime/wiiu/m1_snapshot_probe.c ../../runtime/wiiu/m1_storage_probe.c ../../runtime/core/ctr_fs_snapshot.c $(CTR_RUNTIME_SOURCES)
 SNAPSHOT_HEADERS := ../../runtime/wiiu/m1_snapshot_probe.h $(wildcard ../../runtime/core/*.h) $(CTR_RUNTIME_MANIFEST)
 OUT := ../../artifacts/m1-storage-tests
 .PHONY: check sanitize clean
