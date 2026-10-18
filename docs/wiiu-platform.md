@@ -1,7 +1,12 @@
 # Wii U application protocol
 
-Start from the native [application](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/runtime/wiiu/main.c)
-and reuse its platform helpers. Initialize checked SD evidence before graphics.
+Start from the compact [installed application](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/runtime/wiiu/install_check.c)
+and reuse its platform helpers. Install Check and Capture share
+[display](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/runtime/wiiu/diagnostic_display.c),
+silent AX and the [live ProcUI adapter](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/runtime/wiiu/test_lifecycle_wiiu.h).
+Initialize checked SD evidence before graphics; initialize silent audio and the
+shared display before lengthy diagnostic work. Keep guest execution, tone voices
+and prototype display caches out of an installation/lifecycle-only application.
 WUT owns the SD mount: never add a competing mount or unmount it. Use binary
 writes, checked sync/close and exact read-back; installation diagnostics also
 verify the physical `/vol/external01` file through FSA. Preserve the first error,

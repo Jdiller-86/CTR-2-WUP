@@ -26,7 +26,9 @@ The explicit diagnostic ID **`0005000043543257`** is not a reserved safe range:
 check the console for an unrelated title with that ID before installation.
 
 The `native-install` diagnostic checks its actual title identity and the production
-`ctr_fs_snapshot_*` adapter using isolated original data. The first Menu launch
+`ctr_fs_snapshot_*` adapter using isolated original data. Its compact frontend
+shares Capture's native display, silent AX and live ProcUI adapter; it initializes
+no guest execution, tone voice or prototype display cache. The first Menu launch
 leaves a deliberately interrupted publication (**PREPARED**); the second recovers
 the committed `.previous`, rejects the uncommitted `.pending` and verifies a new
 publication (**RECOVERED**). Later launches only recheck completion. Source-bound
@@ -35,7 +37,7 @@ publication (**RECOVERED**). Later launches only recheck completion. Source-boun
 FTP. This proves deterministic software interruption recovery, not power-loss
 durability. The package supplies one guide, one `sd-card/` tree and the existing
 capture app compiled with the candidate's exact file hashes and manifest digest.
-The v3 trace ends at the durable WUT I/O-finalization barrier before the Menu
+The v3 trace ends at the durable application logging barrier before the Menu
 transition; later checkpoints use OSReport. Review requires observed Minus and
 HOME Menu returns and both recovery phases. Earlier v1/v2 evidence retains its
 original exit-checkpoint requirements.

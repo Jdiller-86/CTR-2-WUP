@@ -12,7 +12,7 @@ CFLAGS := -std=c11 -O2 -g -Wall -Wextra -Werror -ffunction-sections -fdata-secti
           -DCTR_SOURCE_COMMIT=\"$(SHA)\" -DCTR_SOURCE_DIRTY=$(DIRTY) \
           -I"$(WUT)/include" -I.. -I../../core -I"$(CONFIG)"
 LDFLAGS := -mcpu=750 -meabi -mhard-float -specs="$(WUT)/share/wut.specs"
-SOURCES := main.c log.c display.c ../diagnostic_font.c ../diagnostic_audio.c ../viewport.c ../image_scale.c \
+SOURCES := main.c log.c ../diagnostic_display.c ../diagnostic_font.c ../diagnostic_audio.c ../viewport.c ../image_scale.c \
            ../install_capture.c ../test_report.c ../report_storage.c ../test_lifecycle.c ../../core/ctr_sha256.c
 OBJECTS := $(addprefix $(OUTPUT)/,$(notdir $(SOURCES:.c=.o)))
 vpath %.c .. ../../core

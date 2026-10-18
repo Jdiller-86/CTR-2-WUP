@@ -811,8 +811,14 @@ static void exit_order_tests(void) {
 }
 
 unsigned test_audio_stream_app(void);
+unsigned test_installed_frontend(void);
+int test_installed_frontend_child(const char *,const char *);
 int main(int argc,char **argv) {
-    if(argc==4 && !strcmp(argv[1],"--ctr-test-child"))return interrupted_report(argv[2],argv[3]);
+    if(argc==4 && !strcmp(argv[1],"--ctr-test-child")) {
+        if(!strncmp(argv[2],"native-",7))return test_installed_frontend_child(argv[2],argv[3]);
+        return interrupted_report(argv[2],argv[3]);
+    }
+    checks+=test_installed_frontend();
     checks+=test_audio_stream_app();
     storage_tests();
     storage_verify_tests();
