@@ -509,6 +509,7 @@ jobs:
           name: wiiu-prototype-${{ github.sha }}
           path: |
             artifacts/ci/sdk/*.log
+            artifacts/ci/compiled-textured/*.log
             artifacts/ci/wiiu/
           retention-days: 30
           if-no-files-found: warn

@@ -146,7 +146,9 @@ def main():
         r=subprocess.run(command,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,errors='replace',**kw)
         (out/(name+'.log')).write_text(r.stdout)
         checks.append({'name':name,'exit_code':r.returncode})
-        if r.returncode:raise RuntimeError(name+' failed; see its preserved log')
+        if r.returncode:
+            print(r.stdout[-12000:],file=sys.stderr)
+            raise RuntimeError(name+' failed; see '+str(out/(name+'.log')))
         return r.stdout
     source_commit=run('source-commit',['git','-C',str(ROOT),'rev-parse','HEAD']).strip()
     source_dirty=bool(run('source-state',['git','-C',str(ROOT),'status','--porcelain']))
