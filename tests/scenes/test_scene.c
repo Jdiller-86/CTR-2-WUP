@@ -738,7 +738,7 @@ static bool texture_draw(void *context,const ctr_scene_state *s,const ctr_vertex
     texture_backend *p=context;++p->draws;CHECK(count==3 && vertices[0].enabled==7);
     CHECK(s->registers[0x080]==1 && texture && texture->rgba && texture->width==16 && texture->height==8);
     CHECK(texture->address==UINT32_C(0x18008000) && !texture->format &&
-        (texture->params==0u || texture->params==6u) && !texture->tev_mode);
+        (texture->params==0u || texture->params==6u));
     const uint8_t first[]={0,0,11,37},lastrow[]={119,203,32,198};
     CHECK(!memcmp(texture->rgba,first,4) && !memcmp(texture->rgba+7u*16u*4u,lastrow,4));
     CHECK(vertices[0].input[2][0]==(p->draws==1u?0.0f:1.0f));return true;
@@ -781,9 +781,9 @@ static void textured_rollback(void) {
         if(kind==0)append(&f,0x083,2); /* Late unsupported magnification filter. */
         if(kind==1)append(&f,0x083,UINT32_C(0x100)); /* Border wrap. */
         if(kind==2)append(&f,0x084,1); /* Unsupported mip/LOD. */
-        if(kind==3)append(&f,0xc2,2); /* Unsupported TEV after both draws. */
-        if(kind==4)append(&f,0xc1,1);
-        if(kind==5)append(&f,0xc4,1);
+        if(kind==3)append(&f,0xc2,6); /* Unsupported TEV after both draws. */
+        if(kind==4)append(&f,0xc1,6);
+        if(kind==5)append(&f,0xc4,3);
         if(kind==6)append(&f,0x08e,14);
         if(kind==7)append(&f,0x080,3);
         if(kind==8)set(&f,0x082,UINT32_C(0x000f0008));

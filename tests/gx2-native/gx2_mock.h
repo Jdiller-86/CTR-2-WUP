@@ -87,6 +87,7 @@ void GX2InitSamplerZMFilter(GX2Sampler *sampler,unsigned z,unsigned mip);
 void GX2SetPixelSampler(const GX2Sampler *sampler,unsigned unit);
 void GX2SetAttribBuffer(unsigned index,unsigned size,unsigned stride,const void *bytes);
 void GX2SetVertexUniformReg(unsigned offset,unsigned count,const void *bytes);
+void GX2SetPixelUniformReg(unsigned offset,unsigned count,const void *bytes);
 void GX2SetCullOnlyControl(unsigned front,bool cullfront,bool cullback);
 #define GX2SetupContextStateEx(p,flag) ((void)(p),(void)(flag))
 #define GX2InitColorBufferRegs(p) ((void)(p))

@@ -9,6 +9,7 @@ from dataclasses import dataclass, replace
 from fractions import Fraction as F
 import hashlib
 import json
+import math
 from pathlib import Path
 import shlex
 import struct
@@ -40,6 +41,8 @@ class Case:
     late_error: str = ''
     linear: bool = False
     side: int = 64
+    tev: tuple = ()
+    textured: bool = True
 
 
 def original_cases():
@@ -87,7 +90,96 @@ def original_cases():
         dimensions=(1024,8),points=((0,0),(512,0),(0,512),(512,512)),
         uv=((F(-16),F(16)),(F(16),F(-16)),(F(1,2),F(1,2)),(F(15),F(-15))),
         wrap=(2,3),scissor=(3,253,253,255,255)))
-    return cases
+    return cases+tev_cases()
+
+
+TEV_OPERATIONS = (0, 1, 2, 3, 4, 5, 8, 9)
+RGB_OPERANDS = (0, 1, 2, 3, 4, 5, 8, 9, 12, 13)
+
+
+def tev_stage(rgb=(3, 0, 0), alpha=None, operation=(0, 0), operands=((0, 0, 0), (0, 0, 0)),
+              constant=(0, 0, 0, 0), scale=(0, 0)):
+    alpha = rgb if alpha is None else alpha
+    return (sum(value << (4*i+16*side) for side, group in enumerate((rgb, alpha)) for i, value in enumerate(group)),
+            sum(value << (4*i+(12 if side else 0)) for side, group in enumerate(operands) for i, value in enumerate(group)),
+            operation[0] | operation[1] << 16,
+            sum(value << (8*i) for i, value in enumerate(constant)), scale[0] | scale[1] << 16)
+
+
+def tev_chain():
+    return (tev_stage(operation=(1, 4), rgb=(3, 14, 0), alpha=(14, 3, 14),
+                      constant=(179, 73, 233, 101)),
+            tev_stage(rgb=(15, 14, 0), operation=(2, 5), constant=(37, 151, 19, 33)),
+            tev_stage(rgb=(15, 3, 14), operation=(4, 8), constant=(91, 211, 47, 83),
+                      operands=((0, 1, 2), (0, 2, 1))),
+            tev_stage(rgb=(15, 14, 0), operation=(3, 1), constant=(149, 67, 241, 177), scale=(1, 0)),
+            tev_stage(rgb=(15, 14, 3), operation=(9, 4), constant=(83, 47, 181, 119)),
+            tev_stage(rgb=(15, 14, 3), operation=(8, 2), constant=(113, 199, 59, 17)))
+
+
+def tev_cases():
+    result = []
+    for index, op in enumerate(TEV_OPERATIONS):
+        stage = tev_stage(rgb=(3, 14, 14), operation=(op, TEV_OPERATIONS[-1-index]),
+                          constant=(113, 197, 61, 149))
+        for linear in (False, True):
+            result.append(Case(f'tev-operation-{op}-filter-{int(linear)}', linear=linear, tev=(stage,)))
+    for index, operand in enumerate(RGB_OPERANDS):
+        stage = tev_stage(rgb=(3, 14, 14), operation=(4, 4), constant=(37, 199, 83, 157),
+                          operands=((operand, RGB_OPERANDS[(index+3)%10], RGB_OPERANDS[(index+6)%10]),
+                                    (index%8, (index+3)%8, (index+5)%8)))
+        result.append(Case(f'tev-operands-{operand}', tev=(stage,)))
+    for rgb in range(3):
+        for alpha in range(3):
+            result.append(Case(f'tev-scale-{rgb}-{alpha}', tev=(tev_stage(rgb=(3, 14, 14),
+                operation=(1, 3), constant=(71, 181, 139, 149), scale=(rgb, alpha)),)))
+    result.extend((Case('tev-six-stage-chain', tev=tev_chain()),
+                   Case('tev-six-stage-chain-linear', tev=tev_chain(), linear=True, index_bytes=2),
+                   Case('tev-six-stage-chain-etc-alpha', tev=tev_chain(), format=13, wrap=(2, 3)),
+                   Case('tev-untextured-constant', textured=False,
+                        tev=(tev_stage(rgb=(14, 0, 0), constant=(19, 83, 171, 47)),)),
+                   Case('tev-previous-alpha-swizzle', tev=(tev_stage(), tev_stage(rgb=(15, 15, 15),
+                        operation=(4, 5), operands=((2, 5, 12), (0, 7, 0)))))))
+    for error in ('dot3', 'texture1', 'operand', 'scale', 'buffer', 'previous', 'constant'):
+        result.append(Case('late-tev-'+error, tev=tev_chain()[:5] if error == 'constant' else tev_chain(), late_error=error))
+    return result
+
+
+def case_stages(case):
+    stages = list(case.tev or (tev_stage(rgb=(0, 3, 0) if case.modulate else (3, 0, 0),
+                                        operation=(1, 1) if case.modulate else (0, 0)),))
+    return stages+[tev_stage(rgb=(15, 0, 0))]*(6-len(stages))
+
+
+def tev_reference(stages, primary, texture):
+    """Independent rational byte-domain TEV; all inputs snapshot the prior stage."""
+    previous = (0, 0, 0, 0)
+    formulas = {0:lambda a,b,c:a, 1:lambda a,b,c:a*b/255,
+                2:lambda a,b,c:a+b, 3:lambda a,b,c:a+b-128,
+                4:lambda a,b,c:(a*c+b*(255-c))/255, 5:lambda a,b,c:a-b,
+                8:lambda a,b,c:a*b/255+c, 9:lambda a,b,c:min(F(255),a+b)*c/255}
+    for stage, row in enumerate(stages):
+        sources, operands, functions, constant, scales = row
+        if sources & 0x000f000f == 0x000f000f and not operands and not functions and not scales:
+            continue
+        colors = {0:primary, 3:texture, 14:tuple((constant >> (8*i)) & 255 for i in range(4)), 15:previous}
+        next_color = []
+        for lane in range(4):
+            side = int(lane == 3)
+            operation = functions >> (16*side) & 15
+            values = []
+            count = 1 if operation == 0 else 3 if operation in (4, 8, 9) else 2
+            for arg in range(count):
+                source = sources >> (16*side+4*arg) & 15
+                if source == 15 and stage == 0: raise ValueError('Stage-zero Previous unsupported')
+                modifier = operands >> ((12 if side else 0)+4*arg) & (7 if side else 15)
+                selected = (3, 0, 1, 2)[modifier//2] if side else {0:lane,2:3,4:0,8:1,12:2}[modifier & ~1]
+                value = F(colors[source][selected]);values.append(255-value if modifier & 1 else value)
+            value = formulas[operation](*(values+[F(0)]*(3-len(values))))
+            integer = max(0, min(255, value.numerator//value.denominator))
+            next_color.append(min(255, integer*(1 << (scales >> (16*side) & 3))))
+        previous = tuple(next_color)
+    return previous
 
 
 def morton_coordinates(size=8):
@@ -196,6 +288,7 @@ def golden(case, texture):
     rgba = decode_texture(texture, case.format, width, height)
     pixels = bytearray(BACKGROUND*case.side*case.side)
     fragments = 0
+    shade_cache = {}
     for indices in case.indices:
         points = tuple(tuple(map(F, case.points[i])) for i in indices)
         uv = tuple(case.uv[i] for i in indices)
@@ -226,7 +319,11 @@ def golden(case, texture):
                     continue
                 u, v = (sum(weight*value[axis] for weight, value in zip(weights, uv)) for axis in range(2))
                 color = sampled_color(rgba,width,height,u,v,case.wrap,case.linear)
-                if case.modulate:
+                if case.tev:
+                    if color not in shade_cache:
+                        shade_cache[color] = bytes(tev_reference(case_stages(case), tuple(255*v for v in case.color), color))
+                    color = shade_cache[color]
+                elif case.modulate:
                     color = bytes(component*mask for component, mask in zip(color, case.color))
                 pixels[(y*case.side+x)*4:(y*case.side+x+1)*4] = color
                 fragments += 1
@@ -259,14 +356,14 @@ def command_bytes(case):
     command(0x232, 1)
     for shift in (64, 32, 0): command(0x233+((64-shift)//32), (packed >> shift) & 0xffffffff)
     width, height = case.dimensions
-    command(0x080, 1); command(0x082, width << 16 | height)
+    command(0x080, int(case.textured)); command(0x082, width << 16 | height)
     params = case.wrap[0] << 12 | case.wrap[1] << 8 | (32 if case.format >= 12 else 0) | (6 if case.linear else 0)
     command(0x083, params); command(0x084, 0); command(0x085, 0x1a000000 >> 3)
     command(0x08e, case.format); command(0x08f, 0); command(0x0e0, 0); command(0x0fd, 0)
-    for index, base in enumerate((0xc0, 0xc8, 0xd0, 0xd8, 0xf0, 0xf8)):
-        command(base, 0x300030 if not index and case.modulate else 0x30003 if not index else 0xf000f)
-        command(base+1, 0); command(base+2, 0x10001 if not index and case.modulate else 0)
-        command(base+4, 0)
+    for index, (base, row) in enumerate(zip((0xc0, 0xc8, 0xd0, 0xd8, 0xf0, 0xf8), case_stages(case))):
+        for offset, value in enumerate(row):
+            if not (case.late_error == 'constant' and index == 5 and offset == 3):
+                command(base+offset, value)
     geometry = bytearray()
     vertices = range(len(case.points)) if case.index_bytes else [i for triangle in case.indices for i in triangle]
     for i in vertices:
@@ -287,6 +384,13 @@ def command_bytes(case):
         if case.late_error in ('filter','mixed-filter'): command(0x083, (params & ~6) | 2)
         elif case.late_error == 'mip-filter': command(0x083, params | (1 << 24))
         elif case.late_error == 'binding': command(0x085, (0x1a000000+8) >> 3)
+        elif case.late_error == 'dot3': command(0xfa, 6)
+        elif case.late_error == 'texture1': command(0xf8, 0x40004)
+        elif case.late_error == 'operand': command(0xf9, 6)
+        elif case.late_error == 'scale': command(0xfc, 3)
+        elif case.late_error == 'buffer': command(0xe0, 1 << 8)
+        elif case.late_error == 'previous': command(0xc0, 0xf000f)
+        elif case.late_error == 'constant': command(0xf8, 0xe000e)
         elif case.late_error == 'uv':
             # A later shader changes U beyond the exact supported Q16 bound;
             # earlier valid texture draws must still roll back atomically.
@@ -301,123 +405,127 @@ def command_bytes(case):
 
 
 def compile_probe(binary, cc='cc', sanitize=False):
-    names = ('ctr_scene.c', 'ctr_shader.c', 'ctr_vertex.c', 'ctr_pica.c', 'ctr_texture.c')
+    names = ('ctr_scene.c', 'ctr_tev.c', 'ctr_shader.c', 'ctr_vertex.c', 'ctr_pica.c', 'ctr_texture.c')
     sources = [ROOT/'tests/textured-scenes/reference_probe.c']+[ROOT/'runtime/core'/name for name in names]
     flags = ['-std=c11', '-O2', '-Wall', '-Wextra', '-Wpedantic', '-Werror', '-I'+str(ROOT/'runtime/core')]
     if sanitize: flags += ['-O1', '-fno-omit-frame-pointer', '-fsanitize=address,undefined']
     subprocess.run(shlex.split(cc)+flags+list(map(str, sources))+['-lm', '-o', str(binary)], check=True)
 
 
-def decode_fragment_program(row, primary, texel):
-    """Decode captured Latte PS bytes using ISA facts, without encoder helpers.
+def binary32(value):
+    return struct.unpack('<f', struct.pack('<f', value))[0]
 
-    References: Decaf e6c528a20a41c34e0f9eb91dd3da40f119db2dee,
-    src/libgpu/latte/latte_instructions.h and latte_instructions_def.inl.
-    TEX_SAMPLE_LZ samples the independently supplied normalized RGBA texel;
-    no desktop GPU execution is inferred by this small instruction oracle.
+
+def decode_fragment_program(row, primary, texel):
+    """Independent ISA decoder with binary32 rounding after every scalar ALU.
+
+    Decaf e6c528a20a41c34e0f9eb91dd3da40f119db2dee supplies field facts.
+    A supplied normalized texel stands in for SAMPLE_LZ; this is not GPU execution.
     """
     program = bytes.fromhex(row['hex'])
-    if len(program) != 256 or row['gprs'] != 3 or row['interpolators'] != 2:
+    textured = row.get('textured', True)
+    if not 256 <= len(program) <= 8192 or len(program) % 256 or row['gprs'] != 9:
         raise ValueError('Unexpected fragment storage/register allocation')
-    if row['spi_ps_in_control_0'] != 0x14000002 or row['inputs'] != [0x100, 0x101]:
+    count = 2 if textured else 1
+    if row['interpolators'] != count or row['spi_ps_in_control_0'] != 0x14000000 | count or row['inputs'] != [0x100,0x101][:count]:
         raise ValueError('Unexpected fragment color/UV interpolation semantics')
-    registers = {(0, lane):F(component) for lane, component in enumerate(primary)}
+    uniforms = row.get('uniforms', [])
+    if len(uniforms) != 32: raise ValueError('Missing fragment constants')
+    constants = [struct.unpack('<f', struct.pack('<I', value))[0] for value in uniforms]
+    if not all(math.isfinite(value) for value in constants): raise ValueError('Nonfinite fragment constants')
+    registers = {(0, lane):binary32(value) for lane, value in enumerate(primary)}
     used = set()
     def words(at, count):
-        if at < 0 or at+count*4 > len(program):
-            raise ValueError('Fragment clause outside program')
+        if at < 0 or at+count*4 > len(program): raise ValueError('Fragment clause outside program')
         byte_range = set(range(at, at+count*4))
-        if used & byte_range:
-            raise ValueError('Overlapping fragment instructions')
+        if used & byte_range: raise ValueError('Overlapping fragment instructions')
         used.update(byte_range)
         return struct.unpack_from('<'+'I'*count, program, at)
+    def source(selector, channel, negative):
+        if 256 <= selector < 264: value = constants[(selector-256)*4+channel]
+        elif (selector, channel) in registers: value = registers[(selector, channel)]
+        else: raise ValueError('Undefined fragment source lane')
+        return -value if negative else value
     at, samples, instructions = 0, 0, 0
-    while at < 32:
-        word0, word1 = words(at, 2)
-        at += 8
+    while at < 128:
+        word0, word1 = words(at, 2);at += 8
         opcode = word1 >> 23 & 127
         if opcode == 1:
-            # TEX CF: one instruction, active/unconditional, barrier. The
-            # address unit is eight bytes; a TEX occupies four words.
-            if word1 != 0x80800000 or word0 >> 22:
-                raise ValueError('Unsupported fragment TEX control flow')
-            a, b, c, padding = words(word0*8, 4)
-            samples += 1
-            if (a & 31) != 0x13 or (a >> 8 & 255) or (c >> 15 & 31):
+            if word1 != 0x80800000 or word0 >> 22: raise ValueError('Unsupported fragment TEX control flow')
+            a,b,c,padding = words(word0*8, 4);samples += 1
+            if (a & 31) != 0x13 or a >> 8 & 255 or c >> 15 & 31:
                 raise ValueError('Expected SAMPLE_LZ at resource/sampler zero')
-            source = a >> 16 & 127
-            destination = b & 127
-            source_selectors = [(c >> bit) & 7 for bit in (20, 23, 26, 29)]
-            destinations = [(b >> bit) & 7 for bit in (9, 12, 15, 18)]
-            if source != 1 or destination != 2 or source_selectors != [0, 1, 4, 5]:
+            src,dest = a >> 16 & 127,b & 127
+            source_selectors = [(c >> bit) & 7 for bit in (20,23,26,29)]
+            destinations = [(b >> bit) & 7 for bit in (9,12,15,18)]
+            if src != 1 or dest != 2 or source_selectors != [0,1,4,5]:
                 raise ValueError('Expected original UV source R1.xy01 and sample R2')
-            if destinations != [0, 1, 2, 3] or b >> 28 != 15:
+            if destinations != [0,1,2,3] or b >> 28 != 15:
                 raise ValueError('Expected normalized RGBA texture fetch')
             if a & 0xff80ffe0 or b & 0x0fe00180 or c & 0x00007fff or padding:
                 raise ValueError('Unsupported texture offsets/relative/LOD mode')
-            for lane, component in enumerate(texel):
-                registers[(destination, lane)] = F(component, 255)
+            for lane,value in enumerate(texel):registers[(2,lane)] = binary32(value/255)
         elif word1 >> 26 & 15 == 8:
-            count = (word1 >> 18 & 127)+1
+            length = (word1 >> 18 & 127)+1
             if not word1 >> 31 or word1 & 0x4203ffff or word0 >> 22:
                 raise ValueError('Unsupported fragment ALU control flow')
-            for index in range(count):
-                a, b = words(word0*8+index*8, 2)
-                # Scalar independent LAST groups, no predicates, relative
-                # addressing, output modifiers, clamping or absolutes.
+            for index in range(length):
+                a,b = words(word0*8+index*8,2);operation = b >> 7 & 2047
                 if not a >> 31 or a & 0x7c401200 or b & 0x9000006f or b >> 18 & 7:
                     raise ValueError('Unsupported grouped/modified fragment ALU')
-                if b >> 7 & 2047 != 2 or not b & 16:
-                    raise ValueError('Expected fragment MUL_IEEE with write mask')
-                sources = ((a & 511, a >> 10 & 3, bool(a & (1 << 12))),
-                           (a >> 13 & 511, a >> 23 & 3, bool(a & (1 << 25))))
-                values = []
-                for register, channel, negative in sources:
-                    if (register, channel) not in registers:
-                        raise ValueError('Undefined fragment source lane')
-                    value = registers[(register, channel)]
-                    values.append(-value if negative else value)
-                destination, channel = b >> 21 & 127, b >> 29 & 3
-                if destination != 2:
-                    raise ValueError('Unexpected fragment multiplication destination')
-                registers[(destination, channel)] = values[0]*values[1]
-                instructions += 1
+                if operation not in (0,2,3,4,20,25) or not b & 16:
+                    raise ValueError('Unsupported fragment scalar opcode')
+                x = source(a & 511,a >> 10 & 3,bool(a & (1 << 12)))
+                if operation in (20,25):value = math.floor(x) if operation == 20 else x
+                else:
+                    y = source(a >> 13 & 511,a >> 23 & 3,bool(a & (1 << 25)))
+                    value = {0:lambda:x+y,2:lambda:x*y,3:lambda:max(x,y),4:lambda:min(x,y)}[operation]()
+                dest,channel = b >> 21 & 127,b >> 29 & 3
+                if dest >= row['gprs']:raise ValueError('Fragment destination exceeds GPR allocation')
+                registers[(dest,channel)] = binary32(value);instructions += 1
         elif opcode == 0x28:
-            if word0 & 0xffc07fff or (word0 >> 15 & 127) != 2:
-                raise ValueError('Expected PIX0 export from sample register R2')
-            if word1 != 0x94200688:
-                raise ValueError('Expected complete RGBA pixel export and end')
-            if samples != 1:
-                raise ValueError('Expected one base-level texture sample')
-            if any(byte for index, byte in enumerate(program) if index not in used):
+            dest = word0 >> 15 & 127
+            if word0 & 0xffc07fff or dest not in (3,7) or word1 != 0x94200688:
+                raise ValueError('Expected complete PIX0 export and end')
+            if samples != int(textured):raise ValueError('Wrong number of base-level texture samples')
+            if any(value for index,value in enumerate(program) if index not in used):
                 raise ValueError('Nonzero unused fragment program bytes')
-            return {'color':tuple(registers[(2, lane)] for lane in range(4)),
-                    'samples':samples, 'alu_instructions':instructions}
-        else:
-            raise ValueError('Unsupported fragment control flow')
+            values = tuple(source(dest,lane,False) for lane in range(4))
+            # All stage results are integer bytes. UNORM export is well away
+            # from half-byte ties; model its final rounding independently.
+            color = tuple(F(max(0,min(255,math.floor(value*255+0.5))),255) for value in values)
+            return {'color':color,'linear_color':values,'samples':samples,'alu_instructions':instructions}
+        else:raise ValueError('Unsupported fragment control flow')
     raise ValueError('Missing fragment program end')
 
 
 def validate_fragment_programs(path):
-    capture = json.loads(path.read_text())
-    rows = capture.get('programs', [])
-    if [row.get('mode') for row in rows] != ['replace', 'modulate']:
+    capture = json.loads(path.read_text());rows = capture.get('programs', [])
+    if [row.get('mode') for row in rows[:2]] != ['replace','modulate']:
         raise ValueError('Require actual replace and modulate PS captures')
-    cases = 0
+    cases = 0;max_instructions = 0
+    texels = ((0,255,127,0),(255,0,1,255),(17,89,233,53),(128,129,130,131),
+              (1,254,128,127),(255,255,255,255),(0,0,0,0),(127,128,129,254))
     for row in rows:
         for mask in range(8):
             primary = tuple((mask >> channel) & 1 for channel in range(3))+(1,)
-            for texel in ((0, 255, 127, 0), (255, 0, 1, 255), (17, 89, 233, 53), (128, 129, 130, 131)):
-                result = decode_fragment_program(row, primary, texel)
-                expected = tuple(F(value*(primary[lane] if row['mode'] == 'modulate' else 1), 255)
-                                 for lane, value in enumerate(texel))
-                if result['color'] != expected or result['alu_instructions'] != (4 if row['mode'] == 'modulate' else 0):
-                    raise ValueError('Decoded fragment pixels differ from independent TEV arithmetic')
-                cases += 1
-    return {'programs':len(rows), 'arithmetic_cases':cases, 'source_sha256':hashlib.sha256(path.read_bytes()).hexdigest(),
-            'capture':'actual native-adapter PS bytes bound through the host GX2 API model',
+            for texel in texels:
+                result = decode_fragment_program(row,primary,texel)
+                expected = tev_reference(row['stages'],tuple(255*v for v in primary),texel)
+                if result['color'] != tuple(F(v,255) for v in expected):
+                    raise ValueError(f"{row['mode']}: decoded fragment bytes differ: {result['color']} != {expected}")
+                max_instructions = max(max_instructions,result['alu_instructions']);cases += 1
+    # Exhaust every bounded integer numerator, including exact multiples of
+    # 255. Binary32 reciprocal multiplication must never cross a floor boundary.
+    reciprocal = binary32(1/255)
+    for value in range(65026):
+        if math.floor(binary32(value*reciprocal)) != value//255:
+            raise ValueError('Fragment reciprocal does not preserve integer division')
+    return {'programs':len(rows),'arithmetic_cases':cases,'integer_division_cases':65026,
+            'max_alu_instructions':max_instructions,'source_sha256':hashlib.sha256(path.read_bytes()).hexdigest(),
+            'capture':'actual native-adapter PS bytes and constants bound through the host GX2 API model',
             'reference_pin':'e6c528a20a41c34e0f9eb91dd3da40f119db2dee',
-            'console_verified':False, 'gpu_execution':False}
+            'console_verified':False,'gpu_execution':False}
 
 
 def execute_case(binary, output, case):
@@ -444,6 +552,7 @@ def execute_case(binary, output, case):
             raise ValueError(f'{case.name}: independent exact pixel mismatch at ({at//4%case.side},{at//(case.side*4)}) lane{at%4}')
     return {'name':case.name, 'format':case.format, 'dimensions':case.dimensions,
             'index_bytes':case.index_bytes, 'wrap':case.wrap, 'modulate':case.modulate,'linear':case.linear,'side':case.side,
+            'tev_stages':case_stages(case), 'textured':case.textured,
             'late_error':case.late_error or None, **result,
             'expected_rgba_sha256':hashlib.sha256(BACKGROUND*case.side*case.side if case.late_error else expected).hexdigest(),
             'files':[{'name':path.name, 'size':path.stat().st_size,

@@ -54,30 +54,24 @@ static ctr_scene_result target_pipeline(const ctr_scene_state *s,const ctr_scene
     return CTR_SCENE_OK;
 }
 static ctr_scene_result fragment(const ctr_scene_state *s,const ctr_scene_resources *resources,
-                                 bool bound,ctr_scene_texture *texture,uint8_t **allocation) {
-    static const unsigned tev[]={0xc0,0xc8,0xd0,0xd8,0xf0,0xf8};
+                                 bool bound,ctr_scene_texture *texture,uint8_t **allocation,
+                                 ctr_tev_program *combiner) {
     bool textured=s->registers[0x080u]!=0u;
     if((s->register_defined[0x064u] && !configured(s,0x064u,textured?1u:0u)) ||
        (s->register_defined[0x06fu] && !configured(s,0x06fu,textured?UINT32_C(0x103):3u)))
         return CTR_SCENE_UNSUPPORTED;
-    if(!textured && !bound)return CTR_SCENE_OK;
+    bool configured_tev=false;
+    for(unsigned i=0;i<CTR_TEV_STAGES;++i)
+        if(s->register_defined[ctr_tev_registers[i]])configured_tev=true;
+    if(!textured && !bound && !configured_tev) {
+        memset(combiner,0,sizeof(*combiner));
+        for(unsigned i=1;i<CTR_TEV_STAGES;++i)
+            combiner->stages[i].source[0][0]=combiner->stages[i].source[1][0]=15u;
+        return CTR_SCENE_OK;
+    }
     if(!configured(s,0x080u,textured?1u:0u) || s->registers[0x08fu] ||
        s->registers[0x0e0u] || s->registers[0x0fdu])return CTR_SCENE_UNSUPPORTED;
-    unsigned mode=0;
-    for(unsigned i=0;i<6;++i) {
-        uint32_t source=s->registers[tev[i]],operation=s->registers[tev[i]+2u];
-        if(!configured(s,tev[i]+1u,0u) || !configured(s,tev[i]+4u,0u) ||
-           s->register_defined[tev[i]]!=15u || s->register_defined[tev[i]+2u]!=15u)
-            return CTR_SCENE_UNSUPPORTED;
-        if(i || !textured) {
-            if(source!=(i?UINT32_C(0xf000f):0u) || operation)return CTR_SCENE_UNSUPPORTED;
-        } else {
-            if(source==UINT32_C(0x30003) && !operation)mode=0;
-            else if((source==UINT32_C(0x30003) || source==UINT32_C(0x300030)) &&
-                    operation==UINT32_C(0x10001))mode=1;
-            else return CTR_SCENE_UNSUPPORTED;
-        }
-    }
+    if(!ctr_tev_decode(s->registers,s->register_defined,textured,combiner))return CTR_SCENE_UNSUPPORTED;
     if(!textured)return CTR_SCENE_OK;
     for(unsigned reg=0x082u;reg<=0x085u;++reg)
         if(s->register_defined[reg]!=15u)return CTR_SCENE_UNSUPPORTED;
@@ -109,14 +103,13 @@ static ctr_scene_result fragment(const ctr_scene_state *s,const ctr_scene_resour
     if(ctr_texture_decode(source,bytes,format,width,height,rgba,(size_t)width*height*4u)!=CTR_TEXTURE_OK) {
         free(rgba);return CTR_SCENE_LAYOUT;
     }
-    *texture=(ctr_scene_texture){rgba,width,height,address,format,params,mode};
+    *texture=(ctr_scene_texture){rgba,width,height,address,format,params};
     *allocation=rgba;return CTR_SCENE_OK;
 }
 /* Reject unsupported independently meaningful state even when it follows a
  * staged draw. Configuration may prepare a later list, but cannot hide an
  * unsupported filter, texture mode or combiner behind the last trigger. */
 static bool fragment_value(unsigned reg,uint32_t value) {
-    static const unsigned tev[]={0xc0,0xc8,0xd0,0xd8,0xf0,0xf8};
     if(reg==0x080u)return value<=1u;
     if(reg==0x082u)return !(value&~UINT32_C(0x07ff07ff));
     if(reg==0x083u)return !(value&~UINT32_C(0x3326)) &&
@@ -126,13 +119,7 @@ static bool fragment_value(unsigned reg,uint32_t value) {
        reg==0x08fu || reg==0x0e0u || reg==0x0fdu)return !value;
     if(reg==0x085u)return value<=UINT32_MAX/8u;
     if(reg==0x08eu)return value<14u;
-    for(unsigned i=0;i<6;++i) {
-        if(reg==tev[i])return i?value==UINT32_C(0xf000f):
-            value==0u || value==UINT32_C(0x30003) || value==UINT32_C(0x300030);
-        if(reg==tev[i]+1u || reg==tev[i]+4u)return !value;
-        if(reg==tev[i]+2u)return !value || (!i && value==UINT32_C(0x10001));
-    }
-    return true;
+    return ctr_tev_register_value(reg,value);
 }
 static ctr_scene_result packed(const uint32_t words[3],uint32_t bits[4]) {
     uint32_t raw[4]={words[2]&UINT32_C(0xffffff),
@@ -379,7 +366,9 @@ static uint8_t bilinear_byte(unsigned a,unsigned b,unsigned c,unsigned d,
 }
 static void raster(const ctr_scene_state *s,const ctr_scene_surface *surface,
                    uint8_t *pixels,scene_vertex v[3],ctr_scene_report *report,
-                   const ctr_scene_texture *texture) {
+                   const ctr_scene_texture *texture,const ctr_tev_program *combiner) {
+    uint8_t primary[4];
+    for(unsigned lane=0;lane<4;++lane)primary[lane]=v[0].color[lane]==1.0f?255u:0u;
     int64_t area=edge(v[0],v[1],v[2].x,v[2].y);unsigned cull=s->registers[0x040u]&3u;
     if(!area || (cull==1u && area>0) || (cull==2u && area<0))return;
     if(area<0) { scene_vertex t=v[1];v[1]=v[2];v[2]=t;area=-area; }
@@ -406,6 +395,7 @@ static void raster(const ctr_scene_state *s,const ctr_scene_surface *surface,
         }
         if(inside) {
             uint8_t *pixel=pixels+(size_t)y*surface->stride+(size_t)x*4u;
+            uint8_t sampled[4]={0};
             if(texture) {
                 int64_t weights[3]={edge(v[1],v[2],x*16+8,y*16+8),
                     edge(v[2],v[0],x*16+8,y*16+8),edge(v[0],v[1],x*16+8,y*16+8)};
@@ -435,9 +425,10 @@ static void raster(const ctr_scene_state *s,const ctr_scene_surface *surface,
                 for(unsigned lane=0;lane<4;++lane) {
                     unsigned sample=linear?bilinear_byte(samples[0][0][lane],samples[0][1][lane],
                         samples[1][0][lane],samples[1][1][lane],fraction[0],fraction[1],denominator):samples[0][0][lane];
-                    pixel[lane]=texture->tev_mode && v[0].color[lane]!=1.0f?0u:(uint8_t)sample;
+                    sampled[lane]=(uint8_t)sample;
                 }
-            } else for(unsigned lane=0;lane<4;++lane)pixel[lane]=v[0].color[lane]==1.0f?255u:0u;
+            }
+            ctr_tev_evaluate(combiner,primary,sampled,pixel);
             ++report->fragments;
         }
     }
@@ -461,8 +452,8 @@ static ctr_scene_result draw(ctr_scene_state *s,const ctr_scene_resources *resou
     if(s->fixed_words || s->uniform_words)return CTR_SCENE_LAYOUT;
     ctr_scene_result result=vertices(s,resources,indexed,decoded,report);
     if(result!=CTR_SCENE_OK)return result;
-    ctr_scene_texture texture={0};uint8_t *texture_allocation=NULL;
-    result=fragment(s,resources,bound,&texture,&texture_allocation);
+    ctr_scene_texture texture={0};uint8_t *texture_allocation=NULL;ctr_tev_program combiner;
+    result=fragment(s,resources,bound,&texture,&texture_allocation,&combiner);
     if(result!=CTR_SCENE_OK)return result;
     const ctr_scene_texture *sampling=texture_allocation?&texture:NULL;
     s->shader.entry=s->registers[0x2bau];
@@ -485,7 +476,7 @@ static ctr_scene_result draw(ctr_scene_state *s,const ctr_scene_resources *resou
             for(unsigned i=1;i<3;++i)for(unsigned lane=0;lane<4;++lane)
                 if(primitive[i].color[lane]!=primitive[0].color[lane])result=CTR_SCENE_UNSUPPORTED;
             if(result!=CTR_SCENE_OK)break;
-            raster(s,surface,pixels,primitive,report,sampling);++report->triangles;
+            raster(s,surface,pixels,primitive,report,sampling,&combiner);++report->triangles;
         }
     }
     free(texture_allocation);

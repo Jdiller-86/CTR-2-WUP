@@ -28,6 +28,9 @@
 #define MAX_TEXTURE_BYTES (8u*1024u*1024u)
 #define VERTEX_STRIDE (16u*4u*sizeof(float))
 #define MAX_FETCH_BYTES 4096u
+#define PIXEL_BYTES 8192u
+#define PIXEL_ALU_OFFSET 256u
+#define PIXEL_MAX_ALUS 768u
 
 typedef struct {
     GX2ContextState *context;
@@ -43,6 +46,7 @@ typedef struct {
     unsigned width,height,stride;
     size_t size;
     bool pending;
+    uint32_t pixel_constants[8][4];
 } scene_private;
 
 static bool retire(ctr_wiiu_gx2_scene *s,scene_private *p);
@@ -118,45 +122,114 @@ static bool layout(GX2Surface *surface,unsigned width,unsigned height,GX2TileMod
 static void put32(uint8_t *p,uint32_t value) {
     for(unsigned i=0;i<4;++i)p[i]=(uint8_t)(value>>(8u*i));
 }
-/* Original encoder from the pinned Latte TEX/CF/ALU field definitions. R0 is
- * primary color and R1 is original interpolated guest UV. A base-level sample
- * goes to R2; the optional exact binary-primary TEV mode multiplies it by R0.
- * Program and clause addresses are explicitly little endian on PowerPC. */
-static void pixel_shader(scene_private *p,const ctr_scene_texture *texture) {
-    uint8_t *program=p->pixel_program;memset(program,0,256);
+/* Original scalar Latte encoder. R0 is primary, R1 original guest UV, R2
+ * Texture0. R3/R7 alternate Previous/output; R4..R6 snapshot all operands before
+ * any output lane changes. R8 is scratch. Independent LAST groups avoid a VLIW
+ * bank scheduler. Constants 0..5 contain stage bytes; 6/7 are numeric helpers. */
+static uint32_t bits(float value);
+static void pixel_op(scene_private *p,unsigned *count,unsigned opcode,unsigned a,unsigned ac,
+                      unsigned b,unsigned bc,bool negate,unsigned dest,unsigned lane) {
+    if(*count>=PIXEL_MAX_ALUS) { *count=PIXEL_MAX_ALUS+1u;return; }
+    uint8_t *at=(uint8_t *)p->pixel_program+PIXEL_ALU_OFFSET+(*count)++*8u;
+    put32(at,a|(ac<<10)|(b<<13)|(bc<<23)|(negate?UINT32_C(1)<<25:0u)|UINT32_C(0x80000000));
+    put32(at+4u,(opcode<<7)|(1u<<4)|(dest<<21)|(lane<<29));
+}
+static void pixel_divide(scene_private *p,unsigned *count,unsigned dest,unsigned lane) {
+    pixel_op(p,count,2,dest,lane,262,2,false,dest,lane);
+    pixel_op(p,count,20,dest,lane,0,0,false,dest,lane);
+}
+static void pixel_combine(scene_private *p,unsigned *count,unsigned op,unsigned dest,unsigned lane) {
+    pixel_op(p,count,op==1u || op==4u || op==8u?2u:op==0u?25u:0u,
+        4,lane,op==4u?6u:5u,lane,op==5u,dest,lane);
+    if(op==3u)pixel_op(p,count,0,dest,lane,262,1,true,dest,lane);
+    if(op==4u) {
+        pixel_op(p,count,0,262,0,6,lane,true,8,lane);
+        pixel_op(p,count,2,5,lane,8,lane,false,8,lane);
+        pixel_op(p,count,0,dest,lane,8,lane,false,dest,lane);
+    }
+    if(op==9u) {
+        pixel_op(p,count,4,dest,lane,262,0,false,dest,lane);
+        pixel_op(p,count,2,dest,lane,6,lane,false,dest,lane);
+    }
+    if(op==1u || op==4u || op==8u || op==9u)pixel_divide(p,count,dest,lane);
+    if(op==8u)pixel_op(p,count,0,dest,lane,6,lane,false,dest,lane);
+}
+static bool pixel_shader(scene_private *p,const ctr_scene_state *state,bool textured) {
+    ctr_tev_program tev;
+    if(!ctr_tev_decode(state->registers,state->register_defined,textured,&tev))return false;
+    uint8_t *program=p->pixel_program;memset(program,0,PIXEL_BYTES);
+    unsigned count=0,previous=3,destination=7;
+    for(unsigned stage=0;stage<CTR_TEV_STAGES;++stage)
+        for(unsigned lane=0;lane<4;++lane)p->pixel_constants[stage][lane]=bits((float)tev.stages[stage].constant[lane]);
+    p->pixel_constants[6][0]=bits(255.0f);p->pixel_constants[6][1]=bits(128.0f);
+    /* The upward binary32 reciprocal gives exact floor(N/255), 0<=N<=65025.
+     * Integer products/sums stay exactly representable; no fused operation. */
+    p->pixel_constants[6][2]=UINT32_C(0x3b808081);p->pixel_constants[6][3]=bits(0.5f);
+    for(unsigned lane=0;lane<4;++lane)p->pixel_constants[7][lane]=bits(lane<3u?(float)(1u<<lane):0.0f);
+    for(unsigned lane=0;lane<4;++lane) {
+        pixel_op(p,&count,2,0,lane,262,0,false,0,lane);
+        pixel_op(p,&count,0,0,lane,262,3,false,0,lane);
+        pixel_op(p,&count,20,0,lane,0,0,false,0,lane);
+        if(textured) {
+            pixel_op(p,&count,2,2,lane,262,0,false,2,lane);
+            pixel_op(p,&count,0,2,lane,262,3,false,2,lane);
+            pixel_op(p,&count,20,2,lane,0,0,false,2,lane);
+        }
+    }
+    for(unsigned stage=0;stage<CTR_TEV_STAGES;++stage) {
+        const ctr_tev_stage *v=&tev.stages[stage];
+        if(ctr_tev_passthrough(v))continue;
+        for(unsigned lane=0;lane<4;++lane) {
+            unsigned side=lane==3u;
+            for(unsigned arg=0;arg<ctr_tev_arguments(v->operation[side]);++arg) {
+                unsigned source=v->source[side][arg],operand=v->operand[side][arg];
+                unsigned reg=source==0u?0u:source==3u?2u:source==14u?256u+stage:previous;
+                const unsigned alpha_channels[4]={3,0,1,2};
+                unsigned channel=side?alpha_channels[operand/2u]:
+                    operand<2u?lane:operand<4u?3u:operand<6u?0u:operand<10u?1u:2u;
+                pixel_op(p,&count,25,reg,channel,0,0,false,4u+arg,lane);
+                if(operand&1u)pixel_op(p,&count,0,262,0,4u+arg,lane,true,4u+arg,lane);
+            }
+        }
+        for(unsigned lane=0;lane<4;++lane) {
+            unsigned side=lane==3u;
+            pixel_combine(p,&count,v->operation[side],destination,lane);
+            pixel_op(p,&count,3,destination,lane,263,3,false,destination,lane);
+            pixel_op(p,&count,4,destination,lane,262,0,false,destination,lane);
+            if(v->scale[side]) {
+                pixel_op(p,&count,2,destination,lane,263,v->scale[side],false,destination,lane);
+                pixel_op(p,&count,4,destination,lane,262,0,false,destination,lane);
+            }
+        }
+        unsigned swap=previous;previous=destination;destination=swap;
+    }
+    for(unsigned lane=0;lane<4;++lane)pixel_op(p,&count,2,previous,lane,262,2,false,previous,lane);
+    if(count>PIXEL_MAX_ALUS)return false;
+    unsigned cf=0;
+    if(textured) {
+        put32(program,128u/8u);put32(program+4u,UINT32_C(0x80800000));cf=8;
+        put32(program+128u,UINT32_C(0x00010013));
+        put32(program+132u,UINT32_C(0xf00d1002));
+        put32(program+136u,UINT32_C(0xb0800000));
+    }
+    for(unsigned first=0;first<count;first+=128u) {
+        unsigned length=count-first;if(length>128u)length=128u;
+        put32(program+cf,PIXEL_ALU_OFFSET/8u+first);
+        put32(program+cf+4u,UINT32_C(0xa0000000)|((length-1u)<<18));cf+=8;
+    }
+    if(cf>120u)return false;
+    put32(program+cf,previous<<15);put32(program+cf+4u,UINT32_C(0x94200688));
     memset(&p->pixel,0,sizeof(p->pixel));
-    p->pixel.size=256;p->pixel.program=program;p->pixel.mode=GX2_SHADER_MODE_UNIFORM_REGISTER;
-    p->pixel.regs.sq_pgm_resources_ps=texture?3u:1u;
-    p->pixel.regs.sq_pgm_exports_ps=2;
-    p->pixel.regs.spi_ps_in_control_0=UINT32_C(0x14000000)|(texture?2u:1u);
-    p->pixel.regs.num_spi_ps_input_cntl=texture?2u:1u;
+    p->pixel.size=(PIXEL_ALU_OFFSET+count*8u+255u)&~255u;
+    p->pixel.program=program;p->pixel.mode=GX2_SHADER_MODE_UNIFORM_REGISTER;
+    p->pixel.regs.sq_pgm_resources_ps=9u;p->pixel.regs.sq_pgm_exports_ps=2;
+    p->pixel.regs.spi_ps_in_control_0=UINT32_C(0x14000000)|(textured?2u:1u);
+    p->pixel.regs.num_spi_ps_input_cntl=textured?2u:1u;
     p->pixel.regs.spi_ps_input_cntls[0]=UINT32_C(0x100);
-    if(texture)p->pixel.regs.spi_ps_input_cntls[1]=UINT32_C(0x101);
+    if(textured)p->pixel.regs.spi_ps_input_cntls[1]=UINT32_C(0x101);
     p->pixel.regs.cb_shader_mask=15;p->pixel.regs.cb_shader_control=1;
     p->pixel.regs.db_shader_control=UINT32_C(0x10);
-    unsigned export_at=0;
-    if(texture) {
-        /* TEX clause at byte 32; one SAMPLE_LZ, resource/sampler zero,
-         * normalized coordinates R1.xy01 and result R2.xyzw. */
-        put32(program,4);put32(program+4,UINT32_C(0x80800000));
-        put32(program+32,UINT32_C(0x00010013));
-        put32(program+36,UINT32_C(0xf00d1002));
-        put32(program+40,UINT32_C(0xb0800000));
-        export_at=8;
-        if(texture->tev_mode==1u) {
-            /* Four scalar, independent LAST groups avoid a bank scheduler. */
-            put32(program+8,6);put32(program+12,UINT32_C(0xa00c0000));
-            for(unsigned lane=0;lane<4;++lane) {
-                put32(program+48u+lane*8u,UINT32_C(0x80000002)|(lane<<10)|(lane<<23));
-                put32(program+52u+lane*8u,UINT32_C(0x00400110)|(lane<<29));
-            }
-            export_at=16;
-        }
-        put32(program+export_at,2u<<15);
-    }
-    /* EXP_DONE PIX0, R0 or R2.xyzw, END_OF_PROGRAM. */
-    put32(program+export_at+4u,UINT32_C(0x94200688));
-    GX2Invalidate(GX2_INVALIDATE_MODE_CPU_SHADER,program,256);
+    GX2Invalidate(GX2_INVALIDATE_MODE_CPU_SHADER,program,p->pixel.size);return true;
 }
 static bool upload_texture(ctr_wiiu_gx2_scene *s,scene_private *p,
                            const ctr_scene_texture *source) {
@@ -167,7 +240,7 @@ static bool upload_texture(ctr_wiiu_gx2_scene *s,scene_private *p,
     if(!source->rgba || source->width<8u || source->height<8u ||
        source->width>1024u || source->height>1024u ||
        (source->width&(source->width-1u)) || (source->height&(source->height-1u)) ||
-       source->format>=14u || source->tev_mode>1u || source->params!=expected_params ||
+       source->format>=14u || source->params!=expected_params ||
        (filter!=0u && filter!=6u) ||
        (wrap_t!=0u && wrap_t!=2u && wrap_t!=3u) ||
        (wrap_s!=0u && wrap_s!=2u && wrap_s!=3u) ||
@@ -234,7 +307,7 @@ static bool begin(void *context,const ctr_scene_surface *initial) {
     p->linear.image=allocate(s,p->linear.alignment,p->linear.imageSize);
     p->compiled=allocate(s,256,sizeof(*p->compiled));
     p->vertex_program=allocate(s,256,sizeof(p->compiled->program));
-    p->pixel_program=allocate(s,256,256);
+    p->pixel_program=allocate(s,256,PIXEL_BYTES);
     uint32_t fetch_size=GX2CalcFetchShaderSizeEx(16,GX2_FETCH_SHADER_TESSELLATION_NONE,
                                                GX2_TESSELLATION_MODE_DISCRETE);
     if(!fetch_size || fetch_size>MAX_FETCH_BYTES) {
@@ -272,7 +345,6 @@ static bool begin(void *context,const ctr_scene_surface *initial) {
     GX2InitFetchShaderEx(&p->fetch,p->fetch_program,16,attributes,
                         GX2_FETCH_SHADER_TESSELLATION_NONE,GX2_TESSELLATION_MODE_DISCRETE);
     GX2Invalidate(GX2_INVALIDATE_MODE_CPU_SHADER,p->fetch_program,fetch_size);
-    pixel_shader(p,NULL);
     if(!restore(s))return false;
     ++s->begins;return true;
 error:
@@ -318,6 +390,7 @@ static bool draw(void *context,const ctr_scene_state *state,const ctr_vertex *ve
     if(!p->compiled->size || p->compiled->size>sizeof(p->compiled->program) ||
        p->compiled->gprs>64u || (texture && !p->compiled->texcoord0))
         return fail(s,CTR_WIIU_GX2_SCENE_SHADER);
+    if(!pixel_shader(p,state,texture!=NULL))return fail(s,CTR_WIIU_GX2_SCENE_SHADER);
     if(!upload_texture(s,p,texture))return false;
     for(unsigned vertex=0;vertex<count;++vertex) {
         if((vertices[vertex].enabled&p->compiled->input_mask)!=p->compiled->input_mask)
@@ -339,13 +412,13 @@ static bool draw(void *context,const ctr_scene_state *state,const ctr_vertex *ve
     p->vertex.regs.num_sq_vtx_semantic=16;
     for(unsigned index=0;index<16;++index)p->vertex.regs.sq_vtx_semantic[index]=index;
     p->vertex.regs.vgt_vertex_reuse_block_cntl=14;p->vertex.regs.vgt_hos_reuse_depth=16;
-    pixel_shader(p,texture);
     GX2SetContextState(p->context);
     if(!viewport(p,state))return fail(s,CTR_WIIU_GX2_SCENE_LAYOUT);
     GX2SetColorBuffer(&p->target,GX2_RENDER_TARGET_0);
     GX2SetShaderModeEx(GX2_SHADER_MODE_UNIFORM_REGISTER,64,64,0,0,184,192);
     GX2SetFetchShader(&p->fetch);GX2SetVertexShader(&p->vertex);GX2SetPixelShader(&p->pixel);
     if(texture) { GX2SetPixelTexture(&p->texture,0);GX2SetPixelSampler(&p->sampler,0); }
+    GX2SetPixelUniformReg(0,32,p->pixel_constants);
     GX2SetAttribBuffer(0,count*VERTEX_STRIDE,VERTEX_STRIDE,p->vertices);
     for(unsigned uniform=0;uniform<CTR_SHADER_UNIFORMS;++uniform)if(p->compiled->uniform_used[uniform])
         GX2SetVertexUniformReg(uniform*4u,4,state->shader.uniforms[uniform]);

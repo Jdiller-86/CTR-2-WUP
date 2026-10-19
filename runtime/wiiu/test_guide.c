@@ -59,7 +59,7 @@ static const step gx_steps[]={
     {GUEST_EXIT,"GX operations and exit","Wait for fill/copy/conversion checks and exit.","The original guest's own PASS and exit are checked."}
 };
 static const step textured_steps[]={
-    {VIEW_GUEST,"Textured guest pictures","BOTH: colored texture and color-masked triangle.","R: correct on BOTH   L: wrong or missing picture"},
+    {VIEW_GUEST,"Textured guest pictures","BOTH: colored pattern and pale-green triangle.","R: correct on BOTH   L: wrong or missing picture"},
     {GUEST_EXIT,"Texture readback and guest exit","Checking texture, TEV and GPU pixels automatically.","Wait for automatic guest PASS, then MINUS to exit."}
 };
 

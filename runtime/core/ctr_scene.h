@@ -2,6 +2,7 @@
 #define CTR_SCENE_H
 #include "ctr_pica.h"
 #include "ctr_shader.h"
+#include "ctr_tev.h"
 
 #define CTR_SCENE_MAX_VERTICES 256u
 #define CTR_SCENE_MAX_DRAWS 32u
@@ -48,7 +49,6 @@ typedef struct {
     const uint8_t *rgba;
     unsigned width,height;
     uint32_t address,format,params;
-    unsigned tev_mode; /* 0: texture replace; 1: texture * primary color. */
 } ctr_scene_texture;
 typedef struct {
     /* Explicit resolved backend target: linear RGBA8, row zero at bottom.
@@ -90,9 +90,11 @@ void ctr_scene_init(ctr_scene_state *state);
  * exact 1/16-pixel positions and constant opaque binary primary color per
  * triangle. Optional texture0 supports all 14 base formats, matching min/mag
  * nearest or bilinear filtering (exact affine weights, round half up),
- * clamp/repeat/mirror, signed exact Q16 UVs in [-16,16], and texture replacement
- * or modulation by primary color. V=0 samples the last raw texture row.
- * Depth/blend, other texture/TEV modes, unsupported arithmetic and geometry fail.
+ * clamp/repeat/mirror and signed exact Q16 UVs in [-16,16]. Six TEV stages use
+ * primary, Texture0, constants and Previous with separate RGB/alpha operations,
+ * operands and scale; see ctr_tev.h for byte-domain quantization. V=0 samples
+ * the last raw texture row. Depth/blend, DOT3/buffers, other textures,
+ * unsupported arithmetic and geometry fail.
  * Every list stages state and the complete target before any commit, so late
  * errors preserve previous state/pixels. Inputs must be owned/aligned/stable.
  * Reports may change on failure unless aliased. This software entry point never
@@ -104,7 +106,7 @@ ctr_scene_result ctr_scene_execute(ctr_scene_state *state,const void *commands,
                                   const ctr_scene_surface *surface,
                                   ctr_scene_report *report);
 /* Same owned staging boundary with explicit PICA framebuffer/fragment state.
- * Requires defined primary-color or supported texture/pass-through TEV, logic
+ * Requires a completely defined supported six-stage TEV pipeline, logic
  * COPY, full RGBA writes, no depth/stencil/alpha/blend, RGBA8, 8x8 tiles,
  * and unflipped dimensions/address matching the caller-resolved linear target.
  * The caller resolves, snapshots and commits guest tiled storage separately;

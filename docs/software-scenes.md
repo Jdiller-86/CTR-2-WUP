@@ -31,8 +31,9 @@ The bounded path supports:
   alpha 1. Fragments replace the target with depth and blend disabled.
 - Optional Texture0 UV outputs (semantics 12/13), exact Q16 in −16..16 with W=1;
   affine nearest/bilinear sampling of all 14 base formats with independent clamp/repeat/
-  mirror S/T. TEV0 replaces with the sample or multiplies by primary color;
-  later stages pass Previous. See [texture state and origin rules](textures.md).
+  mirror S/T. Six TEV stages combine Texture0, primary, constants and Previous
+  with independent RGB/alpha operations, component operands and 1/2/4 scale.
+  See [texture and combiner rules](textures.md).
 
 Limits are 256 vertices per draw, 32 draws per list, 512 vertex shader code words,
 128 descriptors, 96 float uniforms, 12 attributes/loaders, a 4 MiB geometry span,
@@ -40,7 +41,7 @@ Limits are 256 vertices per draw, 32 draws per list, 512 vertex shader code word
 larger than 512×512. Separate texture spans cannot overlap geometry or each
 other. No primitive is carried across lists. Unknown state, inexact shader
 arithmetic, other opcodes, relative addressing, geometry, clipping, perspective,
-varying primary color, mixed min/mag filters, mipmaps, general TEV and blending
+varying primary color, mixed min/mag filters, mipmaps, DOT3/combiner buffers and blending
 fail visibly. This is not a general PICA renderer.
 
 `runtime/core/ctr_shader.c` accepts only finite normal values exactly
@@ -146,8 +147,8 @@ bytes, before commit. Callback failures and mismatches report
 
 `runtime/wiiu/gx2_scene.c` implements GX2 surfaces, shaders, uniforms,
 viewport/cull/scissor and readback. Textured draws bind an owned RGBA8 texture
-and point sampler; an original Latte pixel program samples base level zero and
-optionally multiplies primary color. Reversed upload rows preserve PICA V origin
+and point/linear sampler; an original Latte pixel program samples base level zero
+and evaluates the six-stage byte-domain TEV chain. Reversed rows preserve PICA V origin
 without changing guest UV. CPU flush/texture invalidation precede drawing.
 The adapter restores the presentation context after each callback and retires
 GPU references before reuse/free; failed retirement quarantines allocations
