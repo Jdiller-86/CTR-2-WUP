@@ -107,6 +107,29 @@ class TexturedSceneReferenceTests(unittest.TestCase):
         self.assertFalse(report['gpu_execution'])
         self.assertFalse(report['console_verified'])
 
+    def test_linear_half_up_and_texel_centers_match_analytic_bytes(self):
+        texture=ORACLE.original_texture(0,8,8)
+        for name,uv,expected in (
+            ('half-up',(F(1,8),F(1,16)),bytes((137,96,192,224))),
+            ('center',(F(3,16),F(5,16)),bytes((125,25,207,187)))):
+            with self.subTest(name=name):
+                case=ORACLE.Case('linear-analytic-'+name,linear=True,uv=(uv,)*4)
+                self.assertEqual(ORACLE.sampled_color(ORACLE.decode_texture(texture,0,8,8),8,8,*uv,(0,0),True),expected)
+                ORACLE.execute_case(self.binary,self.output,case)
+                pixels=(self.output/(case.name+'.rgba')).read_bytes()
+                self.assertEqual(pixels[(20*64+20)*4:(20*64+21)*4],expected)
+
+    def test_linear_filters_all_wraps_and_preserves_late_failure_atomicity(self):
+        selected={'linear-format-00-clamp','linear-format-03-repeat','linear-format-13-mirror-modulate',
+                  'linear-asymmetric-fractional-mixed-wrap','linear-outside-scissor',
+                  'linear-maximum-q16-uv','linear-maximum-base-dimension',
+                  'linear-late-truncated-binding','linear-late-invalid-uv','linear-mixed-filter','linear-mip-filter',
+                  'linear-maximum-area-wide-weights'}
+        cases=[case for case in ORACLE.original_cases() if case.name in selected]
+        self.assertEqual(len(cases),len(selected))
+        for case in cases:
+            with self.subTest(case=case.name):ORACLE.execute_case(self.binary,self.output,case)
+
     def mutate(self, mode, offset, mask):
         row = dict(next(row for row in self.capture['programs'] if row['mode'] == mode))
         program = bytearray.fromhex(row['hex'])

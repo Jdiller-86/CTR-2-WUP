@@ -88,7 +88,8 @@ void ctr_scene_init(ctr_scene_state *state);
  * registers, complete packed fixed/uniform uploads and full-mask draw triggers.
  * Draw complete triangle lists (<=256 vertices each), W=1, inside clip volume,
  * exact 1/16-pixel positions and constant opaque binary primary color per
- * triangle. Optional texture0 supports all 14 base formats, nearest filtering,
+ * triangle. Optional texture0 supports all 14 base formats, matching min/mag
+ * nearest or bilinear filtering (exact affine weights, round half up),
  * clamp/repeat/mirror, signed exact Q16 UVs in [-16,16], and texture replacement
  * or modulation by primary color. V=0 samples the last raw texture row.
  * Depth/blend, other texture/TEV modes, unsupported arithmetic and geometry fail.

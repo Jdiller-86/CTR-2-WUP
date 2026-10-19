@@ -33,7 +33,9 @@ static uint32_t draw_pixel(unsigned x,unsigned y,unsigned screen) {
     uint32_t result=((tx&1u)?UINT32_C(0xff000000):0u)|
         ((((tx>>2)^(ty>>1))&1u)?UINT32_C(0x00ff0000):0u)|
         ((((tx>>3)^ty)&1u)?UINT32_C(0x0000ff00):0u)|255u;
-    if((2u*px+1u)*height+(2u*py+1u)*240u>=480u*height)result&=UINT32_C(0x00ff00ff);
+    /* Four central samples average to green 128 before RGB565 conversion;
+     * the display reader expands its six-bit green channel to 130. */
+    if((2u*px+1u)*height+(2u*py+1u)*240u>=480u*height)result=UINT32_C(0x008200ff);
     return result;
 #else
     return (2u*px+1u)*height+(2u*py+1u)*240u<480u*height?UINT32_C(0xff0000ff):UINT32_C(0x00ff00ff);
@@ -64,9 +66,15 @@ static bool capture(ctr_guest *g,const char *folder) {
     bool match=ctr_gsp_pixels(g,0,pixels,400*240)==CTR_MEM_OK;
     uint32_t color=match?pixels[0]:0;
 #ifdef CTR_DRAW_HOMEBREW
-    for(unsigned i=0;match && i<400*240;++i)match=pixels[i]==draw_pixel(i%400u,i/400u,0);
+    for(unsigned i=0;match && i<400*240;++i) {
+        uint32_t expected=draw_pixel(i%400u,i/400u,0);match=pixels[i]==expected;
+        if(!match)fprintf(stderr,"top pixel mismatch x=%u y=%u actual=%08x expected=%08x\n",i%400u,i/400u,pixels[i],expected);
+    }
     match=match && ctr_gsp_pixels(g,1,pixels,320*240)==CTR_MEM_OK;
-    for(unsigned i=0;match && i<320*240;++i)match=pixels[i]==draw_pixel(i%320u,i/320u,1);
+    for(unsigned i=0;match && i<320*240;++i) {
+        uint32_t expected=draw_pixel(i%320u,i/320u,1);match=pixels[i]==expected;
+        if(!match)fprintf(stderr,"bottom pixel mismatch x=%u y=%u actual=%08x expected=%08x\n",i%320u,i/320u,pixels[i],expected);
+    }
     if(!match) { free(pixels);return false; }
 #else
     match=match && (color==0x00ff00ff || color==0xff0000ff);

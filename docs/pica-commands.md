@@ -102,5 +102,6 @@ report. These observations are distinct from picture/launcher confirmations.
 
 The [compiled guest draw adapter](guest-pica-draws.md) executes its separately
 bounded software subset or the optional guarded GX2 backend, including
-[Texture0 sampling and replace/modulate TEV](textures.md). General shaders,
-filtering, combiners, geometry and full renderer compatibility remain unsupported.
+[nearest/bilinear Texture0 sampling and replace/modulate TEV](textures.md).
+General shaders, mipmaps, combiners, geometry and full renderer compatibility
+remain unsupported.

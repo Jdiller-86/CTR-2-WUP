@@ -89,7 +89,8 @@ static ctr_scene_result fragment(const ctr_scene_state *s,const ctr_scene_resour
     if((dimensions&~UINT32_C(0x07ff07ff)) || format>=14u)return CTR_SCENE_UNSUPPORTED;
     size_t bytes=0;
     if(ctr_texture_size(format,width,height,&bytes)!=CTR_TEXTURE_OK)return CTR_SCENE_LAYOUT;
-    if((params&~UINT32_C(0x3320)) || ((params>>8)&3u)==1u || ((params>>12)&3u)==1u ||
+    if((params&~UINT32_C(0x3326)) || ((params&6u)!=0u && (params&6u)!=6u) ||
+       ((params>>8)&3u)==1u || ((params>>12)&3u)==1u ||
        (params&32u)!=(format>=12u?32u:0u))return CTR_SCENE_UNSUPPORTED;
     if(s->registers[0x085u]>UINT32_MAX/8u)return CTR_SCENE_OVERFLOW;
     uint32_t address=s->registers[0x085u]*8u;const uint8_t *source=NULL;
@@ -118,7 +119,8 @@ static bool fragment_value(unsigned reg,uint32_t value) {
     static const unsigned tev[]={0xc0,0xc8,0xd0,0xd8,0xf0,0xf8};
     if(reg==0x080u)return value<=1u;
     if(reg==0x082u)return !(value&~UINT32_C(0x07ff07ff));
-    if(reg==0x083u)return !(value&~UINT32_C(0x3320)) &&
+    if(reg==0x083u)return !(value&~UINT32_C(0x3326)) &&
+        ((value&6u)==0u || (value&6u)==6u) &&
         ((value>>8)&3u)!=1u && ((value>>12)&3u)!=1u;
     if(reg==0x084u || (reg>=0x086u && reg<=0x08bu) ||
        reg==0x08fu || reg==0x0e0u || reg==0x0fdu)return !value;
@@ -345,6 +347,36 @@ static unsigned wrapped(int64_t coordinate,unsigned extent,unsigned mode) {
     if(mode==3u && remainder>=(int64_t)extent)remainder=period-1-remainder;
     return (unsigned)remainder;
 }
+/* Bilinear weights retain the exact affine denominator, up to 2^42. The final
+ * numerator needs 93 bits. Explicit limbs work on 32-bit PowerPC/MSVC without
+ * compiler-specific wide integers or floating-point rounding dependencies. */
+typedef struct { uint64_t hi,lo; } scene_wide;
+static scene_wide multiply_wide(uint64_t a,uint64_t b) {
+    uint64_t p0=(uint64_t)(uint32_t)a*(uint32_t)b;
+    uint64_t p1=(uint64_t)(uint32_t)a*(b>>32),p2=(a>>32)*(uint32_t)b;
+    uint64_t middle=(p0>>32)+(uint32_t)p1+(uint32_t)p2;
+    return (scene_wide){(a>>32)*(b>>32)+(p1>>32)+(p2>>32)+(middle>>32),
+        (middle<<32)|(uint32_t)p0};
+}
+static uint8_t bilinear_byte(unsigned a,unsigned b,unsigned c,unsigned d,
+                             uint64_t x,uint64_t y,uint64_t denominator) {
+    if(a==b && a==c && a==d)return (uint8_t)a;
+    uint64_t top=a*(denominator-x)+b*x,bottom=c*(denominator-x)+d*x;
+    /* Flooring horizontal rows underestimates the ideal value by less than
+     * one byte. Correct its rounded estimate against the exact half threshold;
+     * this avoids both intermediate rounding and a wide division per lane. */
+    unsigned estimate=(unsigned)((top/denominator*(denominator-y)+
+        bottom/denominator*y+denominator/2u)/denominator);
+    if(estimate<255u) {
+        scene_wide first=multiply_wide(top,denominator-y),second=multiply_wide(bottom,y);
+        scene_wide twice={first.hi+second.hi,first.lo+second.lo};
+        twice.hi+=twice.lo<first.lo;
+        twice.hi=(twice.hi<<1)|(twice.lo>>63);twice.lo<<=1;
+        scene_wide half=multiply_wide(denominator,denominator*(2u*estimate+1u));
+        if(twice.hi>half.hi || (twice.hi==half.hi && twice.lo>=half.lo))++estimate;
+    }
+    return (uint8_t)estimate;
+}
 static void raster(const ctr_scene_state *s,const ctr_scene_surface *surface,
                    uint8_t *pixels,scene_vertex v[3],ctr_scene_report *report,
                    const ctr_scene_texture *texture) {
@@ -377,20 +409,34 @@ static void raster(const ctr_scene_state *s,const ctr_scene_surface *surface,
             if(texture) {
                 int64_t weights[3]={edge(v[1],v[2],x*16+8,y*16+8),
                     edge(v[2],v[0],x*16+8,y*16+8),edge(v[0],v[1],x*16+8,y*16+8)};
-                unsigned coordinates[2];
+                unsigned coordinates[2][2];uint64_t fraction[2]={0,0};
+                uint64_t denominator=(uint64_t)area*65536u;
+                bool linear=(texture->params&6u)==6u;
                 for(unsigned axis=0;axis<2;++axis) {
                     int64_t numerator=0;
                     for(unsigned i=0;i<3;++i)numerator+=weights[i]*v[i].uv[axis];
                     unsigned extent=axis?texture->height:texture->width;
                     /* Geometry is inside 512x512 on a 12.4 grid, |UV|<=16:
                      * even the largest numerator*extent is below 2^57. */
-                    int64_t texel=floor_div(numerator*extent,area*65536);
-                    coordinates[axis]=wrapped(texel,extent,(texture->params>>(axis?8u:12u))&3u);
+                    int64_t position=numerator*extent-(linear?(int64_t)(denominator/2u):0);
+                    int64_t texel=floor_div(position,(int64_t)denominator);
+                    unsigned wrap=(texture->params>>(axis?8u:12u))&3u;
+                    coordinates[axis][0]=wrapped(texel,extent,wrap);
+                    if(linear) {
+                        coordinates[axis][1]=wrapped(texel+1,extent,wrap);
+                        fraction[axis]=(uint64_t)(position-texel*(int64_t)denominator);
+                    }
                 }
-                unsigned row=texture->height-1u-coordinates[1];
-                const uint8_t *sample=texture->rgba+((size_t)row*texture->width+coordinates[0])*4u;
-                for(unsigned lane=0;lane<4;++lane)
-                    pixel[lane]=texture->tev_mode && v[0].color[lane]!=1.0f?0u:sample[lane];
+                const uint8_t *samples[2][2];
+                for(unsigned y0=0;y0<(linear?2u:1u);++y0)
+                    for(unsigned x0=0;x0<(linear?2u:1u);++x0)
+                        samples[y0][x0]=texture->rgba+((size_t)(texture->height-1u-coordinates[1][y0])*
+                            texture->width+coordinates[0][x0])*4u;
+                for(unsigned lane=0;lane<4;++lane) {
+                    unsigned sample=linear?bilinear_byte(samples[0][0][lane],samples[0][1][lane],
+                        samples[1][0][lane],samples[1][1][lane],fraction[0],fraction[1],denominator):samples[0][0][lane];
+                    pixel[lane]=texture->tev_mode && v[0].color[lane]!=1.0f?0u:(uint8_t)sample;
+                }
             } else for(unsigned lane=0;lane<4;++lane)pixel[lane]=v[0].color[lane]==1.0f?255u:0u;
             ++report->fragments;
         }

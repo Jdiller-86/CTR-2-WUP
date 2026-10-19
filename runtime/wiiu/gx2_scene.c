@@ -162,11 +162,13 @@ static bool upload_texture(ctr_wiiu_gx2_scene *s,scene_private *p,
                            const ctr_scene_texture *source) {
     if(!source)return true;
     unsigned wrap_t=(source->params>>8)&7u,wrap_s=(source->params>>12)&7u;
-    uint32_t expected_params=(wrap_t<<8)|(wrap_s<<12)|(source->format>=12u?0x20u:0u);
+    unsigned filter=source->params&6u;
+    uint32_t expected_params=(wrap_t<<8)|(wrap_s<<12)|(source->format>=12u?0x20u:0u)|filter;
     if(!source->rgba || source->width<8u || source->height<8u ||
        source->width>1024u || source->height>1024u ||
        (source->width&(source->width-1u)) || (source->height&(source->height-1u)) ||
        source->format>=14u || source->tev_mode>1u || source->params!=expected_params ||
+       (filter!=0u && filter!=6u) ||
        (wrap_t!=0u && wrap_t!=2u && wrap_t!=3u) ||
        (wrap_s!=0u && wrap_s!=2u && wrap_s!=3u) ||
        (size_t)source->width*source->height*4u>UINTPTR_MAX-(uintptr_t)source->rgba)
@@ -205,7 +207,8 @@ static bool upload_texture(ctr_wiiu_gx2_scene *s,scene_private *p,
     GX2Invalidate(GX2_INVALIDATE_MODE_CPU_TEXTURE,p->texture.surface.image,p->texture.surface.imageSize);
     GX2TexClampMode clamps[4]={GX2_TEX_CLAMP_MODE_CLAMP,GX2_TEX_CLAMP_MODE_CLAMP,
                              GX2_TEX_CLAMP_MODE_WRAP,GX2_TEX_CLAMP_MODE_MIRROR};
-    GX2InitSampler(&p->sampler,GX2_TEX_CLAMP_MODE_CLAMP,GX2_TEX_XY_FILTER_MODE_POINT);
+    GX2InitSampler(&p->sampler,GX2_TEX_CLAMP_MODE_CLAMP,
+        filter?GX2_TEX_XY_FILTER_MODE_LINEAR:GX2_TEX_XY_FILTER_MODE_POINT);
     GX2InitSamplerClamping(&p->sampler,clamps[wrap_s],clamps[wrap_t],GX2_TEX_CLAMP_MODE_CLAMP);
     GX2InitSamplerLOD(&p->sampler,0.0f,0.0f,0.0f);
     GX2InitSamplerZMFilter(&p->sampler,GX2_TEX_Z_FILTER_MODE_NONE,GX2_TEX_MIP_FILTER_MODE_NONE);

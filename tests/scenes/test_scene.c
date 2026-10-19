@@ -737,7 +737,8 @@ static bool texture_draw(void *context,const ctr_scene_state *s,const ctr_vertex
                          const ctr_scene_texture *texture) {
     texture_backend *p=context;++p->draws;CHECK(count==3 && vertices[0].enabled==7);
     CHECK(s->registers[0x080]==1 && texture && texture->rgba && texture->width==16 && texture->height==8);
-    CHECK(texture->address==UINT32_C(0x18008000) && !texture->format && !texture->params && !texture->tev_mode);
+    CHECK(texture->address==UINT32_C(0x18008000) && !texture->format &&
+        (texture->params==0u || texture->params==6u) && !texture->tev_mode);
     const uint8_t first[]={0,0,11,37},lastrow[]={119,203,32,198};
     CHECK(!memcmp(texture->rgba,first,4) && !memcmp(texture->rgba+7u*16u*4u,lastrow,4));
     CHECK(vertices[0].input[2][0]==(p->draws==1u?0.0f:1.0f));return true;
@@ -755,22 +756,24 @@ static void textured_rollback(void) {
     ctr_scene_resource_span span={UINT32_C(0x18008000),raw,sizeof(raw)};
     ctr_scene_resources resources={UINT32_C(0x18000000),f.resources,0,&span,1};
     ctr_scene_surface surface={pixels,sizeof(pixels),64,64,256};
-    textured_fixture(&f,false,0,0,0,1,0,1);resources.size=f.resource_bytes;target_state(&state);
-    ctr_scene_fixture_background(pixels,sizeof(pixels));memcpy(before,pixels,sizeof(before));
-    CHECK(ctr_scene_execute_target(&state,f.commands,f.command_bytes,&resources,&surface,
-          UINT32_C(0x18010000),&report)==CTR_SCENE_OK);memcpy(reference,pixels,sizeof(reference));
-    /* The payload contains actual decoded source rows and original guest UV
-     * attributes; exact full-target parity still guards the native commit. */
-    for(unsigned corrupt=0;corrupt<2;++corrupt) {
-        textured_fixture(&f,false,0,0,0,1,0,1);resources.size=f.resource_bytes;
-        target_state(&state);previous=state;memcpy(pixels,before,sizeof(pixels));
-        texture_backend context={reference,0,0,0,0,corrupt!=0};
-        ctr_scene_backend backend={&context,texture_begin,texture_draw,texture_end,texture_abort};
-        CHECK(ctr_scene_execute_target_backend(&state,f.commands,f.command_bytes,&resources,&surface,
-              UINT32_C(0x18010000),&backend,&report)==(corrupt?CTR_SCENE_BACKEND:CTR_SCENE_OK));
-        CHECK(context.begins==1 && context.draws==2 && context.ends==1 && context.aborts==corrupt);
-        CHECK(!memcmp(pixels,corrupt?before:reference,sizeof(pixels)));
-        if(corrupt)CHECK(!memcmp(&state,&previous,sizeof(state)));
+    for(unsigned filter=0;filter<2;++filter) {
+        textured_fixture(&f,false,0,filter?6u:0u,0,1,0,1);resources.size=f.resource_bytes;target_state(&state);
+        ctr_scene_fixture_background(pixels,sizeof(pixels));memcpy(before,pixels,sizeof(before));
+        CHECK(ctr_scene_execute_target(&state,f.commands,f.command_bytes,&resources,&surface,
+              UINT32_C(0x18010000),&report)==CTR_SCENE_OK);memcpy(reference,pixels,sizeof(reference));
+        /* The payload contains actual decoded source rows and original guest UV
+         * attributes; exact full-target parity still guards the native commit. */
+        for(unsigned corrupt=0;corrupt<2;++corrupt) {
+            textured_fixture(&f,false,0,filter?6u:0u,0,1,0,1);resources.size=f.resource_bytes;
+            target_state(&state);previous=state;memcpy(pixels,before,sizeof(pixels));
+            texture_backend context={reference,0,0,0,0,corrupt!=0};
+            ctr_scene_backend backend={&context,texture_begin,texture_draw,texture_end,texture_abort};
+            CHECK(ctr_scene_execute_target_backend(&state,f.commands,f.command_bytes,&resources,&surface,
+                  UINT32_C(0x18010000),&backend,&report)==(corrupt?CTR_SCENE_BACKEND:CTR_SCENE_OK));
+            CHECK(context.begins==1 && context.draws==2 && context.ends==1 && context.aborts==corrupt);
+            CHECK(!memcmp(pixels,corrupt?before:reference,sizeof(pixels)));
+            if(corrupt)CHECK(!memcmp(&state,&previous,sizeof(state)));
+        }
     }
     for(unsigned kind=0;kind<19;++kind) {
         textured_fixture(&f,false,0,0,0,1,0,1);resources.size=f.resource_bytes;

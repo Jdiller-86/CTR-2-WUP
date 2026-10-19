@@ -46,7 +46,7 @@ independently of handles. Unsupported interfaces fail with PC/opcode or IPC cont
 [Software scenes](software-scenes.md) provide a bounded reference for
 [guest draws](guest-pica-draws.md). The optional native scene backend translates
 PICA MOV/ADD/MUL/NOP/END to Latte vertex code and submits original inputs through
-GX2. [Base textures](textures.md) support nearest Texture0 sampling and bounded
+GX2. [Base textures](textures.md) support nearest/bilinear Texture0 sampling and bounded
 replace/modulate TEV; decoded uploads retain guest UV and explicit ownership.
 Complete software preflight and byte-exact GPU readback precede atomic guest
 commit; unsupported state or backend failure cannot fall back silently.

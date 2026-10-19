@@ -454,6 +454,27 @@ static void guest_texture_success(void) {
         texture_golden(&g,true,kind==1,true);ctr_guest_close(&g);
     }
 }
+static void guest_linear_texture(void) {
+    for(unsigned shorts=0;shorts<2;++shorts) {
+        ctr_guest g;list l;ctr_gx_completion c;textured_open(&g,&l,shorts!=0);
+        set(&l,0x083,6u);
+        for(unsigned vertex=0;vertex<4;++vertex) {
+            write_word(&g,RESOURCE+vertex*24u+16u,float_word(0.125f));
+            write_word(&g,RESOURCE+vertex*24u+20u,float_word(0.0625f));
+        }
+        CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK && c.signal && c.irq==5);
+        CHECK(g.gsp.pica_scene->registers[0x083]==6u && g.gsp.pica_draws==2 && g.gsp.pica_fragments==2304);
+        uint8_t pixels[BYTES];
+        CHECK(ctr_texture_decode(backing(&g)+0x2000u,BYTES,0,64,64,pixels,sizeof(pixels))==CTR_TEXTURE_OK);
+        for(unsigned y=0;y<64;++y)for(unsigned x=0;x<64;++x) {
+            /* Constant UV samples raw row 7, halfway between x1/x2. Each
+             * odd channel sum rounds up once: (139,211,43,227). */
+            const uint8_t inside[]={139,211,43,227},outside[]={16,32,48,255};
+            CHECK(!memcmp(pixels+(y*64u+x)*4u,x>=8 && x<56 && y>=8 && y<56?inside:outside,4));
+        }
+        ctr_guest_close(&g);
+    }
+}
 typedef struct {
     ctr_guest *guest;unsigned begins,draws,ends,aborts;uint8_t pixels[BYTES];
 } guest_texture_backend;
@@ -552,6 +573,6 @@ static void guest_texture_queues(void) {
 }
 int main(void) {
     successful();rollback();shader_capacity();arithmetic_draws();queues();native_backend_success();native_backend_rollback();
-    guest_texture_success();guest_texture_snapshots();guest_texture_rollback();guest_texture_queues();
+    guest_texture_success();guest_linear_texture();guest_texture_snapshots();guest_texture_rollback();guest_texture_queues();
     printf("guest PICA draw tests: %u assertions passed\n",assertions);return 0;
 }
