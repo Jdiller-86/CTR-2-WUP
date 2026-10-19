@@ -38,6 +38,8 @@ class Case:
     scissor: tuple = (0, 0, 0, 63, 63)
     cull: int = 0
     late_error: str = ''
+    linear: bool = False
+    side: int = 64
 
 
 def original_cases():
@@ -76,6 +78,15 @@ def original_cases():
               Case('late-unsupported-filter', late_error='filter'),
               Case('late-truncated-binding', late_error='binding'),
               Case('late-invalid-uv', late_error='uv')]
+    cases += [replace(case,name='linear-'+case.name,linear=True) for case in cases]
+    cases += [Case('linear-half-up-tie',linear=True,uv=((F(1,8),F(1,16)),)*4),
+              Case('linear-texel-center',linear=True,uv=((F(3,16),F(5,16)),)*4),
+              Case('linear-mixed-filter',linear=True,late_error='mixed-filter'),
+              Case('linear-mip-filter',linear=True,late_error='mip-filter')]
+    cases.append(Case('linear-maximum-area-wide-weights',linear=True,side=512,
+        dimensions=(1024,8),points=((0,0),(512,0),(0,512),(512,512)),
+        uv=((F(-16),F(16)),(F(16),F(-16)),(F(1,2),F(1,2)),(F(15),F(-15))),
+        wrap=(2,3),scissor=(3,253,253,255,255)))
     return cases
 
 
@@ -160,10 +171,30 @@ def barycentric(point, triangle):
     return F(1)-beta-gamma, beta, gamma
 
 
+def sampled_color(rgba, width, height, u, v, wrap, linear):
+    if not linear:
+        x=sampled_texel(u,width,wrap[0]);y=height-1-sampled_texel(v,height,wrap[1])
+        return rgba[(y*width+x)*4:(y*width+x+1)*4]
+    # Rational ideal: texel centers, independently wrapped taps, one final
+    # round-half-up. No runtime limbs or intermediate-rounding model.
+    axes=[]
+    for value,extent,mode in zip((u,v),(width,height),wrap):
+        position=value*extent-F(1,2)
+        base=position.numerator//position.denominator;fraction=position-base
+        axes.append([(sampled_texel(F(base+i,extent),extent,mode),weight)
+                     for i,weight in ((0,1-fraction),(1,fraction))])
+    color=[]
+    for lane in range(4):
+        value=sum(wx*wy*rgba[((height-1-y)*width+x)*4+lane]
+                  for x,wx in axes[0] for y,wy in axes[1])+F(1,2)
+        color.append(value.numerator//value.denominator)
+    return bytes(color)
+
+
 def golden(case, texture):
     width, height = case.dimensions
     rgba = decode_texture(texture, case.format, width, height)
-    pixels = bytearray(BACKGROUND*64*64)
+    pixels = bytearray(BACKGROUND*case.side*case.side)
     fragments = 0
     for indices in case.indices:
         points = tuple(tuple(map(F, case.points[i])) for i in indices)
@@ -175,8 +206,8 @@ def golden(case, texture):
         if determinant < 0:
             points = points[0], points[2], points[1]
             uv = uv[0], uv[2], uv[1]
-        for y in range(64):
-            for x in range(64):
+        for y in range(case.side):
+            for x in range(case.side):
                 mode, x1, y1, x2, y2 = case.scissor
                 box = x1 <= x <= x2 and y1 <= y <= y2
                 if (mode == 3 and not box) or (mode == 1 and box):
@@ -194,12 +225,10 @@ def golden(case, texture):
                 if not include:
                     continue
                 u, v = (sum(weight*value[axis] for weight, value in zip(weights, uv)) for axis in range(2))
-                tx = sampled_texel(u, width, case.wrap[0])
-                ty = height-1-sampled_texel(v, height, case.wrap[1])
-                color = rgba[(ty*width+tx)*4:(ty*width+tx+1)*4]
+                color = sampled_color(rgba,width,height,u,v,case.wrap,case.linear)
                 if case.modulate:
                     color = bytes(component*mask for component, mask in zip(color, case.color))
-                pixels[(y*64+x)*4:(y*64+x+1)*4] = color
+                pixels[(y*case.side+x)*4:(y*case.side+x+1)*4] = color
                 fragments += 1
     return bytes(pixels), fragments
 
@@ -207,7 +236,8 @@ def golden(case, texture):
 def command_bytes(case):
     commands = []
     def command(reg, value): commands.append((value, 0xf0000 | reg))
-    command(0x040, case.cull); command(0x041, 0x440000); command(0x043, 0x440000)
+    half=(case.side.bit_length()+61)<<16
+    command(0x040, case.cull); command(0x041, half); command(0x043, half)
     mode, x1, y1, x2, y2 = case.scissor
     command(0x065, mode); command(0x066, x1 | y1 << 16); command(0x067, x2 | y2 << 16)
     command(0x068, 0)
@@ -230,7 +260,7 @@ def command_bytes(case):
     for shift in (64, 32, 0): command(0x233+((64-shift)//32), (packed >> shift) & 0xffffffff)
     width, height = case.dimensions
     command(0x080, 1); command(0x082, width << 16 | height)
-    params = case.wrap[0] << 12 | case.wrap[1] << 8 | (32 if case.format >= 12 else 0)
+    params = case.wrap[0] << 12 | case.wrap[1] << 8 | (32 if case.format >= 12 else 0) | (6 if case.linear else 0)
     command(0x083, params); command(0x084, 0); command(0x085, 0x1a000000 >> 3)
     command(0x08e, case.format); command(0x08f, 0); command(0x0e0, 0); command(0x0fd, 0)
     for index, base in enumerate((0xc0, 0xc8, 0xd0, 0xd8, 0xf0, 0xf8)):
@@ -241,7 +271,7 @@ def command_bytes(case):
     vertices = range(len(case.points)) if case.index_bytes else [i for triangle in case.indices for i in triangle]
     for i in vertices:
         x, y = case.points[i]
-        geometry += struct.pack('<6f', float(F(x)/32-1), float(F(y)/32-1), -.5, 1,
+        geometry += struct.pack('<6f', float(F(x)*2/case.side-1), float(F(y)*2/case.side-1), -.5, 1,
                                 *map(float, case.uv[i]))
     index_offset = len(geometry)
     if case.index_bytes:
@@ -254,7 +284,8 @@ def command_bytes(case):
         else:
             command(0x22a, draw*3); command(0x22e, 1)
     if case.late_error:
-        if case.late_error == 'filter': command(0x083, params | 2)
+        if case.late_error in ('filter','mixed-filter'): command(0x083, (params & ~6) | 2)
+        elif case.late_error == 'mip-filter': command(0x083, params | (1 << 24))
         elif case.late_error == 'binding': command(0x085, (0x1a000000+8) >> 3)
         elif case.late_error == 'uv':
             # A later shader changes U beyond the exact supported Q16 bound;
@@ -395,13 +426,13 @@ def execute_case(binary, output, case):
     paths = [output/(case.name+suffix) for suffix in ('.commands', '.resources', '.texture', '.rgba')]
     for path, data in zip(paths, (commands, geometry, texture)):
         path.write_bytes(data)
-    result = json.loads(subprocess.check_output([str(binary), *map(str, paths)], text=True))
+    result = json.loads(subprocess.check_output([str(binary), *map(str, paths),str(case.side)], text=True))
     actual = paths[-1].read_bytes()
     expected, fragments = golden(case, texture)
     if case.late_error:
         if result['result'] == 'ok' or not result['state_unchanged'] or not result['pixels_unchanged']:
             raise ValueError(case.name+': late invalid state committed')
-        if actual != BACKGROUND*64*64 or result['draws'] != 2:
+        if actual != BACKGROUND*case.side*case.side or result['draws'] != 2:
             raise ValueError(case.name+': missing staged prefix or pixel rollback')
     else:
         counters = {'result':'ok', 'draws':len(case.indices), 'triangles':len(case.indices),
@@ -410,11 +441,11 @@ def execute_case(binary, output, case):
             raise ValueError(case.name+': scene execution differs: '+str(result)+', expected fragments='+str(fragments))
         if actual != expected:
             at = next(index for index, pair in enumerate(zip(actual, expected)) if pair[0] != pair[1])
-            raise ValueError(f'{case.name}: independent exact pixel mismatch at ({at//4%64},{at//256}) lane{at%4}')
+            raise ValueError(f'{case.name}: independent exact pixel mismatch at ({at//4%case.side},{at//(case.side*4)}) lane{at%4}')
     return {'name':case.name, 'format':case.format, 'dimensions':case.dimensions,
-            'index_bytes':case.index_bytes, 'wrap':case.wrap, 'modulate':case.modulate,
+            'index_bytes':case.index_bytes, 'wrap':case.wrap, 'modulate':case.modulate,'linear':case.linear,'side':case.side,
             'late_error':case.late_error or None, **result,
-            'expected_rgba_sha256':hashlib.sha256(BACKGROUND*64*64 if case.late_error else expected).hexdigest(),
+            'expected_rgba_sha256':hashlib.sha256(BACKGROUND*case.side*case.side if case.late_error else expected).hexdigest(),
             'files':[{'name':path.name, 'size':path.stat().st_size,
                       'sha256':hashlib.sha256(path.read_bytes()).hexdigest()} for path in paths]}
 

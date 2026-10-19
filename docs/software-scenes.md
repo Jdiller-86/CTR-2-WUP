@@ -30,7 +30,7 @@ The bounded path supports:
   Each triangle has a constant opaque endpoint color: RGBA lanes are 0 or 1,
   alpha 1. Fragments replace the target with depth and blend disabled.
 - Optional Texture0 UV outputs (semantics 12/13), exact Q16 in −16..16 with W=1;
-  affine nearest sampling of all 14 base formats with independent clamp/repeat/
+  affine nearest/bilinear sampling of all 14 base formats with independent clamp/repeat/
   mirror S/T. TEV0 replaces with the sample or multiplies by primary color;
   later stages pass Previous. See [texture state and origin rules](textures.md).
 
@@ -40,7 +40,7 @@ Limits are 256 vertices per draw, 32 draws per list, 512 vertex shader code word
 larger than 512×512. Separate texture spans cannot overlap geometry or each
 other. No primitive is carried across lists. Unknown state, inexact shader
 arithmetic, other opcodes, relative addressing, geometry, clipping, perspective,
-varying primary color, bilinear filtering, mipmaps, general TEV and blending
+varying primary color, mixed min/mag filters, mipmaps, general TEV and blending
 fail visibly. This is not a general PICA renderer.
 
 `runtime/core/ctr_shader.c` accepts only finite normal values exactly

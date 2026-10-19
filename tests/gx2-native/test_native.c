@@ -206,7 +206,8 @@ void GX2SetPixelTexture(const GX2Texture *texture,unsigned unit) {
     bound_texture=texture;++texture_binds;
 }
 void GX2InitSampler(GX2Sampler *sampler,GX2TexClampMode clamp,unsigned filter) {
-    assert(clamp==GX2_TEX_CLAMP_MODE_CLAMP && filter==GX2_TEX_XY_FILTER_MODE_POINT);
+    assert(clamp==GX2_TEX_CLAMP_MODE_CLAMP &&
+        (filter==GX2_TEX_XY_FILTER_MODE_POINT || filter==GX2_TEX_XY_FILTER_MODE_LINEAR));
     memset(sampler,0,sizeof(*sampler));sampler->filter=filter;
 }
 void GX2InitSamplerClamping(GX2Sampler *sampler,GX2TexClampMode x,GX2TexClampMode y,GX2TexClampMode z) {
@@ -221,7 +222,8 @@ void GX2SetPixelSampler(const GX2Sampler *sampler,unsigned unit) {
     assert(expected_texture && !unit);
     assert(sampler->clamp[0]==wraps[(expected_texture->params>>12)&7u]);
     assert(sampler->clamp[1]==wraps[(expected_texture->params>>8)&7u] && sampler->clamp[2]==GX2_TEX_CLAMP_MODE_CLAMP);
-    assert(sampler->filter==GX2_TEX_XY_FILTER_MODE_POINT && !sampler->mip_filter && !sampler->z_filter);
+    assert(sampler->filter==((expected_texture->params&6u)?GX2_TEX_XY_FILTER_MODE_LINEAR:GX2_TEX_XY_FILTER_MODE_POINT));
+    assert(!sampler->mip_filter && !sampler->z_filter);
     assert(sampler->lod[0]==0.0f && sampler->lod[1]==0.0f && sampler->lod[2]==0.0f);
     bound_sampler=sampler;++sampler_binds;
 }
@@ -409,12 +411,13 @@ static void textured_bindings(bool dump_programs) {
     ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
     const unsigned wraps[3]={0,2,3};
     if(dump_programs)fputs("{\"programs\":[",stdout);
+    for(unsigned filter=0;filter<(dump_programs?1u:2u);++filter)
     for(unsigned format=0;format<(dump_programs?1u:14u);++format)
         for(unsigned t=0;t<(dump_programs?1u:3u);++t)
             for(unsigned s=0;s<(dump_programs?1u:3u);++s)for(unsigned tev=0;tev<2;++tev) {
                 reset();ctr_scene_state state;ctr_vertex vertices[3];textured_setup(&state,vertices);
                 ctr_scene_texture texture={pixels,16,16,0x18010000u,format,
-                    (wraps[t]<<8)|(wraps[s]<<12)|(format>=12u?0x20u:0u),tev};
+                    (wraps[t]<<8)|(wraps[s]<<12)|(format>=12u?0x20u:0u)|(filter?6u:0u),tev};
                 expected_texture=&texture;
                 ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
                 ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
@@ -450,7 +453,7 @@ static void texture_reuse(void) {
     unsigned allocations=alloc_attempts;void *first_image=texture_image;
     /* Same dimensions and changed content/TEV reuse a retired owned allocation. */
     for(unsigned i=0;i<sizeof(pixels);++i)pixels[i]^=0xb5u;
-    texture.tev_mode=1;texture.params=0x3200;rectangle_count=0;
+    texture.tev_mode=1;texture.params=0x3206;rectangle_count=0;
     assert(backend.draw(backend.context,&state,vertices,3,&texture));
     assert(alloc_attempts==allocations && texture_image==first_image && texture_inits==1u);
     /* A larger texture replaces the old image only after successful allocation. */
@@ -486,7 +489,7 @@ static void texture_dimensions(void) {
 static void texture_failures(void) {
     uint8_t pixels[16u*16u*4u],bytes[1024]={0};texture_pixels(pixels,16,16);
     ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
-    for(unsigned failure=0;failure<17;++failure) {
+    for(unsigned failure=0;failure<21;++failure) {
         reset();ctr_scene_state state;ctr_vertex vertices[3];textured_setup(&state,vertices);
         ctr_scene_texture texture={pixels,8,16,0x18010000u,0,0,0};expected_texture=&texture;
         ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
@@ -510,6 +513,10 @@ static void texture_failures(void) {
             case 14:expected_uv=false;setup(&state,vertices);break;
             case 15:texture.height=0;break;
             case 16:texture.params=0x7000;break;
+            case 17:texture.params=2;break; /* Mixed nearest/linear unsupported. */
+            case 18:texture.params=4;break;
+            case 19:texture.params=6u|(1u<<24);break; /* Mip filter remains unsupported. */
+            case 20:texture.params=6u|(1u<<28);break;
         }
         assert(!backend.draw(backend.context,&state,vertices,3,&texture));
         assert(!gpu_draws && !scene.texture_uploads && !texture_binds);

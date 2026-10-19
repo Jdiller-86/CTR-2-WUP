@@ -25,8 +25,9 @@ static u32 expected(unsigned x,unsigned y,unsigned width,unsigned height) {
     unsigned u=((2*x+1-width/4)*16)/(width*3/2);
     unsigned v=7-((2*y+1-height/4)*8)/(height*3/2);
     u32 result=texel(u,v);
-    /* Triangle 0 replaces primary white; triangle 1 modulates primary green. */
-    if((2*x+1)*height+(2*y+1)*width>=2*width*height)result&=0x00ff00ff;
+    /* Triangle 1 averages four central texels at UV (.5,.5), then modulates
+     * green. Its independently known half-up average is (128,128,128,255). */
+    if((2*x+1)*height+(2*y+1)*width>=2*width*height)result=0x008000ff;
     return result;
 }
 static u16 rgb565(u32 rgba) { return (u16)(((rgba>>27)<<11)|(((rgba>>18)&63)<<5)|((rgba>>11)&31)); }
@@ -93,6 +94,15 @@ int main(void) {
         GPUCMD_AddWrite(GPUREG_VIEWPORT_HEIGHT,screen?0x464000:0x469000);
         for(unsigned triangle=0;triangle<2;++triangle) {
             color(triangle!=0);GPUCMD_AddWrite(0xc2,triangle?0x10001:0);
+            GPUCMD_AddWrite(GPUREG_TEXUNIT0_PARAM,triangle?
+                GPU_TEXTURE_MAG_FILTER(GPU_LINEAR)|GPU_TEXTURE_MIN_FILTER(GPU_LINEAR):0);
+            if(triangle) {
+                GPUCMD_AddWrite(0x2c0,0x80000000); /* c0 in float32 W/Z/Y/X order. */
+                GPUCMD_AddWrite(0x2c1,0);GPUCMD_AddWrite(0x2c1,0);
+                GPUCMD_AddWrite(0x2c1,0x3f000000);GPUCMD_AddWrite(0x2c1,0x3f000000);
+            }
+            GPUCMD_AddWrite(0x2cb,2);
+            GPUCMD_AddWrite(0x2cc,triangle?0x4c420000:0x4c402000); /* o2 = c0 / v2 */
             GPUCMD_AddWrite(GPUREG_INDEXBUFFER_CONFIG,(screen?0x80000000:0)|(screen?112+triangle*6:96+triangle*3));
             GPUCMD_AddWrite(GPUREG_DRAWELEMENTS,1);
         }

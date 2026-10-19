@@ -81,14 +81,15 @@ python3 tools/validate-libctru.py --application textured --wiiu --gx2 --sanitize
 ```
 
 This distinct original application submits retained shader/texture state and
-tests sample replacement and primary-color modulation. Its patterned top/bottom
+tests nearest replacement and a bilinear four-texel average with primary-green
+modulation. Its patterned/solid-green top/bottom
 frames receive independent exact host comparison. The native build is named
 `CTR2WUP Textured Guest`, with `ctr2wup-textured-guest.rpx`/`.wuhb` in CI artifact
 `wiiu-textured-guest-<source commit>`. Source identity, checked reference images,
 notices and one two-step `START-HERE.md` guide accompany the binaries.
 
 The [texture contract](textures.md) covers all 14 base formats, 8..1024 dimensions,
-nearest clamp/repeat/mirror, exact Q16 UV with W=1, and replace/binary-primary
+nearest/bilinear clamp/repeat/mirror, exact Q16 UV with W=1, and replace/binary-primary
 modulation. Decoded texture storage has explicit ownership; native pitched upload
 reverses rows for PICA V origin, flushes caches and retires GPU references before
 reuse/free. Physical sampling parity and performance remain unverified.
@@ -128,7 +129,7 @@ attribute, uniform and MOV/ADD/MUL/NOP/END shader subset. ADD/MUL
 accept only exact normal float24/signed-zero results with integer evaluation and
 transactional numeric rejection; [original arithmetic checks](software-scenes.md#exact-add-and-mul)
 validate the exact numeric subset separately from this MOV fixture. Broader
-arithmetic/filtering, mipmaps, perspective, general TEV, clipping and
+arithmetic, mixed min/mag filters, mipmaps, perspective, general TEV, clipping and
 depth/blend/stencil remain unsupported.
 A raw VFP push/pop guard fix supports exact bit transfers
 under CRT FPSCR controls; it does not enable unsupported arithmetic modes.
