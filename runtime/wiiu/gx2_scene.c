@@ -168,6 +168,8 @@ static bool pixel_shader(scene_private *p,const ctr_scene_state *state,bool text
     for(unsigned lane=0;lane<4;++lane)p->pixel_constants[7][lane]=bits(lane<3u?(float)(1u<<lane):0.0f);
     for(unsigned lane=0;lane<4;++lane) {
         pixel_op(p,&count,2,0,lane,262,0,false,0,lane);
+        pixel_op(p,&count,0,0,lane,262,3,false,0,lane);
+        pixel_op(p,&count,20,0,lane,0,0,false,0,lane);
         if(textured) {
             pixel_op(p,&count,2,2,lane,262,0,false,2,lane);
             pixel_op(p,&count,0,2,lane,262,3,false,2,lane);

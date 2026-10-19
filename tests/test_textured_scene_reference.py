@@ -169,6 +169,11 @@ class TexturedSceneReferenceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'constants'):
             ORACLE.decode_fragment_program(row, (1,1,1,1), (17,89,233,53))
 
+    def test_primary_byte_quantization_tolerates_interpolator_roundoff(self):
+        row = next(row for row in self.capture['programs'] if row['mode'] == 'modulate')
+        result = ORACLE.decode_fragment_program(row, (1-2**-24, 2**-25, 1, 1), (17,89,233,53))
+        self.assertEqual(result['color'], (F(17,255), F(0), F(233,255), F(53,255)))
+
     def mutate(self, mode, offset, mask):
         row = dict(next(row for row in self.capture['programs'] if row['mode'] == mode))
         program = bytearray.fromhex(row['hex'])
