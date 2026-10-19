@@ -11,7 +11,7 @@ Wii U compatibility. The selected first-title target is
 | CPU | Checked ARM/Thumb interpreter, original AOT and external generated-C adapter | Incomplete ARM11/VFP coverage; exact revision profiles and useful workload costs remain open |
 | Kernel/services | Single-process threads, memory/objects, TLS/SRV/CFG, HID, GSP and standalone APT/FS | Unsupported commands fail; general applets, retail saves and DSP IPC remain open |
 | Original compiled applications | Standard libctru startup, input, frames, saves, RomFS, transfers and bounded draws | Original programs do not establish retail startup or gameplay |
-| Graphics | Five framebuffer formats, CPU-backed GX transfers, bounded GX2 vertex translation, all 14 base textures and nearest replace/modulate scenes | Physical GPU parity, general shaders/rounding, filtering/mips, broader TEV/depth/blend and geometry remain open |
+| Graphics | Five framebuffer formats, CPU-backed GX transfers, bounded GX2 vertex translation, all 14 base textures and nearest/bilinear replace/modulate scenes | Physical GPU parity/rounding, general shaders, mixed filters/mipmaps, broader TEV/depth/blend and geometry remain open |
 | Audio | DSP ADPCM, bounded CSTM blocks/seek, two-voice 48 kHz mixer and finite native clips | Guest DSP firmware/IPC, CSAR selection, loops and synchronized streaming remain open |
 | Decrypted inputs | Base-application CIA, NCCH v2 CXI and NCSD cartridge inspection | No NAND loader, update/DLC merging or arbitrary-ROM execution |
 | Encrypted inputs | Scoped local CIA/NCCH preparation with local key/seed files | Supported profiles only; no bundled keys or console extraction |
