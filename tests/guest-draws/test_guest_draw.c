@@ -455,9 +455,23 @@ static void guest_texture_success(void) {
     }
 }
 static void guest_linear_texture(void) {
-    for(unsigned shorts=0;shorts<2;++shorts) {
+    for(unsigned shorts=0;shorts<2;++shorts)for(unsigned chain=0;chain<2;++chain) {
         ctr_guest g;list l;ctr_gx_completion c;textured_open(&g,&l,shorts!=0);
         set(&l,0x083,6u);
+        if(chain) {
+            static const uint32_t stages[6][5]={
+                {0x0e3e00e3,0,0x00040001,0x65e949b3,0},
+                {0x00ef00ef,0,0x00050002,0x21139725,0},
+                {0x0e3f0e3f,0x00120210,0x00080004,0x532fd35b,0},
+                {0x00ef00ef,0,0x00010003,0xb1f14395,1},
+                {0x03ef03ef,0,0x00040009,0x77b52f53,0},
+                {0x03ef03ef,0,0x00020008,0x113bc771,0}
+            };
+            size_t at=find(&l,0x22f,0);
+            for(unsigned stage=0;stage<6;++stage)for(unsigned field=0;field<5;++field,at+=8u)
+                insert_at(&l,at,ctr_tev_registers[stage]+field,stages[stage][field]);
+            trim(&l);finish(&l);
+        }
         for(unsigned vertex=0;vertex<4;++vertex) {
             write_word(&g,RESOURCE+vertex*24u+16u,float_word(0.125f));
             write_word(&g,RESOURCE+vertex*24u+20u,float_word(0.0625f));
@@ -469,8 +483,8 @@ static void guest_linear_texture(void) {
         for(unsigned y=0;y<64;++y)for(unsigned x=0;x<64;++x) {
             /* Constant UV samples raw row 7, halfway between x1/x2. Each
              * odd channel sum rounds up once: (139,211,43,227). */
-            const uint8_t inside[]={139,211,43,227},outside[]={16,32,48,255};
-            CHECK(!memcmp(pixels+(y*64u+x)*4u,x>=8 && x<56 && y>=8 && y<56?inside:outside,4));
+            const uint8_t inside[]={139,211,43,227},combined[]={200,255,52,184},outside[]={16,32,48,255};
+            CHECK(!memcmp(pixels+(y*64u+x)*4u,x>=8 && x<56 && y>=8 && y<56?chain?combined:inside:outside,4));
         }
         ctr_guest_close(&g);
     }
@@ -517,7 +531,7 @@ static void guest_texture_snapshots(void) {
     ctr_guest_close(&g);
 }
 static void guest_texture_rollback(void) {
-    for(unsigned retained=0;retained<2;++retained)for(unsigned kind=0;kind<9;++kind) {
+    for(unsigned retained=0;retained<2;++retained)for(unsigned kind=0;kind<15;++kind) {
         ctr_guest g;list l;ctr_gx_completion c;textured_open(&g,&l,(kind&1u)!=0);
         if(retained)CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK);
         uint32_t second=TEXTURE_PA+1024u;ctr_gx_result expected=CTR_GX_UNSUPPORTED;
@@ -536,6 +550,12 @@ static void guest_texture_rollback(void) {
             CHECK(ctr_memory_map(&g.memory,TEXTURE_VA+0x20000u,TEXTURE_BYTES,CTR_MEM_READ,
                   g.allocations[1].storage,TEXTURE_BYTES)==CTR_MEM_OK);
         }
+        if(kind==9) { trim(&l);add(&l,0xfa,6); }
+        if(kind==10) { trim(&l);add(&l,0xf9,6); }
+        if(kind==11) { trim(&l);add(&l,0xe0,1u<<8); }
+        if(kind==12)insert_at(&l,find(&l,0x22f,1),0xf8,UINT32_C(0xe000e)); /* Undefined constant. */
+        if(kind==13)insert_at(&l,find(&l,0x22f,1),0xf8,UINT32_C(0x40004));
+        if(kind==14) { trim(&l);add(&l,0xc0,UINT32_C(0xf000f)); }
         insert_at(&l,find(&l,0x22f,1),0x085,second/8u);trim(&l);finish(&l);
         unsigned owner=relay(&g);(void)owner;ctr_guest_shared *shared=&g.shared[g.gsp.relay_shared];
         uint8_t relay_before[CTR_GUEST_PAGE];CHECK(shared->size==sizeof(relay_before));memcpy(relay_before,shared->storage,shared->size);

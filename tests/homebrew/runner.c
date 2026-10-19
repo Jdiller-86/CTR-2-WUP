@@ -33,9 +33,9 @@ static uint32_t draw_pixel(unsigned x,unsigned y,unsigned screen) {
     uint32_t result=((tx&1u)?UINT32_C(0xff000000):0u)|
         ((((tx>>2)^(ty>>1))&1u)?UINT32_C(0x00ff0000):0u)|
         ((((tx>>3)^ty)&1u)?UINT32_C(0x0000ff00):0u)|255u;
-    /* Four central samples average to green 128 before RGB565 conversion;
-     * the display reader expands its six-bit green channel to 130. */
-    if((2u*px+1u)*height+(2u*py+1u)*240u>=480u*height)result=UINT32_C(0x008200ff);
+    /* The six-stage chain yields RGBA (184,212,157,191); RGB565 display
+     * expansion gives the independent RGB bytes (189,215,156). */
+    if((2u*px+1u)*height+(2u*py+1u)*240u>=480u*height)result=UINT32_C(0xbdd79cff);
     return result;
 #else
     return (2u*px+1u)*height+(2u*py+1u)*240u<480u*height?UINT32_C(0xff0000ff):UINT32_C(0x00ff00ff);

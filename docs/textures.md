@@ -15,8 +15,8 @@ The [scene renderer](software-scenes.md) and optional native GX2 backend accept:
 | Texture | Texture0, one base level, all 14 decoded formats, 8..1024 per dimension |
 | Coordinates | Vertex semantics 12/13, exact Q16 UV in −16..16, affine interpolation with W=1 |
 | Sampler | Matching nearest or bilinear min/mag, LOD/bias zero; clamp-to-edge, repeat or mirrored repeat independently on S/T |
-| Combiner | TEV0 replaces with Texture0 or multiplies it by constant binary primary color; later stages pass Previous |
-| Fragment policy | Zero TEV operands/scales, opaque primary color, full writes, copy logic, no lighting/depth/stencil/blending |
+| Combiner | Six stages; Texture0, binary primary color, per-stage RGBA8 constants and Previous; independent RGB/alpha operands, operations and 1/2/4 scale |
+| Fragment policy | Opaque binary primary color, full writes, copy logic; no lighting/depth/stencil/blending |
 
 PICA wrap IDs are 0/2/3 for clamp/repeat/mirror; parameters store T at bits 8–10,
 S at 12–14, with bit 5 set only for ETC1/ETC1A4. Filter bits 1/2 must both be
@@ -35,6 +35,26 @@ One final round-half-up produces each byte; intermediate rows are not rounded.
 Portable integer limbs preserve the full numerator on 32-bit PowerPC. This is an
 explicit software numeric contract; physical PICA/GX2 rounding is not established.
 
+## Texture combiners
+
+All six TEV stages accept separate RGB/alpha replace, modulate, add, signed add,
+interpolate, subtract, multiply-add and add-multiply. Sources are primary color,
+Texture0, each stage's RGBA8 constant and the preceding stage. RGB operands select
+color, alpha or replicated R/G/B, optionally complemented; alpha operands select
+A/R/G/B with optional complement. Each stage snapshots its inputs before writing
+any output channel, including cross-channel Previous operands.
+
+The byte-domain contract truncates product/interpolation division by 255.
+Signed add subtracts 128. Clamp the operation result to 0..255, multiply by the
+selected 1/2/4 scale, then saturate to 255 before the next stage. Add-multiply
+also clamps its sum before multiplication. These explicit software rules do not
+establish physical PICA rounding. Register/operand facts follow pinned
+[libctru enums](https://github.com/devkitPro/libctru/blob/9b55eda44cf80b971503991e0c78f9bc8fe50425/libctru/include/3ds/gpu/enums.h#L313)
+and [PICA register fields](https://github.com/azahar-emu/azahar/blob/987f18405073960622e1043bb44005989135c6e1/src/video_core/pica/regs_texturing.h#L288).
+DOT3, combiner-buffer reads/writes, lighting sources, Texture1–3 and stage-zero
+Previous reject explicitly. Active constant sources require a completely defined
+constant register; reserved operand/function/scale fields reject even after a draw.
+
 Textures resolve entirely inside the stable geometry snapshot or one of at most
 32 separate owned snapshots, with 4 MiB total additional source bytes. External
 spans cannot overlap geometry or each other; partial geometry aliases and target
@@ -45,14 +65,16 @@ checks allocation identity and permissions before snapshotting.
 
 The native adapter uploads decoded RGBA to an owned pitched GX2 texture, reversing
 rows so the original guest UV needs no CPU rewrite. Its Latte pixel program uses
-base-level normalized sampling, the selected point/linear sampler and optional
-primary-color multiplication.
+base-level normalized sampling and the selected point/linear sampler. An original
+scalar Latte encoder implements the admitted combiner chain using nine GPRs and
+bounded shader storage. Pixel uniforms carry stage constants; explicit byte
+quantization and floor division preserve the software stage boundaries.
 CPU cache flushes and texture invalidation precede drawing; retirement precedes
 reuse/free. Failed waits quarantine GPU allocations until graphics shutdown.
 Complete software preflight and exact GPU readback precede guest commit.
 
-Mipmaps, mixed min/mag filters, projective/perspective coordinates, general TEV,
-resource caching and depth/blend remain unsupported. Physical sampling parity
+Mipmaps, mixed min/mag filters, projective/perspective coordinates, DOT3,
+combiner buffers, resource caching and depth/blend remain unsupported. Physical sampling parity
 and useful GPU performance remain unverified. The full-target byte comparison
 stays exact, including for bilinear draws; differing hardware rounding rejects
 the list without guest publication or software fallback.
@@ -65,7 +87,7 @@ python tools/validate-textured-scenes.py --sanitize --output artifacts/textured-
 ```
 
 Independent original reference checks cover format decoding, exact scene pixels,
-wrap/origin rules, modulation and transactional failures. The native API model
+wrap/origin rules, combiner operations/operands/scales and transactional failures. The native API model
 also captures actual submitted pixel-program bytes for independent decoding;
 it does not emulate GPU execution. The optional clean Zakuro decoder comparison
 uses pin `76f17bf76cd9ea238a94f37d389fe701ab05a673`. Format 6 follows RG8

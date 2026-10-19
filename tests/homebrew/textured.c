@@ -25,9 +25,10 @@ static u32 expected(unsigned x,unsigned y,unsigned width,unsigned height) {
     unsigned u=((2*x+1-width/4)*16)/(width*3/2);
     unsigned v=7-((2*y+1-height/4)*8)/(height*3/2);
     u32 result=texel(u,v);
-    /* Triangle 1 averages four central texels at UV (.5,.5), then modulates
-     * green. Its independently known half-up average is (128,128,128,255). */
-    if((2*x+1)*height+(2*y+1)*width>=2*width*height)result=0x008000ff;
+    /* Triangle 1 averages to (128,128,128,255). Its six byte-domain stages
+     * produce (89,36,116,194), (126,187,135,161), (126,146,129,252),
+     * (255,170,255,174), (128,108,128,174), then (184,212,157,191). */
+    if((2*x+1)*height+(2*y+1)*width>=2*width*height)result=0xb8d49dbf;
     return result;
 }
 static u16 rgb565(u32 rgba) { return (u16)(((rgba>>27)<<11)|(((rgba>>18)&63)<<5)|((rgba>>11)&31)); }
@@ -36,11 +37,6 @@ static void pipeline(void) {
     for(unsigned i=0;i<sizeof(disabled)/sizeof(*disabled);++i)GPUCMD_AddWrite(disabled[i],0);
     GPUCMD_AddWrite(GPUREG_LOGIC_OP,3);GPUCMD_AddWrite(GPUREG_DEPTH_COLOR_MASK,0xf00);
     GPUCMD_AddWrite(GPUREG_COLORBUFFER_WRITE,15);
-    const u16 tev[]={0xc0,0xc8,0xd0,0xd8,0xf0,0xf8};
-    for(unsigned i=0;i<6;++i) {
-        GPUCMD_AddWrite(tev[i],i?0xf000f:0x30003);GPUCMD_AddWrite(tev[i]+1,0);
-        GPUCMD_AddWrite(tev[i]+2,0);GPUCMD_AddWrite(tev[i]+4,0);
-    }
     GPUCMD_AddWrite(GPUREG_TEXUNIT_CONFIG,1);
     GPUCMD_AddWrite(GPUREG_TEXUNIT0_DIM,(16u<<16)|8u);
     GPUCMD_AddWrite(GPUREG_TEXUNIT0_PARAM,0);GPUCMD_AddWrite(GPUREG_TEXUNIT0_LOD,0);
@@ -62,6 +58,19 @@ static void pipeline(void) {
     GPUCMD_AddWrite(GPUREG_VSH_CODETRANSFER_CONFIG,0);GPUCMD_AddWrites(GPUREG_VSH_CODETRANSFER_DATA,shader,4);
     GPUCMD_AddWrite(GPUREG_VSH_CODETRANSFER_END,1);GPUCMD_AddWrite(GPUREG_VSH_OPDESCS_CONFIG,0);
     GPUCMD_AddWrite(GPUREG_VSH_OPDESCS_DATA,0x36f);
+}
+static void combiner(bool chain) {
+    static const u16 bases[]={0xc0,0xc8,0xd0,0xd8,0xf0,0xf8};
+    static const u32 stages[6][5]={
+        {0x0e3e00e3,0,0x00040001,0x65e949b3,0},
+        {0x00ef00ef,0,0x00050002,0x21139725,0},
+        {0x0e3f0e3f,0x00120210,0x00080004,0x532fd35b,0},
+        {0x00ef00ef,0,0x00010003,0xb1f14395,1},
+        {0x03ef03ef,0,0x00040009,0x77b52f53,0},
+        {0x03ef03ef,0,0x00020008,0x113bc771,0}
+    };
+    for(unsigned stage=0;stage<6;++stage)for(unsigned field=0;field<5;++field)
+        GPUCMD_AddWrite(bases[stage]+field,chain?stages[stage][field]:field?0:stage?0xf000f:0x30003);
 }
 static void color(bool green) {
     const u32 packed[]={green?0x3f000000:0x3f00003f,0x3f00,green?0:0x003f0000};
@@ -93,7 +102,7 @@ int main(void) {
         GPUCMD_AddWrite(GPUREG_VIEWPORT_WIDTH,0x45e000);
         GPUCMD_AddWrite(GPUREG_VIEWPORT_HEIGHT,screen?0x464000:0x469000);
         for(unsigned triangle=0;triangle<2;++triangle) {
-            color(triangle!=0);GPUCMD_AddWrite(0xc2,triangle?0x10001:0);
+            color(triangle!=0);combiner(triangle!=0);
             GPUCMD_AddWrite(GPUREG_TEXUNIT0_PARAM,triangle?
                 GPU_TEXTURE_MAG_FILTER(GPU_LINEAR)|GPU_TEXTURE_MIN_FILTER(GPU_LINEAR):0);
             if(triangle) {

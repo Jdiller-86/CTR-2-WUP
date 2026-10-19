@@ -16,6 +16,8 @@ static const GX2ColorBuffer *bound_target;
 static const ctr_shader_program *expected_shader;
 static const ctr_vertex *expected_vertices;
 static const ctr_scene_texture *expected_texture;
+static const ctr_scene_state *expected_state;
+static uint32_t bound_pixel_uniforms[32];
 static const GX2Texture *bound_texture;
 static const GX2Sampler *bound_sampler;
 static const uint8_t *bound_pixel_program;
@@ -141,49 +143,47 @@ static uint32_t little32(const uint8_t *p) {
 }
 /* Independently decode the emitted instruction fields. This is an API model,
  * not a GPU emulator: it checks the exact sampler/TEV program bound to GX2. */
-static void check_pixel_program(const uint8_t *program) {
-    unsigned export_at=0;
-    if(expected_texture) {
-        uint32_t cf=little32(program+4);
-        assert(little32(program)==4 && ((cf>>23)&127u)==1u);
-        assert(((cf>>10)&7u)==0u && (cf>>31)==1u); /* One TEX, barrier. */
-        uint32_t a=little32(program+32),b=little32(program+36),c=little32(program+40);
-        assert((a&31u)==0x13u && ((a>>8)&255u)==0u && ((a>>16)&127u)==1u);
-        assert((b&127u)==2u && ((b>>9)&7u)==0u && ((b>>12)&7u)==1u);
-        assert(((b>>15)&7u)==2u && ((b>>18)&7u)==3u && (b>>28)==15u);
-        assert(((c>>15)&31u)==0u && ((c>>20)&7u)==0u && ((c>>23)&7u)==1u);
-        assert(((c>>26)&7u)==4u && ((c>>29)&7u)==5u && little32(program+44)==0u);
-        export_at=8;
-        if(expected_texture->tev_mode) {
-            cf=little32(program+12);
-            assert(little32(program+8)==6u && ((cf>>26)&15u)==8u);
-            assert(((cf>>18)&127u)==3u && (cf>>31)==1u);
-            for(unsigned lane=0;lane<4;++lane) {
-                a=little32(program+48u+lane*8u);b=little32(program+52u+lane*8u);
-                assert((a&511u)==2u && ((a>>13)&511u)==0u);
-                assert(((a>>10)&3u)==lane && ((a>>23)&3u)==lane && (a>>31)==1u);
-                assert(((b>>7)&2047u)==2u && ((b>>21)&127u)==2u);
-                assert(((b>>29)&3u)==lane && ((b>>4)&1u)==1u);
+static void check_pixel_program(const uint8_t *program,unsigned size) {
+    bool used[8192]={false};unsigned at=0,samples=0;
+    for(;at<128u;at+=8u) {
+        for(unsigned i=at;i<at+8u;++i) { assert(!used[i]);used[i]=true; }
+        uint32_t a=little32(program+at),b=little32(program+at+4u);
+        if(b==UINT32_C(0x80800000)) {
+            assert(expected_texture && !samples++ && a==16u);
+            assert(little32(program+128u)==0x00010013u);
+            assert(little32(program+132u)==0xf00d1002u);
+            assert(little32(program+136u)==0xb0800000u && !little32(program+140u));
+            for(unsigned i=128;i<144;++i)used[i]=true;
+        } else if((b&UINT32_C(0xfe03ffff))==UINT32_C(0xa0000000)) {
+            unsigned count=((b>>18)&127u)+1u,start=a*8u;
+            assert(start>=256u && start+count*8u<=size);
+            for(unsigned i=0;i<count;++i) {
+                uint32_t x=little32(program+start+i*8u),y=little32(program+start+i*8u+4u);
+                unsigned op=(y>>7)&2047u,src=x&511u,other=(x>>13)&511u;
+                assert(op==0u || op==2u || op==3u || op==4u || op==20u || op==25u);
+                assert((x>>31)==1u && (y&16u) && ((y>>21)&127u)<9u);
+                assert(src<9u || (src>=256u && src<264u));
+                if(op!=20u && op!=25u)assert(other<9u || (other>=256u && other<264u));
             }
-            export_at=16;
+            for(unsigned i=start;i<start+count*8u;++i) { assert(!used[i]);used[i]=true; }
+        } else {
+            assert(b==0x94200688u && (a==3u<<15 || a==7u<<15));
+            assert(samples==(expected_texture?1u:0u));
+            for(unsigned i=0;i<size;++i)if(!used[i])assert(!program[i]);
+            return;
         }
     }
-    uint32_t a=little32(program+export_at),b=little32(program+export_at+4u);
-    assert((a&8191u)==0u && ((a>>13)&3u)==0u);
-    assert(((a>>15)&127u)==(expected_texture?2u:0u));
-    assert(((b>>23)&127u)==0x28u && ((b>>21)&1u)==1u && (b&4095u)==0x688u);
-    unsigned used=expected_texture?(expected_texture->tev_mode?80u:48u):8u;
-    for(unsigned at=used;at<256;++at)assert(program[at]==0u);
+    assert(!"Missing pixel program end");
 }
 void GX2SetPixelShader(const GX2PixelShader *shader) {
-    assert(shader->size==256 && ((uintptr_t)shader->program&255u)==0);
-    assert(shader->regs.sq_pgm_resources_ps==(expected_texture?3u:1u));
+    assert(shader->size>=256 && shader->size<=8192 && !(shader->size&255u) && ((uintptr_t)shader->program&255u)==0);
+    assert(shader->regs.sq_pgm_resources_ps==9u);
     assert(shader->regs.sq_pgm_exports_ps==2u && shader->regs.spi_ps_input_cntls[0]==0x100u);
     assert(shader->regs.spi_ps_in_control_0==(expected_texture?0x14000002u:0x14000001u));
     assert(shader->regs.num_spi_ps_input_cntl==(expected_texture?2u:1u));
     if(expected_texture)assert(shader->regs.spi_ps_input_cntls[1]==0x101u);
     assert(shader->regs.cb_shader_mask==15u && shader->regs.cb_shader_control==1u && shader->regs.db_shader_control==16u);
-    bound_pixel_program=shader->program;bound_pixel_metadata=*shader;check_pixel_program(shader->program);
+    bound_pixel_program=shader->program;bound_pixel_metadata=*shader;check_pixel_program(shader->program,shader->size);
 }
 void GX2InitTextureRegs(GX2Texture *texture) {
     assert(texture && !gpu_pending && texture->surface.image);
@@ -235,6 +235,15 @@ void GX2SetAttribBuffer(unsigned index,unsigned size,unsigned stride,const void 
 void GX2SetVertexUniformReg(unsigned offset,unsigned count,const void *bytes) {
     assert(offset==8 && count==4 && !memcmp(bytes,expected_shader->uniforms[2],16));++uniform_uploads;
 }
+void GX2SetPixelUniformReg(unsigned offset,unsigned count,const void *bytes) {
+    assert(!offset && count==32u && bytes && bound_pixel_program);
+    memcpy(bound_pixel_uniforms,bytes,sizeof(bound_pixel_uniforms));
+    assert(bound_pixel_uniforms[26]==0x3b808081u);
+    for(unsigned stage=0;stage<6;++stage)for(unsigned lane=0;lane<4;++lane) {
+        float value=(float)((expected_state->registers[ctr_tev_registers[stage]+3u]>>(lane*8u))&255u);
+        uint32_t raw;memcpy(&raw,&value,4);assert(bound_pixel_uniforms[stage*4u+lane]==raw);
+    }
+}
 void GX2SetCullOnlyControl(unsigned front,bool a,bool b) { assert(front==GX2_FRONT_FACE_CCW);cull_front=a;cull_back=b; }
 bool ctr_shader_f24_decode(uint32_t raw,uint32_t *value) {
     if(raw!=0x420000)return false;
@@ -261,6 +270,12 @@ static void reset(void) {
 }
 static void setup(ctr_scene_state *state,ctr_vertex vertices[3]) {
     memset(state,0,sizeof(*state));memset(vertices,0,3*sizeof(*vertices));
+    expected_state=state;
+    for(unsigned stage=0;stage<6;++stage) {
+        unsigned base=ctr_tev_registers[stage];
+        for(unsigned i=0;i<5;++i)state->register_defined[base+i]=15u;
+        state->registers[base]=stage?0x000f000fu:0u;
+    }
     state->registers[0x041]=state->registers[0x043]=0x420000;
     state->registers[0x04f]=2;state->registers[0x050]=0x03020100;
     state->registers[0x051]=0x0b0a0908;state->registers[0x2bd]=3;
@@ -393,6 +408,7 @@ static void readback_observer(void) {
 }
 static void textured_setup(ctr_scene_state *state,ctr_vertex vertices[3]) {
     setup(state,vertices);expected_uv=true;
+    state->registers[0xc0]=0x00030003u;
     state->registers[0x04f]=3;state->registers[0x052]=0x1f1f0d0c;state->registers[0x2bd]=7;
     for(unsigned i=0;i<3;++i) {
         vertices[i].enabled=7;
@@ -406,6 +422,25 @@ static void texture_pixels(uint8_t *bytes,unsigned width,unsigned height) {
     for(unsigned y=0;y<height;++y)for(unsigned x=0;x<width;++x)
         for(unsigned c=0;c<4;++c)bytes[((size_t)y*width+x)*4u+c]=(uint8_t)(x*13u+y*37u+c*59u);
 }
+static void dump_pixel(const char *mode,const ctr_scene_state *state,bool comma) {
+    if(comma)fputc(',',stdout);
+    printf("{\"mode\":\"%s\",\"textured\":%s,\"hex\":\"",mode,expected_texture?"true":"false");
+    for(unsigned i=0;i<bound_pixel_metadata.size;++i)printf("%02x",bound_pixel_program[i]);
+    printf("\",\"gprs\":%u,\"interpolators\":%u,\"spi_ps_in_control_0\":%u,\"inputs\":[%u",
+        bound_pixel_metadata.regs.sq_pgm_resources_ps,bound_pixel_metadata.regs.num_spi_ps_input_cntl,
+        bound_pixel_metadata.regs.spi_ps_in_control_0,bound_pixel_metadata.regs.spi_ps_input_cntls[0]);
+    if(expected_texture)printf(",%u",bound_pixel_metadata.regs.spi_ps_input_cntls[1]);
+    fputs("],\"uniforms\":[",stdout);
+    for(unsigned i=0;i<32;++i)printf("%s%u",i?",":"",bound_pixel_uniforms[i]);
+    fputs("],\"stages\":[",stdout);
+    for(unsigned stage=0;stage<6;++stage) {
+        printf("%s[",stage?",":"");
+        for(unsigned offset=0;offset<5;++offset)printf("%s%u",offset?",":"",state->registers[ctr_tev_registers[stage]+offset]);
+        fputc(']',stdout);
+    }
+    fputs("]}",stdout);
+}
+static void combiner_programs(bool dump);
 static void textured_bindings(bool dump_programs) {
     uint8_t pixels[16u*16u*4u],bytes[1024]={0};texture_pixels(pixels,16,16);
     ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
@@ -417,7 +452,8 @@ static void textured_bindings(bool dump_programs) {
             for(unsigned s=0;s<(dump_programs?1u:3u);++s)for(unsigned tev=0;tev<2;++tev) {
                 reset();ctr_scene_state state;ctr_vertex vertices[3];textured_setup(&state,vertices);
                 ctr_scene_texture texture={pixels,16,16,0x18010000u,format,
-                    (wraps[t]<<8)|(wraps[s]<<12)|(format>=12u?0x20u:0u)|(filter?6u:0u),tev};
+                    (wraps[t]<<8)|(wraps[s]<<12)|(format>=12u?0x20u:0u)|(filter?6u:0u)};
+                state.registers[0xc2]=tev?0x00010001u:0u;
                 expected_texture=&texture;
                 ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
                 ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
@@ -426,26 +462,81 @@ static void textured_bindings(bool dump_programs) {
                 assert(!gpu_pending && active_context==&native_context);
                 assert(texture_inits==1 && texture_binds==1 && sampler_binds==1 && gpu_draws==1);
                 assert(scene.texture_uploads==1 && scene.texture_bytes==sizeof(pixels));
-                if(dump_programs) {
-                    if(tev)fputc(',',stdout);
-                    printf("{\"mode\":\"%s\",\"hex\":\"",tev?"modulate":"replace");
-                    for(unsigned i=0;i<256;++i)printf("%02x",bound_pixel_program[i]);
-                    printf("\",\"gprs\":%u,\"interpolators\":%u,\"spi_ps_in_control_0\":%u,\"inputs\":[%u,%u]}",
-                        bound_pixel_metadata.regs.sq_pgm_resources_ps,
-                        bound_pixel_metadata.regs.num_spi_ps_input_cntl,
-                        bound_pixel_metadata.regs.spi_ps_in_control_0,
-                        bound_pixel_metadata.regs.spi_ps_input_cntls[0],bound_pixel_metadata.regs.spi_ps_input_cntls[1]);
-                }
+                if(dump_programs)dump_pixel(tev?"modulate":"replace",&state,tev!=0u);
                 assert(backend.end(backend.context,&surface));clean(&scene);
             }
-    if(dump_programs)fputs("]}\n",stdout);
+    if(dump_programs) { combiner_programs(true);fputs("]}\n",stdout); }
+}
+static void tev_row(ctr_scene_state *state,unsigned stage,uint32_t sources,uint32_t operands,
+                    uint32_t operations,uint32_t constant,uint32_t scale) {
+    unsigned base=ctr_tev_registers[stage];
+    state->registers[base]=sources;state->registers[base+1u]=operands;
+    state->registers[base+2u]=operations;state->registers[base+3u]=constant;
+    state->registers[base+4u]=scale;
+}
+static void combiner_programs(bool dump) {
+    const unsigned operations[8]={0,1,2,3,4,5,8,9},operands[10]={0,1,2,3,4,5,8,9,12,13};
+    uint8_t pixels[16u*16u*4u],bytes[1024]={0};texture_pixels(pixels,16,16);
+    ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
+    for(unsigned sample=0;sample<33u;++sample) {
+        reset();ctr_scene_state state;ctr_vertex vertices[3];textured_setup(&state,vertices);
+        ctr_scene_texture texture={pixels,16,16,0x18010000u,0,0};
+        expected_texture=sample==28u || sample==29u?NULL:&texture;
+        if(sample<8u) {
+            tev_row(&state,0,0x0ee30ee3,0,operations[sample]|operations[7u-sample]<<16,0x953dc571u,0);
+        } else if(sample<18u) {
+            unsigned n=sample-8u;
+            uint32_t mods=operands[n]|operands[(n+3u)%10u]<<4|operands[(n+6u)%10u]<<8|
+                (n%8u)<<12|((n+3u)%8u)<<16|((n+5u)%8u)<<20;
+            tev_row(&state,0,0x0ee30ee3,mods,0x00040004u,0x9d53c725u,0);
+        } else if(sample<27u) {
+            unsigned n=sample-18u;
+            tev_row(&state,0,0x0ee30ee3,0,0x00030001u,0x958bb547u,n/3u|(n%3u)<<16);
+        } else {
+            tev_row(&state,0,0x0e3e00e3u,0,0x00040001u,0x65e949b3u,0);
+            tev_row(&state,1,0x00ef00efu,0,0x00050002u,0x21139725u,0);
+            tev_row(&state,2,0x0e3f0e3fu,0x00120210u,0x00080004u,0x532fd35bu,0);
+            tev_row(&state,3,0x00ef00efu,0,0x00010003u,0xb1f14395u,1);
+            tev_row(&state,4,0x03ef03efu,0,0x00040009u,0x77b52f53u,0);
+            tev_row(&state,5,0x03ef03efu,0,0x00020008u,0x113bc771u,0);
+            if(sample==28u || sample==29u) {
+                for(unsigned stage=0;stage<6;++stage) {
+                    unsigned reg=ctr_tev_registers[stage];
+                    uint32_t source=state.registers[reg];
+                    /* Replace every texture source with primary for this
+                     * untextured pipeline; no sampler or UV fetch is bound. */
+                    for(unsigned shift=0;shift<32;shift+=4u)
+                        if(((source>>shift)&15u)==3u)source&=~(15u<<shift);
+                    state.registers[reg]=source;
+                }
+                if(sample==28u) {
+                    tev_row(&state,0,0x000e000eu,0,0,0x2fab5313u,0);
+                    for(unsigned stage=1;stage<6;++stage)tev_row(&state,stage,0x000f000fu,0,0,0,0);
+                }
+            }
+            if(sample==30u)tev_row(&state,3,0x000f000fu,0,0,0,0);
+            if(sample==31u) {
+                tev_row(&state,2,0x000f000fu,0,0,0,0);
+                tev_row(&state,5,0x000f000fu,0,0,0,0);
+            }
+        }
+        if(sample==32u)for(unsigned stage=0;stage<6;++stage)
+            tev_row(&state,stage,stage?0x03ef03efu:0x00e300e3u,0x0035759du,0x00040004u,
+                0x953dc571u^(stage*0x11111111u),0x00020002u);
+        ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+        ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+        assert(backend.begin(backend.context,&surface));
+        assert(backend.draw(backend.context,&state,vertices,3,expected_texture));
+        if(dump) { char mode[32];snprintf(mode,sizeof(mode),"combiner-%02u",sample);dump_pixel(mode,&state,true); }
+        assert(backend.end(backend.context,&surface));clean(&scene);
+    }
 }
 static void texture_reuse(void) {
     reset();uint8_t pixels[16u*16u*4u],saved[sizeof(pixels)],bytes[1024]={0};
     texture_pixels(pixels,16,16);memcpy(saved,pixels,sizeof(saved));
     ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
     ctr_scene_state state;ctr_vertex vertices[3];textured_setup(&state,vertices);
-    ctr_scene_texture texture={pixels,8,16,0x18010000u,0,0,0};expected_texture=&texture;
+    ctr_scene_texture texture={pixels,8,16,0x18010000u,0,0};expected_texture=&texture;
     ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
     ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
     assert(backend.begin(backend.context,&surface));
@@ -453,7 +544,7 @@ static void texture_reuse(void) {
     unsigned allocations=alloc_attempts;void *first_image=texture_image;
     /* Same dimensions and changed content/TEV reuse a retired owned allocation. */
     for(unsigned i=0;i<sizeof(pixels);++i)pixels[i]^=0xb5u;
-    texture.tev_mode=1;texture.params=0x3206;rectangle_count=0;
+    state.registers[0xc2]=0x00010001u;texture.params=0x3206;rectangle_count=0;
     assert(backend.draw(backend.context,&state,vertices,3,&texture));
     assert(alloc_attempts==allocations && texture_image==first_image && texture_inits==1u);
     /* A larger texture replaces the old image only after successful allocation. */
@@ -462,7 +553,7 @@ static void texture_reuse(void) {
     assert(alloc_attempts==allocations+1u && texture_inits==2u);
     assert(scene.texture_uploads==3u && scene.texture_bytes==2048u);
     /* Return to the original untextured PS while harmless UV exports remain. */
-    expected_texture=NULL;rectangle_count=0;
+    expected_texture=NULL;state.registers[0xc0]=0;state.registers[0xc2]=0;rectangle_count=0;
     assert(backend.draw(backend.context,&state,vertices,3,NULL));
     assert(scene.texture_uploads==3u && texture_binds==3u && sampler_binds==3u);
     assert(backend.end(backend.context,&surface));clean(&scene);
@@ -476,7 +567,7 @@ static void texture_dimensions(void) {
         texture_pixels(pixels,width,height);
         uint8_t bytes[1024]={0};ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
         ctr_scene_state state;ctr_vertex vertices[3];textured_setup(&state,vertices);
-        ctr_scene_texture texture={pixels,width,height,0x18010000u,13u,0x20u,0};expected_texture=&texture;
+        ctr_scene_texture texture={pixels,width,height,0x18010000u,13u,0x20u};expected_texture=&texture;
         ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
         ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
         assert(backend.begin(backend.context,&surface));
@@ -491,7 +582,7 @@ static void texture_failures(void) {
     ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
     for(unsigned failure=0;failure<21;++failure) {
         reset();ctr_scene_state state;ctr_vertex vertices[3];textured_setup(&state,vertices);
-        ctr_scene_texture texture={pixels,8,16,0x18010000u,0,0,0};expected_texture=&texture;
+        ctr_scene_texture texture={pixels,8,16,0x18010000u,0,0};expected_texture=&texture;
         ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
         ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
         assert(backend.begin(backend.context,&surface));
@@ -501,7 +592,7 @@ static void texture_failures(void) {
             case 2:texture.height=2048;break;
             case 3:texture.width=12;break;
             case 4:texture.format=14;break;
-            case 5:texture.tev_mode=2;break;
+            case 5:state.registers[0xc2]=6;break;
             case 6:texture.params=0x0100;break;
             case 7:texture.params=0x4000;break;
             case 8:texture.params=1;break;
@@ -522,14 +613,14 @@ static void texture_failures(void) {
         assert(!gpu_draws && !scene.texture_uploads && !texture_binds);
         assert(scene.result==(failure==12?CTR_WIIU_GX2_SCENE_LAYOUT:
             failure==13?CTR_WIIU_GX2_SCENE_ALLOCATION:
-            failure==14?CTR_WIIU_GX2_SCENE_SHADER:CTR_WIIU_GX2_SCENE_ARGUMENT));
+            (failure==14 || failure==5)?CTR_WIIU_GX2_SCENE_SHADER:CTR_WIIU_GX2_SCENE_ARGUMENT));
         backend.abort(backend.context);clean(&scene);
     }
     /* Failed replacement allocation leaves the retired previous image owned
      * until abort. A failed submission wait retains it through driver shutdown. */
     for(unsigned failure=0;failure<3;++failure) {
         reset();ctr_scene_state state;ctr_vertex vertices[3];textured_setup(&state,vertices);
-        ctr_scene_texture texture={pixels,8,16,0x18010000u,0,0,0};expected_texture=&texture;
+        ctr_scene_texture texture={pixels,8,16,0x18010000u,0,0};expected_texture=&texture;
         ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
         ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
         assert(backend.begin(backend.context,&surface));
@@ -556,7 +647,7 @@ int main(int argc,char **argv) {
     if(argc==2 && !strcmp(argv[1],"--fragment-programs")) { textured_bindings(true);return 0; }
     assert(argc==1);
     baseline();allocation_failures();scissor_modes();failures();readback_observer();
-    textured_bindings(false);texture_reuse();texture_dimensions();texture_failures();
+    textured_bindings(false);combiner_programs(false);texture_reuse();texture_dimensions();texture_failures();
     puts("GX2 native API model: lifetime, texture retirement/quarantine, original inputs, sampler/TEV bytecode, pitched upload, scissor and readback passed");
     return 0;
 }

@@ -34,7 +34,7 @@ class TexturedSceneReferenceTests(unittest.TestCase):
         obj, binary = cls.output/'native.o', cls.output/'native-probe'
         subprocess.run(cc+flags+['-DCTR_GX2_SCENE_MOCK', '-Dmemalign=ctr_gx2_test_memalign',
                        '-Dfree=ctr_gx2_test_free', '-c', str(ROOT/'runtime/wiiu/gx2_scene.c'), '-o', str(obj)], check=True)
-        subprocess.run(cc+flags+[str(ROOT/'tests/gx2-native/test_native.c'), str(obj), '-o', str(binary)], check=True)
+        subprocess.run(cc+flags+[str(ROOT/'tests/gx2-native/test_native.c'), str(ROOT/'runtime/core/ctr_tev.c'), str(obj), '-o', str(binary)], check=True)
         cls.capture = json.loads(subprocess.check_output([str(binary), '--fragment-programs'], text=True))
 
     @classmethod
@@ -102,8 +102,10 @@ class TexturedSceneReferenceTests(unittest.TestCase):
         path = self.output/'fragment-programs.json'
         path.write_text(json.dumps(self.capture))
         report = ORACLE.validate_fragment_programs(path)
-        self.assertEqual(report['programs'], 2)
-        self.assertEqual(report['arithmetic_cases'], 64)
+        self.assertEqual(report['programs'], 35)
+        self.assertEqual(report['arithmetic_cases'], 2240)
+        self.assertGreaterEqual(report['max_alu_instructions'], 384)
+        self.assertEqual(report['integer_division_cases'], 65026)
         self.assertFalse(report['gpu_execution'])
         self.assertFalse(report['console_verified'])
 
@@ -130,6 +132,43 @@ class TexturedSceneReferenceTests(unittest.TestCase):
         for case in cases:
             with self.subTest(case=case.name):ORACLE.execute_case(self.binary,self.output,case)
 
+    def test_tev_byte_operations_have_manual_numeric_anchors(self):
+        # a=64, b=128, c=77. RGB and alpha select different packed operand
+        # fields but must produce the same independently worked scalar result.
+        answers = {0:64, 1:32, 2:192, 3:64, 4:108, 5:0, 8:109, 9:57}
+        for operation, expected in answers.items():
+            stage = ORACLE.tev_stage(rgb=(3,14,14), operation=(operation,operation),
+                operands=((0,4,2),(0,2,0)), constant=(128,33,222,77))
+            with self.subTest(operation=operation):
+                self.assertEqual(ORACLE.tev_reference((stage,), (0,255,0,255), (64,)*4), (expected,)*4)
+
+    def test_six_stage_chain_has_manual_intermediate_results(self):
+        expected = ((89,36,116,194), (126,187,135,161), (126,146,129,252),
+                    (255,170,255,174), (128,108,128,174), (184,212,157,191))
+        for stage in range(6):
+            self.assertEqual(ORACLE.tev_reference(ORACLE.tev_chain()[:stage+1], (0,255,0,255), (128,128,128,255)), expected[stage])
+        row = next(row for row in self.capture['programs'] if row['mode'] == 'combiner-27')
+        decoded = ORACLE.decode_fragment_program(row, (0,1,0,1), (128,128,128,255))
+        self.assertEqual(decoded['color'], tuple(F(v,255) for v in expected[-1]))
+
+    def test_tev_scene_operations_constants_scales_and_late_rollback(self):
+        names = {'tev-six-stage-chain', 'tev-six-stage-chain-linear', 'tev-untextured-constant',
+                 'tev-previous-alpha-swizzle', 'tev-operands-3', 'tev-operands-13',
+                 'tev-scale-0-2', 'tev-scale-2-0', 'tev-scale-2-2'}
+        cases = [c for c in ORACLE.tev_cases() if c.name in names or c.late_error or
+                 (c.name.startswith('tev-operation-') and not c.linear)]
+        self.assertEqual(len(cases), 24)
+        for case in cases:
+            with self.subTest(case=case.name):ORACLE.execute_case(self.binary,self.output,case)
+
+    def test_fragment_undefined_gpr_and_missing_constants_fail(self):
+        row = self.mutate('replace', 256, 511)
+        with self.assertRaisesRegex(ValueError, 'Undefined'):
+            ORACLE.decode_fragment_program(row, (1,1,1,1), (17,89,233,53))
+        row = dict(self.capture['programs'][0]);row['uniforms'] = row['uniforms'][:-1]
+        with self.assertRaisesRegex(ValueError, 'constants'):
+            ORACLE.decode_fragment_program(row, (1,1,1,1), (17,89,233,53))
+
     def mutate(self, mode, offset, mask):
         row = dict(next(row for row in self.capture['programs'] if row['mode'] == mode))
         program = bytearray.fromhex(row['hex'])
@@ -140,25 +179,27 @@ class TexturedSceneReferenceTests(unittest.TestCase):
 
     def test_fragment_coordinates_must_remain_normalized_original_uv(self):
         with self.assertRaisesRegex(ValueError, 'normalized'):
-            ORACLE.decode_fragment_program(self.mutate('replace', 36, 1 << 28), (1, 1, 1, 1), (17, 89, 233, 53))
+            ORACLE.decode_fragment_program(self.mutate('replace', 132, 1 << 28), (1, 1, 1, 1), (17, 89, 233, 53))
         with self.assertRaisesRegex(ValueError, 'original UV'):
-            ORACLE.decode_fragment_program(self.mutate('replace', 40, 1 << 20), (1, 1, 1, 1), (17, 89, 233, 53))
+            ORACLE.decode_fragment_program(self.mutate('replace', 136, 1 << 20), (1, 1, 1, 1), (17, 89, 233, 53))
 
     def test_fragment_sample_opcode_and_bound_resource_are_checked(self):
-        for offset, mask in ((32, 1), (32, 1 << 8), (40, 1 << 15)):
+        for offset, mask in ((128, 1), (128, 1 << 8), (136, 1 << 15)):
             with self.subTest(offset=offset, mask=mask):
                 with self.assertRaisesRegex(ValueError, 'SAMPLE_LZ'):
                     ORACLE.decode_fragment_program(self.mutate('replace', offset, mask), (1, 1, 1, 1), (17, 89, 233, 53))
 
-    def test_legal_but_wrong_alu_channel_changes_decoded_pixel(self):
-        row = self.mutate('modulate', 48, 1 << 23)  # R0.y replaces R0.x.
+    def test_legal_but_wrong_stage_constant_changes_decoded_pixel(self):
+        row = dict(next(row for row in self.capture['programs'] if row['mode'] == 'combiner-28'))
+        row['uniforms'] = list(row['uniforms'])
+        row['uniforms'][0] = struct.unpack('<I', struct.pack('<f', 23))[0]
         result = ORACLE.decode_fragment_program(row, (1, 0, 1, 1), (17, 89, 233, 53))
-        self.assertEqual(result['color'][0], 0)
-        self.assertNotEqual(result['color'], (F(17, 255), 0, F(233, 255), F(53, 255)))
+        self.assertEqual(result['color'][0], F(23, 255))
+        self.assertNotEqual(result['color'][0], F(19, 255))
 
     def test_fragment_clause_bounds_padding_and_end_are_checked(self):
         for mode, offset, mask in (('replace', 0, 1 << 8), ('replace', 120, 1),
-                                   ('modulate', 20, 1 << 21)):
+                                   ('modulate', 28, 1 << 21)):
             with self.subTest(mode=mode, offset=offset):
                 with self.assertRaises(ValueError):
                     ORACLE.decode_fragment_program(self.mutate(mode, offset, mask), (1, 1, 1, 1), (17, 89, 233, 53))
