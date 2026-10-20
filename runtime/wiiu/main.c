@@ -293,6 +293,24 @@ static void gx2_readback_log(void *context,const ctr_scene_surface *surface) {
         surface->stride,(unsigned)surface->size,hash);
     WHBLogPrintf("GX2 GRID sequence=%llu rgba=%s",(unsigned long long)(scene->readbacks+1u),grid);
 }
+static void gx2_depth_readback_log(void *context,const ctr_scene_depth_surface *surface) {
+    const ctr_wiiu_gx2_scene *scene=context;
+    const uint8_t *bytes=surface->bytes;uint32_t hash=UINT32_C(2166136261);
+    for(size_t i=0;i<surface->size;++i)hash=(hash^bytes[i])*UINT32_C(16777619);
+    char grid[81];size_t used=0;
+    for(unsigned row=0;row<4;++row)for(unsigned col=0;col<4;++col) {
+        unsigned x=(2u*col+1u)*surface->width/8u,y=(2u*row+1u)*surface->height/8u;
+        const uint8_t *pixel=bytes+(size_t)y*surface->stride+x*2u;
+        unsigned depth=(unsigned)pixel[0]|(unsigned)pixel[1]<<8;
+        int n=snprintf(grid+used,sizeof(grid)-used,"%s%04x",used?" ":"",depth);
+        if(n<0 || (size_t)n>=sizeof(grid)-used)return;
+        used+=(size_t)n;
+    }
+    WHBLogPrintf("GX2 DEPTH READBACK sequence=%llu width=%u height=%u stride=%u bytes=%u fnv1a=%08x; GPU bytes before parity/commit; D16_LE rows=bottom_to_top",
+        (unsigned long long)(scene->readbacks+1u),surface->width,surface->height,
+        surface->stride,(unsigned)surface->size,hash);
+    WHBLogPrintf("GX2 DEPTH GRID sequence=%llu d16=%s",(unsigned long long)(scene->readbacks+1u),grid);
+}
 static void gx2_description(char *line,size_t capacity) {
     snprintf(line,capacity,"GX2 backend: result=%s shader=%s begins=%llu draws=%llu submissions=%llu readbacks=%llu shader_ops=%llu waits=%llu wait_failures=%llu allocations=%llu releases=%llu quarantine=%u backend_stage=%u texture_uploads=%llu texture_bytes=%llu; CPU preflight and full GPU readback parity\n",
         ctr_wiiu_gx2_scene_result_name(gx2_scene.result),ctr_gx2_shader_result_name(gx2_scene.shader_result),
@@ -1299,7 +1317,8 @@ int main(int argc, char **argv) {
     gfx_ready=1;
 #ifdef CTR_GX2_GUEST
     ctr_wiiu_gx2_scene_init(&gx2_scene,WHBGfxGetTVContextState());
-    gx2_scene.observe_readback=gx2_readback_log;gx2_scene.readback_context=&gx2_scene;
+    gx2_scene.observe_readback=gx2_readback_log;gx2_scene.observe_depth_readback=gx2_depth_readback_log;
+    gx2_scene.readback_context=&gx2_scene;
     gx2_backend=ctr_wiiu_gx2_scene_backend(&gx2_scene);
 #endif
     GX2Surface *tv_target=&WHBGfxGetTVColourBuffer()->surface;
@@ -1500,8 +1519,13 @@ int main(int argc, char **argv) {
                     WHBLogPrintf("GSP presentation FAIL top=%s bottom=%s",ctr_mem_result_name(top),ctr_mem_result_name(bottom));
                 }
                 gsp_presented=gsp_guest.gsp.swaps[0];
+#ifdef CTR_TEXTURED_HOMEBREW
+                draw_candidate=ctr_textured_draw_observation_ready(top==CTR_MEM_OK && bottom==CTR_MEM_OK,gsp_presented,
+                    gsp_guest.gsp.pica_draws,gsp_guest.gsp.pica_triangles,gsp_guest.gsp.pica_fragments,gsp_guest.gsp.pica_shader_instructions);
+#else
                 draw_candidate=ctr_draw_observation_ready(top==CTR_MEM_OK && bottom==CTR_MEM_OK,gsp_presented,
                     gsp_guest.gsp.pica_draws,gsp_guest.gsp.pica_triangles,gsp_guest.gsp.pica_fragments,gsp_guest.gsp.pica_shader_instructions);
+#endif
                 guest_green_frame=top==CTR_MEM_OK;
                 for(unsigned i=0;guest_green_frame && i<TOP_W*GUEST_H;++i)
                     if(top_image[i]!=0x00ff00ff)guest_green_frame=false;
@@ -1776,7 +1800,12 @@ int main(int argc, char **argv) {
         ++frame;
     }
 #if defined(CTR_GX2_GUEST)
-    result=gsp_ready && gsp_pass_seen && drawn_frame_submitted && gx2_scene.draws>=4u &&
+    result=gsp_ready && gsp_pass_seen && drawn_frame_submitted &&
+#ifdef CTR_TEXTURED_HOMEBREW
+        gx2_scene.draws>=6u &&
+#else
+        gx2_scene.draws>=4u &&
+#endif
         gx2_scene.readbacks && gx2_scene.result==CTR_WIIU_GX2_SCENE_OK &&
         !gx2_scene.wait_failures && !gx2_scene.quarantined && !guest_fault_seen &&
         test_guide.done && test_guide.passed==2u && !test_guide.failed && !test_guide.skipped &&

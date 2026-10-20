@@ -10,8 +10,8 @@ retain the same narrow scene contract; general PICA rendering remains unsupporte
 `runtime/core/ctr_scene.c` accepts an explicit stable geometry span, optional
 owned texture spans, matching PICA physical bases and an owned linear RGBA8 surface. Row zero is the
 bottom. It never dereferences a guest/physical address. Every command list
-stages the state and entire target before committing; late errors preserve
-previous registers, counters and pixels. Failure reports describe an attempted
+stages the state and entire color/depth targets before committing; late errors
+preserve previous registers, counters and both buffers. Failure reports describe an attempted
 staged prefix, not committed draws. Aliased reports are left untouched.
 
 The bounded path supports:
@@ -29,7 +29,7 @@ The bounded path supports:
   include/exclude scissor, degenerate triangles and integer edge evaluation.
   Each triangle has a constant opaque endpoint color: RGBA lanes are 0 or 1,
   alpha 1. Final TEV alpha can reject fragments; logic/blend operations and
-  channel masks control destination writes, with depth disabled.
+  channel masks control color writes; the paired-target API adds bounded D16 depth.
 - Optional Texture0 UV outputs (semantics 12/13), exact Q16 in −16..16 with W=1;
   affine nearest/bilinear sampling of all 14 base formats with independent clamp/repeat/
   mirror S/T. Six TEV stages combine Texture0, primary, constants and Previous
@@ -43,11 +43,12 @@ The bounded path supports:
 
 Limits are 256 vertices per draw, 32 draws per list, 512 vertex shader code words,
 128 descriptors, 96 float uniforms, 12 attributes/loaders, a 4 MiB geometry span,
-32 separate texture spans with 4 MiB total source bytes, and a 1 MiB target no
-larger than 512×512. Separate texture spans cannot overlap geometry or each
+32 separate texture spans with 4 MiB total source bytes, a 1 MiB color target and
+a 512 KiB D16 target, with matching dimensions no larger than 512×512. Separate texture spans cannot overlap geometry or each
 other. No primitive is carried across lists. Unknown state, inexact shader
 arithmetic, other opcodes, relative addressing, geometry, clipping, perspective,
-varying primary color, mixed min/mag filters, mipmaps, DOT3/combiner buffers and depth/stencil
+varying primary color, mixed min/mag filters, mipmaps, DOT3/combiner buffers,
+broader depth and stencil
 fail visibly. This is not a general PICA renderer.
 
 `runtime/core/ctr_shader.c` accepts only finite normal values exactly
@@ -149,7 +150,11 @@ float24 evaluator, then passes original inputs and state to synchronous
 PARAM0 exports primary color; PARAM1 is present only with complete UV semantics.
 Readback must match the entire staged target, including padding and trailing
 bytes, before commit. Callback failures and mismatches report
-`CTR_SCENE_BACKEND` and abort without fallback.
+`CTR_SCENE_BACKEND` and abort without fallback. The paired
+`ctr_scene_execute_targets_backend` variant uses optional `begin_depth` and
+`end_depth` callbacks; legacy color-only backends reject depth before submission.
+Both readbacks must match, including padding and trailing bytes. The
+[D16 profile](textures.md#d16-depth) defines quantization and native admission.
 
 `runtime/wiiu/gx2_scene.c` implements GX2 surfaces, shaders, uniforms,
 viewport/cull/scissor and readback. Textured draws bind an owned RGBA8 texture

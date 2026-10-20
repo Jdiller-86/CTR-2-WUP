@@ -21,7 +21,7 @@ bool ctr_fragment_register_value(unsigned reg,uint32_t value) {
     case 0x102u:return value<16u;
     case 0x103u:return true;
     case 0x104u:return !(value&~UINT32_C(0xff71));
-    case 0x107u:return !(value&~UINT32_C(0xf00)); /* Depth read/write disabled. */
+    case 0x107u:return !(value&~UINT32_C(0x1f71));
     case 0x112u:case 0x113u:return value==0u || value==15u;
     default:return false;
     }
@@ -32,8 +32,8 @@ static bool reads_destination(unsigned op) {
 static bool factor_reads_destination(unsigned factor,bool alpha) {
     return factor==4u || factor==5u || factor==8u || factor==9u || (!alpha && factor==14u);
 }
-bool ctr_fragment_decode(const uint32_t registers[],const uint8_t defined[],
-                         bool required,ctr_fragment_state *out) {
+bool ctr_fragment_decode_depth(const uint32_t registers[],const uint8_t defined[],
+                               bool required,bool depth_allowed,ctr_fragment_state *out) {
     if(!registers || !defined || !out)return false;
     bool present=required;
     for(unsigned i=0;i<sizeof(merger_registers)/sizeof(*merger_registers);++i)
@@ -44,6 +44,7 @@ bool ctr_fragment_decode(const uint32_t registers[],const uint8_t defined[],
             unsigned reg=base_registers[i];
             if(defined[reg]!=15u || !ctr_fragment_register_value(reg,registers[reg]))return false;
         }
+        if(!depth_allowed && (registers[0x107u]&~UINT32_C(0xf00)))return false;
         if(defined[0x101u]==15u && !ctr_fragment_register_value(0x101u,registers[0x101u]))return false;
         trial.logic_op=(uint8_t)registers[0x102u];
         trial.write_mask=registers[0x113u]?((registers[0x107u]>>8)&15u):0u;
@@ -72,7 +73,11 @@ bool ctr_fragment_decode(const uint32_t registers[],const uint8_t defined[],
     }
     *out=trial;return true;
 }
-static bool alpha_passes(const ctr_fragment_state *state,uint8_t alpha) {
+bool ctr_fragment_decode(const uint32_t registers[],const uint8_t defined[],
+                         bool required,ctr_fragment_state *out) {
+    return ctr_fragment_decode_depth(registers,defined,required,false,out);
+}
+bool ctr_fragment_alpha_passes(const ctr_fragment_state *state,uint8_t alpha) {
     if(!state->alpha_enabled)return true;
     switch(state->alpha_function) {
     case 0:return false;
@@ -148,7 +153,7 @@ static uint8_t blend(const ctr_fragment_state *state,unsigned lane,const uint8_t
 bool ctr_fragment_apply(const ctr_fragment_state *state,const uint8_t source[4],
                         uint8_t destination[4]) {
     uint8_t input[4],old[4];memcpy(input,source,4u);memcpy(old,destination,4u);
-    if(!alpha_passes(state,input[3]))return false;
+    if(!ctr_fragment_alpha_passes(state,input[3]))return false;
     for(unsigned lane=0;lane<4;++lane)if(state->write_mask&(1u<<lane))
         destination[lane]=state->blend_enabled?blend(state,lane,input,old):logic(state->logic_op,input[lane],old[lane]);
     return true;

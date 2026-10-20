@@ -8,6 +8,7 @@
 #define CTR_SCENE_MAX_VERTICES 256u
 #define CTR_SCENE_MAX_DRAWS 32u
 #define CTR_SCENE_MAX_SURFACE_BYTES (1024u*1024u)
+#define CTR_SCENE_MAX_DEPTH_BYTES (512u*1024u)
 #define CTR_SCENE_MAX_TEXTURE_SPANS 32u
 #define CTR_SCENE_MAX_TEXTURE_SOURCE_BYTES (4u*1024u*1024u)
 typedef enum {
@@ -57,6 +58,14 @@ typedef struct {
     void *bytes;size_t size;
     unsigned width,height,stride;
 } ctr_scene_surface;
+typedef struct {
+    /* Owned linear little-endian D16, row zero at bottom. PICA address is an
+     * explicit binding identity, never dereferenced. Padding/trailing bytes
+     * participate in staging and exact parity just like the color surface. */
+    void *bytes;size_t size;
+    unsigned width,height,stride;
+    uint32_t address;
+} ctr_scene_depth_surface;
 /* Optional synchronous renderer. All commands, resources and software pixels
  * are validated before begin. begin initializes private scratch from initial;
  * draw receives original inputs, complete current PICA/shader state and an
@@ -73,6 +82,12 @@ typedef struct ctr_scene_backend {
                  const ctr_scene_texture *texture);
     bool (*end)(void *context,const ctr_scene_surface *readback);
     void (*abort)(void *context);
+    /* Optional paired-target extension; both are required when depth is bound.
+     * Legacy color-only callbacks retain their existing contract. */
+    bool (*begin_depth)(void *context,const ctr_scene_surface *initial,
+                        const ctr_scene_depth_surface *depth);
+    bool (*end_depth)(void *context,const ctr_scene_surface *readback,
+                      const ctr_scene_depth_surface *depth);
 } ctr_scene_backend;
 typedef struct {
     ctr_scene_result result;
@@ -97,8 +112,8 @@ void ctr_scene_init(ctr_scene_state *state);
  * the last raw texture row. Alpha comparisons, RGBA masks, explicit color gates
  * and all sixteen bytewise logic operations or checked RGB/alpha blending run
  * after TEV. Blend equations use one byte-domain division before saturation;
- * native admission is narrower and remains guarded by full parity. Depth/stencil,
- * DOT3/buffers, other textures,
+ * native admission is narrower and remains guarded by full parity. The paired
+ * target entry admits bounded D16; stencil, DOT3/buffers, other textures,
  * unsupported arithmetic and geometry fail.
  * Every list stages state and the complete target before any commit, so late
  * errors preserve previous state/pixels. Inputs must be owned/aligned/stable.
@@ -128,5 +143,22 @@ ctr_scene_result ctr_scene_execute_target_backend(ctr_scene_state *state,const v
                                                   size_t command_bytes,const ctr_scene_resources *resources,
                                                   const ctr_scene_surface *surface,uint32_t color_address,
                                                   const ctr_scene_backend *backend,ctr_scene_report *report);
+/* Paired-target variant. Optional depth is owned D16 with canonical Z buffering
+ * (scale -1, offset signed zero), W=1 and constant Z per triangle. All eight
+ * comparisons and independent read/write gates are checked. Both complete
+ * surfaces and state commit together; no depth address is followed. Each owned
+ * color/depth target is bounded to 1 MiB/512 KiB (1.5 MiB combined). The paired
+ * backend profile admits only endpoint Z=0/-1 and rejects other values before
+ * begin; software-only execution admits exact constant fractional depth. Legacy
+ * renderers without a paired-target interface reject depth before begin. */
+ctr_scene_result ctr_scene_execute_targets(ctr_scene_state *state,const void *commands,
+                                           size_t command_bytes,const ctr_scene_resources *resources,
+                                           const ctr_scene_surface *surface,uint32_t color_address,
+                                           const ctr_scene_depth_surface *depth,ctr_scene_report *report);
+ctr_scene_result ctr_scene_execute_targets_backend(ctr_scene_state *state,const void *commands,
+                                                   size_t command_bytes,const ctr_scene_resources *resources,
+                                                   const ctr_scene_surface *surface,uint32_t color_address,
+                                                   const ctr_scene_depth_surface *depth,
+                                                   const ctr_scene_backend *backend,ctr_scene_report *report);
 const char *ctr_scene_result_name(ctr_scene_result result);
 #endif

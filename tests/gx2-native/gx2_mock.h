@@ -24,6 +24,11 @@ typedef struct {
 typedef struct { GX2Surface surface;unsigned viewNumSlices; } GX2ColorBuffer;
 typedef struct {
     GX2Surface surface;
+    unsigned viewMip,viewFirstSlice,viewNumSlices;
+    void *hiZPtr;unsigned hiZSize;float depthClear;unsigned stencilClear;
+} GX2DepthBuffer;
+typedef struct {
+    GX2Surface surface;
     unsigned viewFirstMip,viewNumMips,viewFirstSlice,viewNumSlices,compMap,regs[5];
 } GX2Texture;
 typedef struct { unsigned clamp[3],filter,z_filter,mip_filter;float lod[3]; } GX2Sampler;
@@ -47,12 +52,14 @@ typedef struct {
 typedef struct { unsigned location,buffer,offset,format,type,mask,endianSwap; } GX2AttribStream;
 typedef struct {
     uint32_t pa_cl_vport_xscale,pa_cl_vport_xoffset,pa_cl_vport_yscale,pa_cl_vport_yoffset;
+    uint32_t pa_cl_vport_zscale,pa_cl_vport_zoffset,pa_sc_vport_zmin,pa_sc_vport_zmax;
 } GX2ViewportReg;
 enum {
     GX2_SURFACE_DIM_TEXTURE_2D=1,GX2_SURFACE_FORMAT_UNORM_R8_G8_B8_A8=0x1a,
-    GX2_AA_MODE1X=0,GX2_SURFACE_USE_TEXTURE=1,GX2_SURFACE_USE_COLOR_BUFFER=2,
+    GX2_SURFACE_FORMAT_UNORM_R16=5,
+    GX2_AA_MODE1X=0,GX2_SURFACE_USE_TEXTURE=1,GX2_SURFACE_USE_COLOR_BUFFER=2,GX2_SURFACE_USE_DEPTH_BUFFER=4,
     GX2_TILE_MODE_TILED_2D_THIN1=4,GX2_TILE_MODE_LINEAR_ALIGNED=1,
-    GX2_INVALIDATE_MODE_CPU_TEXTURE=66,GX2_INVALIDATE_MODE_COLOR_BUFFER=16,
+    GX2_INVALIDATE_MODE_CPU_TEXTURE=66,GX2_INVALIDATE_MODE_COLOR_BUFFER=16,GX2_INVALIDATE_MODE_DEPTH_BUFFER=32,
     GX2_INVALIDATE_MODE_CPU_SHADER=72,GX2_INVALIDATE_MODE_CPU_ATTRIBUTE_BUFFER=65,
     GX2_FETCH_SHADER_TESSELLATION_NONE=0,GX2_TESSELLATION_MODE_DISCRETE=0,
     GX2_ATTRIB_FORMAT_FLOAT_32_32_32_32=0x813,GX2_ATTRIB_INDEX_PER_VERTEX=0,
@@ -97,6 +104,12 @@ void GX2SetRasterizerClipControlEx(bool raster,bool clip,bool half);
 void GX2SetScissor(unsigned x,unsigned y,unsigned w,unsigned h);
 void GX2DrawEx(unsigned type,unsigned count,unsigned first,unsigned instances);
 void GX2SetColorBuffer(const GX2ColorBuffer *target,unsigned index);
+void GX2InitDepthBufferRegs(GX2DepthBuffer *target);
+void GX2InitDepthBufferHiZEnable(GX2DepthBuffer *target,bool enable);
+void GX2SetDepthBuffer(const GX2DepthBuffer *target);
+void GX2SetDepthStencilControl(bool test,bool write,unsigned function,bool stencil,bool backface,
+    unsigned front,unsigned front_pass,unsigned front_fail,unsigned front_stencil,
+    unsigned back,unsigned back_pass,unsigned back_fail,unsigned back_stencil);
 void GX2SetShaderModeEx(unsigned mode,unsigned vs,unsigned vsstack,unsigned gs,unsigned gsstack,unsigned ps,unsigned psstack);
 void GX2SetVertexShader(const GX2VertexShader *shader);
 void GX2SetPixelShader(const GX2PixelShader *shader);
@@ -122,7 +135,6 @@ void GX2SetBlendConstantColor(float red,float green,float blue,float alpha);
 #define GX2SetupContextStateEx(p,flag) ((void)(p),(void)(flag))
 #define GX2InitColorBufferRegs(p) ((void)(p))
 #define GX2SetFetchShader(p) ((void)(p))
-#define GX2SetDepthStencilControl(a,b,c,d,e,f,g,h,i,j,k,l,m) ((void)0)
 #define GX2SetAlphaToMask(a,b) ((void)(a),(void)(b))
 #define GX2SetStreamOutEnable(a) ((void)(a))
 #endif

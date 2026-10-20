@@ -134,13 +134,8 @@ ctr_mem_result ctr_memory_read_bytes(const ctr_memory *memory,uint32_t address,v
     if(host_alias(memory,output,size))return CTR_MEM_OVERLAP;
     copy_bytes(memory,address,output,size,false);return CTR_MEM_OK;
 }
-ctr_mem_result ctr_memory_write_bytes(ctr_memory *memory,uint32_t address,const void *input,uint32_t size) {
-    ctr_mem_result result=ctr_memory_check_range(memory,address,size,CTR_MEM_WRITE);
-    if(result!=CTR_MEM_OK)return result;
-    if(!size)return CTR_MEM_OK;
-    if(!input)return CTR_MEM_OVERFLOW;
-    if(host_alias(memory,input,size))return CTR_MEM_OVERLAP;
-    bool code=false;uint64_t end=(uint64_t)address+size;
+static bool write_touches_code(const ctr_memory *memory,uint32_t address,uint32_t size) {
+    uint64_t end=(uint64_t)address+size;
     for(size_t i=0;i<memory->count;++i) {
         const ctr_mapping *map=&memory->maps[i];uint64_t stop=(uint64_t)map->base+map->size;
         if(address>=stop || map->base>=end)continue;
@@ -148,12 +143,68 @@ ctr_mem_result ctr_memory_write_bytes(ctr_memory *memory,uint32_t address,const 
         uintptr_t first=(uintptr_t)map->storage+(size_t)(begin-map->base),last=first+(size_t)(finish-begin);
         for(size_t j=0;j<memory->count;++j) {
             const ctr_mapping *other=&memory->maps[j];uintptr_t base=(uintptr_t)other->storage;
-            if((other->permissions&CTR_MEM_EXEC) && first<base+other->size && base<last)code=true;
+            if((other->permissions&CTR_MEM_EXEC) && first<base+other->size && base<last)return true;
         }
     }
-    copy_bytes(memory,address,(void*)input,size,true);++memory->generation;
+    return false;
+}
+static bool write_ranges_overlap(const ctr_memory *memory,const ctr_memory_write_range *a,
+                                 const ctr_memory_write_range *b) {
+    if(!a->size || !b->size)return false;
+    uint64_t a_end=(uint64_t)a->address+a->size,b_end=(uint64_t)b->address+b->size;
+    if(a!=b && a->address<b_end && b->address<a_end)return true;
+    for(size_t i=0;i<memory->count;++i) {
+        const ctr_mapping *a_map=&memory->maps[i];uint64_t a_stop=(uint64_t)a_map->base+a_map->size;
+        if(a->address>=a_stop || a_map->base>=a_end)continue;
+        uint64_t a_begin=a->address>a_map->base?a->address:a_map->base;
+        uint64_t a_finish=a_end<a_stop?a_end:a_stop;
+        uintptr_t a_first=(uintptr_t)a_map->storage+(size_t)(a_begin-a_map->base);
+        uintptr_t a_last=a_first+(size_t)(a_finish-a_begin);
+        for(size_t j=a==b?i+1u:0u;j<memory->count;++j) {
+            const ctr_mapping *b_map=&memory->maps[j];uint64_t b_stop=(uint64_t)b_map->base+b_map->size;
+            if(b->address>=b_stop || b_map->base>=b_end)continue;
+            uint64_t b_begin=b->address>b_map->base?b->address:b_map->base;
+            uint64_t b_finish=b_end<b_stop?b_end:b_stop;
+            uintptr_t b_first=(uintptr_t)b_map->storage+(size_t)(b_begin-b_map->base);
+            uintptr_t b_last=b_first+(size_t)(b_finish-b_begin);
+            if(a_first<b_last && b_first<a_last)return true;
+        }
+    }
+    return false;
+}
+static ctr_mem_result write_ranges(ctr_memory *memory,const ctr_memory_write_range *ranges,size_t count,
+                                   bool distinct_backing) {
+    bool changed=false,code=false;
+    for(size_t i=0;i<count;++i) {
+        const ctr_memory_write_range *r=&ranges[i];
+        ctr_mem_result result=ctr_memory_check_range(memory,r->address,r->size,CTR_MEM_WRITE);
+        if(result!=CTR_MEM_OK)return result;
+        if(!r->size)continue;
+        if(!r->input)return CTR_MEM_OVERFLOW;
+        if(host_alias(memory,r->input,r->size))return CTR_MEM_OVERLAP;
+        if(distinct_backing && write_ranges_overlap(memory,r,r))return CTR_MEM_OVERLAP;
+        for(size_t j=0;j<i;++j)if(write_ranges_overlap(memory,r,&ranges[j]))return CTR_MEM_OVERLAP;
+        changed=true;
+        if(write_touches_code(memory,r->address,r->size))code=true;
+    }
+    if(!changed)return CTR_MEM_OK;
+    for(size_t i=0;i<count;++i)if(ranges[i].size)
+        copy_bytes(memory,ranges[i].address,(void*)ranges[i].input,ranges[i].size,true);
+    ++memory->generation;
     if(code)++memory->code_generation;
     return CTR_MEM_OK;
+}
+ctr_mem_result ctr_memory_write_ranges(ctr_memory *memory,const ctr_memory_write_range *ranges,size_t count) {
+    if(count>CTR_MEMORY_MAX_WRITE_RANGES)return CTR_MEM_CAPACITY;
+    if(!count)return CTR_MEM_OK;
+    size_t bytes=count*sizeof(*ranges);
+    if(!ranges || (uintptr_t)ranges>UINTPTR_MAX-bytes)return CTR_MEM_OVERFLOW;
+    if(host_alias(memory,ranges,(uint32_t)bytes))return CTR_MEM_OVERLAP;
+    return write_ranges(memory,ranges,count,true);
+}
+ctr_mem_result ctr_memory_write_bytes(ctr_memory *memory,uint32_t address,const void *input,uint32_t size) {
+    const ctr_memory_write_range range={address,input,size};
+    return write_ranges(memory,&range,1,false);
 }
 
 ctr_mem_result ctr_memory_check_range(const ctr_memory *memory, uint32_t address,

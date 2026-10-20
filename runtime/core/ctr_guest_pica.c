@@ -75,6 +75,15 @@ static void layout(uint8_t *linear_bytes,uint8_t *raw,unsigned width,unsigned he
         else for(unsigned lane=0;lane<4;++lane)p[lane]=q[3u-lane];
     }
 }
+/* D16 uses the same 8x8 Morton indices as color, with two little-endian
+ * bytes per sample. Keep raw bytes explicit on both host endian orders. */
+static void depth_layout(uint8_t *pixels,uint8_t *raw,unsigned width,unsigned height,bool encode) {
+    for(unsigned y=0;y<height;++y)for(unsigned x=0;x<width;++x) {
+        uint8_t *p=pixels+((size_t)y*width+x)*2u,*q=raw+tiled(x,y,width)/2u;
+        if(encode) { q[0]=p[0];q[1]=p[1]; }
+        else { p[0]=q[0];p[1]=q[1]; }
+    }
+}
 static void diagnostic(ctr_guest *g,const ctr_scene_report *r) {
     g->gsp.last_scene_result=(uint32_t)r->result;
     g->gsp.last_vertex_result=(uint32_t)r->vertex_result;
@@ -103,7 +112,7 @@ ctr_gx_result ctr_guest_pica_execute(ctr_guest *g,const void *commands,size_t si
     c->signal=false;ctr_scene_report report={0};ctr_pica_report wire={0};
     ctr_gx_result result=CTR_GX_UNSUPPORTED;
     ctr_pica_write *writes=NULL;ctr_scene_state *trial=NULL;
-    uint8_t *source=NULL,*raw=NULL,*pixels=NULL;
+    uint8_t *source=NULL,*raw=NULL,*pixels=NULL,*depth_raw=NULL,*depth_pixels=NULL;
     ctr_scene_resource_span textures[CTR_SCENE_MAX_TEXTURE_SPANS]={0};unsigned texture_count=0;
     ctr_pica_result inspected=ctr_pica_inspect(commands,size,CTR_PICA_MAX_WRITES,NULL,0,&wire);
     if(inspected!=CTR_PICA_OK || !size || (size&15u)) {
@@ -118,14 +127,15 @@ ctr_gx_result ctr_guest_pica_execute(ctr_guest *g,const void *commands,size_t si
     trial->lists=g->gsp.pica.committed_lists;
     /* Select actual bindings at the first draw, rather than guessing from the
      * final state. Later draws must match; post-draw setup may prepare a next list. */
-    const unsigned ids[]={0x200,0x11d,0x11e,0x117};uint32_t values[4],bound[4]={0};uint8_t defined[4];
-    for(unsigned i=0;i<4;++i) { values[i]=trial->registers[ids[i]];defined[i]=trial->register_defined[ids[i]]; }
+    const unsigned ids[]={0x200,0x11d,0x11e,0x117,0x116,0x11c};
+    uint32_t values[6],bound[6]={0};uint8_t defined[6];
+    for(unsigned i=0;i<6;++i) { values[i]=trial->registers[ids[i]];defined[i]=trial->register_defined[ids[i]]; }
     const unsigned texture_ids[]={0x080,0x082,0x085,0x08e};uint32_t texture_values[4];uint8_t texture_defined[4];
     for(unsigned i=0;i<4;++i) { texture_values[i]=trial->registers[texture_ids[i]];texture_defined[i]=trial->register_defined[texture_ids[i]]; }
     bool draws=false;size_t markers=0,first_draw=0;unsigned draw_register=0;
     for(size_t i=0;i<wire.writes;++i) {
         const ctr_pica_write *w=&writes[i];report.byte_offset=w->byte_offset;report.reg=w->reg;
-        for(unsigned k=0;k<4;++k)if(w->reg==ids[k]) {
+        for(unsigned k=0;k<6;++k)if(w->reg==ids[k]) {
             values[k]=ctr_pica_merge(values[k],w->value,w->byte_mask);defined[k]|=w->byte_mask;
         }
         for(unsigned k=0;k<4;++k)if(w->reg==texture_ids[k]) {
@@ -156,8 +166,10 @@ ctr_gx_result ctr_guest_pica_execute(ctr_guest *g,const void *commands,size_t si
     if(g->gsp.pica.committed_lists==UINT64_MAX || wire.writes>UINT64_MAX-g->gsp.pica.register_writes ||
        markers>UINT64_MAX-g->gsp.pica.finalizations) { report.result=CTR_SCENE_OVERFLOW;goto done; }
     uint32_t resource_address=0,resource_bytes=0,target_address=0,target_bytes=4,color_address=0;
+    uint32_t depth_address=0,depth_virtual=0,depth_bytes=0;
     unsigned width=1,height=1;uint8_t empty[4]={0};
     ctr_scene_resources resources={0};ctr_scene_surface surface={empty,4,1,1,4};
+    ctr_scene_depth_surface depth={0};
     if(draws) {
         report.byte_offset=first_draw;report.reg=draw_register;
         if((bound[0]&UINT32_C(0xe0000001)) || (bound[1]&UINT32_C(0xf0000000)) || bound[3] ||
@@ -171,10 +183,21 @@ ctr_gx_result ctr_guest_pica_execute(ctr_guest *g,const void *commands,size_t si
             report.result=CTR_SCENE_LAYOUT;goto done;
         }
         target_bytes=width*height*4u;
+        if(bound[4] || (bound[5]&UINT32_C(0xf0000000))) { report.result=CTR_SCENE_UNSUPPORTED;goto done; }
+        depth_address=bound[5]*8u;
+        if(depth_address)depth_bytes=width*height*2u;
         result=linear(g,color_address,target_bytes,CTR_MEM_READ|CTR_MEM_WRITE,&target_address,NULL,c);
         if(result!=CTR_GX_OK) { report.result=CTR_SCENE_LAYOUT;goto done; }
         if(command_alias(g,target_address,target_bytes,command_address,(uint32_t)size)) {
             result=CTR_GX_MEMORY;c->memory=CTR_MEM_OVERLAP;report.result=CTR_SCENE_ALIAS;goto done;
+        }
+        if(depth_bytes) {
+            result=linear(g,depth_address,depth_bytes,CTR_MEM_READ|CTR_MEM_WRITE,&depth_virtual,NULL,c);
+            if(result!=CTR_GX_OK) { report.result=CTR_SCENE_LAYOUT;goto done; }
+            if(command_alias(g,depth_virtual,depth_bytes,command_address,(uint32_t)size) ||
+               command_alias(g,target_address,target_bytes,depth_virtual,depth_bytes)) {
+                result=CTR_GX_MEMORY;c->memory=CTR_MEM_OVERLAP;report.result=CTR_SCENE_ALIAS;goto done;
+            }
         }
         result=linear(g,(uint32_t)base,1u,CTR_MEM_READ,&resource_address,&resource_bytes,c);
         if(result!=CTR_GX_OK) { report.result=CTR_SCENE_LAYOUT;goto done; }
@@ -184,15 +207,31 @@ ctr_gx_result ctr_guest_pica_execute(ctr_guest *g,const void *commands,size_t si
             if(color_address<=base) { result=CTR_GX_MEMORY;c->memory=CTR_MEM_OVERLAP;report.result=CTR_SCENE_ALIAS;goto done; }
             resource_bytes=color_address-(uint32_t)base;
         }
+        if(depth_bytes && base<(uint64_t)depth_address+depth_bytes && depth_address<base+resource_bytes) {
+            if(depth_address<=base) { result=CTR_GX_MEMORY;c->memory=CTR_MEM_OVERLAP;report.result=CTR_SCENE_ALIAS;goto done; }
+            resource_bytes=depth_address-(uint32_t)base;
+        }
         if(resource_bytes>CTR_VERTEX_MAX_SOURCE_BYTES) { result=CTR_GX_UNSUPPORTED;report.result=CTR_SCENE_LIMIT;goto done; }
         result=linear(g,(uint32_t)base,resource_bytes,CTR_MEM_READ,&resource_address,NULL,c);
         if(result!=CTR_GX_OK) { report.result=CTR_SCENE_VERTEX;goto done; }
+        if(command_alias(g,target_address,target_bytes,resource_address,resource_bytes) ||
+           (depth_bytes && command_alias(g,depth_virtual,depth_bytes,resource_address,resource_bytes))) {
+            result=CTR_GX_MEMORY;c->memory=CTR_MEM_OVERLAP;report.result=CTR_SCENE_ALIAS;goto done;
+        }
         source=malloc(resource_bytes);raw=malloc(target_bytes);pixels=malloc(target_bytes);
         if(!source || !raw || !pixels) { result=CTR_GX_NO_MEMORY;report.result=CTR_SCENE_NO_MEMORY;goto done; }
         c->memory=ctr_memory_read_bytes(&g->memory,resource_address,source,resource_bytes);
         if(c->memory==CTR_MEM_OK)c->memory=ctr_memory_read_bytes(&g->memory,target_address,raw,target_bytes);
         if(c->memory!=CTR_MEM_OK) { result=CTR_GX_MEMORY;report.result=CTR_SCENE_LAYOUT;goto done; }
         layout(pixels,raw,width,height,false);
+        if(depth_bytes) {
+            depth_raw=malloc(depth_bytes);depth_pixels=malloc(depth_bytes);
+            if(!depth_raw || !depth_pixels) { result=CTR_GX_NO_MEMORY;report.result=CTR_SCENE_NO_MEMORY;goto done; }
+            c->memory=ctr_memory_read_bytes(&g->memory,depth_virtual,depth_raw,depth_bytes);
+            if(c->memory!=CTR_MEM_OK) { result=CTR_GX_MEMORY;report.result=CTR_SCENE_LAYOUT;goto done; }
+            depth_layout(depth_pixels,depth_raw,width,height,false);
+            depth=(ctr_scene_depth_surface){depth_pixels,depth_bytes,width,height,width*2u,depth_address};
+        }
         size_t total_texture_bytes=0;
         for(unsigned i=0;i<texture_count;) {
             uint64_t first=textures[i].base_address,last=first+textures[i].size;
@@ -209,7 +248,8 @@ ctr_gx_result ctr_guest_pica_execute(ctr_guest *g,const void *commands,size_t si
             total_texture_bytes+=textures[i].size;
             result=linear(g,(uint32_t)first,(uint32_t)textures[i].size,CTR_MEM_READ,&texture_address,NULL,c);
             if(result!=CTR_GX_OK) { report.result=CTR_SCENE_LAYOUT;goto done; }
-            if(command_alias(g,target_address,target_bytes,texture_address,(uint32_t)textures[i].size)) {
+            if(command_alias(g,target_address,target_bytes,texture_address,(uint32_t)textures[i].size) ||
+               (depth_bytes && command_alias(g,depth_virtual,depth_bytes,texture_address,(uint32_t)textures[i].size))) {
                 result=CTR_GX_MEMORY;c->memory=CTR_MEM_OVERLAP;report.result=CTR_SCENE_ALIAS;goto done;
             }
             uint8_t *snapshot=malloc(textures[i].size);
@@ -222,15 +262,17 @@ ctr_gx_result ctr_guest_pica_execute(ctr_guest *g,const void *commands,size_t si
         resources=(ctr_scene_resources){(uint32_t)base,source,resource_bytes,textures,texture_count};
         surface=(ctr_scene_surface){pixels,target_bytes,width,height,width*4u};
     }
-    ctr_scene_result rendered=ctr_scene_execute_target_backend(trial,commands,size,&resources,&surface,
-                                                               color_address,g->gsp.pica_backend,&report);
+    ctr_scene_result rendered=ctr_scene_execute_targets_backend(trial,commands,size,&resources,&surface,
+                                                               color_address,depth_bytes?&depth:NULL,g->gsp.pica_backend,&report);
     if(rendered!=CTR_SCENE_OK) { result=rendered==CTR_SCENE_NO_MEMORY?CTR_GX_NO_MEMORY:CTR_GX_UNSUPPORTED;goto done; }
     if(draws) {
         layout(pixels,raw,width,height,true);
-        c->memory=ctr_memory_write_bytes(&g->memory,target_address,raw,target_bytes);
+        ctr_memory_write_range targets[2]={{target_address,raw,target_bytes},{depth_virtual,depth_raw,depth_bytes}};
+        if(depth_bytes)depth_layout(depth_pixels,depth_raw,width,height,true);
+        c->memory=ctr_memory_write_ranges(&g->memory,targets,depth_bytes?2u:1u);
         if(c->memory!=CTR_MEM_OK) { result=CTR_GX_MEMORY;report.result=CTR_SCENE_LAYOUT;goto done; }
     }
-    /* No fallible operations remain after the one atomic guest byte commit. */
+    /* No fallible operations remain after the atomic color/depth guest commit. */
     if(g->gsp.pica_scene)*g->gsp.pica_scene=*trial;
     else { g->gsp.pica_scene=trial;trial=NULL; }
     const ctr_scene_state *state=g->gsp.pica_scene;
@@ -243,7 +285,7 @@ done:
     diagnostic(g,&report);
     if(result==CTR_GX_UNSUPPORTED)c->detail=command_address+(report.byte_offset<size?(uint32_t)report.byte_offset:0u);
     for(unsigned i=0;i<texture_count;++i)free((void *)textures[i].bytes);
-    free(writes);free(trial);free(source);free(raw);free(pixels);return result;
+    free(writes);free(trial);free(source);free(raw);free(pixels);free(depth_raw);free(depth_pixels);return result;
 }
 void ctr_guest_set_scene_backend(ctr_guest *g,const ctr_scene_backend *backend) {
     if(g)g->gsp.pica_backend=backend;

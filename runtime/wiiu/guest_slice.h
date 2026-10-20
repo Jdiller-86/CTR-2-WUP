@@ -18,4 +18,6 @@ ctr_slice_report ctr_guest_slice(const ctr_slice_policy *,ctr_slice_clock,ctr_sl
 const char *ctr_slice_reason_name(ctr_slice_reason);
 bool ctr_draw_observation_ready(bool decoded,uint64_t serial,uint64_t draws,uint64_t triangles,
                                 uint64_t fragments,uint64_t shader_steps);
+bool ctr_textured_draw_observation_ready(bool decoded,uint64_t serial,uint64_t draws,uint64_t triangles,
+                                         uint64_t fragments,uint64_t shader_steps);
 #endif
