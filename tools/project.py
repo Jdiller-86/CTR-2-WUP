@@ -88,6 +88,17 @@ class GitHub:
         return self.graphql('mutation($input:' + input_type + '!) { ' + name +
                             '(input:$input) { clientMutationId } }', {'input': payload})
 
+    def add_item(self, project_id, issue_id):
+        data = self.graphql('''mutation($input:AddProjectV2ItemByIdInput!) {
+          addProjectV2ItemById(input:$input) { item {
+            __typename id isArchived project { id }
+            content { __typename ... on Issue { id number url state
+              repository { nameWithOwner isPrivate } } }
+          } }
+        }''', {'input': {'projectId': project_id, 'contentId': issue_id}})
+        result = data.get('addProjectV2ItemById')
+        return result.get('item') if isinstance(result, dict) else None
+
     def connection(self, project_id, name, selection):
         archived = ',archivedStates:[ARCHIVED,NOT_ARCHIVED]' if name == 'items' else ''
         query = ('query($id:ID!,$after:String) { node(id:$id) { ... on ProjectV2 { '
@@ -387,18 +398,23 @@ def update_item(client, project, issue_number, status=None, waiting=None, apply=
         return receipt
     trusted_main(client)
     if adding:
-        client.mutate('addProjectV2ItemById', 'AddProjectV2ItemByIdInput', {
-            'projectId': project['id'], 'contentId': issue['id']})
-        refreshed = client.project()
-        rows = [item for item in refreshed['items']
-                if (public_issue(item) or {}).get('number') == issue_number]
-        if len(rows) != 1 or refreshed.get('id') != project['id']:
+        row = client.add_item(project['id'], issue['id'])
+        content = row.get('content') if isinstance(row, dict) else None
+        actual = (public_issue(row) if isinstance(content, dict)
+                  and isinstance(content.get('repository'), dict) else None)
+        # A mutation acknowledgement alone proves no membership. Bind field
+        # updates to the exact returned public issue item; the final full
+        # connection read still has to observe that same identity and values.
+        if (not isinstance(row, dict) or row.get('__typename') != 'ProjectV2Item'
+                or not isinstance(row.get('id'), str) or not row['id']
+                or type(row.get('isArchived')) is not bool
+                or not isinstance(row.get('project'), dict) or row['project'].get('id') != project['id']
+                or actual is None or actual.get('id') != issue['id']
+                or type(actual.get('number')) is not int or actual['number'] != issue_number
+                or actual.get('url') != f'https://github.com/{REPOSITORY}/issues/{issue_number}'
+                or actual.get('state') != issue['state']):
             raise TrackingError('Project issue addition could not be verified.')
-        row = rows[0]
-        refreshed_fields = fields(refreshed)
-        if any(refreshed_fields.get(name, {}).get('id') != definition['id']
-               for name, definition in selected.items()):
-            raise TrackingError('Project tracking fields changed during the update.')
+        receipt['will_unarchive'] = row['isArchived']
     if row.get('isArchived'):
         client.mutate('unarchiveProjectV2Item', 'UnarchiveProjectV2ItemInput', {
             'projectId': project['id'], 'itemId': row['id']})
@@ -414,15 +430,20 @@ def update_item(client, project, issue_number, status=None, waiting=None, apply=
         else:
             client.mutate('clearProjectV2ItemFieldValue', 'ClearProjectV2ItemFieldValueInput', payload)
     refreshed = client.project()
+    refreshed_fields = fields(refreshed)
+    if any(refreshed_fields.get(name, {}).get('id') != definition['id']
+           for name, definition in selected.items()):
+        raise TrackingError('Project tracking fields changed during the update.')
     rows = [item for item in refreshed['items']
             if (public_issue(item) or {}).get('number') == issue_number]
     if (refreshed.get('id') != project['id'] or len(rows) != 1
-            or rows[0].get('id') != row['id'] or rows[0].get('isArchived') is not False):
+            or rows[0].get('id') != row['id'] or rows[0].get('isArchived') is not False
+            or (public_issue(rows[0]) or {}).get('id') != issue['id']):
         raise TrackingError('Project update readback did not match the requested issue membership.')
     actual = rows[0]
     if status == 'Accepted' and (public_issue(actual) or {}).get('state') != 'CLOSED':
         raise TrackingError('Accepted requires a closed milestone gate issue at readback.')
-    if option and (status_value(actual, fields(refreshed)) != status
+    if option and (status_value(actual, refreshed_fields) != status
                    or (actual.get('status') or {}).get('optionId') != option['id']):
         raise TrackingError('Project update readback did not match the requested status.')
     if waiting is not None:
