@@ -578,7 +578,7 @@ static void fragment_failures(void) {
         if(failure<6u)state.register_defined[regs[failure]]=0;
         else if(failure<12u)state.register_defined[regs[failure-6u]]=14;
         else switch(failure) {
-            case 12:state.registers[0x100]=1;break; /* Blending unsupported. */
+            case 12:state.registers[0x100]=0x100;break; /* Blending unsupported. */
             case 13:state.registers[0x102]=16;break;
             case 14:state.registers[0x104]=2;break;
             case 15:state.registers[0x107]|=1u;break; /* Depth unsupported. */
