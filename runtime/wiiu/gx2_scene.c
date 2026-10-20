@@ -379,6 +379,18 @@ static void rectangle(ctr_wiiu_gx2_scene *s,unsigned x,unsigned y,unsigned w,uns
     scene_private *p=s->private_state;GX2SetScissor(x,y,w,h);
     GX2DrawEx(GX2_PRIMITIVE_MODE_TRIANGLES,count,0,1);p->pending=true;++s->submissions;
 }
+static bool native_fragment(const ctr_fragment_state *fragment) {
+    if(!fragment->blend_enabled)return true;
+    for(unsigned side=0;side<2;++side) {
+        /* Native MIN/MAX factor handling and destination-selector SAT are not
+         * established. ONE/ONE removes the MIN/MAX factor ambiguity. */
+        if(fragment->blend_destination[side]==14u ||
+           (fragment->blend_equation[side]>=3u &&
+            (fragment->blend_source[side]!=1u || fragment->blend_destination[side]!=1u)))
+            return false;
+    }
+    return true;
+}
 static void fragment_state(const ctr_fragment_state *fragment) {
     /* PICA's enum order is neither GX2's ROP3 truth table nor its comparison
      * order. Use the named SDK values instead of casting the guest fields. */
@@ -392,6 +404,17 @@ static void fragment_state(const ctr_fragment_state *fragment) {
         GX2_COMPARE_FUNC_NEVER,GX2_COMPARE_FUNC_ALWAYS,GX2_COMPARE_FUNC_EQUAL,
         GX2_COMPARE_FUNC_NOT_EQUAL,GX2_COMPARE_FUNC_LESS,GX2_COMPARE_FUNC_LEQUAL,
         GX2_COMPARE_FUNC_GREATER,GX2_COMPARE_FUNC_GEQUAL
+    };
+    static const GX2BlendMode factors[15]={
+        GX2_BLEND_MODE_ZERO,GX2_BLEND_MODE_ONE,GX2_BLEND_MODE_SRC_COLOR,
+        GX2_BLEND_MODE_INV_SRC_COLOR,GX2_BLEND_MODE_DST_COLOR,GX2_BLEND_MODE_INV_DST_COLOR,
+        GX2_BLEND_MODE_SRC_ALPHA,GX2_BLEND_MODE_INV_SRC_ALPHA,GX2_BLEND_MODE_DST_ALPHA,
+        GX2_BLEND_MODE_INV_DST_ALPHA,GX2_BLEND_MODE_BLEND_FACTOR,GX2_BLEND_MODE_INV_BLEND_FACTOR,
+        GX2_BLEND_MODE_CONSTANT_ALPHA,GX2_BLEND_MODE_INV_CONSTANT_ALPHA,GX2_BLEND_MODE_SRC_ALPHA_SAT
+    };
+    static const GX2BlendCombineMode equations[5]={
+        GX2_BLEND_COMBINE_MODE_ADD,GX2_BLEND_COMBINE_MODE_SUB,GX2_BLEND_COMBINE_MODE_REV_SUB,
+        GX2_BLEND_COMBINE_MODE_MIN,GX2_BLEND_COMBINE_MODE_MAX
     };
     GX2CompareFunction function=compare[fragment->alpha_function];
     float reference=(float)fragment->alpha_reference*real(UINT32_C(0x3b808081));
@@ -407,7 +430,28 @@ static void fragment_state(const ctr_fragment_state *fragment) {
         };
         function=endpoint[fragment->alpha_function];reference=1.0f;
     }
-    GX2SetColorControl(logic[fragment->logic_op],0,false,true);
+    GX2BlendMode source[2]={GX2_BLEND_MODE_ONE,GX2_BLEND_MODE_ONE};
+    GX2BlendMode destination[2]={GX2_BLEND_MODE_ZERO,GX2_BLEND_MODE_ZERO};
+    GX2BlendCombineMode equation[2]={GX2_BLEND_COMBINE_MODE_ADD,GX2_BLEND_COMBINE_MODE_ADD};
+    float constant[4]={0,0,0,0};
+    if(fragment->blend_enabled) {
+        for(unsigned side=0;side<2;++side) {
+            /* PICA's saturate factor is ONE in the alpha equation. */
+            source[side]=side && fragment->blend_source[side]==14u?
+                GX2_BLEND_MODE_ONE:factors[fragment->blend_source[side]];
+            destination[side]=factors[fragment->blend_destination[side]];
+            equation[side]=equations[fragment->blend_equation[side]];
+        }
+        for(unsigned lane=0;lane<4;++lane)constant[lane]=(float)fragment->blend_constant[lane]/255.0f;
+    }
+    /* These calls translate admitted state, not a hardware rounding proof.
+     * Floating/UNORM blending may differ from byte-domain truncation; the
+     * unchanged complete-target comparison rejects any difference. */
+    GX2SetBlendControl(GX2_RENDER_TARGET_0,source[0],destination[0],equation[0],true,
+        source[1],destination[1],equation[1]);
+    GX2SetBlendConstantColor(constant[0],constant[1],constant[2],constant[3]);
+    GX2SetColorControl(fragment->blend_enabled?GX2_LOGIC_OP_COPY:logic[fragment->logic_op],
+        fragment->blend_enabled?1u:0u,false,true);
     GX2SetTargetChannelMasks((GX2ChannelMask)fragment->write_mask,0,0,0,0,0,0,0);
     GX2SetAlphaTest(fragment->alpha_enabled,function,reference);
 }
@@ -418,7 +462,8 @@ static bool draw(void *context,const ctr_scene_state *state,const ctr_vertex *ve
         return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
     if(s->quarantined)return fail(s,CTR_WIIU_GX2_SCENE_WAIT);
     ctr_fragment_state fragment;
-    if(!ctr_fragment_decode(state->registers,state->register_defined,true,&fragment))
+    if(!ctr_fragment_decode(state->registers,state->register_defined,true,&fragment) ||
+       !native_fragment(&fragment))
         return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
     s->shader_result=ctr_gx2_shader_compile(&state->shader,(uint16_t)state->registers[0x2bdu],
         &state->registers[0x050u],state->registers[0x04fu],p->compiled);

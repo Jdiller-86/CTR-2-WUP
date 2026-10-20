@@ -7,10 +7,17 @@
  * All eight alpha comparisons, sixteen logic operations and RGBA masks are
  * supported. Color reads/writes use only the explicit gates 0 or 15; operations
  * reading destination bytes require the full read gate when writes are active.
- * Depth/stencil/blending and other fragment operation modes remain unsupported. */
+ * Separate RGB/alpha blending supports five equations and fifteen factors.
+ * Products remain exact integers until one truncating division by 255, then
+ * clamp to a byte. MIN/MAX apply the factors. These are explicit software
+ * rules; physical PICA/GX2 rounding remains unverified.
+ * Depth/stencil and other fragment operation modes remain unsupported. */
 typedef struct {
     uint8_t logic_op,write_mask,alpha_function,alpha_reference;
     bool alpha_enabled;
+    bool blend_enabled;
+    uint8_t blend_equation[2],blend_source[2],blend_destination[2];
+    uint8_t blend_constant[4];
 } ctr_fragment_state;
 
 bool ctr_fragment_register(unsigned reg);
@@ -18,7 +25,10 @@ bool ctr_fragment_register_value(unsigned reg,uint32_t value);
 /* Arrays cover PICA registers through 0x113. No output changes on failure.
  * required demands all six registers completely defined. Otherwise no defined
  * merger registers selects legacy COPY/RGBA/disabled alpha; any definition
- * requires the entire explicit configuration, including full byte masks. */
+ * requires the entire explicit configuration, including full byte masks.
+ * Blend enable additionally requires 0x101 completely defined; selected
+ * constant factors require full 0x103 even when writes are masked. Disabled
+ * blending retains partial configuration but fully defined 0x101 still validates. */
 bool ctr_fragment_decode(const uint32_t registers[],const uint8_t defined[],
                          bool required,ctr_fragment_state *out);
 /* Internal evaluation for a successfully decoded state. Sources and the old

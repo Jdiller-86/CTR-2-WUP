@@ -95,7 +95,9 @@ void ctr_scene_init(ctr_scene_state *state);
  * primary, Texture0, constants and Previous with separate RGB/alpha operations,
  * operands and scale; see ctr_tev.h for byte-domain quantization. V=0 samples
  * the last raw texture row. Alpha comparisons, RGBA masks, explicit color gates
- * and all sixteen bytewise logic operations run after TEV. Depth/blend,
+ * and all sixteen bytewise logic operations or checked RGB/alpha blending run
+ * after TEV. Blend equations use one byte-domain division before saturation;
+ * native admission is narrower and remains guarded by full parity. Depth/stencil,
  * DOT3/buffers, other textures,
  * unsupported arithmetic and geometry fail.
  * Every list stages state and the complete target before any commit, so late
@@ -110,7 +112,7 @@ ctr_scene_result ctr_scene_execute(ctr_scene_state *state,const void *commands,
                                   ctr_scene_report *report);
 /* Same owned staging boundary with explicit PICA framebuffer/fragment state.
  * Requires a completely defined supported six-stage TEV/output-merger pipeline,
- * no depth/stencil/blend, RGBA8, 8x8 tiles,
+ * no depth/stencil, RGBA8, 8x8 tiles,
  * and unflipped dimensions/address matching the caller-resolved linear target.
  * The caller resolves, snapshots and commits guest tiled storage separately;
  * this API never follows an address or reads/writes a guest mapping. */

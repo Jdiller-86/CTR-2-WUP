@@ -16,7 +16,7 @@ The [scene renderer](software-scenes.md) and optional native GX2 backend accept:
 | Coordinates | Vertex semantics 12/13, exact Q16 UV in −16..16, affine interpolation with W=1 |
 | Sampler | Matching nearest or bilinear min/mag, LOD/bias zero; clamp-to-edge, repeat or mirrored repeat independently on S/T |
 | Combiner | Six stages; Texture0, binary primary color, per-stage RGBA8 constants and Previous; independent RGB/alpha operands, operations and 1/2/4 scale |
-| Fragment policy | Binary opaque primary color; final-alpha tests, 16 logic operations and RGBA write masks; no lighting/depth/stencil/blending |
+| Fragment policy | Binary opaque primary color; final-alpha tests, logic/blend operations and RGBA write masks; no lighting/depth/stencil |
 
 PICA wrap IDs are 0/2/3 for clamp/repeat/mirror; parameters store T at bits 8–10,
 S at 12–14, with bit 5 set only for ETC1/ETC1A4. Filter bits 1/2 must both be
@@ -66,30 +66,51 @@ checks allocation identity and permissions before snapshotting.
 After TEV, alpha testing compares the final alpha byte with an unsigned reference
 using NEVER, ALWAYS, EQUAL, NOT_EQUAL, LESS, LEQUAL, GREATER or GEQUAL. A failed
 test preserves the destination. Passing fragments apply one of all 16 PICA logic
-operations independently to each byte, then write only enabled RGBA channels.
-Logic operations read the destination produced by earlier draws in the same list.
+operations or separate RGB/alpha blending, then write only enabled RGBA channels.
+Both routes read the destination produced by earlier draws in the same list.
 The fragment counter measures geometric coverage, including rejected alpha.
 
 | Register | Accepted state |
 | --- | --- |
-| `0x100` | Zero: ordinary fragment mode, blending disabled |
+| `0x100` | Ordinary mode; 0 selects logic, `0x100` selects blending |
+| `0x101` | RGB/alpha equations in bits 0..2/8..10; source/destination factors at 16/20/24/28 |
 | `0x102` | Logic operation 0..15 |
+| `0x103` | Blend constant RGBA in successive low-to-high bytes |
 | `0x104` | Alpha enable bit 0, comparison bits 4..6, reference bits 8..15 |
 | `0x107` | RGBA write bits 8..11; depth test/write disabled |
-| `0x112` | Read gate 0 or 15; destination-dependent logic requires 15 when writes are enabled |
+| `0x112` | Read gate 0 or 15; destination-dependent operations require 15 for enabled writes |
 | `0x113` | Whole-framebuffer write gate 0 or 15; zero preserves every channel |
 
-All six registers must be completely defined for bound targets. The owned scene
+The six base registers must be completely defined for bound targets. Blending
+also requires all bytes of `0x101`; selected constant factors require all of
+`0x103`, including when writes are masked. The owned scene
 API retains its COPY/full-write/disabled-alpha default only when none is supplied.
 Partial byte writes merge with retained state; unsupported fields reject even
 after the final draw. CLEAR, COPY, SET and COPY_INVERTED do not require destination
-reads. Partial read/write gate encodings, blending, depth and stencil fail explicitly.
+reads. Blend dependencies are checked per enabled RGB/alpha side: destination
+factors other than ZERO and source factors that consume destination bytes require
+the full read gate. ONE/ZERO replacement can use read gate zero. Partial read/write
+gate encodings, other fragment modes, depth and stencil fail explicitly.
 Register and comparison facts follow pinned
 [PICA fields](https://github.com/azahar-emu/azahar/blob/987f18405073960622e1043bb44005989135c6e1/src/video_core/pica/regs_framebuffer.h)
 and [libctru enums](https://github.com/devkitPro/libctru/blob/9b55eda44cf80b971503991e0c78f9bc8fe50425/libctru/include/3ds/gpu/enums.h#L162).
 The full read/write gate follows the
 [citro3d framebuffer producer](https://github.com/devkitPro/citro3d/blob/9f21cf7b380ce6f9e01a0420f19f0763e5443ca7/source/framebuffer.c#L49);
 undocumented partial gate behavior is not approximated.
+
+### Blending
+
+The portable merger supports separate RGB/alpha ADD, SUBTRACT, REVERSE_SUBTRACT,
+MIN and MAX, with all 15 PICA factors: zero/one, source/destination color or alpha,
+constants, their complements, and source-alpha-saturate. For source byte S,
+destination D and byte factors Fs/Fd, combine `S×Fs` and `D×Fd` with the selected
+equation, divide once by 255 with integer truncation, then clamp to 0..255.
+Products are not rounded separately. MIN/MAX compare the weighted products.
+Source-alpha-saturate gives `min(Sa,255−Da)` for RGB and 255 for alpha.
+The explicit numeric contract follows the pinned
+[framebuffer equation reference](https://github.com/azahar-emu/azahar/blob/987f18405073960622e1043bb44005989135c6e1/src/video_core/renderer_software/sw_framebuffer.cpp#L294)
+and [factor lookup](https://github.com/azahar-emu/azahar/blob/987f18405073960622e1043bb44005989135c6e1/src/video_core/renderer_software/sw_rasterizer.cpp#L595);
+it does not establish physical PICA rounding.
 
 ## Native GX2 path
 
@@ -105,9 +126,15 @@ Complete software preflight and exact GPU readback precede guest commit.
 GX2 receives explicitly translated logic/comparison enums and the effective
 channel mask. Alpha thresholds match the shader's byte normalization, including
 the 255 endpoint; the API model checks both clamped and unclamped exports.
+Blending translates ADD/SUBTRACT/REVERSE_SUBTRACT factors explicitly, with separate
+alpha controls and constants. Native MIN/MAX admits ONE/ONE factors only;
+source-alpha-saturate in the destination selector rejects. Logic draws disable
+blending, and every draw rebinds complete fixed state. Fixed-function fractional
+rounding remains unverified: a one-byte difference still rejects the entire list.
+The original compiled guest uses integral ONE/ONE RGB addition and ONE/ZERO alpha.
 
 Mipmaps, mixed min/mag filters, projective/perspective coordinates, DOT3,
-combiner buffers, resource caching and depth/blend/stencil remain unsupported. Physical sampling parity
+combiner buffers, resource caching and depth/stencil remain unsupported. Physical sampling/blending parity
 and useful GPU performance remain unverified. The full-target byte comparison
 stays exact, including for bilinear draws; differing hardware rounding rejects
 the list without guest publication or software fallback.

@@ -72,9 +72,10 @@ def check_textured_frames(folder):
                     if not (u&1):rgb=(16,32,49)
                     # The second triangle samples four center texels with linear
                     # filtering, then six independent RGB/alpha TEV stages.
-                    # Alpha191 passes EQUAL; XOR only R/B with(16,32,48,255).
-                    # Raw(168,32,173,255) expands through RGB565 here.
-                    if (2*vx+1)*width+(2*vy+1)*240>=480*width:rgb=(173,32,173)
+                    # Alpha191 passes EQUAL; RGB ONE/ONE adds(16,32,48),
+                    # alpha ONE/ZERO replaces. Raw(200,244,205,191) expands
+                    # through RGB565 to(206,247,206).
+                    if (2*vx+1)*width+(2*vy+1)*240>=480*width:rgb=(206,247,206)
                 expected.extend(rgb)
         if data[len(header):]!=expected:
             raise RuntimeError('Captured texture pixels differ from the independent analytic image')

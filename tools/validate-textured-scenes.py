@@ -92,7 +92,7 @@ def original_cases():
         dimensions=(1024,8),points=((0,0),(512,0),(0,512),(512,512)),
         uv=((F(-16),F(16)),(F(16),F(-16)),(F(1,2),F(1,2)),(F(15),F(-15))),
         wrap=(2,3),scissor=(3,253,253,255,255)))
-    return cases+tev_cases()+fragment_cases()
+    return cases+tev_cases()+fragment_cases()+blend_cases()
 
 
 TEV_OPERATIONS = (0, 1, 2, 3, 4, 5, 8, 9)
@@ -189,11 +189,69 @@ def fragment_cases():
         case('fragment-disabled-alpha-retains-fields', textured=False, tev=constant(126),
              output=output_state(function=0, reference=255)),
     ))
-    for error in ('blend', 'logic', 'alpha-reserved', 'depth', 'read-gate', 'write-gate',
+    for error in ('mode', 'logic', 'alpha-reserved', 'depth', 'read-gate', 'write-gate',
                   'missing-read', 'missing-write', 'destination-read'):
         cases.append(case('late-fragment-'+error, textured=False, tev=constant(126),
                           output=() if error.startswith('missing-') else output_state(),
                           late_error='output-'+error))
+    return cases
+
+
+def blend_state(rgb=(0,6,7), alpha_blend=(0,1,7), constant=(19,83,171,47),
+                **output):
+    writes = [(reg, 0x100 if reg == 0x100 else value, mask)
+              for reg, value, mask in output_state(**output)]
+    writes.append((0x101, rgb[0] | alpha_blend[0] << 8 | rgb[1] << 16 |
+                   rgb[2] << 20 | alpha_blend[1] << 24 | alpha_blend[2] << 28, 15))
+    if constant is not None:
+        writes.append((0x103, sum(value << (8*lane) for lane,value in enumerate(constant)), 15))
+    return tuple(writes)
+
+
+def blend_cases():
+    def case(name, **kwargs):
+        return Case(name, side=8, points=((0,0),(8,0),(0,8),(8,8)),
+                    scissor=(0,0,0,7,7), textured=False,
+                    tev=(tev_stage(rgb=(14,0,0),constant=(73,141,229,127)),), **kwargs)
+    overdraw = ((0,1,2),(0,1,2),(1,3,2))
+    cases = []
+    for factor in range(15):
+        cases.append(case(f'blend-source-factor-{factor:02}', indices=overdraw,
+                          output=blend_state(rgb=(0,factor,0),alpha_blend=(0,factor,0))))
+        changes = (((0x100,0,15),), ((0x100,0x100,15),)) if factor == 14 else ()
+        cases.append(case(f'blend-destination-factor-{factor:02}', indices=overdraw,
+                          output=blend_state(rgb=(0,0,factor),alpha_blend=(0,0,factor)),
+                          draw_output=changes))
+    for equation in range(5):
+        cases.append(case(f'blend-separate-equations-{equation}-{4-equation}', indices=overdraw,
+            output=blend_state(rgb=(equation,6,7),alpha_blend=(4-equation,10,3))))
+    for mask in (0,5,10,15):
+        cases.append(case(f'blend-mask-{mask:02x}', indices=overdraw,
+                          output=blend_state(mask=mask,alpha_blend=(0,1,0))))
+    cases.extend((
+        case('blend-alpha-before-output',indices=overdraw,
+             output=blend_state(alpha=True,function=2,reference=127),
+             draw_output=((), ((0x104,128 << 8,2),), ((0x104,127 << 8,2),))),
+        case('blend-retained-constant-bytes',indices=overdraw,
+             output=blend_state(rgb=(0,10,11),alpha_blend=(0,12,13)),
+             draw_output=((), ((0x103,23 | (91 << 24),9),),
+                          ((0x103,(37 << 8) | (199 << 16),6),))),
+        case('blend-retained-control-bytes',indices=overdraw,
+             output=blend_state(rgb=(0,1,1),alpha_blend=(0,1,1)),
+             draw_output=((), ((0x101,2 | (1 << 8),3),),
+                          ((0x101,(6 << 16) | (7 << 20) | (1 << 24),12),))),
+        case('blend-logic-blend-logic',indices=((0,1,2),(0,1,2),(0,1,2),(1,3,2)),
+             output=blend_state(logic=11)+((0x100,0,15),),
+             draw_output=((), ((0x100,0x100,15),), ((0x100,0,15),))),
+        case('blend-source-only-read-disabled',output=blend_state(rgb=(0,1,0),alpha_blend=(0,1,0),read=0)),
+        case('blend-saturate-alpha-only-read-disabled',output=blend_state(rgb=(0,14,0),alpha_blend=(0,14,0),mask=8,read=0)),
+        case('blend-zero-mask-read-disabled',output=blend_state(mask=0,read=0)),
+    ))
+    for error in ('equation','factor','reserved','undefined','partial','constant','partial-constant',
+                  'masked-constant','read','read-gate','write-gate'):
+        state = output_state() if error in ('undefined','partial') else blend_state(
+            rgb=(0,1,0),alpha_blend=(0,1,0),constant=None,read=0)
+        cases.append(case('late-blend-'+error,output=state,late_error='blend-'+error))
     return cases
 
 
@@ -233,9 +291,42 @@ def output_reference(registers, source, destination):
     if alpha & 1 and not alpha_reference(alpha >> 4 & 7, source[3], alpha >> 8 & 255):
         return bytes(destination)
     mask = registers[0x107] >> 8 & 15 if registers[0x113] == 15 else 0
-    return bytes((value if registers[0x102] == 3 else logic_reference(registers[0x102], value, previous))
-                 if mask & (1 << lane) else previous
-                 for lane, (value, previous) in enumerate(zip(source, destination)))
+    if registers[0x100] & 0x100:
+        control = registers[0x101]
+        rgb = (control & 7, control >> 16 & 15, control >> 20 & 15)
+        alpha_blend = (control >> 8 & 7, control >> 24 & 15, control >> 28 & 15)
+        constant = tuple(registers.get(0x103,0) >> (8*lane) & 255 for lane in range(4))
+        merged = blend_reference(rgb,alpha_blend,constant,source,destination)
+    else:
+        merged = bytes(value if registers[0x102] == 3 else logic_reference(registers[0x102],value,previous)
+                       for value,previous in zip(source,destination))
+    return bytes(value if mask & (1 << lane) else previous
+                 for lane,(value,previous) in enumerate(zip(merged,destination)))
+
+
+def blend_factor_reference(factor, lane, constant, source, destination):
+    """Exact normalized factors; the equation retains these rationals whole."""
+    color = (F(source[lane],255),F(destination[lane],255),F(constant[lane],255))
+    alpha = (F(source[3],255),F(destination[3],255),F(constant[3],255))
+    choices = (F(0),F(1),color[0],1-color[0],color[1],1-color[1],
+               alpha[0],1-alpha[0],alpha[1],1-alpha[1],color[2],1-color[2],
+               alpha[2],1-alpha[2],min(alpha[0],1-alpha[1]) if lane < 3 else F(1))
+    if not 0 <= factor < len(choices): raise ValueError('Invalid blend factor')
+    return choices[factor]
+
+
+def blend_reference(rgb, alpha, constant, source, destination):
+    result = []
+    for lane in range(4):
+        equation,sf,df = alpha if lane == 3 else rgb
+        a = source[lane]*blend_factor_reference(sf,lane,constant,source,destination)
+        b = destination[lane]*blend_factor_reference(df,lane,constant,source,destination)
+        operations = (a+b,a-b,b-a,min(a,b),max(a,b))
+        if not 0 <= equation < len(operations): raise ValueError('Invalid blend equation')
+        # A single truncation follows the complete rational operation. In
+        # particular, fractional contributions may carry across an ADD.
+        result.append(max(0,min(255,int(operations[equation]))))
+    return bytes(result)
 
 
 def case_stages(case):
@@ -492,7 +583,7 @@ def command_bytes(case):
         elif case.late_error == 'constant': command(0xf8, 0xe000e)
         elif case.late_error.startswith('output-'):
             error = case.late_error.removeprefix('output-')
-            invalid = {'blend':(0x100,1), 'logic':(0x102,16), 'alpha-reserved':(0x104,2),
+            invalid = {'mode':(0x100,1), 'logic':(0x102,16), 'alpha-reserved':(0x104,2),
                        'depth':(0x107,0xf01), 'read-gate':(0x112,3), 'write-gate':(0x113,3)}
             if error.startswith('missing-'):
                 missing = 0x112 if error == 'missing-read' else 0x113
@@ -501,6 +592,22 @@ def command_bytes(case):
             elif error == 'destination-read':
                 command(0x102,11);command(0x112,0)
             else: command(*invalid[error])
+        elif case.late_error.startswith('blend-'):
+            error = case.late_error.removeprefix('blend-')
+            if error in ('undefined','partial'):
+                command(0x100,0x100)
+                if error == 'partial': command(0x101,0,1)
+            elif error in ('constant','partial-constant','masked-constant'):
+                if error == 'partial-constant': command(0x103,0x1234,3)
+                if error == 'masked-constant': command(0x107,0)
+                control = next(value for reg,value,mask in blend_state(
+                    rgb=(0,10,0),alpha_blend=(0,1,0),constant=None) if reg == 0x101)
+                command(0x101,control)
+            elif error == 'read': command(0x101,0x01110000)
+            elif error == 'read-gate': command(0x112,3)
+            elif error == 'write-gate': command(0x113,3)
+            else:
+                command(0x101,{'equation':0x01010005,'factor':0x010f0000,'reserved':0x01010008}[error])
         elif case.late_error == 'uv':
             # A later shader changes U beyond the exact supported Q16 bound;
             # earlier valid texture draws must still roll back atomically.
@@ -684,7 +791,7 @@ def main():
               'source_dirty':bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT, text=True)),
               'console_verified':False, 'gx2_execution':False, 'guest_gsp_draws':False,
               'pixel_tolerance':0, 'sampler_reference':'exact Fraction barycentric interpolation, floor, wrap and raw-memory V inversion',
-              'output_reference':'post-TEV byte comparisons, independent Boolean truth tables, channel masks and sequential destination contents',
+              'output_reference':'post-TEV byte comparisons, independent Boolean truth tables, exact Fraction separate blending before truncation, channel masks and sequential destination contents',
               'texture_reference':'original recursive Morton encoding and independently tested renderer.texture decoder',
               'cases':[]}
     try:
