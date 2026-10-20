@@ -1,6 +1,6 @@
-/* Original normal-CRT/libctru texture/TEV/depth program. No external assets.
- * Geometry, texture, color and D16 targets use owned linear allocations. Every
- * tiled color/depth sample and RGB565 display pixel is checked before PASS. */
+/* Original normal-CRT/libctru texture/TEV/depth/stencil program. No external assets.
+ * Owned top D16 and bottom D24S8 targets retain the same displayed images.
+ * Every prepared/final packed sample and RGB565 display pixel is checked. */
 #include <3ds.h>
 #include <stdlib.h>
 #include <string.h>
@@ -89,12 +89,58 @@ static void color(bool green) {
     const u32 packed[]={green?0x3f000000:0x3f00003f,0x3f00,green?0:0x003f0000};
     GPUCMD_AddWrite(GPUREG_FIXEDATTRIB_INDEX,1);GPUCMD_AddIncrementalWrites(GPUREG_FIXEDATTRIB_DATA0,packed,3);
 }
+static void stencil(GPU_TESTFUNC function,unsigned reference,unsigned input_mask,unsigned write_mask,
+                    GPU_STENCILOP fail_op,GPU_STENCILOP depth_fail,GPU_STENCILOP pass) {
+    GPUCMD_AddWrite(GPUREG_STENCIL_TEST,1u|((u32)function<<4)|(write_mask<<8)|
+        (reference<<16)|(input_mask<<24));
+    GPUCMD_AddWrite(GPUREG_STENCIL_OP,(u32)fail_op|((u32)depth_fail<<4)|((u32)pass<<8));
+}
+static void index_buffer(unsigned screen,unsigned triangle) {
+    GPUCMD_AddWrite(GPUREG_INDEXBUFFER_CONFIG,(screen?0x80000000:0)|
+        (screen?112+(triangle%2)*6:96+(triangle%2)*3));
+}
+static void submit(u32 *commands) {
+    GPUCMD_AddWrite(GPUREG_FRAMEBUFFER_FLUSH,1);
+    u32 *submitted,words;GPUCMD_Split(&submitted,&words);
+    if(submitted!=commands || words>1024 || (words&3))fail();
+    request(GX_ProcessCommandList(submitted,words*4,2));gspWaitForP3D();
+}
+static void prepare_stencil(u32 *commands,u32 *target,const u8 *depth,unsigned width,unsigned height) {
+    color(false);combiner(false);GPUCMD_AddWrite(GPUREG_TEXUNIT0_PARAM,0);
+    GPUCMD_AddWrite(GPUREG_FRAGOP_ALPHA_TEST,0);GPUCMD_AddWrite(GPUREG_COLOR_OPERATION,0);
+    GPUCMD_AddWrite(GPUREG_LOGIC_OP,GPU_LOGICOP_COPY);GPUCMD_AddWrite(GPUREG_COLORBUFFER_READ,0);
+    GPUCMD_AddWrite(GPUREG_ATTRIBBUFFER0_OFFSET,0);
+    GPUCMD_AddWrite(0x2cb,2);GPUCMD_AddWrite(0x2cc,0x4c402000);
+    /* Stencil-only preparation preserves color and the far depth clear. */
+    GPUCMD_AddWrite(GPUREG_DEPTH_COLOR_MASK,0);
+    stencil(GPU_ALWAYS,0x0c,0x0f,0x0f,GPU_STENCIL_KEEP,GPU_STENCIL_KEEP,GPU_STENCIL_REPLACE);
+    for(unsigned triangle=0;triangle<2;++triangle) {
+        index_buffer(1,triangle);GPUCMD_AddWrite(GPUREG_DRAWELEMENTS,1);
+    }
+    /* Compare reference 2 against stored C, not the reverse. GREATER fails;
+     * only the high stencil nibble changes. A mistaken pass also writes color
+     * and near depth, which the independent preparation check would reject. */
+    GPUCMD_AddWrite(GPUREG_DEPTH_COLOR_MASK,1u|(GPU_ALWAYS<<4)|(15u<<8)|(1u<<12));
+    stencil(GPU_GREATER,2,0x0f,0xf0,GPU_STENCIL_INVERT,GPU_STENCIL_KEEP,GPU_STENCIL_KEEP);
+    index_buffer(1,0);GPUCMD_AddWrite(GPUREG_DRAWELEMENTS,1);submit(commands);
+    for(unsigned y=0;y<height;++y)for(unsigned x=0;x<width;++x) {
+        bool covered=x>=width/8 && x<width*7/8 && y>=height/8 && y<height*7/8;
+        bool lower=(2*x+1)*height+(2*y+1)*width<2*width*height;
+        unsigned expected=covered?(lower?0x5c:0xac):0xa5;
+        unsigned at=tile(x,y,width);const u8 *stored=depth+at*4;
+        if(target[at]!=0x102030ff || stored[0]!=255 || stored[1]!=255 ||
+           stored[2]!=255 || stored[3]!=expected)fail();
+    }
+    static const char prepared[]="CTR2WUP compiled stencil preparation PASS";
+    svcOutputDebugString(prepared,sizeof(prepared)-1);
+    GPUCMD_SetBuffer(commands,1024,0);
+}
 int main(void) {
     gfxInit(GSP_RGB565_OES,GSP_RGB565_OES,false);
     u32 *texture=linearMemAlign(16*8*4,128);
     u32 *commands=linearAlloc(4096);u8 *geometry=linearMemAlign(256,16);
     u32 *targets[2]={linearAlloc(240*400*4),linearAlloc(240*320*4)};
-    u8 *depths[2]={linearAlloc(240*400*2),linearAlloc(240*320*2)};
+    u8 *depths[2]={linearAlloc(240*400*2),linearAlloc(240*320*4)};
     if(!commands || !geometry || !texture || !targets[0] || !targets[1] || !depths[0] || !depths[1])fail();
     static const float vertices[4][6]={{-.75f,-.75f,0.f,1.f,0.f,0.f},{.75f,-.75f,0.f,1.f,1.f,0.f},
         {-.75f,.75f,0.f,1.f,0.f,1.f},{.75f,.75f,0.f,1.f,1.f,1.f}};
@@ -108,18 +154,23 @@ int main(void) {
     for(unsigned screen=0;screen<2;++screen) {
         u16 width,height;u16 *output=(u16*)gfxGetFramebuffer(screen?GFX_BOTTOM:GFX_TOP,GFX_LEFT,&width,&height);
         if(width!=240 || height!=(screen?320:400))fail();
-        unsigned pixels=(unsigned)width*height;
+        unsigned pixels=(unsigned)width*height,depth_bytes=screen?4:2;
         request(GX_MemoryFill(targets[screen],0x102030ff,targets[screen]+pixels,GX_FILL_32BIT_DEPTH|GX_FILL_TRIGGER,
-            (u32*)depths[screen],65535,(u32*)(depths[screen]+pixels*2),GX_FILL_16BIT_DEPTH|GX_FILL_TRIGGER));gspWaitForPSC0();
+            (u32*)depths[screen],screen?0xa5ffffff:65535,(u32*)(depths[screen]+pixels*depth_bytes),
+            (screen?GX_FILL_32BIT_DEPTH:GX_FILL_16BIT_DEPTH)|GX_FILL_TRIGGER));gspWaitForPSC0();
         GPUCMD_SetBuffer(commands,1024,0);
         if(!screen) { pipeline();GPUCMD_AddWrite(GPUREG_TEXUNIT0_ADDR1,osConvertVirtToPhys(texture)/8); }
         /* The second list reuses the original texture/shader state, not an upload. */
         GPUCMD_AddWrite(GPUREG_ATTRIBBUFFERS_LOC,(osConvertVirtToPhys(geometry)/16)*2);
         GPUCMD_AddWrite(GPUREG_COLORBUFFER_LOC,osConvertVirtToPhys(targets[screen])/8);
         GPUCMD_AddWrite(GPUREG_DEPTHBUFFER_LOC,osConvertVirtToPhys(depths[screen])/8);
+        GPUCMD_AddWrite(GPUREG_DEPTHBUFFER_FORMAT,screen?GPU_RB_DEPTH24_STENCIL8:GPU_RB_DEPTH16);
+        GPUCMD_AddWrite(GPUREG_DEPTHBUFFER_READ,screen?3:2);
+        GPUCMD_AddWrite(GPUREG_DEPTHBUFFER_WRITE,screen?3:2);
         GPUCMD_AddWrite(GPUREG_FRAMEBUFFER_DIM,width|((height-1)<<12)|(1<<24));
         GPUCMD_AddWrite(GPUREG_VIEWPORT_WIDTH,0x45e000);
         GPUCMD_AddWrite(GPUREG_VIEWPORT_HEIGHT,screen?0x464000:0x469000);
+        if(screen)prepare_stencil(commands,targets[screen],depths[screen],width,height);
         for(unsigned triangle=0;triangle<3;++triangle) {
             /* The third draw repeats the first triangle at far Z with alpha
              * disabled. LESS must reject it against both near and clear depth. */
@@ -133,6 +184,12 @@ int main(void) {
             GPUCMD_AddWrite(GPUREG_BLEND_FUNC,0x01110000u);
             GPUCMD_AddWrite(GPUREG_LOGIC_OP,GPU_LOGICOP_COPY);
             GPUCMD_AddWrite(GPUREG_DEPTH_COLOR_MASK,1u|(GPU_LESS<<4)|(15u<<8)|(1u<<12));
+            if(screen) {
+                if(triangle==2)stencil(GPU_EQUAL,0x50,0xf0,0xf0,
+                    GPU_STENCIL_KEEP,GPU_STENCIL_INVERT,GPU_STENCIL_KEEP);
+                else stencil(GPU_EQUAL,0x0c,0x0f,0x0f,
+                    GPU_STENCIL_KEEP,GPU_STENCIL_KEEP,GPU_STENCIL_INCR);
+            }
             GPUCMD_AddWrite(GPUREG_COLORBUFFER_READ,triangle?15u:0u);
             GPUCMD_AddWrite(GPUREG_TEXUNIT0_PARAM,triangle?
                 GPU_TEXTURE_MAG_FILTER(GPU_LINEAR)|GPU_TEXTURE_MIN_FILTER(GPU_LINEAR):0);
@@ -143,18 +200,20 @@ int main(void) {
             }
             GPUCMD_AddWrite(0x2cb,2);
             GPUCMD_AddWrite(0x2cc,triangle?0x4c420000:0x4c402000); /* o2 = c0 / v2 */
-            GPUCMD_AddWrite(GPUREG_INDEXBUFFER_CONFIG,(screen?0x80000000:0)|(screen?112+(triangle%2)*6:96+(triangle%2)*3));
+            index_buffer(screen,triangle);
             GPUCMD_AddWrite(GPUREG_DRAWELEMENTS,1);
         }
-        GPUCMD_AddWrite(GPUREG_FRAMEBUFFER_FLUSH,1);
-        u32 *submitted,words;GPUCMD_Split(&submitted,&words);
-        if(submitted!=commands || words>1024 || (words&3))fail();
-        request(GX_ProcessCommandList(submitted,words*4,2));gspWaitForP3D();
+        submit(commands);
         for(unsigned y=0;y<height;++y)for(unsigned x=0;x<width;++x) {
-            unsigned index=tile(x,y,width);u16 z=expected_depth(x,y,width,height);
-            const u8 *stored=depths[screen]+index*2;
-            if(targets[screen][index]!=expected(x,y,width,height) ||
-               stored[0]!=(u8)z || stored[1]!=(u8)(z>>8))fail();
+            unsigned index=tile(x,y,width);bool visible=expected_depth(x,y,width,height)==0;
+            u32 packed=visible?0:(screen?0xffffff:65535);
+            if(screen) {
+                bool covered=x>=width/8 && x<width*7/8 && y>=height/8 && y<height*7/8;
+                packed|=(u32)(covered?(visible?0xad:0xac):0xa5)<<24;
+            }
+            const u8 *stored=depths[screen]+index*depth_bytes;
+            if(targets[screen][index]!=expected(x,y,width,height))fail();
+            for(unsigned lane=0;lane<depth_bytes;++lane)if(stored[lane]!=(u8)(packed>>(lane*8)))fail();
         }
         request(GX_DisplayTransfer(targets[screen],GX_BUFFER_DIM(width,height),(u32*)output,GX_BUFFER_DIM(width,height),GX_TRANSFER_OUT_FORMAT(GX_TRANSFER_FMT_RGB565)));gspWaitForPPF();
         for(unsigned y=0;y<height;++y)for(unsigned x=0;x<width;++x)
@@ -165,5 +224,7 @@ int main(void) {
     linearFree(commands);linearFree(geometry);linearFree(texture);linearFree(targets[0]);linearFree(targets[1]);linearFree(depths[0]);linearFree(depths[1]);gfxExit();
     static const char depth_pass[]="CTR2WUP compiled D16 depth PASS";
     svcOutputDebugString(depth_pass,sizeof(depth_pass)-1);
+    static const char stencil_pass[]="CTR2WUP compiled D24S8 stencil PASS";
+    svcOutputDebugString(stencil_pass,sizeof(stencil_pass)-1);
     static const char message[]="CTR2WUP compiled textured PICA PASS";svcOutputDebugString(message,sizeof(message)-1);return 0;
 }

@@ -5,7 +5,7 @@
 
 /* Original synchronous guest adapter. Resolves only owned Old-family linear
  * allocations (VA 0x14000000 -> PA 0x20000000). One vertex base and a stable tiled
- * RGBA8/color + optional D16/depth pair per list; target feedback and
+ * RGBA8/color + optional D16 or D24S8 depth/stencil pair per list; target feedback and
  * command/relay aliases fail. Both outputs publish in one memory transaction.
  * Validated command/resources/target snapshots survive guest aliases safely.
  * Publishes guest bytes/generations, shader state and counters only after the

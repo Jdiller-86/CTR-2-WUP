@@ -9,6 +9,8 @@
 #define CTR_SCENE_MAX_DRAWS 32u
 #define CTR_SCENE_MAX_SURFACE_BYTES (1024u*1024u)
 #define CTR_SCENE_MAX_DEPTH_BYTES (512u*1024u)
+#define CTR_SCENE_MAX_D24S8_BYTES (1024u*1024u)
+enum { CTR_SCENE_DEPTH_D16=0u, CTR_SCENE_DEPTH_D24S8=3u };
 #define CTR_SCENE_MAX_TEXTURE_SPANS 32u
 #define CTR_SCENE_MAX_TEXTURE_SOURCE_BYTES (4u*1024u*1024u)
 typedef enum {
@@ -59,12 +61,13 @@ typedef struct {
     unsigned width,height,stride;
 } ctr_scene_surface;
 typedef struct {
-    /* Owned linear little-endian D16, row zero at bottom. PICA address is an
+    /* Owned linear little-endian D16 or D24S8, row zero at bottom. PICA address is an
      * explicit binding identity, never dereferenced. Padding/trailing bytes
      * participate in staging and exact parity just like the color surface. */
     void *bytes;size_t size;
     unsigned width,height,stride;
     uint32_t address;
+    unsigned format; /* D16=0:2 bytes; D24S8=3:depth low24, stencil high8. */
 } ctr_scene_depth_surface;
 /* Optional synchronous renderer. All commands, resources and software pixels
  * are validated before begin. begin initializes private scratch from initial;
@@ -113,7 +116,7 @@ void ctr_scene_init(ctr_scene_state *state);
  * and all sixteen bytewise logic operations or checked RGB/alpha blending run
  * after TEV. Blend equations use one byte-domain division before saturation;
  * native admission is narrower and remains guarded by full parity. The paired
- * target entry admits bounded D16; stencil, DOT3/buffers, other textures,
+ * target entry admits bounded D16/D24S8 depth and stencil; DOT3/buffers, other textures,
  * unsupported arithmetic and geometry fail.
  * Every list stages state and the complete target before any commit, so late
  * errors preserve previous state/pixels. Inputs must be owned/aligned/stable.
@@ -143,11 +146,13 @@ ctr_scene_result ctr_scene_execute_target_backend(ctr_scene_state *state,const v
                                                   size_t command_bytes,const ctr_scene_resources *resources,
                                                   const ctr_scene_surface *surface,uint32_t color_address,
                                                   const ctr_scene_backend *backend,ctr_scene_report *report);
-/* Paired-target variant. Optional depth is owned D16 with canonical Z buffering
+/* Paired-target variant. Optional depth is owned D16/D24S8 with canonical Z buffering
  * (scale -1, offset signed zero), W=1 and constant Z per triangle. All eight
- * comparisons and independent read/write gates are checked. Both complete
- * surfaces and state commit together; no depth address is followed. Each owned
- * color/depth target is bounded to 1 MiB/512 KiB (1.5 MiB combined). The paired
+ * comparisons, D24S8 stencil comparisons/actions and independent read/write
+ * gates are checked. Both complete
+ * surfaces and state commit together; no depth address is followed. Owned
+ * color is bounded to 1 MiB; depth to 512 KiB D16 or 1 MiB D24S8 (2 MiB combined
+ * maximum). The paired
  * backend profile admits only endpoint Z=0/-1 and rejects other values before
  * begin; software-only execution admits exact constant fractional depth. Legacy
  * renderers without a paired-target interface reject depth before begin. */

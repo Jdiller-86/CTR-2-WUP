@@ -11,8 +11,9 @@
  * Products remain exact integers until one truncating division by 255, then
  * clamp to a byte. MIN/MAX apply the factors. These are explicit software
  * rules; physical PICA/GX2 rounding remains unverified.
- * Descriptor-aware scenes perform D16 depth test/write between alpha acceptance
- * and color output. Stencil and other fragment operation modes are unsupported. */
+ * Descriptor-aware scenes perform stencil then depth between alpha acceptance
+ * and color output. D24S8 supports checked comparison/actions; other fragment
+ * operation modes remain unsupported. */
 typedef struct {
     uint8_t logic_op,write_mask,alpha_function,alpha_reference;
     bool alpha_enabled;
@@ -20,6 +21,23 @@ typedef struct {
     uint8_t blend_equation[2],blend_source[2],blend_destination[2];
     uint8_t blend_constant[4];
 } ctr_fragment_state;
+
+/* D24S8 stencil state. Compare masked reference against masked stored value;
+ * actions are stencil-fail, depth-fail and pass, in that order. All arithmetic
+ * is byte-oriented; the write mask merges the action result with old stencil. */
+typedef struct {
+    bool enabled;
+    uint8_t function,write_mask,reference,input_mask,action[3];
+} ctr_stencil_state;
+bool ctr_stencil_register_value(unsigned reg,uint32_t value);
+/* Format-aware caller supplies allowed only for an owned D24S8 surface.
+ * Allowed requires both registers fully defined; legacy disabled zero state
+ * permits undefined registers. No output changes on validation failure. */
+bool ctr_stencil_decode(const uint32_t registers[],const uint8_t defined[],
+                        bool allowed,ctr_stencil_state *out);
+bool ctr_stencil_passes(const ctr_stencil_state *state,uint8_t stored);
+/* action is the actual decoded action ID0..7, not an outcome array index. */
+uint8_t ctr_stencil_apply(const ctr_stencil_state *state,unsigned action,uint8_t stored);
 
 bool ctr_fragment_register(unsigned reg);
 bool ctr_fragment_register_value(unsigned reg,uint32_t value);

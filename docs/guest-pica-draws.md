@@ -64,8 +64,8 @@ contents; its synchronous readback must match every staged target byte before
 guest pixels, retained state, memory generations or P3D completion commit.
 Backend failures and mismatches fail the list without software fallback.
 The existing TXT trace retains a hash and 4×4 RGBA sample grid for each retired
-GPU readback, including pixels from a list later rejected for parity. Bound D16
-readbacks record a separate hash and 4×4 depth grid before parity/commit.
+GPU readback, including pixels from a list later rejected for parity. Bound depth
+readbacks record a separate hash and 4×4 depth/stencil grid before parity/commit.
 
 CI artifact `wiiu-gx2-guest-<source commit>` contains the separately named
 `ctr2wup-gx2-guest.rpx`/`.wuhb`, reference images, provenance and one short
@@ -84,7 +84,7 @@ python3 tools/validate-libctru.py --application textured --wiiu --gx2 --sanitize
 This distinct original application submits retained shader/texture state and
 tests nearest replacement and a bilinear four-texel average followed by a
 six-stage RGB/alpha combiner chain, alpha cutouts, separate RGB/alpha blending
-and D16 depth writes with occluded overdraw.
+and D16/D24S8 depth with stencil preparation, masked rendering and occluded overdraw.
 Its striped-cutout/pale-green top/bottom
 frames receive independent exact host comparison. The native build is named
 `CTR2WUP Textured Guest`, with `ctr2wup-textured-guest.rpx`/`.wuhb` in CI artifact
@@ -117,13 +117,14 @@ reuse/free. Physical sampling parity and performance remain unverified.
 - Targets are 8×8 Morton tiled RGBA8/ABGR storage, with dimensions that are multiples
   of eight and no larger than 512. The adapter converts to the renderer's linear
   RGBA view, then publishes both complete targets in one checked memory transaction.
-  Optional D16 depth uses the same Morton indices with two little-endian bytes
-  per sample; color/depth, command, geometry and texture aliases reject.
+  Optional depth uses the same Morton indices: two little-endian bytes for D16
+  or four for D24S8, with stencil in byte 3. Color/depth, command, geometry and
+  texture aliases reject.
 - Supported fragment state is explicitly defined: primary-color replacement or
   bounded six-stage Texture0/constant/Previous TEV with independent operands and
   scale, all eight alpha tests, 16 logic operations, checked blending and RGBA write masks.
-  Lighting and stencil remain disabled; [D16 depth](textures.md#d16-depth) has an
-  explicit bounded profile. The
+  Lighting remains disabled; [D16 depth](textures.md#d16-depth) and
+  [D24S8 stencil](textures.md#d24s8-stencil) have explicit bounded profiles. The
   [fragment output contract](textures.md#fragment-output) defines read/write gates.
   Required registers need fully defined byte masks. Unsupported
   or incomplete state fails before publishing pixels, shader state or completion.
@@ -138,7 +139,7 @@ accept only exact normal float24/signed-zero results with integer evaluation and
 transactional numeric rejection; [original arithmetic checks](software-scenes.md#exact-add-and-mul)
 validate the exact numeric subset separately from this MOV fixture. Broader
 arithmetic, mixed min/mag filters, mipmaps, perspective, DOT3/combiner buffers, clipping and
-broader depth and stencil remain unsupported. Native fractional blend parity remains unverified;
+broader depth remains unsupported. Native fractional blend parity remains unverified;
 every target byte must match the explicit software contract before publication.
 A raw VFP push/pop guard fix supports exact bit transfers
 under CRT FPSCR controls; it does not enable unsupported arithmetic modes.

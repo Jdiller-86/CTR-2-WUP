@@ -1181,7 +1181,7 @@ static ctr_scene_result depth_execute(ctr_scene_fixture *fixture,ctr_scene_state
                                       uint8_t *color,uint8_t *depth,ctr_scene_report *report) {
     ctr_scene_resources resources={UINT32_C(0x18000000),fixture->resources,fixture->resource_bytes,NULL,0};
     ctr_scene_surface surface={color,DEPTH_COLOR_BYTES,64,64,DEPTH_COLOR_STRIDE};
-    ctr_scene_depth_surface z={depth,DEPTH_BYTES,64,64,DEPTH_STRIDE,UINT32_C(0x18020000)};
+    ctr_scene_depth_surface z={depth,DEPTH_BYTES,64,64,DEPTH_STRIDE,UINT32_C(0x18020000),0};
     return ctr_scene_execute_targets(state,fixture->commands,fixture->command_bytes,&resources,
                                      &surface,UINT32_C(0x18010000),&z,report);
 }
@@ -1302,7 +1302,7 @@ static void depth_quantization(void) {
     uint8_t color[8u*8u*4u],depth[8u*8u*2u];
     ctr_scene_resources resources={UINT32_C(0x18000000),fixture.resources,0,NULL,0};
     ctr_scene_surface surface={color,sizeof(color),8,8,32};
-    ctr_scene_depth_surface z={depth,sizeof(depth),8,8,16,UINT32_C(0x18020000)};
+    ctr_scene_depth_surface z={depth,sizeof(depth),8,8,16,UINT32_C(0x18020000),0};
     unsigned cases=0;
     for(unsigned exponent=1;exponent<=63;++exponent)
         for(unsigned index=0;index<sizeof(fractions)/sizeof(fractions[0]);++index) {
@@ -1368,7 +1368,7 @@ static void depth_rollback(void) {
         memcpy(color,old_color,sizeof(color));memcpy(depth,old_depth,sizeof(depth));
         ctr_scene_resources resources={UINT32_C(0x18000000),fixture.resources,fixture.resource_bytes,NULL,0};
         ctr_scene_surface surface={color,sizeof(color),64,64,DEPTH_COLOR_STRIDE};
-        ctr_scene_depth_surface z={depth,sizeof(depth),64,64,DEPTH_STRIDE,UINT32_C(0x18020000)};
+        ctr_scene_depth_surface z={depth,sizeof(depth),64,64,DEPTH_STRIDE,UINT32_C(0x18020000),0};
         ctr_scene_report *output=&report;
         if(kind==0)z.bytes=color;
         if(kind==1)z.bytes=&state;
@@ -1434,7 +1434,7 @@ static void depth_backend_parity(void) {
     CHECK(depth_execute(&fixture,&expected,reference_color,reference_depth,&report)==CTR_SCENE_OK);
     ctr_scene_resources resources={UINT32_C(0x18000000),fixture.resources,fixture.resource_bytes,NULL,0};
     ctr_scene_surface surface={color,sizeof(color),64,64,DEPTH_COLOR_STRIDE};
-    ctr_scene_depth_surface z={depth,sizeof(depth),64,64,DEPTH_STRIDE,UINT32_C(0x18020000)};
+    ctr_scene_depth_surface z={depth,sizeof(depth),64,64,DEPTH_STRIDE,UINT32_C(0x18020000),0};
     /* A correct color image cannot authorize a corrupted depth image, even if
      * the only changed byte is row padding or the final byte after all rows. */
     for(unsigned kind=0;kind<9;++kind) {
@@ -1472,10 +1472,374 @@ static void depth_backend_parity(void) {
         CHECK(!memcmp(&state,&initial,sizeof(state)) && !memcmp(color,old_color,sizeof(color)) && !memcmp(depth,old_depth,sizeof(depth)));
     }
 }
+/* Original stencil references use mathematical byte operations independently
+ * of the renderer. Every stored byte is exercised, with finite mask/ref sets. */
+static unsigned stencil_reference(unsigned action,unsigned old,unsigned reference,unsigned mask) {
+    const unsigned candidates[]={old,0,reference,old==255u?255u:old+1u,
+        old?old-1u:0u,255u-old,(old+1u)%256u,(old+255u)%256u};
+    unsigned result=0;
+    for(unsigned bit=0;bit<8;++bit)result|=((mask&(1u<<bit))?candidates[action]:old)&(1u<<bit);
+    return result;
+}
+static uint32_t stencil_word(unsigned function,unsigned write,unsigned reference,unsigned input) {
+    return 1u|(function<<4)|(write<<8)|(reference<<16)|(input<<24);
+}
+static void stencil_contract(void) {
+    uint32_t registers[CTR_PICA_REGISTER_COUNT]={0};uint8_t defined[CTR_PICA_REGISTER_COUNT]={0};
+    ctr_stencil_state decoded,previous;
+    static const unsigned masks[]={0,0x55,0xaa,255},refs[]={0,0xa6,255};
+    for(unsigned bit=0;bit<32;++bit) {
+        uint32_t one=UINT32_C(1)<<bit;
+        CHECK(ctr_stencil_register_value(0x105,one)==((one&UINT32_C(0xffffff71))!=0u));
+        CHECK(ctr_stencil_register_value(0x106,one)==((one&UINT32_C(0x777))!=0u));
+    }
+    for(unsigned function=0;function<8;++function)for(unsigned mask=0;mask<4;++mask)
+        for(unsigned reference=0;reference<3;++reference) {
+        ctr_stencil_state state={.enabled=true,.function=(uint8_t)function,
+            .write_mask=(uint8_t)masks[mask],.reference=(uint8_t)refs[reference],.input_mask=(uint8_t)masks[mask]};
+        for(unsigned stored=0;stored<256;++stored) {
+            CHECK(ctr_stencil_passes(&state,(uint8_t)stored)==
+                  depth_relation(function,refs[reference]&masks[mask],stored&masks[mask]));
+            if(!function)for(unsigned action=0;action<8;++action)
+                CHECK(ctr_stencil_apply(&state,action,(uint8_t)stored)==
+                      stencil_reference(action,stored,refs[reference],masks[mask]));
+        }
+        state.enabled=false;CHECK(ctr_stencil_passes(&state,0) && ctr_stencil_passes(&state,255));
+    }
+    registers[0x105]=stencil_word(6,0x5a,0xa6,0x3c);registers[0x106]=0x765;
+    defined[0x105]=defined[0x106]=15;
+    CHECK(ctr_stencil_decode(registers,defined,true,&decoded));
+    CHECK(decoded.enabled && decoded.function==6 && decoded.write_mask==0x5a &&
+          decoded.reference==0xa6 && decoded.input_mask==0x3c &&
+          decoded.action[0]==5 && decoded.action[1]==6 && decoded.action[2]==7);
+    const unsigned regs[]={0x105,0x106};
+    for(unsigned index=0;index<2;++index)for(unsigned mask=0;mask<15;++mask) {
+        uint8_t old=defined[regs[index]];defined[regs[index]]=(uint8_t)mask;
+        memset(&decoded,0xa5,sizeof(decoded));decoded.enabled=true;previous=decoded;
+        CHECK(!ctr_stencil_decode(registers,defined,true,&decoded));
+        CHECK(!memcmp(&decoded,&previous,sizeof(decoded)));defined[regs[index]]=old;
+    }
+    memset(&decoded,0xa5,sizeof(decoded));decoded.enabled=true;previous=decoded;
+    CHECK(!ctr_stencil_decode(registers,defined,false,&decoded));CHECK(!memcmp(&decoded,&previous,sizeof(decoded)));
+    registers[0x105]=registers[0x106]=0;
+    CHECK(ctr_stencil_decode(registers,defined,false,&decoded) && !decoded.enabled);
+}
+enum { STENCIL_STRIDE=260,STENCIL_BYTES=64*STENCIL_STRIDE+12 };
+static unsigned stencil_seed(unsigned x,unsigned y) { return (17u*x+31u*y)&255u; }
+static void stencil_state(ctr_scene_state *state,unsigned control,unsigned config,unsigned actions) {
+    depth_state(state,control);state->registers[0x105]=config;state->registers[0x106]=actions;
+    state->registers[0x114]=state->registers[0x115]=state->registers[0x116]=3;
+}
+static void stencil_initial(uint8_t color[DEPTH_COLOR_BYTES],uint8_t packed[STENCIL_BYTES]) {
+    static const unsigned z[]={0,1,0x12abcd,0x7ffffe,0x7fffff,0x800000,0xfffffe,0xffffff};
+    memset(color,0x6d,DEPTH_COLOR_BYTES);memset(packed,0xa5,STENCIL_BYTES);
+    for(unsigned y=0;y<64;++y)for(unsigned x=0;x<64;++x) {
+        const uint8_t background[]={16,32,48,255};memcpy(color+y*DEPTH_COLOR_STRIDE+x*4u,background,4);
+        put32(packed+y*STENCIL_STRIDE+x*4u,z[(x+3u*y)&7u]|(stencil_seed(x,y)<<24));
+    }
+}
+static ctr_scene_result stencil_execute(ctr_scene_fixture *fixture,ctr_scene_state *state,
+                                        uint8_t *color,uint8_t *packed,ctr_scene_report *report) {
+    ctr_scene_resources resources={UINT32_C(0x18000000),fixture->resources,fixture->resource_bytes,NULL,0};
+    ctr_scene_surface surface={color,DEPTH_COLOR_BYTES,64,64,DEPTH_COLOR_STRIDE};
+    ctr_scene_depth_surface z={packed,STENCIL_BYTES,64,64,STENCIL_STRIDE,UINT32_C(0x18020000),3};
+    return ctr_scene_execute_targets(state,fixture->commands,fixture->command_bytes,&resources,
+                                     &surface,UINT32_C(0x18010000),&z,report);
+}
+static void stencil_pixel(uint8_t *color,unsigned x,unsigned y) {
+    const uint8_t pixel[]={(uint8_t)(x+y<63u?255u:0u),(uint8_t)(x+y<63u?0u:255u),0,255};
+    memcpy(color+y*DEPTH_COLOR_STRIDE+x*4u,pixel,4);
+}
+static void stencil_images(void) {
+    ctr_scene_fixture fixture;ctr_scene_state state;ctr_scene_report report;
+    uint8_t color[DEPTH_COLOR_BYTES],old_color[DEPTH_COLOR_BYTES],expected_color[DEPTH_COLOR_BYTES];
+    uint8_t packed[STENCIL_BYTES],old_packed[STENCIL_BYTES],expected_packed[STENCIL_BYTES];
+    stencil_initial(old_color,old_packed);bool seen[256]={false};
+    for(unsigned y=8;y<56;++y)for(unsigned x=8;x<56;++x)seen[stencil_seed(x,y)]=true;
+    for(unsigned value=0;value<256;++value)CHECK(seen[value]);
+    /* Force each branch independently. Other branches carry distinct actions,
+     * so confusing stencil-fail, depth-fail and pass cannot accidentally pass. */
+    for(unsigned outcome=0;outcome<3;++outcome)for(unsigned action=0;action<8;++action) {
+        unsigned choices[]={(action+1u)%8u,(action+2u)%8u,(action+3u)%8u};choices[outcome]=action;
+        unsigned actions=choices[0]|(choices[1]<<4)|(choices[2]<<8);
+        ctr_scene_fixture_make(&fixture,false);
+        stencil_state(&state,outcome==1u?0x1f01u:0x1f11u,stencil_word(outcome?1u:0u,0x5a,0xa6,255),actions);
+        memcpy(color,old_color,sizeof(color));memcpy(packed,old_packed,sizeof(packed));
+        memcpy(expected_color,old_color,sizeof(color));memcpy(expected_packed,old_packed,sizeof(packed));
+        for(unsigned y=8;y<56;++y)for(unsigned x=8;x<56;++x) {
+            size_t at=y*STENCIL_STRIDE+x*4u;unsigned word=get32(old_packed+at);
+            unsigned next=stencil_reference(action,word>>24,0xa6,0x5a);
+            put32(expected_packed+at,(next<<24)|(outcome==2u?0x7fffffu:word&0xffffffu));
+            if(outcome==2u)stencil_pixel(expected_color,x,y);
+        }
+        CHECK(stencil_execute(&fixture,&state,color,packed,&report)==CTR_SCENE_OK && report.fragments==2304);
+        CHECK(!memcmp(color,expected_color,sizeof(color)) && !memcmp(packed,expected_packed,sizeof(packed)));
+    }
+    /* Comparisons use masked reference on the left, not the stored byte.
+     * Gate zero suppresses every selected stencil action and depth write, while
+     * comparisons still select color fragments. */
+    static const unsigned masks[]={0,15,240,255},refs[]={0x16,0xa6,255};
+    for(unsigned function=0;function<8;++function)for(unsigned mask=0;mask<4;++mask)
+        for(unsigned reference=0;reference<3;++reference) {
+        ctr_scene_fixture_make(&fixture,false);
+        stencil_state(&state,0x1f11,stencil_word(function,255,refs[reference],masks[mask]),0x222);
+        state.registers[0x115]=0;
+        memcpy(color,old_color,sizeof(color));memcpy(packed,old_packed,sizeof(packed));
+        memcpy(expected_color,old_color,sizeof(color));
+        for(unsigned y=8;y<56;++y)for(unsigned x=8;x<56;++x)
+            if(depth_relation(function,refs[reference]&masks[mask],stencil_seed(x,y)&masks[mask]))
+                stencil_pixel(expected_color,x,y);
+        CHECK(stencil_execute(&fixture,&state,color,packed,&report)==CTR_SCENE_OK && report.draws==2);
+        CHECK(!memcmp(color,expected_color,sizeof(color)) && !memcmp(packed,old_packed,sizeof(packed)));
+    }
+}
+static void stencil_depth_comparisons(void) {
+    static const uint32_t positions[]={0,UINT32_C(0xbe800000),UINT32_C(0xbf000000),UINT32_C(0xbf800000)};
+    static const unsigned incoming[]={0,0x3fffff,0x7fffff,0xffffff};
+    ctr_scene_fixture fixture;ctr_scene_state state;ctr_scene_report report;
+    uint8_t color[DEPTH_COLOR_BYTES],old_color[DEPTH_COLOR_BYTES],expected_color[DEPTH_COLOR_BYTES];
+    uint8_t packed[STENCIL_BYTES],old_packed[STENCIL_BYTES],expected_packed[STENCIL_BYTES];
+    stencil_initial(old_color,old_packed);
+    /* Numerical depth comparisons read exactly the low 24 little-endian bits.
+     * The independently varying high byte selects a distinct depth-fail action. */
+    for(unsigned function=0;function<8;++function)for(unsigned anchor=0;anchor<4;++anchor) {
+        ctr_scene_fixture_make(&fixture,false);depth_position(&fixture,positions[anchor]);
+        stencil_state(&state,0x1f01u|(function<<4),stencil_word(1,255,0xa6,255),0x251);
+        memcpy(color,old_color,sizeof(color));memcpy(packed,old_packed,sizeof(packed));
+        memcpy(expected_color,old_color,sizeof(color));memcpy(expected_packed,old_packed,sizeof(packed));
+        for(unsigned y=8;y<56;++y)for(unsigned x=8;x<56;++x) {
+            size_t at=y*STENCIL_STRIDE+x*4u;unsigned old=get32(old_packed+at);
+            bool pass=depth_relation(function,incoming[anchor],old&0xffffffu);
+            put32(expected_packed+at,pass?(UINT32_C(0xa6000000)|incoming[anchor]):
+                  (((255u-(old>>24))<<24)|(old&0xffffffu)));
+            if(pass)stencil_pixel(expected_color,x,y);
+        }
+        CHECK(stencil_execute(&fixture,&state,color,packed,&report)==CTR_SCENE_OK &&
+              report.fragments==2304 && report.draws==2);
+        CHECK(!memcmp(color,expected_color,sizeof(color)) && !memcmp(packed,expected_packed,sizeof(packed)));
+    }
+}
+static void stencil_order_and_retention(void) {
+    ctr_scene_fixture fixture;ctr_scene_state state;ctr_scene_report report;
+    uint8_t color[DEPTH_COLOR_BYTES],old_color[DEPTH_COLOR_BYTES],expected_color[DEPTH_COLOR_BYTES];
+    uint8_t packed[STENCIL_BYTES],old_packed[STENCIL_BYTES],expected_packed[STENCIL_BYTES];
+    stencil_initial(old_color,old_packed);
+    for(unsigned kind=0;kind<5;++kind) {
+        ctr_scene_fixture_make(&fixture,false);
+        stencil_state(&state,kind==1u?0x1f01u:kind==2u?0x1000u:0x1f11u,
+            stencil_word(kind==0u?0u:1u,255,0xa6,255),0x235);
+        if(kind==0u)state.registers[0x104]=1; /* NEVER alpha before stencil-fail INVERT. */
+        if(kind==2u)state.registers[0x114]=3; /* Depth disabled: stencil pass still runs. */
+        if(kind==3u)state.registers[0x105]&=~1u; /* Disabled stencil must preserve its byte. */
+        if(kind==4u)state.registers[0x107]&=~0x1000u; /* Stencil-only update preserves depth. */
+        memcpy(color,old_color,sizeof(color));memcpy(packed,old_packed,sizeof(packed));
+        memcpy(expected_color,old_color,sizeof(color));memcpy(expected_packed,old_packed,sizeof(packed));
+        if(kind)for(unsigned y=8;y<56;++y)for(unsigned x=8;x<56;++x) {
+            size_t at=y*STENCIL_STRIDE+x*4u;unsigned old=get32(old_packed+at);
+            unsigned next=kind==1u?stencil_reference(3,old>>24,0xa6,255):kind==3u?old>>24:0xa6;
+            unsigned z=kind==1u || kind==4u?old&0xffffffu:0x7fffffu;
+            put32(expected_packed+at,(next<<24)|z);
+            if(kind!=1u && kind!=2u)stencil_pixel(expected_color,x,y);
+        }
+        CHECK(stencil_execute(&fixture,&state,color,packed,&report)==CTR_SCENE_OK && report.fragments==2304);
+        CHECK(!memcmp(color,expected_color,sizeof(color)) && !memcmp(packed,expected_packed,sizeof(packed)));
+    }
+    /* A stencil-only prepass retains per-pixel data for a later list. It changes
+     * only the lower stencil nibble, preserving depth and color exactly. */
+    ctr_scene_fixture_make(&fixture,false);stencil_state(&state,0,stencil_word(1,15,0x4c,255),0x200);
+    memcpy(color,old_color,sizeof(color));memcpy(packed,old_packed,sizeof(packed));
+    memcpy(expected_packed,old_packed,sizeof(packed));
+    for(unsigned y=8;y<56;++y)for(unsigned x=8;x<56;++x) {
+        size_t at=y*STENCIL_STRIDE+x*4u;unsigned old=get32(old_packed+at);
+        put32(expected_packed+at,(old&UINT32_C(0xf0ffffff))|UINT32_C(0x0c000000));
+    }
+    CHECK(stencil_execute(&fixture,&state,color,packed,&report)==CTR_SCENE_OK);
+    CHECK(!memcmp(color,old_color,sizeof(color)) && !memcmp(packed,expected_packed,sizeof(packed)));
+    fixture.command_bytes=0;append(&fixture,0x105,stencil_word(2,0,0x0c,15));append(&fixture,0x107,0xf00);
+    append(&fixture,0x115,0);append(&fixture,0x22f,1);
+    memcpy(expected_color,old_color,sizeof(color));
+    for(unsigned y=8;y<56;++y)for(unsigned x=8;x<56;++x)if(x+y>=63u) {
+        const uint8_t green[]={0,255,0,255};memcpy(expected_color+y*DEPTH_COLOR_STRIDE+x*4u,green,4);
+    }
+    CHECK(stencil_execute(&fixture,&state,color,packed,&report)==CTR_SCENE_OK && state.lists==2 && report.draws==1);
+    CHECK(!memcmp(color,expected_color,sizeof(color)) && !memcmp(packed,expected_packed,sizeof(packed)));
+}
+static void stencil_quantization(void) {
+    /* Binary64 evaluates this finite dyadic product exactly (<=41 significant
+     * bits), independently of the renderer's integer-significand shifts. */
+    static const unsigned fractions[]={0,1,2,32767,32768,65534,65535};
+    ctr_scene_fixture fixture;ctr_scene_state state;ctr_scene_report report;
+    uint8_t color[8u*8u*4u],packed[8u*8u*4u];unsigned cases=0;
+    ctr_scene_resources resources={UINT32_C(0x18000000),fixture.resources,0,NULL,0};
+    ctr_scene_surface surface={color,sizeof(color),8,8,32};
+    ctr_scene_depth_surface z={packed,sizeof(packed),8,8,32,UINT32_C(0x18020000),3};
+    for(unsigned exponent=1;exponent<=63;++exponent)for(unsigned index=0;index<7;++index) {
+        unsigned fraction=fractions[index];if(exponent==63u && fraction)continue;
+        double magnitude=ldexp(1.0+(double)fraction/65536.0,(int)exponent-63);
+        unsigned expected=(unsigned)(magnitude*16777215.0);
+        ctr_scene_fixture_make(&fixture,false);depth_position(&fixture,bits((float)-magnitude));
+        for(unsigned vertex=0;vertex<4;++vertex) {
+            put32(fixture.resources+vertex*16u,bits(vertex&1u?-0.5f:-1.0f));
+            put32(fixture.resources+vertex*16u+4u,bits(vertex&2u?-0.5f:-1.0f));
+        }
+        set(&fixture,0x041,UINT32_C(0x410000));set(&fixture,0x043,UINT32_C(0x410000));
+        stencil_state(&state,0x1000,0,0);state.registers[0x114]=0;state.registers[0x11e]=UINT32_C(0x01007008);
+        memset(color,0xa6,sizeof(color));for(unsigned i=0;i<64;++i)put32(packed+i*4u,UINT32_C(0x6d123456));
+        resources.size=fixture.resource_bytes;
+        CHECK(ctr_scene_execute_targets(&state,fixture.commands,fixture.command_bytes,&resources,
+              &surface,UINT32_C(0x18010000),&z,&report)==CTR_SCENE_OK && report.fragments==4);
+        for(unsigned y=0;y<8;++y)for(unsigned x=0;x<8;++x)
+            CHECK(get32(packed+(y*8u+x)*4u)==(UINT32_C(0x6d000000)|(x<2u && y<2u?expected:0x123456u)));
+        for(unsigned byte=0;byte<sizeof(color);++byte)CHECK(color[byte]==0xa6u);
+        ++cases;
+    }
+    CHECK(cases==435);
+}
+static void stencil_rollback(void) {
+    ctr_scene_fixture fixture;ctr_scene_state state,previous;ctr_scene_report report;
+    uint8_t color[DEPTH_COLOR_BYTES],old_color[DEPTH_COLOR_BYTES],packed[STENCIL_BYTES],old_packed[STENCIL_BYTES];
+    stencil_initial(old_color,old_packed);
+    const unsigned regs[]={0x105,0x106,0x106,0x114,0x115,0x116,0x105,0x107};
+    const uint32_t invalid[]={4,8,UINT32_C(0x80000000),2,2,2,0x80,4};
+    for(unsigned kind=0;kind<8;++kind) {
+        ctr_scene_fixture_make(&fixture,false);stencil_state(&state,0x1f11,stencil_word(1,255,0xa6,255),0x222);previous=state;
+        memcpy(color,old_color,sizeof(color));memcpy(packed,old_packed,sizeof(packed));append(&fixture,regs[kind],invalid[kind]);
+        CHECK(stencil_execute(&fixture,&state,color,packed,&report)!=CTR_SCENE_OK && report.draws==2 && report.reg==regs[kind]);
+        CHECK(!memcmp(&state,&previous,sizeof(state)) && !memcmp(color,old_color,sizeof(color)) && !memcmp(packed,old_packed,sizeof(packed)));
+    }
+    for(unsigned reg=0x105;reg<=0x106;++reg)for(unsigned partial=0;partial<4;++partial) {
+        const unsigned masks[]={0,1,7,14};ctr_scene_fixture_make(&fixture,false);
+        stencil_state(&state,0x1f11,0,0);state.register_defined[reg]=(uint8_t)masks[partial];previous=state;
+        memcpy(color,old_color,sizeof(color));memcpy(packed,old_packed,sizeof(packed));
+        CHECK(stencil_execute(&fixture,&state,color,packed,&report)!=CTR_SCENE_OK && !report.draws);
+        CHECK(!memcmp(&state,&previous,sizeof(state)) && !memcmp(color,old_color,sizeof(color)) && !memcmp(packed,old_packed,sizeof(packed)));
+    }
+    for(unsigned kind=0;kind<8;++kind) {
+        ctr_scene_fixture_make(&fixture,false);stencil_state(&state,0x1f11,stencil_word(1,255,0xa6,255),0x222);previous=state;
+        memcpy(color,old_color,sizeof(color));memcpy(packed,old_packed,sizeof(packed));
+        ctr_scene_resources resources={UINT32_C(0x18000000),fixture.resources,fixture.resource_bytes,NULL,0};
+        ctr_scene_surface surface={color,sizeof(color),64,64,DEPTH_COLOR_STRIDE};
+        ctr_scene_depth_surface z={packed,sizeof(packed),64,64,STENCIL_STRIDE,UINT32_C(0x18020000),3};
+        if(kind==0)z.bytes=color;
+        if(kind==1)z.bytes=&report;
+        if(kind==2)z.format=2;
+        if(kind==3)z.format=4;
+        if(kind==4)z.stride=255;
+        if(kind==5)z.size=64u*255u;
+        /* The upper half of a four-byte D24S8 target overlaps color. Treating
+         * it as a two-byte D16 span would miss this physical alias. */
+        if(kind==6)z.address=UINT32_C(0x1800d000);
+        if(kind==7) {
+            z.address=UINT32_C(0x1800d000);
+            ctr_scene_resource_span span={UINT32_C(0x1800fff0),old_packed,16};
+            resources.textures=&span;resources.texture_count=1;
+            CHECK(ctr_scene_execute_targets(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
+                  UINT32_C(0x18100000),&z,&report)==CTR_SCENE_ALIAS);
+        } else CHECK(ctr_scene_execute_targets(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
+                      UINT32_C(0x18010000),&z,&report)!=CTR_SCENE_OK);
+        CHECK(!memcmp(&state,&previous,sizeof(state)) && !memcmp(color,old_color,sizeof(color)) && !memcmp(packed,old_packed,sizeof(packed)));
+    }
+}
+typedef struct {
+    const uint8_t *color,*packed;
+    unsigned begins,draws,ends,aborts,fail;
+    size_t color_corruption,packed_corruption;
+} stencil_backend;
+static bool stencil_backend_begin(void *context,const ctr_scene_surface *initial,const ctr_scene_depth_surface *depth) {
+    stencil_backend *b=context;++b->begins;
+    CHECK(initial->size==DEPTH_COLOR_BYTES && depth->size==STENCIL_BYTES && depth->stride==STENCIL_STRIDE && depth->format==3);
+    return b->fail!=1u;
+}
+static bool stencil_backend_draw(void *context,const ctr_scene_state *state,const ctr_vertex *vertices,
+                                  unsigned count,const ctr_scene_texture *texture) {
+    stencil_backend *b=context;++b->draws;(void)vertices;
+    CHECK(count==3 && !texture && state->registers[0x116]==3);return b->fail!=2u;
+}
+static bool stencil_backend_end(void *context,const ctr_scene_surface *readback,const ctr_scene_depth_surface *depth) {
+    stencil_backend *b=context;++b->ends;
+    memcpy(readback->bytes,b->color,readback->size);memcpy(depth->bytes,b->packed,depth->size);
+    if(b->color_corruption)((uint8_t *)readback->bytes)[b->color_corruption]^=1u;
+    if(b->packed_corruption)((uint8_t *)depth->bytes)[b->packed_corruption]^=1u;
+    return b->fail!=3u;
+}
+static void stencil_backend_abort(void *context) { ++((stencil_backend*)context)->aborts; }
+static void stencil_backend_parity(void) {
+    ctr_scene_fixture fixture;ctr_scene_state state,initial,previous;ctr_scene_report report;
+    uint8_t color[DEPTH_COLOR_BYTES],old_color[DEPTH_COLOR_BYTES],expected_color[DEPTH_COLOR_BYTES];
+    uint8_t packed[STENCIL_BYTES],old_packed[STENCIL_BYTES],expected_packed[STENCIL_BYTES];
+    stencil_initial(old_color,old_packed);memcpy(expected_color,old_color,sizeof(color));memcpy(expected_packed,old_packed,sizeof(packed));
+    for(unsigned y=8;y<56;++y)for(unsigned x=8;x<56;++x) {
+        size_t at=y*STENCIL_STRIDE+x*4u;unsigned old=get32(old_packed+at);
+        put32(expected_packed+at,(stencil_reference(2,old>>24,0xa6,0x5a)<<24)|0xffffffu);
+        stencil_pixel(expected_color,x,y);
+    }
+    stencil_state(&initial,0x1f11,stencil_word(1,0x5a,0xa6,255),0x251);
+    for(unsigned kind=0;kind<14;++kind) {
+        ctr_scene_fixture_make(&fixture,false);depth_position(&fixture,kind==11u?UINT32_C(0xbf000000):UINT32_C(0xbf800000));
+        if(kind==12u)append(&fixture,0x105,4);
+        if(kind==13u)put32(fixture.resources+3u*16u+8u,0);
+        state=initial;previous=state;memcpy(color,old_color,sizeof(color));memcpy(packed,old_packed,sizeof(packed));
+        const size_t sample=8u*STENCIL_STRIDE+8u*4u;
+        stencil_backend context={expected_color,expected_packed,0,0,0,0,
+            kind>=6u && kind<=8u?kind-5u:0u,kind==1u?256u:0u,
+            kind==2u?sample:kind==3u?sample+3u:kind==4u?256u:kind==5u?sizeof(packed)-1u:0u};
+        ctr_scene_backend backend={&context,depth_backend_legacy_begin,stencil_backend_draw,depth_backend_legacy_end,
+            stencil_backend_abort,stencil_backend_begin,stencil_backend_end};
+        if(kind==9u)backend.begin_depth=NULL;
+        if(kind==10u)backend.end_depth=NULL;
+        ctr_scene_resources resources={UINT32_C(0x18000000),fixture.resources,fixture.resource_bytes,NULL,0};
+        ctr_scene_surface surface={color,sizeof(color),64,64,DEPTH_COLOR_STRIDE};
+        ctr_scene_depth_surface z={packed,sizeof(packed),64,64,STENCIL_STRIDE,UINT32_C(0x18020000),3};
+        ctr_scene_result actual=ctr_scene_execute_targets_backend(&state,fixture.commands,fixture.command_bytes,&resources,
+            &surface,UINT32_C(0x18010000),&z,&backend,&report);
+        CHECK(actual==(kind>=9u?CTR_SCENE_UNSUPPORTED:kind?CTR_SCENE_BACKEND:CTR_SCENE_OK));
+        if(kind)CHECK(!memcmp(&state,&previous,sizeof(state)) && !memcmp(color,old_color,sizeof(color)) && !memcmp(packed,old_packed,sizeof(packed)));
+        else CHECK(state.draws==2 && state.lists==1 && !memcmp(color,expected_color,sizeof(color)) && !memcmp(packed,expected_packed,sizeof(packed)));
+        if(kind>=9u)CHECK(!context.begins && !context.draws && !context.ends && !context.aborts);
+        else CHECK(context.begins==1 && context.aborts==(kind?1u:0u));
+        if(kind>=1u && kind<=5u)CHECK(report.backend_stage==CTR_SCENE_BACKEND_PARITY);
+    }
+}
+
+static void stencil_capacity(void) {
+    /* A full 512x512 D24S8 target is one MiB, independent of the retained
+     * half-MiB D16 cap. Validate every color/packed byte at the exact boundary. */
+    const size_t capacity=512u*512u*4u;
+    uint8_t *color=malloc(capacity),*packed=malloc(capacity+1u);
+    uint8_t *expected_color=malloc(capacity),*expected_packed=malloc(capacity+1u);
+    CHECK(color && packed && expected_color && expected_packed);
+    memset(color,0x6d,capacity);memset(packed,0x39,capacity+1u);
+    memcpy(expected_color,color,capacity);memcpy(expected_packed,packed,capacity+1u);
+    for(unsigned y=8;y<56;++y)for(unsigned x=8;x<56;++x) {
+        size_t at=(y*512u+x)*4u;
+        const uint8_t pixel[]={(uint8_t)(x+y<63u?255u:0u),(uint8_t)(x+y<63u?0u:255u),0,255};
+        memcpy(expected_color+at,pixel,4);put32(expected_packed+at,UINT32_C(0xa67fffff));
+    }
+    ctr_scene_fixture fixture;ctr_scene_fixture_make(&fixture,false);
+    ctr_scene_state state,previous;ctr_scene_report report;
+    stencil_state(&state,0x1f11,stencil_word(1,255,0xa6,255),0x222);
+    state.registers[0x11d]=UINT32_C(0x18100000)/8u;
+    state.registers[0x11c]=UINT32_C(0x18300000)/8u;
+    state.registers[0x11e]=UINT32_C(0x011ff200);
+    ctr_scene_resources resources={UINT32_C(0x18000000),fixture.resources,fixture.resource_bytes,NULL,0};
+    ctr_scene_surface surface={color,capacity,512,512,2048};
+    ctr_scene_depth_surface z={packed,capacity,512,512,2048,UINT32_C(0x18300000),3};
+    CHECK(ctr_scene_execute_targets(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
+          UINT32_C(0x18100000),&z,&report)==CTR_SCENE_OK && report.fragments==2304);
+    CHECK(!memcmp(color,expected_color,capacity) && !memcmp(packed,expected_packed,capacity+1u));
+    previous=state;++z.size;
+    CHECK(ctr_scene_execute_targets(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
+          UINT32_C(0x18100000),&z,&report)==CTR_SCENE_LIMIT);
+    CHECK(!memcmp(&state,&previous,sizeof(state)) && !memcmp(color,expected_color,capacity) &&
+          !memcmp(packed,expected_packed,capacity+1u));
+    free(color);free(packed);free(expected_color);free(expected_packed);
+}
+
 int main(void) {
     floats24();shader_patterns();shader_arithmetic();arithmetic_boundaries();shader_errors();shader_capacity();
     scenes();arithmetic_scenes();scene_capacity();scene_errors();backend_full_target();textured_scenes();textured_rollback();
     fragment_contract();fragment_scenes();blend_contract();blend_scenes();
     depth_comparisons();depth_overdraw();depth_quantization();depth_rollback();depth_backend_parity();
+    stencil_contract();stencil_images();stencil_depth_comparisons();stencil_order_and_retention();stencil_quantization();stencil_rollback();stencil_backend_parity();stencil_capacity();
     printf("original shader/scene tests: %u assertions passed\n",assertions);return 0;
 }

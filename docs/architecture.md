@@ -48,7 +48,7 @@ independently of handles. Unsupported interfaces fail with PC/opcode or IPC cont
 PICA MOV/ADD/MUL/NOP/END to Latte vertex code and submits original inputs through
 GX2. [Base textures](textures.md) support nearest/bilinear Texture0 sampling and bounded
 six-stage RGB/alpha TEV, alpha tests, logic/blend operations, write masks and
-bounded D16 depth; decoded
+bounded D16/D24S8 depth/stencil; decoded
 uploads retain guest UV and explicit ownership.
 Complete software preflight and byte-exact GPU readback precede atomic guest
 commit; unsupported state or backend failure cannot fall back silently.
