@@ -10,6 +10,9 @@ void ctr_gx2_test_free(void *bytes);
  * shader, rasterizer, GX2 driver, cache coherency or physical Wii U execution. */
 typedef unsigned GX2TileMode;
 typedef unsigned GX2TexClampMode;
+typedef unsigned GX2LogicOp;
+typedef unsigned GX2CompareFunction;
+typedef unsigned GX2ChannelMask;
 struct GX2ContextState { uint32_t marker; };
 typedef struct {
     unsigned dim,width,height,depth,mipLevels,format,aa,use,imageSize;
@@ -52,8 +55,16 @@ enum {
     GX2_ATTRIB_FORMAT_FLOAT_32_32_32_32=0x813,GX2_ATTRIB_INDEX_PER_VERTEX=0,
     GX2_SQ_SEL_X=0,GX2_SQ_SEL_Y=1,GX2_SQ_SEL_Z=2,GX2_SQ_SEL_W=3,
     GX2_ENDIAN_SWAP_8_IN_32=2,GX2_SHADER_MODE_UNIFORM_REGISTER=0,
-    GX2_PRIMITIVE_MODE_TRIANGLES=4,GX2_RENDER_TARGET_0=0,GX2_LOGIC_OP_COPY=0xcc,
-    GX2_CHANNEL_MASK_RGBA=15,GX2_COMPARE_FUNC_ALWAYS=7,GX2_STENCIL_FUNCTION_KEEP=0,
+    GX2_PRIMITIVE_MODE_TRIANGLES=4,GX2_RENDER_TARGET_0=0,
+    GX2_LOGIC_OP_CLEAR=0x00,GX2_LOGIC_OP_NOR=0x11,GX2_LOGIC_OP_INV_AND=0x22,
+    GX2_LOGIC_OP_INV_COPY=0x33,GX2_LOGIC_OP_REV_AND=0x44,GX2_LOGIC_OP_INV=0x55,
+    GX2_LOGIC_OP_XOR=0x66,GX2_LOGIC_OP_NOT_AND=0x77,GX2_LOGIC_OP_AND=0x88,
+    GX2_LOGIC_OP_EQUIV=0x99,GX2_LOGIC_OP_NOP=0xaa,GX2_LOGIC_OP_INV_OR=0xbb,
+    GX2_LOGIC_OP_COPY=0xcc,GX2_LOGIC_OP_REV_OR=0xdd,GX2_LOGIC_OP_OR=0xee,GX2_LOGIC_OP_SET=0xff,
+    GX2_COMPARE_FUNC_NEVER=0,GX2_COMPARE_FUNC_LESS=1,GX2_COMPARE_FUNC_EQUAL=2,
+    GX2_COMPARE_FUNC_LEQUAL=3,GX2_COMPARE_FUNC_GREATER=4,GX2_COMPARE_FUNC_NOT_EQUAL=5,
+    GX2_COMPARE_FUNC_GEQUAL=6,GX2_COMPARE_FUNC_ALWAYS=7,
+    GX2_CHANNEL_MASK_RGBA=15,GX2_STENCIL_FUNCTION_KEEP=0,
     GX2_ALPHA_TO_MASK_MODE_NON_DITHERED=0,GX2_FRONT_FACE_CCW=0,
     GX2_TEX_CLAMP_MODE_WRAP=0,GX2_TEX_CLAMP_MODE_MIRROR=1,GX2_TEX_CLAMP_MODE_CLAMP=2,
     GX2_TEX_XY_FILTER_MODE_POINT=0,GX2_TEX_XY_FILTER_MODE_LINEAR=1,GX2_TEX_Z_FILTER_MODE_NONE=0,GX2_TEX_MIP_FILTER_MODE_NONE=0
@@ -89,13 +100,14 @@ void GX2SetAttribBuffer(unsigned index,unsigned size,unsigned stride,const void 
 void GX2SetVertexUniformReg(unsigned offset,unsigned count,const void *bytes);
 void GX2SetPixelUniformReg(unsigned offset,unsigned count,const void *bytes);
 void GX2SetCullOnlyControl(unsigned front,bool cullfront,bool cullback);
+void GX2SetColorControl(GX2LogicOp logic,uint8_t blend,bool multi_write,bool color_write);
+void GX2SetTargetChannelMasks(GX2ChannelMask a,GX2ChannelMask b,GX2ChannelMask c,GX2ChannelMask d,
+                              GX2ChannelMask e,GX2ChannelMask f,GX2ChannelMask g,GX2ChannelMask h);
+void GX2SetAlphaTest(bool enabled,GX2CompareFunction function,float reference);
 #define GX2SetupContextStateEx(p,flag) ((void)(p),(void)(flag))
 #define GX2InitColorBufferRegs(p) ((void)(p))
 #define GX2SetFetchShader(p) ((void)(p))
-#define GX2SetColorControl(a,b,c,d) ((void)(a),(void)(b),(void)(c),(void)(d))
-#define GX2SetTargetChannelMasks(a,b,c,d,e,f,g,h) ((void)0)
 #define GX2SetDepthStencilControl(a,b,c,d,e,f,g,h,i,j,k,l,m) ((void)0)
-#define GX2SetAlphaTest(a,b,c) ((void)(a),(void)(b),(void)(c))
 #define GX2SetAlphaToMask(a,b) ((void)(a),(void)(b))
 #define GX2SetStreamOutEnable(a) ((void)(a))
 #endif

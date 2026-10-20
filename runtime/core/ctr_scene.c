@@ -35,18 +35,16 @@ static bool fragment_register(unsigned reg) {
     static const unsigned tev[]={0xc0,0xc8,0xd0,0xd8,0xf0,0xf8};
     for(unsigned i=0;i<6;++i)if(reg>=tev[i] && reg<=tev[i]+4u)return true;
     return (reg>=0x080u && reg<=0x08bu) || reg==0x08eu || reg==0x08fu ||
-        reg==0x0e0u || reg==0x0fdu;
+        reg==0x0e0u || reg==0x0fdu || ctr_fragment_register(reg);
 }
 static bool configured(const ctr_scene_state *s,unsigned reg,uint32_t value) {
     return s->register_defined[reg]==15u && s->registers[reg]==value;
 }
 static ctr_scene_result target_pipeline(const ctr_scene_state *s,const ctr_scene_surface *surface,
                                         uint32_t color_address) {
-    static const unsigned disabled[]={0x08f,0x100,0x104,0x105,0x106,0x112,0x114,0x115,0x117,0x11b};
+    static const unsigned disabled[]={0x08f,0x105,0x106,0x114,0x115,0x117,0x11b};
     for(unsigned i=0;i<sizeof(disabled)/sizeof(*disabled);++i)
         if(!configured(s,disabled[i],0u))return CTR_SCENE_UNSUPPORTED;
-    if(!configured(s,0x102u,3u) || !configured(s,0x107u,UINT32_C(0xf00)) ||
-       !configured(s,0x113u,15u))return CTR_SCENE_UNSUPPORTED;
     if(s->registers[0x0e0u] || s->registers[0x116u] || s->registers[0x11cu])return CTR_SCENE_UNSUPPORTED;
     uint32_t dimensions=surface->width|((surface->height-1u)<<12)|UINT32_C(0x01000000);
     if((color_address&7u) || (surface->width&7u) || (surface->height&7u) ||
@@ -110,6 +108,7 @@ static ctr_scene_result fragment(const ctr_scene_state *s,const ctr_scene_resour
  * staged draw. Configuration may prepare a later list, but cannot hide an
  * unsupported filter, texture mode or combiner behind the last trigger. */
 static bool fragment_value(unsigned reg,uint32_t value) {
+    if(ctr_fragment_register(reg))return ctr_fragment_register_value(reg,value);
     if(reg==0x080u)return value<=1u;
     if(reg==0x082u)return !(value&~UINT32_C(0x07ff07ff));
     if(reg==0x083u)return !(value&~UINT32_C(0x3326)) &&
@@ -366,7 +365,8 @@ static uint8_t bilinear_byte(unsigned a,unsigned b,unsigned c,unsigned d,
 }
 static void raster(const ctr_scene_state *s,const ctr_scene_surface *surface,
                    uint8_t *pixels,scene_vertex v[3],ctr_scene_report *report,
-                   const ctr_scene_texture *texture,const ctr_tev_program *combiner) {
+                   const ctr_scene_texture *texture,const ctr_tev_program *combiner,
+                   const ctr_fragment_state *merger) {
     uint8_t primary[4];
     for(unsigned lane=0;lane<4;++lane)primary[lane]=v[0].color[lane]==1.0f?255u:0u;
     int64_t area=edge(v[0],v[1],v[2].x,v[2].y);unsigned cull=s->registers[0x040u]&3u;
@@ -428,7 +428,8 @@ static void raster(const ctr_scene_state *s,const ctr_scene_surface *surface,
                     sampled[lane]=(uint8_t)sample;
                 }
             }
-            ctr_tev_evaluate(combiner,primary,sampled,pixel);
+            uint8_t source[4];ctr_tev_evaluate(combiner,primary,sampled,source);
+            ctr_fragment_apply(merger,source,pixel);
             ++report->fragments;
         }
     }
@@ -441,6 +442,8 @@ static ctr_scene_result draw(ctr_scene_state *s,const ctr_scene_resources *resou
         ctr_scene_result result=target_pipeline(s,surface,color_address);
         if(result!=CTR_SCENE_OK)return result;
     }
+    ctr_fragment_state merger;
+    if(!ctr_fragment_decode(s->registers,s->register_defined,bound,&merger))return CTR_SCENE_UNSUPPORTED;
     unsigned count=s->registers[0x228u];
     if(!count || count%3u)return CTR_SCENE_LAYOUT;
     if(count>CTR_SCENE_MAX_VERTICES || report->draws==CTR_SCENE_MAX_DRAWS)return CTR_SCENE_LIMIT;
@@ -476,7 +479,7 @@ static ctr_scene_result draw(ctr_scene_state *s,const ctr_scene_resources *resou
             for(unsigned i=1;i<3;++i)for(unsigned lane=0;lane<4;++lane)
                 if(primitive[i].color[lane]!=primitive[0].color[lane])result=CTR_SCENE_UNSUPPORTED;
             if(result!=CTR_SCENE_OK)break;
-            raster(s,surface,pixels,primitive,report,sampling,&combiner);++report->triangles;
+            raster(s,surface,pixels,primitive,report,sampling,&combiner,&merger);++report->triangles;
         }
     }
     free(texture_allocation);

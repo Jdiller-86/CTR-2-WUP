@@ -457,7 +457,7 @@ static void scene_errors(void) {
     uint8_t pixels[CTR_SCENE_FIXTURE_BYTES],old_pixels[CTR_SCENE_FIXTURE_BYTES];
 #define RESET() do { ctr_scene_fixture_make(&f,false);ctr_scene_init(&state);previous=state;ctr_scene_fixture_background(pixels,sizeof(pixels));memcpy(old_pixels,pixels,sizeof(pixels)); } while(0)
 #define FAIL(expected) do { CHECK(execute(&f,&state,pixels,&report)==expected);CHECK(!memcmp(&state,&previous,sizeof(state)));CHECK(!memcmp(pixels,old_pixels,sizeof(pixels))); } while(0)
-    RESET();append(&f,0x100,0);FAIL(CTR_SCENE_UNSUPPORTED);CHECK(report.draws==2 && report.fragments==2304);
+    RESET();append(&f,0x100,0x100);FAIL(CTR_SCENE_UNSUPPORTED);CHECK(report.draws==2 && report.fragments==2304);
     RESET();f.resources[69]=255;FAIL(CTR_SCENE_VERTEX);CHECK(report.draws==1 && report.vertex_result==CTR_VERTEX_RANGE);
     RESET();put32(f.resources+48,UINT32_C(0x7fc00000));FAIL(CTR_SCENE_VERTEX);CHECK(report.draws==1);
     RESET();set(&f,0x25e,256);FAIL(CTR_SCENE_UNSUPPORTED);
@@ -848,8 +848,143 @@ static void textured_rollback(void) {
         free(oversized);
     }
 }
+/* Independent Boolean truth tables: bit index = source*2 + destination. */
+static uint8_t merger_expected(unsigned op,unsigned source,unsigned destination) {
+    static const unsigned truth[]={0,8,4,12,15,3,10,5,7,14,1,6,9,2,13,11};
+    unsigned result=0;
+    for(unsigned bit=0;bit<8;++bit) {
+        unsigned index=(((source>>bit)&1u)<<1)|((destination>>bit)&1u);
+        result|=((truth[op]>>index)&1u)<<bit;
+    }
+    return (uint8_t)result;
+}
+static void fragment_contract(void) {
+    ctr_fragment_state state={3,15,0,0,false},out,previous;
+    /* Every source/destination byte pair for every operation, including channel
+     * independence and source/destination aliases. No renderer code is an oracle. */
+    for(unsigned op=0;op<16;++op)for(unsigned a=0;a<256;++a)for(unsigned b=0;b<256;++b) {
+        uint8_t source[4]={(uint8_t)a,(uint8_t)(255u-a),(uint8_t)b,137};
+        uint8_t pixel[4]={(uint8_t)b,(uint8_t)a,183,(uint8_t)b},old[4];
+        memcpy(old,pixel,4);state.logic_op=(uint8_t)op;
+        CHECK(ctr_fragment_apply(&state,source,pixel));
+        for(unsigned lane=0;lane<4;++lane)CHECK(pixel[lane]==merger_expected(op,source[lane],old[lane]));
+    }
+    for(unsigned op=0;op<16;++op)for(unsigned mask=0;mask<16;++mask) {
+        uint8_t pixel[4]={19,67,139,211},old[4];memcpy(old,pixel,4);
+        state.logic_op=(uint8_t)op;state.write_mask=(uint8_t)mask;
+        CHECK(ctr_fragment_apply(&state,pixel,pixel));
+        for(unsigned lane=0;lane<4;++lane)
+            CHECK(pixel[lane]==(mask&(1u<<lane)?merger_expected(op,old[lane],old[lane]):old[lane]));
+    }
+    state=(ctr_fragment_state){4,15,0,0,true};
+    /* Exhaust all 256x256 alpha/reference pairs for every comparison. The
+     * expected ordering is independent of comparison dispatch implementation. */
+    for(unsigned function=0;function<8;++function)for(unsigned alpha=0;alpha<256;++alpha)
+        for(unsigned reference=0;reference<256;++reference) {
+            bool relation[]={false,true,alpha==reference,alpha!=reference,alpha<reference,
+                alpha<=reference,alpha>reference,alpha>=reference};
+            uint8_t source[4]={29,101,173,(uint8_t)alpha},pixel[4]={7,43,149,229},old[4];
+            memcpy(old,pixel,4);state.alpha_function=(uint8_t)function;state.alpha_reference=(uint8_t)reference;
+            CHECK(ctr_fragment_apply(&state,source,pixel)==relation[function]);
+            for(unsigned lane=0;lane<4;++lane)CHECK(pixel[lane]==(relation[function]?255u:old[lane]));
+        }
+    uint32_t registers[CTR_PICA_REGISTER_COUNT]={0};uint8_t defined[CTR_PICA_REGISTER_COUNT]={0};
+    CHECK(ctr_fragment_decode(registers,defined,false,&out));
+    CHECK(out.logic_op==3 && out.write_mask==15 && !out.alpha_enabled);
+    memset(&out,0xa5,sizeof(out));previous=out;
+    CHECK(!ctr_fragment_decode(registers,defined,true,&out));CHECK(!memcmp(&out,&previous,sizeof(out)));
+    CHECK(!ctr_fragment_decode(NULL,defined,false,&out));CHECK(!ctr_fragment_decode(registers,NULL,false,&out));
+    CHECK(!ctr_fragment_decode(registers,defined,false,NULL));
+    const unsigned regs[]={0x100,0x102,0x104,0x107,0x112,0x113};
+    for(unsigned i=0;i<sizeof(regs)/sizeof(*regs);++i)defined[regs[i]]=15;
+    registers[0x102]=3;registers[0x107]=0xf00;registers[0x113]=15;
+    for(unsigned i=0;i<sizeof(regs)/sizeof(*regs);++i)for(unsigned mask=0;mask<15;++mask) {
+        defined[regs[i]]=(uint8_t)mask;
+        CHECK(!ctr_fragment_decode(registers,defined,false,&out));CHECK(!memcmp(&out,&previous,sizeof(out)));
+        defined[regs[i]]=15;
+    }
+    for(unsigned op=0;op<16;++op)for(unsigned mask=0;mask<16;++mask)
+        for(unsigned read=0;read<2;++read)for(unsigned write=0;write<2;++write) {
+            registers[0x102]=op;registers[0x107]=mask<<8;
+            registers[0x112]=read?15u:0u;registers[0x113]=write?15u:0u;
+            bool needs_read=write && mask && op!=0u && op!=3u && op!=4u && op!=5u;
+            out=previous;CHECK(ctr_fragment_decode(registers,defined,true,&out)==(!needs_read || read));
+            if(needs_read && !read)CHECK(!memcmp(&out,&previous,sizeof(out)));
+            else CHECK(out.logic_op==op && out.write_mask==(write?mask:0u));
+        }
+    for(unsigned reg=0;reg<CTR_PICA_REGISTER_COUNT;++reg) {
+        bool recognized=false;
+        for(unsigned i=0;i<sizeof(regs)/sizeof(*regs);++i)if(reg==regs[i])recognized=true;
+        CHECK(ctr_fragment_register(reg)==recognized);
+        if(!recognized)CHECK(!ctr_fragment_register_value(reg,0));
+    }
+    for(unsigned bit=0;bit<32;++bit) {
+        uint32_t word=UINT32_C(1)<<bit;
+        CHECK(!ctr_fragment_register_value(0x100,word));
+        CHECK(ctr_fragment_register_value(0x102,word)==(bit<4u));
+        CHECK(ctr_fragment_register_value(0x104,word)==((word&UINT32_C(0xff71))!=0u));
+        CHECK(ctr_fragment_register_value(0x107,word)==(bit>=8u && bit<12u));
+        CHECK(!ctr_fragment_register_value(0x112,word));CHECK(!ctr_fragment_register_value(0x113,word));
+    }
+    for(unsigned function=0;function<8;++function)for(unsigned reference=0;reference<256;++reference)
+        for(unsigned enabled=0;enabled<2;++enabled) {
+            registers[0x102]=3;registers[0x104]=enabled|(function<<4)|(reference<<8);
+            CHECK(ctr_fragment_decode(registers,defined,true,&out));
+            CHECK(out.alpha_enabled==(enabled!=0) && out.alpha_function==function && out.alpha_reference==reference);
+            uint8_t source[4]={1,2,3,4},pixel[4]={5,6,7,8};out.alpha_enabled=false;out.write_mask=15;
+            CHECK(ctr_fragment_apply(&out,source,pixel) && !memcmp(source,pixel,4));
+        }
+}
+static void fragment_scenes(void) {
+    ctr_scene_fixture f;ctr_scene_state state,previous;ctr_scene_report report;
+    uint8_t pixels[CTR_SCENE_FIXTURE_BYTES],before[CTR_SCENE_FIXTURE_BYTES];
+    ctr_scene_fixture_background(before,sizeof(before));
+    /* A complete explicit merger also works in the owned, unbound API. Every
+     * channel-mask/logic pair preserves pixels outside the analytic triangle. */
+    for(unsigned op=0;op<16;++op)for(unsigned mask=0;mask<16;++mask) {
+        ctr_scene_fixture_make(&f,false);target_state(&state);
+        state.registers[0x102]=op;state.registers[0x107]=mask<<8;state.registers[0x112]=15;
+        memcpy(pixels,before,sizeof(pixels));CHECK(execute(&f,&state,pixels,&report)==CTR_SCENE_OK);
+        CHECK(report.fragments==2304 && report.draws==2 && report.triangles==2);
+        for(unsigned y=0;y<64;++y)for(unsigned x=0;x<64;++x)for(unsigned lane=0;lane<4;++lane) {
+            size_t offset=(y*64u+x)*4u+lane;uint8_t expected=before[offset];
+            if(x>=8 && x<56 && y>=8 && y<56 && (mask&(1u<<lane))) {
+                uint8_t source[4]={(uint8_t)(x+y<63u?255u:0u),(uint8_t)(x+y<63u?0u:255u),0,255};
+                expected=merger_expected(op,source[lane],expected);
+            }
+            CHECK(pixels[offset]==expected);
+        }
+    }
+    /* A disabled write gate and an alpha rejection preserve the full target
+     * while covered-fragment counters retain their geometric meaning. */
+    for(unsigned kind=0;kind<2;++kind) {
+        ctr_scene_fixture_make(&f,false);target_state(&state);memcpy(pixels,before,sizeof(pixels));
+        if(kind)state.registers[0x104]=1;else state.registers[0x113]=0;
+        CHECK(execute(&f,&state,pixels,&report)==CTR_SCENE_OK && report.fragments==2304);
+        CHECK(!memcmp(pixels,before,sizeof(pixels)));
+    }
+    const unsigned regs[]={0x100,0x102,0x104,0x107,0x112,0x113};
+    const uint32_t invalid[]={0x100,16,2,1,1,1};
+    for(unsigned bound=0;bound<2;++bound)for(unsigned i=0;i<sizeof(regs)/sizeof(*regs);++i) {
+        ctr_scene_fixture_make(&f,false);target_state(&state);previous=state;
+        memcpy(pixels,before,sizeof(pixels));append(&f,regs[i],invalid[i]);
+        ctr_scene_resources resources={UINT32_C(0x18000000),f.resources,f.resource_bytes,NULL,0};
+        ctr_scene_surface surface={pixels,sizeof(pixels),64,64,256};
+        ctr_scene_result result=bound?ctr_scene_execute_target(&state,f.commands,f.command_bytes,&resources,&surface,
+            UINT32_C(0x18010000),&report):execute(&f,&state,pixels,&report);
+        CHECK(result==CTR_SCENE_UNSUPPORTED && report.draws==2 && report.reg==regs[i]);
+        CHECK(!memcmp(&state,&previous,sizeof(state)) && !memcmp(pixels,before,sizeof(pixels)));
+    }
+    /* One explicitly configured register cannot silently inherit defaults for
+     * the rest; complete byte-mask state is required at each actual draw. */
+    ctr_scene_fixture_make(&f,false);ctr_scene_init(&state);memcpy(pixels,before,sizeof(pixels));
+    insert(&f,0,0x102,3);finish(&f);previous=state;
+    CHECK(execute(&f,&state,pixels,&report)==CTR_SCENE_UNSUPPORTED && !report.draws);
+    CHECK(!memcmp(&state,&previous,sizeof(state)) && !memcmp(pixels,before,sizeof(pixels)));
+}
 int main(void) {
     floats24();shader_patterns();shader_arithmetic();arithmetic_boundaries();shader_errors();shader_capacity();
     scenes();arithmetic_scenes();scene_capacity();scene_errors();backend_full_target();textured_scenes();textured_rollback();
+    fragment_contract();fragment_scenes();
     printf("original shader/scene tests: %u assertions passed\n",assertions);return 0;
 }

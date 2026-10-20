@@ -43,6 +43,8 @@ class Case:
     side: int = 64
     tev: tuple = ()
     textured: bool = True
+    output: tuple = ()
+    draw_output: tuple = ()
 
 
 def original_cases():
@@ -90,7 +92,7 @@ def original_cases():
         dimensions=(1024,8),points=((0,0),(512,0),(0,512),(512,512)),
         uv=((F(-16),F(16)),(F(16),F(-16)),(F(1,2),F(1,2)),(F(15),F(-15))),
         wrap=(2,3),scissor=(3,253,253,255,255)))
-    return cases+tev_cases()
+    return cases+tev_cases()+fragment_cases()
 
 
 TEV_OPERATIONS = (0, 1, 2, 3, 4, 5, 8, 9)
@@ -143,6 +145,97 @@ def tev_cases():
     for error in ('dot3', 'texture1', 'operand', 'scale', 'buffer', 'previous', 'constant'):
         result.append(Case('late-tev-'+error, tev=tev_chain()[:5] if error == 'constant' else tev_chain(), late_error=error))
     return result
+
+
+def output_state(*, function=1, reference=0, alpha=False, logic=3,
+                 mask=15, read=15, write=15):
+    """Original complete PICA output-register construction; byte mask is explicit."""
+    return ((0x100, 0, 15), (0x102, logic, 15),
+            (0x104, int(alpha) | function << 4 | reference << 8, 15),
+            (0x107, mask << 8, 15), (0x112, read, 15), (0x113, write, 15))
+
+
+def fragment_cases():
+    constant = lambda alpha: (tev_stage(rgb=(14, 0, 0), constant=(90, 195, 105, alpha)),)
+    def case(name, **kwargs):
+        return Case(name, side=8, points=((0,0),(8,0),(0,8),(8,8)),
+                    scissor=(0,0,0,7,7), **kwargs)
+    cases = [case(f'fragment-alpha-{function}-{alpha}', textured=False, tev=constant(alpha),
+                  output=output_state(alpha=True, function=function, reference=128))
+             for function in range(8) for alpha in (127, 128, 129)]
+    for reference, source, function in ((0,0,2), (0,255,6), (0,255,4),
+                                         (255,255,2), (255,0,4), (255,0,6)):
+        cases.append(case(f'fragment-alpha-extreme-{reference}-{source}-{function}',
+                          textured=False, tev=constant(source),
+                          output=output_state(alpha=True,function=function,reference=reference)))
+    # The second draw overlaps the first; XOR, inversion and complements must
+    # read the actual prior draw's bytes, rather than the initial background.
+    for logic in range(16):
+        cases.append(case(f'fragment-logic-{logic:02}', textured=False, tev=constant(126),
+            indices=((0, 1, 2), (0, 1, 2), (1, 3, 2)), output=output_state(logic=logic)))
+    for mask in range(16):
+        cases.append(case(f'fragment-mask-{mask:02x}', textured=False, tev=constant(126),
+                          output=output_state(mask=mask, read=0)))
+    cases.extend((
+        case('fragment-byte-mask-transitions', textured=False, tev=constant(128),
+             indices=((0,1,2),(0,1,2),(1,3,2)),
+             output=output_state(alpha=True, function=2, reference=128, mask=5),
+             draw_output=((), ((0x104, 127 << 8, 2), (0x107, 10 << 8, 2)),
+                          ((0x104, 128 << 8, 2),))),
+        case('fragment-write-gate-zero', textured=False, tev=constant(126),
+             output=output_state(logic=11, read=0, write=0)),
+        case('fragment-zero-mask-read-disabled', textured=False, tev=constant(126),
+             output=output_state(logic=1, read=0, mask=0)),
+        case('fragment-disabled-alpha-retains-fields', textured=False, tev=constant(126),
+             output=output_state(function=0, reference=255)),
+    ))
+    for error in ('blend', 'logic', 'alpha-reserved', 'depth', 'read-gate', 'write-gate',
+                  'missing-read', 'missing-write', 'destination-read'):
+        cases.append(case('late-fragment-'+error, textured=False, tev=constant(126),
+                          output=() if error.startswith('missing-') else output_state(),
+                          late_error='output-'+error))
+    return cases
+
+
+def alpha_reference(function, source, reference):
+    """Independent comparisons on the post-combiner integer alpha byte."""
+    comparisons = (False, True, source == reference, source != reference,
+                   source < reference, source <= reference, source > reference, source >= reference)
+    if not 0 <= function < len(comparisons): raise ValueError('Invalid alpha function')
+    return comparisons[function]
+
+
+def logic_reference(operation, source, destination):
+    """Evaluate each output bit with its two-input Boolean truth table.
+
+    These tables follow named logic operations; no runtime bitwise formulas or
+    native ROP enum values participate in this oracle.
+    """
+    tables = ((0,0,0,0), (0,0,0,1), (0,0,1,0), (0,0,1,1),
+              (1,1,1,1), (1,1,0,0), (0,1,0,1), (1,0,1,0),
+              (1,1,1,0), (0,1,1,1), (1,0,0,0), (0,1,1,0),
+              (1,0,0,1), (0,1,0,0), (1,0,1,1), (1,1,0,1))
+    if not 0 <= operation < len(tables): raise ValueError('Invalid logic operation')
+    return sum(tables[operation][((source >> bit) & 1)*2+((destination >> bit) & 1)] << bit
+               for bit in range(8))
+
+
+def output_registers(writes, registers=None):
+    registers = dict(registers or {0x100:0, 0x102:3, 0x104:0, 0x107:0xf00, 0x112:15, 0x113:15})
+    for reg, value, byte_mask in writes:
+        mask = sum(255 << (8*lane) for lane in range(4) if byte_mask & (1 << lane))
+        registers[reg] = registers.get(reg, 0) & ~mask | value & mask
+    return registers
+
+
+def output_reference(registers, source, destination):
+    alpha = registers[0x104]
+    if alpha & 1 and not alpha_reference(alpha >> 4 & 7, source[3], alpha >> 8 & 255):
+        return bytes(destination)
+    mask = registers[0x107] >> 8 & 15 if registers[0x113] == 15 else 0
+    return bytes((value if registers[0x102] == 3 else logic_reference(registers[0x102], value, previous))
+                 if mask & (1 << lane) else previous
+                 for lane, (value, previous) in enumerate(zip(source, destination)))
 
 
 def case_stages(case):
@@ -289,7 +382,9 @@ def golden(case, texture):
     pixels = bytearray(BACKGROUND*case.side*case.side)
     fragments = 0
     shade_cache = {}
-    for indices in case.indices:
+    output = output_registers(case.output)
+    for draw, indices in enumerate(case.indices):
+        if draw < len(case.draw_output): output = output_registers(case.draw_output[draw], output)
         points = tuple(tuple(map(F, case.points[i])) for i in indices)
         uv = tuple(case.uv[i] for i in indices)
         a, b, c = points
@@ -325,14 +420,15 @@ def golden(case, texture):
                     color = shade_cache[color]
                 elif case.modulate:
                     color = bytes(component*mask for component, mask in zip(color, case.color))
-                pixels[(y*case.side+x)*4:(y*case.side+x+1)*4] = color
                 fragments += 1
+                at = (y*case.side+x)*4
+                pixels[at:at+4] = output_reference(output, color, pixels[at:at+4])
     return bytes(pixels), fragments
 
 
 def command_bytes(case):
     commands = []
-    def command(reg, value): commands.append((value, 0xf0000 | reg))
+    def command(reg, value, mask=15): commands.append((value, mask << 16 | reg))
     half=(case.side.bit_length()+61)<<16
     command(0x040, case.cull); command(0x041, half); command(0x043, half)
     mode, x1, y1, x2, y2 = case.scissor
@@ -364,6 +460,7 @@ def command_bytes(case):
         for offset, value in enumerate(row):
             if not (case.late_error == 'constant' and index == 5 and offset == 3):
                 command(base+offset, value)
+    for write in case.output: command(*write)
     geometry = bytearray()
     vertices = range(len(case.points)) if case.index_bytes else [i for triangle in case.indices for i in triangle]
     for i in vertices:
@@ -375,6 +472,8 @@ def command_bytes(case):
         for triangle in case.indices:
             geometry += struct.pack('<'+('B' if case.index_bytes == 1 else 'H')*3, *triangle)
     for draw in range(len(case.indices)):
+        if draw < len(case.draw_output):
+            for write in case.draw_output[draw]: command(*write)
         if case.index_bytes:
             command(0x227, (0x80000000 if case.index_bytes == 2 else 0) | (index_offset+draw*3*case.index_bytes))
             command(0x22f, 1)
@@ -391,6 +490,17 @@ def command_bytes(case):
         elif case.late_error == 'buffer': command(0xe0, 1 << 8)
         elif case.late_error == 'previous': command(0xc0, 0xf000f)
         elif case.late_error == 'constant': command(0xf8, 0xe000e)
+        elif case.late_error.startswith('output-'):
+            error = case.late_error.removeprefix('output-')
+            invalid = {'blend':(0x100,1), 'logic':(0x102,16), 'alpha-reserved':(0x104,2),
+                       'depth':(0x107,0xf01), 'read-gate':(0x112,3), 'write-gate':(0x113,3)}
+            if error.startswith('missing-'):
+                missing = 0x112 if error == 'missing-read' else 0x113
+                for write in output_state():
+                    if write[0] != missing: command(*write)
+            elif error == 'destination-read':
+                command(0x102,11);command(0x112,0)
+            else: command(*invalid[error])
         elif case.late_error == 'uv':
             # A later shader changes U beyond the exact supported Q16 bound;
             # earlier valid texture draws must still roll back atomically.
@@ -405,7 +515,7 @@ def command_bytes(case):
 
 
 def compile_probe(binary, cc='cc', sanitize=False):
-    names = ('ctr_scene.c', 'ctr_tev.c', 'ctr_shader.c', 'ctr_vertex.c', 'ctr_pica.c', 'ctr_texture.c')
+    names = ('ctr_scene.c', 'ctr_tev.c', 'ctr_fragment.c', 'ctr_shader.c', 'ctr_vertex.c', 'ctr_pica.c', 'ctr_texture.c')
     sources = [ROOT/'tests/textured-scenes/reference_probe.c']+[ROOT/'runtime/core'/name for name in names]
     flags = ['-std=c11', '-O2', '-Wall', '-Wextra', '-Wpedantic', '-Werror', '-I'+str(ROOT/'runtime/core')]
     if sanitize: flags += ['-O1', '-fno-omit-frame-pointer', '-fsanitize=address,undefined']
@@ -540,7 +650,7 @@ def execute_case(binary, output, case):
     if case.late_error:
         if result['result'] == 'ok' or not result['state_unchanged'] or not result['pixels_unchanged']:
             raise ValueError(case.name+': late invalid state committed')
-        if actual != BACKGROUND*case.side*case.side or result['draws'] != 2:
+        if actual != BACKGROUND*case.side*case.side or result['draws'] != len(case.indices):
             raise ValueError(case.name+': missing staged prefix or pixel rollback')
     else:
         counters = {'result':'ok', 'draws':len(case.indices), 'triangles':len(case.indices),
@@ -553,6 +663,7 @@ def execute_case(binary, output, case):
     return {'name':case.name, 'format':case.format, 'dimensions':case.dimensions,
             'index_bytes':case.index_bytes, 'wrap':case.wrap, 'modulate':case.modulate,'linear':case.linear,'side':case.side,
             'tev_stages':case_stages(case), 'textured':case.textured,
+            'output_register_writes':case.output, 'draw_output_register_writes':case.draw_output,
             'late_error':case.late_error or None, **result,
             'expected_rgba_sha256':hashlib.sha256(BACKGROUND*case.side*case.side if case.late_error else expected).hexdigest(),
             'files':[{'name':path.name, 'size':path.stat().st_size,
@@ -573,6 +684,7 @@ def main():
               'source_dirty':bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT, text=True)),
               'console_verified':False, 'gx2_execution':False, 'guest_gsp_draws':False,
               'pixel_tolerance':0, 'sampler_reference':'exact Fraction barycentric interpolation, floor, wrap and raw-memory V inversion',
+              'output_reference':'post-TEV byte comparisons, independent Boolean truth tables, channel masks and sequential destination contents',
               'texture_reference':'original recursive Morton encoding and independently tested renderer.texture decoder',
               'cases':[]}
     try:

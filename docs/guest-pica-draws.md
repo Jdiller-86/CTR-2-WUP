@@ -82,7 +82,8 @@ python3 tools/validate-libctru.py --application textured --wiiu --gx2 --sanitize
 
 This distinct original application submits retained shader/texture state and
 tests nearest replacement and a bilinear four-texel average followed by a
-six-stage RGB/alpha combiner chain. Its patterned/pale-green top/bottom
+six-stage RGB/alpha combiner chain, alpha cutouts and masked XOR writes.
+Its striped-cutout/purple top/bottom
 frames receive independent exact host comparison. The native build is named
 `CTR2WUP Textured Guest`, with `ctr2wup-textured-guest.rpx`/`.wuhb` in CI artifact
 `wiiu-textured-guest-<source commit>`. Source identity, checked reference images,
@@ -115,9 +116,11 @@ reuse/free. Physical sampling parity and performance remain unverified.
   of eight and no larger than 512. The adapter converts to the renderer's linear
   RGBA view, then writes the complete target through checked guest memory once.
 - Supported fragment state is explicitly defined: primary-color replacement or
-  bounded six-stage Texture0/constant/Previous TEV, disabled lighting/depth/stencil/blending,
-  copy logic and full color writes. TEV operands/scales are zero; later stages
-  pass Previous. Required registers need fully defined byte masks. Unsupported
+  bounded six-stage Texture0/constant/Previous TEV with independent operands and
+  scale, all eight alpha tests, 16 logic operations and RGBA write masks.
+  Lighting/depth/stencil/blending remain disabled. The
+  [fragment output contract](textures.md#fragment-output) defines read/write gates.
+  Required registers need fully defined byte masks. Unsupported
   or incomplete state fails before publishing pixels, shader state or completion.
 - Successful commit updates memory generations, invalidates affected code aliases
   and exclusive state, commits shader/register/counter state and publishes P3D

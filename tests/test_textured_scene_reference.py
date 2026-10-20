@@ -34,7 +34,8 @@ class TexturedSceneReferenceTests(unittest.TestCase):
         obj, binary = cls.output/'native.o', cls.output/'native-probe'
         subprocess.run(cc+flags+['-DCTR_GX2_SCENE_MOCK', '-Dmemalign=ctr_gx2_test_memalign',
                        '-Dfree=ctr_gx2_test_free', '-c', str(ROOT/'runtime/wiiu/gx2_scene.c'), '-o', str(obj)], check=True)
-        subprocess.run(cc+flags+[str(ROOT/'tests/gx2-native/test_native.c'), str(ROOT/'runtime/core/ctr_tev.c'), str(obj), '-o', str(binary)], check=True)
+        subprocess.run(cc+flags+[str(ROOT/'tests/gx2-native/test_native.c'), str(ROOT/'runtime/core/ctr_tev.c'),
+                       str(ROOT/'runtime/core/ctr_fragment.c'), str(obj), '-o', str(binary)], check=True)
         cls.capture = json.loads(subprocess.check_output([str(binary), '--fragment-programs'], text=True))
 
     @classmethod
@@ -158,6 +159,54 @@ class TexturedSceneReferenceTests(unittest.TestCase):
         cases = [c for c in ORACLE.tev_cases() if c.name in names or c.late_error or
                  (c.name.startswith('tev-operation-') and not c.linear)]
         self.assertEqual(len(cases), 24)
+        for case in cases:
+            with self.subTest(case=case.name):ORACLE.execute_case(self.binary,self.output,case)
+
+    def test_alpha_comparisons_have_manual_edges_and_extrema(self):
+        answers = ((False,False,False), (True,True,True), (False,True,False),
+                   (True,False,True), (True,False,False), (True,True,False),
+                   (False,False,True), (False,True,True))
+        for function, expected in enumerate(answers):
+            for source, answer in zip((127,128,129), expected):
+                self.assertEqual(ORACLE.alpha_reference(function,source,128), answer)
+        # Exhausting the reference extrema catches signed-byte conversions and
+        # complements that accidentally compare 255 as -1.
+        for reference, expected in ((0,(0,256,1,255,0,1,255,256)),
+                                    (255,(0,256,1,255,255,256,0,1))):
+            for function, count in enumerate(expected):
+                self.assertEqual(sum(ORACLE.alpha_reference(function,value,reference)
+                                     for value in range(256)), count)
+
+    def test_logic_boolean_tables_have_manual_nontrivial_byte_anchors(self):
+        answers = (0x00,0x42,0x18,0x5a,0xff,0xa5,0xc3,0x3c,
+                   0xbd,0xdb,0x24,0x99,0x66,0x81,0x7e,0xe7)
+        for operation, expected in enumerate(answers):
+            with self.subTest(operation=operation):
+                self.assertEqual(ORACLE.logic_reference(operation,0x5a,0xc3),expected)
+        for value in range(256):
+            self.assertEqual(ORACLE.logic_reference(11,value,value),0)
+            self.assertEqual(ORACLE.logic_reference(12,value,value),255)
+            self.assertEqual(ORACLE.logic_reference(1,value,255),value)
+            self.assertEqual(ORACLE.logic_reference(9,value,0),value)
+
+    def test_output_mask_preserves_every_unselected_lane_and_alpha_discard(self):
+        source, destination = bytes((90,195,105,126)), ORACLE.BACKGROUND
+        for mask in range(16):
+            registers = ORACLE.output_registers(ORACLE.output_state(mask=mask))
+            expected = bytes(source[lane] if mask & (1 << lane) else destination[lane] for lane in range(4))
+            self.assertEqual(ORACLE.output_reference(registers,source,destination),expected)
+        registers = ORACLE.output_registers(ORACLE.output_state(alpha=True,function=2,reference=127))
+        self.assertEqual(ORACLE.output_reference(registers,source,destination),destination)
+        merged = ORACLE.output_registers(((0x104,126 << 8,2),),registers)
+        self.assertEqual(merged[0x104],0x7e21)
+        self.assertEqual(ORACLE.output_reference(merged,source,destination),source)
+        for value in range(8):
+            self.assertEqual(ORACLE.output_reference(ORACLE.output_registers(ORACLE.output_state(
+                logic=value,write=0)),source,destination),destination)
+
+    def test_output_scenes_exact_alpha_logic_masks_and_late_atomicity(self):
+        cases = ORACLE.fragment_cases()
+        self.assertEqual(len(cases),75)
         for case in cases:
             with self.subTest(case=case.name):ORACLE.execute_case(self.binary,self.output,case)
 

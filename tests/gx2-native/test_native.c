@@ -30,6 +30,10 @@ static unsigned wait_calls,fail_wait_call;
 static unsigned scissor[4],rectangles[4][4],rectangle_count;
 static float half_x,half_y,offset_x,offset_y;
 static bool cull_front,cull_back;
+static unsigned color_control_sets,channel_mask_sets,alpha_test_sets;
+static unsigned captured_logic,captured_write_mask,captured_alpha_function;
+static bool captured_alpha_enabled;
+static float captured_alpha_reference;
 
 void *ctr_gx2_test_memalign(size_t alignment,size_t bytes) {
     ++alloc_attempts;
@@ -119,8 +123,11 @@ void GX2DrawEx(unsigned type,unsigned count,unsigned first,unsigned instances) {
     assert(type==GX2_PRIMITIVE_MODE_TRIANGLES && count==expected_count && !first && instances==1);
     assert(bound_target && active_context!=&native_context);++gpu_draws;gpu_pending=true;
     assert(!expected_texture || (bound_texture && bound_sampler && bound_pixel_program));
-    /* A visible GPU-side model mutation lets readback tests distinguish the
-     * rendered target from a stale or substituted CPU reference buffer. */
+    assert(color_control_sets==uniform_uploads && channel_mask_sets==uniform_uploads &&
+        alpha_test_sets==uniform_uploads);
+    /* A visible nonrendering marker distinguishes target readback from a stale
+     * or substituted reference buffer. It deliberately ignores fragment state;
+     * fixed-state calls and numerical comparisons are checked separately. */
     if(!scissor[0] && !scissor[1]) {
         uint8_t *p=bound_target->surface.image;p[0]=17;p[1]=33;p[2]=49;p[3]=255;
     }
@@ -245,6 +252,28 @@ void GX2SetPixelUniformReg(unsigned offset,unsigned count,const void *bytes) {
     }
 }
 void GX2SetCullOnlyControl(unsigned front,bool a,bool b) { assert(front==GX2_FRONT_FACE_CCW);cull_front=a;cull_back=b; }
+void GX2SetColorControl(GX2LogicOp logic,uint8_t blend,bool multi_write,bool color_write) {
+    static const unsigned expected[16]={0x00,0x88,0x44,0xcc,0xff,0x33,0xaa,0x55,
+        0x77,0xee,0x11,0x66,0x99,0x22,0xdd,0xbb};
+    assert(expected_state->registers[0x102]<16u);
+    assert(logic==expected[expected_state->registers[0x102]]);
+    assert(!blend && !multi_write && color_write);
+    captured_logic=logic;++color_control_sets;
+}
+void GX2SetTargetChannelMasks(GX2ChannelMask a,GX2ChannelMask b,GX2ChannelMask c,GX2ChannelMask d,
+                              GX2ChannelMask e,GX2ChannelMask f,GX2ChannelMask g,GX2ChannelMask h) {
+    unsigned expected=expected_state->registers[0x113]==15u?(expected_state->registers[0x107]>>8)&15u:0u;
+    assert(a==expected && !b && !c && !d && !e && !f && !g && !h);
+    captured_write_mask=a;++channel_mask_sets;
+}
+void GX2SetAlphaTest(bool enabled,GX2CompareFunction function,float reference) {
+    static const unsigned compare[8]={0,7,2,5,1,3,4,6},endpoint[8]={0,7,6,1,1,7,0,6};
+    unsigned raw=expected_state->registers[0x104],fn=(raw>>4)&7u,ref=(raw>>8)&255u;
+    assert(enabled==((raw&1u)!=0) && function==(ref==255u?endpoint[fn]:compare[fn]));
+    assert(reference>=0.0f && reference<=1.0f);
+    captured_alpha_enabled=enabled;captured_alpha_function=function;
+    captured_alpha_reference=reference;++alpha_test_sets;
+}
 bool ctr_shader_f24_decode(uint32_t raw,uint32_t *value) {
     if(raw!=0x420000)return false;
     *value=0x41000000;return true;
@@ -267,10 +296,17 @@ static void reset(void) {
     gpu_pending=false;gpu_stopped=false;expected_uv=false;expected_texture=NULL;
     bound_texture=NULL;bound_sampler=NULL;bound_pixel_program=NULL;texture_image=NULL;
     texture_inits=0;texture_binds=0;sampler_binds=0;texture_flushes=0;texture_invalidates=0;
+    color_control_sets=channel_mask_sets=alpha_test_sets=0;
+    captured_logic=captured_write_mask=captured_alpha_function=0;
+    captured_alpha_enabled=false;captured_alpha_reference=0.0f;
 }
 static void setup(ctr_scene_state *state,ctr_vertex vertices[3]) {
     memset(state,0,sizeof(*state));memset(vertices,0,3*sizeof(*vertices));
     expected_state=state;
+    const unsigned fragment_regs[6]={0x100,0x102,0x104,0x107,0x112,0x113};
+    for(unsigned i=0;i<6;++i)state->register_defined[fragment_regs[i]]=15u;
+    state->registers[0x102]=3u;state->registers[0x107]=0xf00u;
+    state->registers[0x112]=state->registers[0x113]=15u;
     for(unsigned stage=0;stage<6;++stage) {
         unsigned base=ctr_tev_registers[stage];
         for(unsigned i=0;i<5;++i)state->register_defined[base+i]=15u;
@@ -416,6 +452,146 @@ static void textured_setup(ctr_scene_state *state,ctr_vertex vertices[3]) {
          * The complete attribute upload is checked without CPU UV rewriting. */
         vertices[i].input[2][0]=(float)i*1.5f-0.25f;
         vertices[i].input[2][1]=(float)i*-0.5f+1.25f;
+    }
+}
+static bool pica_alpha(unsigned function,unsigned value,unsigned reference) {
+    switch(function) {
+        case 0:return false;
+        case 1:return true;
+        case 2:return value==reference;
+        case 3:return value!=reference;
+        case 4:return value<reference;
+        case 5:return value<=reference;
+        case 6:return value>reference;
+        case 7:return value>=reference;
+    }
+    assert(!"Invalid PICA comparison");return false;
+}
+static bool gx2_alpha(unsigned function,float value,float reference) {
+    switch(function) {
+        case 0:return false;
+        case 1:return value<reference;
+        case 2:return value==reference;
+        case 3:return value<=reference;
+        case 4:return value>reference;
+        case 5:return value!=reference;
+        case 6:return value>=reference;
+        case 7:return true;
+    }
+    assert(!"Invalid GX2 comparison");return false;
+}
+static unsigned pica_logic_bit(unsigned function,unsigned source,unsigned dest) {
+    switch(function) {
+        case 0:return 0;
+        case 1:return source&dest;
+        case 2:return source&(dest^1u);
+        case 3:return source;
+        case 4:return 1;
+        case 5:return source^1u;
+        case 6:return dest;
+        case 7:return dest^1u;
+        case 8:return (source&dest)^1u;
+        case 9:return source|dest;
+        case 10:return (source|dest)^1u;
+        case 11:return source^dest;
+        case 12:return (source^dest)^1u;
+        case 13:return (source^1u)&dest;
+        case 14:return source|(dest^1u);
+        case 15:return (source^1u)|dest;
+    }
+    assert(!"Invalid PICA logic operation");return 0;
+}
+static void fragment_bindings(void) {
+    reset();uint8_t bytes[1024]={0};ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
+    ctr_scene_state state;ctr_vertex vertices[3];setup(&state,vertices);
+    ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+    ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+    assert(backend.begin(backend.context,&surface));
+    for(unsigned operation=0;operation<16;++operation)for(unsigned mask=0;mask<16;++mask) {
+        state.registers[0x102]=operation;state.registers[0x107]=mask<<8;
+        state.registers[0x104]=1u|((operation&7u)<<4)|(93u<<8);rectangle_count=0;
+        assert(backend.draw(backend.context,&state,vertices,3,NULL));
+        assert(captured_write_mask==mask && captured_alpha_enabled);
+        /* ROP3's pattern input is irrelevant for a two-input logic operation:
+         * both nibbles must implement the independently stated PICA truth table. */
+        for(unsigned source=0;source<2;++source)for(unsigned dest=0;dest<2;++dest) {
+            unsigned bit=pica_logic_bit(operation,source,dest),index=source*2u+dest;
+            assert(((captured_logic>>index)&1u)==bit && ((captured_logic>>(index+4u))&1u)==bit);
+        }
+    }
+    /* Writes disabled by the gate cannot consume a destination, even when a
+     * destination-dependent operation is retained and color reads are off. */
+    state.registers[0x112]=state.registers[0x113]=0;
+    state.registers[0x102]=11;state.registers[0x107]=0xf00u;rectangle_count=0;
+    assert(backend.draw(backend.context,&state,vertices,3,NULL));assert(!captured_write_mask);
+    /* Changing back to default state must reset every fixed-state binding. */
+    state.registers[0x112]=state.registers[0x113]=15;state.registers[0x102]=3;
+    state.registers[0x104]=0;rectangle_count=0;
+    assert(backend.draw(backend.context,&state,vertices,3,NULL));
+    assert(captured_logic==0xccu && captured_write_mask==15u && !captured_alpha_enabled &&
+        captured_alpha_reference==0.0f && captured_alpha_function==0u);
+    const unsigned source_only[4]={0,3,4,5};state.registers[0x112]=0;
+    for(unsigned i=0;i<4;++i) {
+        state.registers[0x102]=source_only[i];rectangle_count=0;
+        assert(backend.draw(backend.context,&state,vertices,3,NULL));assert(captured_write_mask==15u);
+    }
+    assert(backend.end(backend.context,&surface));clean(&scene);
+}
+static void alpha_comparison_vectors(void) {
+    reset();uint8_t bytes[1024]={0};ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
+    ctr_scene_state state;ctr_vertex vertices[3];setup(&state,vertices);
+    ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+    ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+    assert(backend.begin(backend.context,&surface));
+    uint32_t reciprocal_bits=UINT32_C(0x3b808081);float reciprocal;
+    memcpy(&reciprocal,&reciprocal_bits,4);
+    for(unsigned reference=0;reference<256;++reference)for(unsigned function=0;function<8;++function) {
+        state.registers[0x104]=1u|(function<<4)|(reference<<8);rectangle_count=0;
+        assert(backend.draw(backend.context,&state,vertices,3,NULL));
+        assert(captured_alpha_enabled);
+        for(unsigned alpha=0;alpha<256;++alpha) {
+            /* Binary64 can represent the exact product of an eight-bit integer
+             * and binary32 reciprocal. The cast models only the shader's final
+             * multiply, independently of the native reference calculation. */
+            float exported=(float)((double)alpha*(double)reciprocal);
+            float clamped=exported>1.0f?1.0f:exported;
+            bool expected=pica_alpha(function,alpha,reference);
+            assert(gx2_alpha(captured_alpha_function,exported,captured_alpha_reference)==expected);
+            assert(gx2_alpha(captured_alpha_function,clamped,captured_alpha_reference)==expected);
+        }
+    }
+    assert(scene.draws==2048u);
+    assert(backend.end(backend.context,&surface));clean(&scene);
+}
+static void fragment_failures(void) {
+    const unsigned regs[6]={0x100,0x102,0x104,0x107,0x112,0x113};
+    uint8_t pixels[8u*8u*4u]={0},bytes[1024]={0};
+    ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
+    for(unsigned retained=0;retained<2;++retained)for(unsigned failure=0;failure<19;++failure) {
+        reset();ctr_scene_state state;ctr_vertex vertices[3];textured_setup(&state,vertices);
+        ctr_scene_texture texture={pixels,8,8,0x18010000u,0,0};expected_texture=&texture;
+        ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+        ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+        assert(backend.begin(backend.context,&surface));
+        if(retained)assert(backend.draw(backend.context,&state,vertices,3,&texture));
+        unsigned allocations=alloc_attempts;
+        if(failure<6u)state.register_defined[regs[failure]]=0;
+        else if(failure<12u)state.register_defined[regs[failure-6u]]=14;
+        else switch(failure) {
+            case 12:state.registers[0x100]=1;break; /* Blending unsupported. */
+            case 13:state.registers[0x102]=16;break;
+            case 14:state.registers[0x104]=2;break;
+            case 15:state.registers[0x107]|=1u;break; /* Depth unsupported. */
+            case 16:state.registers[0x112]=1;break;
+            case 17:state.registers[0x113]=1;break;
+            case 18:state.registers[0x112]=0;state.registers[0x102]=1;break;
+        }
+        assert(!backend.draw(backend.context,&state,vertices,3,&texture));
+        assert(scene.result==CTR_WIIU_GX2_SCENE_ARGUMENT && scene.draws==retained && gpu_draws==retained &&
+            scene.texture_uploads==retained && texture_inits==retained && texture_binds==retained &&
+            color_control_sets==retained && channel_mask_sets==retained && alpha_test_sets==retained &&
+            alloc_attempts==allocations);
+        backend.abort(backend.context);clean(&scene);
     }
 }
 static void texture_pixels(uint8_t *bytes,unsigned width,unsigned height) {
@@ -647,7 +823,8 @@ int main(int argc,char **argv) {
     if(argc==2 && !strcmp(argv[1],"--fragment-programs")) { textured_bindings(true);return 0; }
     assert(argc==1);
     baseline();allocation_failures();scissor_modes();failures();readback_observer();
+    fragment_bindings();alpha_comparison_vectors();fragment_failures();
     textured_bindings(false);combiner_programs(false);texture_reuse();texture_dimensions();texture_failures();
-    puts("GX2 native API model: lifetime, texture retirement/quarantine, original inputs, sampler/TEV bytecode, pitched upload, scissor and readback passed");
+    puts("GX2 native API model: lifetime, texture retirement/quarantine, original inputs, sampler/TEV bytecode, fragment mappings, 1048576 alpha comparisons, pitched upload, scissor and readback passed");
     return 0;
 }
