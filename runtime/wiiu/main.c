@@ -297,19 +297,24 @@ static void gx2_depth_readback_log(void *context,const ctr_scene_depth_surface *
     const ctr_wiiu_gx2_scene *scene=context;
     const uint8_t *bytes=surface->bytes;uint32_t hash=UINT32_C(2166136261);
     for(size_t i=0;i<surface->size;++i)hash=(hash^bytes[i])*UINT32_C(16777619);
-    char grid[81];size_t used=0;
+    unsigned element=surface->format==3u?4u:2u;
+    char grid[161];size_t used=0;
     for(unsigned row=0;row<4;++row)for(unsigned col=0;col<4;++col) {
         unsigned x=(2u*col+1u)*surface->width/8u,y=(2u*row+1u)*surface->height/8u;
-        const uint8_t *pixel=bytes+(size_t)y*surface->stride+x*2u;
+        const uint8_t *pixel=bytes+(size_t)y*surface->stride+x*element;
         unsigned depth=(unsigned)pixel[0]|(unsigned)pixel[1]<<8;
-        int n=snprintf(grid+used,sizeof(grid)-used,"%s%04x",used?" ":"",depth);
+        int n;
+        if(element==4u) {
+            depth|=(unsigned)pixel[2]<<16;
+            n=snprintf(grid+used,sizeof(grid)-used,"%s%06x/%02x",used?" ":"",depth,(unsigned)pixel[3]);
+        } else n=snprintf(grid+used,sizeof(grid)-used,"%s%04x",used?" ":"",depth);
         if(n<0 || (size_t)n>=sizeof(grid)-used)return;
         used+=(size_t)n;
     }
-    WHBLogPrintf("GX2 DEPTH READBACK sequence=%llu width=%u height=%u stride=%u bytes=%u fnv1a=%08x; GPU bytes before parity/commit; D16_LE rows=bottom_to_top",
-        (unsigned long long)(scene->readbacks+1u),surface->width,surface->height,
+    WHBLogPrintf("GX2 DEPTH READBACK sequence=%llu format=%s width=%u height=%u stride=%u bytes=%u fnv1a=%08x; GPU bytes before parity/commit; rows=bottom_to_top",
+        (unsigned long long)(scene->readbacks+1u),element==4u?"D24S8_LE":"D16_LE",surface->width,surface->height,
         surface->stride,(unsigned)surface->size,hash);
-    WHBLogPrintf("GX2 DEPTH GRID sequence=%llu d16=%s",(unsigned long long)(scene->readbacks+1u),grid);
+    WHBLogPrintf("GX2 DEPTH GRID sequence=%llu samples=%s",(unsigned long long)(scene->readbacks+1u),grid);
 }
 static void gx2_description(char *line,size_t capacity) {
     snprintf(line,capacity,"GX2 backend: result=%s shader=%s begins=%llu draws=%llu submissions=%llu readbacks=%llu shader_ops=%llu waits=%llu wait_failures=%llu allocations=%llu releases=%llu quarantine=%u backend_stage=%u texture_uploads=%llu texture_bytes=%llu; CPU preflight and full GPU readback parity\n",
@@ -1802,7 +1807,7 @@ int main(int argc, char **argv) {
 #if defined(CTR_GX2_GUEST)
     result=gsp_ready && gsp_pass_seen && drawn_frame_submitted &&
 #ifdef CTR_TEXTURED_HOMEBREW
-        gx2_scene.draws>=6u &&
+        gx2_scene.draws>=9u &&
 #else
         gx2_scene.draws>=4u &&
 #endif

@@ -96,8 +96,9 @@ class GuestDrawPackageTests(unittest.TestCase):
         app = self.report['applications'][0]
         app['application'] = 'textured'
         app['gx2_guest']['textured'] = True
-        app['guest']['messages'] = ['CTR2WUP compiled D16 depth PASS', 'CTR2WUP compiled textured PICA PASS']
-        app['guest']['pica_render'] = {'draws': 6, 'triangles': 6, 'fragments': 145770, 'shader_instructions': 72}
+        app['guest']['messages'] = ['CTR2WUP compiled D16 depth PASS', 'CTR2WUP compiled stencil preparation PASS', 'CTR2WUP compiled D24S8 stencil PASS', 'CTR2WUP compiled textured PICA PASS']
+        app['guest']['pica_render'] = {'draws': 9, 'triangles': 9, 'fragments': 210570, 'shader_instructions': 108}
+        app['guest']['gx'] = {'commands': 7, 'dma': 0, 'fills': 2, 'transfers': 2, 'copies': 0, 'cache': 0, 'pica': 3}
         for frame, check in zip(app['frames'], app['independent_frame_checks']):
             width = check['width']
             pixels = b''.join(bytes((x % 256, y % 256, (x + 3*y) % 256))
@@ -262,6 +263,9 @@ class GuestDrawPackageTests(unittest.TestCase):
             lambda r: r['applications'][0]['gx2_guest'].update(gpu_hardware_verified=True),
             lambda r: r['applications'][0]['guest']['pica_render'].update(shader_instructions=36),
             lambda r: r['applications'][0]['guest']['messages'].remove('CTR2WUP compiled D16 depth PASS'),
+            lambda r: r['applications'][0]['guest']['messages'].remove('CTR2WUP compiled stencil preparation PASS'),
+            lambda r: r['applications'][0]['guest']['messages'].remove('CTR2WUP compiled D24S8 stencil PASS'),
+            lambda r: r['applications'][0]['guest']['gx'].update(pica=2),
             lambda r: r['applications'][0].update(wiiu_gx2_artifacts=r['applications'][0]['wiiu_artifacts']),
         )
         for index, change in enumerate(changes):

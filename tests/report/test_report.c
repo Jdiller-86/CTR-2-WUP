@@ -178,18 +178,19 @@ static void slice_tests(void) {
     CHECK(!ctr_draw_observation_ready(true,2,4,4,97200,35));
     CHECK(ctr_draw_observation_ready(true,2,4,4,97200,36));
     /* Presentation readiness belongs to the complete original profile. The
-     * texture/TEV/depth guest has two extra occluded draws and shader exports. */
-    CHECK(!ctr_textured_draw_observation_ready(true,1,6,6,145770,72));
-    CHECK(!ctr_textured_draw_observation_ready(false,2,6,6,145770,72));
-    CHECK(!ctr_textured_draw_observation_ready(true,2,5,6,145770,72));
-    CHECK(!ctr_textured_draw_observation_ready(true,2,6,5,145770,72));
-    CHECK(!ctr_textured_draw_observation_ready(true,2,6,6,145769,72));
-    CHECK(!ctr_textured_draw_observation_ready(true,2,6,6,145770,71));
+     * texture/TEV/depth/stencil guest includes preparation and rejected draws. */
+    CHECK(!ctr_textured_draw_observation_ready(true,1,9,9,210570,108));
+    CHECK(!ctr_textured_draw_observation_ready(false,2,9,9,210570,108));
+    CHECK(!ctr_textured_draw_observation_ready(true,2,8,9,210570,108));
+    CHECK(!ctr_textured_draw_observation_ready(true,2,9,8,210570,108));
+    CHECK(!ctr_textured_draw_observation_ready(true,2,9,9,210569,108));
+    CHECK(!ctr_textured_draw_observation_ready(true,2,9,9,210570,107));
+    CHECK(!ctr_textured_draw_observation_ready(true,2,6,6,145770,72));
     CHECK(!ctr_textured_draw_observation_ready(true,2,4,4,97200,48));
     CHECK(!ctr_textured_draw_observation_ready(true,2,4,4,97200,36));
-    CHECK(!ctr_draw_observation_ready(true,2,6,6,145770,72));
-    CHECK(ctr_textured_draw_observation_ready(true,2,6,6,145770,72));
-    CHECK(ctr_textured_draw_observation_ready(true,3,6,6,145770,72));
+    CHECK(!ctr_draw_observation_ready(true,2,9,9,210570,108));
+    CHECK(ctr_textured_draw_observation_ready(true,2,9,9,210570,108));
+    CHECK(ctr_textured_draw_observation_ready(true,3,9,9,210570,108));
 }
 static void capture(void *context,const char *message) {
     (void)context;

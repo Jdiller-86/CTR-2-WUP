@@ -16,7 +16,7 @@ The [scene renderer](software-scenes.md) and optional native GX2 backend accept:
 | Coordinates | Vertex semantics 12/13, exact Q16 UV in −16..16, affine interpolation with W=1 |
 | Sampler | Matching nearest or bilinear min/mag, LOD/bias zero; clamp-to-edge, repeat or mirrored repeat independently on S/T |
 | Combiner | Six stages; Texture0, binary primary color, per-stage RGBA8 constants and Previous; independent RGB/alpha operands, operations and 1/2/4 scale |
-| Fragment policy | Binary opaque primary color; final-alpha tests, logic/blend operations and RGBA write masks; bounded D16 depth; no lighting/stencil |
+| Fragment policy | Binary opaque primary color; final-alpha tests, logic/blend operations, RGBA masks and bounded D16/D24S8 depth/stencil; no lighting |
 
 PICA wrap IDs are 0/2/3 for clamp/repeat/mirror; parameters store T at bits 8–10,
 S at 12–14, with bit 5 set only for ETC1/ETC1A4. Filter bits 1/2 must both be
@@ -68,7 +68,8 @@ using NEVER, ALWAYS, EQUAL, NOT_EQUAL, LESS, LEQUAL, GREATER or GEQUAL. A failed
 test preserves the destination. Passing fragments apply one of all 16 PICA logic
 operations or separate RGB/alpha blending, then write only enabled RGBA channels.
 Both routes read the destination produced by earlier draws in the same list.
-The fragment counter measures geometric coverage, including alpha or depth rejection.
+Optional stencil/depth tests precede color writes. The fragment counter measures
+geometric coverage, including alpha, stencil or depth rejection.
 
 | Register | Accepted state |
 | --- | --- |
@@ -77,6 +78,8 @@ The fragment counter measures geometric coverage, including alpha or depth rejec
 | `0x102` | Logic operation 0..15 |
 | `0x103` | Blend constant RGBA in successive low-to-high bytes |
 | `0x104` | Alpha enable bit 0, comparison bits 4..6, reference bits 8..15 |
+| `0x105` | D24S8 stencil enable bit 0, comparison bits 4..6, write mask/reference/input mask in successive bytes |
+| `0x106` | D24S8 stencil-fail/depth-fail/pass actions in bits 0..2/4..6/8..10 |
 | `0x107` | Depth test bit 0, comparison bits 4..6, RGBA write bits 8..11, depth write bit 12 |
 | `0x112` | Read gate 0 or 15; destination-dependent operations require 15 for enabled writes |
 | `0x113` | Whole-framebuffer write gate 0 or 15; zero preserves every channel |
@@ -90,7 +93,8 @@ after the final draw. CLEAR, COPY, SET and COPY_INVERTED do not require destinat
 reads. Blend dependencies are checked per enabled RGB/alpha side: destination
 factors other than ZERO and source factors that consume destination bytes require
 the full read gate. ONE/ZERO replacement can use read gate zero. Partial read/write
-gate encodings, other fragment modes and stencil fail explicitly.
+gate encodings and other fragment modes fail explicitly. Stencil state requires
+an owned D24S8 target; D16 and color-only pipelines retain zero stencil state.
 Register and comparison facts follow pinned
 [PICA fields](https://github.com/azahar-emu/azahar/blob/987f18405073960622e1043bb44005989135c6e1/src/video_core/pica/regs_framebuffer.h)
 and [libctru enums](https://github.com/devkitPro/libctru/blob/9b55eda44cf80b971503991e0c78f9bc8fe50425/libctru/include/3ds/gpu/enums.h#L162).
@@ -127,10 +131,34 @@ The numeric profile requires W=1, constant Z per triangle in [−1,0], Z bufferi
 (`0x06d=1`), scale −1 (`0x04d=0xbf0000`) and zero offset (`0x04e`). Software
 quantization truncates `−Z×65535` exactly. Paired native backends initially admit
 only Z=0 or −1, avoiding unestablished fractional GPU conversion. W buffering,
-varying depth, other transforms, D24 and stencil reject explicitly. Field and
+varying depth, other transforms and three-byte D24 reject explicitly. Field and
 ordering facts follow the pinned [framebuffer reference](https://github.com/azahar-emu/azahar/blob/987f18405073960622e1043bb44005989135c6e1/src/video_core/pica/regs_framebuffer.h)
 and [depth test](https://github.com/azahar-emu/azahar/blob/987f18405073960622e1043bb44005989135c6e1/src/video_core/renderer_software/sw_rasterizer.cpp#L860);
 these do not establish physical rounding.
+
+### D24S8 stencil
+
+Format `0x116=3` selects four-byte little-endian D24S8: depth occupies bytes 0–2
+and stencil byte 3. It uses the same Morton indices and paired-target transaction
+as D16. Gates `0x114/0x115` accept 0 or 3; enabled stencil or depth testing requires
+read gate 3. Write gate zero suppresses depth and stencil writes independently of
+color. Both stencil registers must be completely defined, including valid
+inactive configuration. D24S8 storage is limited to 1 MiB, alongside a 1 MiB
+color target; D16 retains its separate 512 KiB limit.
+
+Alpha rejection preserves both targets. Stencil compares masked reference against
+masked stored stencil with the eight comparison functions. Stencil-fail,
+depth-fail and pass each select KEEP, ZERO, REPLACE, saturating increment/decrement,
+INVERT or wrapping increment/decrement. The write mask merges the result with
+stored stencil. A failed stencil/depth test can update stencil while preserving
+color and depth; pass actions run even when depth testing is disabled. Color masks
+do not suppress stencil preparation.
+
+The canonical constant-Z profile is shared with D16. Software truncates
+`−Z×16777215`; native inputs remain Z=0 or −1. Packed layout follows the pinned
+[PICA fields](https://github.com/azahar-emu/azahar/blob/987f18405073960622e1043bb44005989135c6e1/src/video_core/pica/regs_framebuffer.h)
+and independent [R600 depth-format mapping](https://github.com/chaotic-cx/mesa-mirror/blob/f1f246cfda65eff82fba3be1caf2d23bdeda60cc/src/gallium/drivers/r600/r600_state.c#L113).
+These interface facts do not establish physical Wii U parity.
 
 ## Native GX2 path
 
@@ -152,17 +180,21 @@ source-alpha-saturate in the destination selector rejects. Logic draws disable
 blending, and every draw rebinds complete fixed state. Fixed-function fractional
 rounding remains unverified: a one-byte difference still rejects the entire list.
 The original compiled guest uses integral ONE/ONE RGB addition and ONE/ZERO alpha,
-checks D16 writes after alpha rejection and submits an occluded far-depth draw.
+checks D16 writes after alpha rejection and D24S8 stencil preparation, masked
+rendering and rejected overdraw while retaining the same displayed images.
 
-Native D16 targets and their linear staging surfaces both carry depth usage.
+Native D16/D24S8 targets and their linear staging surfaces both carry depth usage.
 The adapter disables HiZ, sets the explicit Z scale/offset and uses late depth
 testing so alpha rejection precedes writes. With testing disabled but writes
 requested, ALWAYS implements the write path. Both complete readbacks must match,
-including padding, before either target commits. Surface/copy facts follow the
+including packed stencil, padding and trailing bytes, before either target commits.
+Stencil reference, input/write masks and named actions bind on every draw with
+matching front/back controls; disabled stencil resets these controls.
+Surface/copy facts follow the
 pinned [GX2 implementation reference](https://github.com/decaf-emu/decaf-emu/blob/e6c528a20a41c34e0f9eb91dd3da40f119db2dee/src/libdecaf/src/cafe/libraries/gx2/gx2_surface.cpp#L430).
 
 Mipmaps, mixed min/mag filters, projective/perspective coordinates, DOT3,
-combiner buffers, resource caching, broader depth and stencil remain unsupported. Physical sampling/blending/depth parity
+combiner buffers, resource caching and broader depth remain unsupported. Physical sampling/blending/depth/stencil parity
 and useful GPU performance remain unverified. The full-target byte comparison
 stays exact, including for bilinear draws; differing hardware rounding rejects
 the list without guest publication or software fallback.

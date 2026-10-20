@@ -29,7 +29,8 @@ The bounded path supports:
   include/exclude scissor, degenerate triangles and integer edge evaluation.
   Each triangle has a constant opaque endpoint color: RGBA lanes are 0 or 1,
   alpha 1. Final TEV alpha can reject fragments; logic/blend operations and
-  channel masks control color writes; the paired-target API adds bounded D16 depth.
+  channel masks control color writes; the paired-target API adds bounded D16
+  depth and D24S8 stencil comparisons/actions.
 - Optional Texture0 UV outputs (semantics 12/13), exact Q16 in −16..16 with W=1;
   affine nearest/bilinear sampling of all 14 base formats with independent clamp/repeat/
   mirror S/T. Six TEV stages combine Texture0, primary, constants and Previous
@@ -44,11 +45,12 @@ The bounded path supports:
 Limits are 256 vertices per draw, 32 draws per list, 512 vertex shader code words,
 128 descriptors, 96 float uniforms, 12 attributes/loaders, a 4 MiB geometry span,
 32 separate texture spans with 4 MiB total source bytes, a 1 MiB color target and
-a 512 KiB D16 target, with matching dimensions no larger than 512×512. Separate texture spans cannot overlap geometry or each
+a 512 KiB D16 or 1 MiB D24S8 target, with matching dimensions no larger than
+512×512. Separate texture spans cannot overlap geometry or each
 other. No primitive is carried across lists. Unknown state, inexact shader
 arithmetic, other opcodes, relative addressing, geometry, clipping, perspective,
 varying primary color, mixed min/mag filters, mipmaps, DOT3/combiner buffers,
-broader depth and stencil
+broader depth
 fail visibly. This is not a general PICA renderer.
 
 `runtime/core/ctr_shader.c` accepts only finite normal values exactly
@@ -154,7 +156,7 @@ bytes, before commit. Callback failures and mismatches report
 `ctr_scene_execute_targets_backend` variant uses optional `begin_depth` and
 `end_depth` callbacks; legacy color-only backends reject depth before submission.
 Both readbacks must match, including padding and trailing bytes. The
-[D16 profile](textures.md#d16-depth) defines quantization and native admission.
+[depth/stencil profiles](textures.md#d16-depth) define quantization and native admission.
 
 `runtime/wiiu/gx2_scene.c` implements GX2 surfaces, shaders, uniforms,
 viewport/cull/scissor and readback. Textured draws bind an owned RGBA8 texture

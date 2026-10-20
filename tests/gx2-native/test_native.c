@@ -19,6 +19,9 @@ static void *depth_target_image,*depth_linear_image;
 static unsigned depth_inits,depth_hiz_sets,depth_binds,depth_copies,depth_invalidates;
 static unsigned depth_control_sets,captured_depth_function;
 static bool captured_depth_test,captured_depth_write;
+static bool captured_stencil_test,captured_stencil_backface;
+static unsigned stencil_mask_sets,captured_stencil_function[2],captured_stencil_actions[2][3];
+static unsigned captured_stencil_mask[2],captured_stencil_write_mask[2],captured_stencil_reference[2];
 static float depth_scale,depth_offset,depth_min,depth_max;
 static const ctr_shader_program *expected_shader;
 static const ctr_vertex *expected_vertices;
@@ -85,8 +88,9 @@ void GX2CalcSurfaceSizeAndAlignment(GX2Surface *surface) {
     assert(surface->depth==1 && surface->mipLevels==1);
     surface->pitch=surface->width+8u;surface->alignment=256;
     assert(surface->format==GX2_SURFACE_FORMAT_UNORM_R8_G8_B8_A8 ||
-        surface->format==GX2_SURFACE_FORMAT_UNORM_R16);
-    if(surface->format==GX2_SURFACE_FORMAT_UNORM_R16) {
+        surface->format==GX2_SURFACE_FORMAT_UNORM_R16 ||
+        surface->format==GX2_SURFACE_FORMAT_UNORM_R24_X8);
+    if(surface->use&GX2_SURFACE_USE_DEPTH_BUFFER) {
         assert(surface->use==(GX2_SURFACE_USE_TEXTURE|GX2_SURFACE_USE_DEPTH_BUFFER));
         assert(surface->tileMode==GX2_TILE_MODE_TILED_2D_THIN1 || surface->tileMode==GX2_TILE_MODE_LINEAR_ALIGNED);
     }
@@ -98,15 +102,15 @@ void GX2CopySurface(const GX2Surface *src,unsigned a,unsigned b,GX2Surface *dst,
     assert(src->image && dst->image && active_context!=&native_context);
     assert(src->format==dst->format);
     unsigned pixel_bytes=src->format==GX2_SURFACE_FORMAT_UNORM_R16?2u:4u;
-    if(pixel_bytes==2u) {
+    if(src->use&GX2_SURFACE_USE_DEPTH_BUFFER) {
         assert(expected_depth && src->use==(GX2_SURFACE_USE_TEXTURE|GX2_SURFACE_USE_DEPTH_BUFFER) && src->use==dst->use);
         if(!depth_copies) {
             assert(src->tileMode==GX2_TILE_MODE_LINEAR_ALIGNED && dst->tileMode==GX2_TILE_MODE_TILED_2D_THIN1);
             depth_linear_image=src->image;depth_target_image=dst->image;
             for(unsigned y=0;y<src->height;++y) {
-                const uint8_t *row=(const uint8_t *)src->image+(size_t)y*src->pitch*2u;
-                assert(!memcmp(row,(const uint8_t *)expected_depth->bytes+(size_t)y*expected_depth->stride,src->width*2u));
-                for(unsigned x=src->width*2u;x<src->pitch*2u;++x)assert(row[x]==0u);
+                const uint8_t *row=(const uint8_t *)src->image+(size_t)y*src->pitch*pixel_bytes;
+                assert(!memcmp(row,(const uint8_t *)expected_depth->bytes+(size_t)y*expected_depth->stride,src->width*pixel_bytes));
+                for(unsigned x=src->width*pixel_bytes;x<src->pitch*pixel_bytes;++x)assert(row[x]==0u);
             }
         } else {
             assert(src->image==depth_target_image && dst->image==depth_linear_image);
@@ -177,13 +181,14 @@ void GX2DrawEx(unsigned type,unsigned count,unsigned first,unsigned instances) {
             assert(bound_depth && bound_depth->surface.image==depth_target_image);
             /* Original byte-flow marker, deliberately unrelated to rendering. */
             uint8_t *z=bound_depth->surface.image;z[0]=0x3cu;z[1]=0xa5u;
+            if(expected_depth->format==3u) { z[2]=0x71u;z[3]=0xd2u; }
         }
     }
 }
 void GX2SetColorBuffer(const GX2ColorBuffer *target,unsigned index) { assert(!index);bound_target=target; }
 void GX2InitDepthBufferRegs(GX2DepthBuffer *target) {
     assert(target && target->surface.image && target->viewNumSlices==1u);
-    assert(target->surface.format==GX2_SURFACE_FORMAT_UNORM_R16 &&
+    assert(target->surface.format==(expected_depth->format==3u?GX2_SURFACE_FORMAT_UNORM_R24_X8:GX2_SURFACE_FORMAT_UNORM_R16) &&
         target->surface.use==(GX2_SURFACE_USE_TEXTURE|GX2_SURFACE_USE_DEPTH_BUFFER));
     assert(!target->hiZPtr && !target->hiZSize);++depth_inits;
 }
@@ -197,11 +202,25 @@ void GX2SetDepthBuffer(const GX2DepthBuffer *target) {
 void GX2SetDepthStencilControl(bool test,bool write,unsigned function,bool stencil,bool backface,
     unsigned front,unsigned front_pass,unsigned front_fail,unsigned front_stencil,
     unsigned back,unsigned back_pass,unsigned back_fail,unsigned back_stencil) {
-    assert(!stencil && !backface && function<8u);
-    assert(front<8u && back<8u && !front_pass && !front_fail && !front_stencil &&
-        !back_pass && !back_fail && !back_stencil);
+    assert(function<8u && front<8u && back<8u);
+    assert(front_pass<8u && front_fail<8u && front_stencil<8u &&
+        back_pass<8u && back_fail<8u && back_stencil<8u);
     captured_depth_test=test;captured_depth_write=write;captured_depth_function=function;++depth_control_sets;
+    captured_stencil_test=stencil;captured_stencil_backface=backface;
+    captured_stencil_function[0]=front;captured_stencil_function[1]=back;
+    captured_stencil_actions[0][0]=front_pass;captured_stencil_actions[0][1]=front_fail;captured_stencil_actions[0][2]=front_stencil;
+    captured_stencil_actions[1][0]=back_pass;captured_stencil_actions[1][1]=back_fail;captured_stencil_actions[1][2]=back_stencil;
+    if(stencil)assert(expected_depth && expected_depth->format==3u && backface);
+    else assert(!backface && front==GX2_COMPARE_FUNC_ALWAYS && back==GX2_COMPARE_FUNC_ALWAYS &&
+        !front_pass && !front_fail && !front_stencil && !back_pass && !back_fail && !back_stencil);
     if(!expected_depth)assert(!test && !write && function==GX2_COMPARE_FUNC_ALWAYS);
+}
+void GX2SetStencilMask(uint8_t frontMask,uint8_t frontWriteMask,uint8_t frontRef,
+                       uint8_t backMask,uint8_t backWriteMask,uint8_t backRef) {
+    captured_stencil_mask[0]=frontMask;captured_stencil_mask[1]=backMask;
+    captured_stencil_write_mask[0]=frontWriteMask;captured_stencil_write_mask[1]=backWriteMask;
+    captured_stencil_reference[0]=frontRef;captured_stencil_reference[1]=backRef;
+    ++stencil_mask_sets;
 }
 void GX2SetShaderModeEx(unsigned mode,unsigned vs,unsigned vsstack,unsigned gs,unsigned gsstack,unsigned ps,unsigned psstack) {
     assert(!mode && vs==64 && vsstack==64 && !gs && !gsstack && ps==184 && psstack==192);
@@ -415,6 +434,12 @@ static void reset(void) {
     depth_inits=depth_hiz_sets=depth_binds=depth_copies=depth_invalidates=depth_control_sets=0;
     captured_depth_function=0;captured_depth_test=captured_depth_write=false;
     depth_scale=depth_offset=depth_min=depth_max=0.0f;
+    captured_stencil_test=captured_stencil_backface=false;stencil_mask_sets=0;
+    memset(captured_stencil_function,0,sizeof(captured_stencil_function));
+    memset(captured_stencil_actions,0,sizeof(captured_stencil_actions));
+    memset(captured_stencil_mask,0,sizeof(captured_stencil_mask));
+    memset(captured_stencil_write_mask,0,sizeof(captured_stencil_write_mask));
+    memset(captured_stencil_reference,0,sizeof(captured_stencil_reference));
 }
 static void setup(ctr_scene_state *state,ctr_vertex vertices[3]) {
     memset(state,0,sizeof(*state));memset(vertices,0,3*sizeof(*vertices));
@@ -830,7 +855,9 @@ static void depth_setup(ctr_scene_state *state,ctr_vertex vertices[3],const ctr_
     const unsigned full[7]={0x04d,0x04e,0x06d,0x114,0x115,0x116,0x11c};
     for(unsigned i=0;i<7;++i)state->register_defined[full[i]]=15u;
     state->registers[0x04d]=0xbf0000u;state->registers[0x06d]=1u;
-    state->registers[0x114]=state->registers[0x115]=2u;
+    state->registers[0x114]=state->registers[0x115]=depth->format==3u?3u:2u;
+    state->registers[0x116]=depth->format;
+    if(depth->format==3u)state->register_defined[0x105]=state->register_defined[0x106]=15u;
     state->registers[0x11c]=depth->address/8u;
     state->registers[0x107]=0x1f11u; /* Test ALWAYS and write, all color lanes. */
 }
@@ -840,8 +867,8 @@ static void depth_bindings(void) {
     for(unsigned i=0;i<sizeof(seed);++i)seed[i]=(uint8_t)(i*37u+0x19u);
     memcpy(readback,seed,sizeof(seed));
     ctr_scene_surface surface={bytes,sizeof(bytes),16,16,72};
-    ctr_scene_depth_surface depth={seed,sizeof(seed),16,16,40,0x18020000u};
-    ctr_scene_depth_surface result={readback,sizeof(readback),16,16,40,depth.address};
+    ctr_scene_depth_surface depth={seed,sizeof(seed),16,16,40,0x18020000u,0};
+    ctr_scene_depth_surface result={readback,sizeof(readback),16,16,40,depth.address,0};
     ctr_scene_state state;ctr_vertex vertices[3];depth_setup(&state,vertices,&depth);
     ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
     ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
@@ -893,10 +920,11 @@ static void depth_bindings(void) {
     assert(!captured_depth_test && !captured_depth_write && bound_pixel_metadata.regs.db_shader_control==16u);
     assert(backend.end(backend.context,&surface));clean(&scene);
 }
-static void depth_failures(void) {
-    uint8_t bytes[1024]={0},zbytes[512]={0};
+static void depth_failures_format(unsigned format) {
+    uint8_t bytes[1024]={0},zbytes[1024]={0};
     ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
-    ctr_scene_depth_surface depth={zbytes,sizeof(zbytes),16,16,32,0x18020000u};
+    unsigned limit=format==3u?CTR_SCENE_MAX_D24S8_BYTES:CTR_SCENE_MAX_DEPTH_BYTES;
+    ctr_scene_depth_surface depth={zbytes,format==3u?1024u:512u,16,16,format==3u?64u:32u,0x18020000u,format};
     const unsigned required[7]={0x04d,0x04e,0x06d,0x114,0x115,0x116,0x11c};
     for(unsigned retained=0;retained<2;++retained)for(unsigned failure=0;failure<24;++failure) {
         reset();ctr_scene_state state;ctr_vertex vertices[3];depth_setup(&state,vertices,&depth);
@@ -964,7 +992,7 @@ static void depth_failures(void) {
             case 2:invalid.height=8;break;
             case 3:invalid.stride=31;break;
             case 4:invalid.size=511;break;
-            case 5:invalid.size=CTR_SCENE_MAX_DEPTH_BYTES+1u;break;
+            case 5:invalid.size=limit+1u;break;
             case 6:break;
         }
         ctr_wiiu_gx2_scene_init(&scene,&native_context);backend=ctr_wiiu_gx2_scene_backend(&scene);
@@ -972,8 +1000,8 @@ static void depth_failures(void) {
         assert(scene.result==CTR_WIIU_GX2_SCENE_ARGUMENT && !alloc_attempts && !depth_copies);
         backend.abort(backend.context);clean(&scene);
     }
-    uint8_t *large=malloc(CTR_SCENE_MAX_DEPTH_BYTES);assert(large);memset(large,0x29,CTR_SCENE_MAX_DEPTH_BYTES);
-    reset();depth.bytes=large;depth.size=CTR_SCENE_MAX_DEPTH_BYTES;expected_depth=&depth;
+    uint8_t *large=malloc(limit);assert(large);memset(large,0x29,limit);
+    reset();depth.bytes=large;depth.size=limit;expected_depth=&depth;
     ctr_wiiu_gx2_scene_init(&scene,&native_context);backend=ctr_wiiu_gx2_scene_backend(&scene);
     assert(backend.begin_depth(backend.context,&surface,&depth));
     assert(backend.end_depth(backend.context,&surface,&depth));clean(&scene);free(large);
@@ -981,19 +1009,21 @@ static void depth_failures(void) {
 static uint8_t *expected_depth_readback;
 static void observe_depth(void *context,const ctr_scene_depth_surface *readback) {
     assert(context==&observed_readbacks && observed_readbacks==1u && readback->bytes==expected_depth_readback);
-    assert(readback->width==16u && readback->height==16u && readback->stride==40u && readback->size==649u &&
-        readback->address==0x18020000u);
+    assert(readback->width==16u && readback->height==16u && readback->stride==expected_depth->stride && readback->size==expected_depth->size &&
+        readback->format==expected_depth->format && readback->address==0x18020000u);
     const uint8_t *pixels=readback->bytes;
-    assert(pixels[0]==0x3cu && pixels[1]==0xa5u && pixels[32]==0x66u && pixels[648]==0x66u);
+    unsigned width=readback->format==3u?64u:32u;
+    assert(pixels[0]==0x3cu && pixels[1]==0xa5u && pixels[width]==0x66u && pixels[readback->size-1u]==0x66u);
+    if(readback->format==3u)assert(pixels[2]==0x71u && pixels[3]==0xd2u);
     ++observed_readbacks;
 }
-static void depth_readback_observer(void) {
+static void depth_readback_observer_format(unsigned format) {
     for(unsigned failure=0;failure<3;++failure) {
         reset();observed_readbacks=0;
-        uint8_t bytes[1161],zbytes[649];memset(bytes,0x55,sizeof(bytes));memset(zbytes,0x66,sizeof(zbytes));
+        uint8_t bytes[1161],zbytes[1161];memset(bytes,0x55,sizeof(bytes));memset(zbytes,0x66,sizeof(zbytes));
         expected_readback=bytes;expected_depth_readback=zbytes;
         ctr_scene_surface surface={bytes,sizeof(bytes),16,16,72};
-        ctr_scene_depth_surface depth={zbytes,sizeof(zbytes),16,16,40,0x18020000u};
+        ctr_scene_depth_surface depth={zbytes,format==3u?1161u:649u,16,16,format==3u?72u:40u,0x18020000u,format};
         ctr_scene_state state;ctr_vertex vertices[3];depth_setup(&state,vertices,&depth);
         ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
         scene.observe_readback=observe;scene.observe_depth_readback=observe_depth;
@@ -1006,6 +1036,181 @@ static void depth_readback_observer(void) {
         assert(observed_readbacks==(failure==1u?0u:2u));
         backend.abort(backend.context);clean(&scene);
     }
+}
+/* Fixed-state semantics are checked independently of the marker-only copy
+ * model. These functions do not rasterize or supply reference GPU pixels. */
+static unsigned gx2_stencil_action(unsigned action,unsigned stored,unsigned reference) {
+    switch(action) {
+    case GX2_STENCIL_FUNCTION_KEEP:return stored;
+    case GX2_STENCIL_FUNCTION_ZERO:return 0u;
+    case GX2_STENCIL_FUNCTION_REPLACE:return reference;
+    case GX2_STENCIL_FUNCTION_INCR_CLAMP:return stored<255u?stored+1u:255u;
+    case GX2_STENCIL_FUNCTION_DECR_CLAMP:return stored?stored-1u:0u;
+    case GX2_STENCIL_FUNCTION_INV:return stored^255u;
+    case GX2_STENCIL_FUNCTION_INCR_WRAP:return (stored+1u)&255u;
+    case GX2_STENCIL_FUNCTION_DECR_WRAP:return (stored+255u)&255u;
+    default:assert(!"Invalid captured stencil action");return 0;
+    }
+}
+static unsigned original_stencil_result(unsigned action,unsigned stored,unsigned reference) {
+    const unsigned values[8]={stored,0u,reference,stored==255u?255u:stored+1u,
+        stored==0u?0u:stored-1u,255u-stored,(stored+1u)%256u,(stored+255u)%256u};
+    assert(action<8u);return values[action];
+}
+static void stencil_disabled(void) {
+    assert(!captured_stencil_test && !captured_stencil_backface);
+    for(unsigned face=0;face<2;++face) {
+        assert(captured_stencil_function[face]==GX2_COMPARE_FUNC_ALWAYS &&
+            !captured_stencil_mask[face] && !captured_stencil_write_mask[face] &&
+            !captured_stencil_reference[face]);
+        for(unsigned slot=0;slot<3;++slot)assert(captured_stencil_actions[face][slot]==GX2_STENCIL_FUNCTION_KEEP);
+    }
+}
+static void stencil_bindings(void) {
+    reset();uint8_t bytes[1161],seed[1161],readback[1161];
+    memset(bytes,0x55,sizeof(bytes));
+    for(unsigned i=0;i<sizeof(seed);++i)seed[i]=(uint8_t)(i*29u+0x35u);
+    memcpy(readback,seed,sizeof(seed));
+    ctr_scene_surface surface={bytes,sizeof(bytes),16,16,72};
+    ctr_scene_depth_surface depth={seed,sizeof(seed),16,16,72,0x18020000u,3};
+    ctr_scene_depth_surface result={readback,sizeof(readback),16,16,72,depth.address,3};
+    ctr_scene_state state;ctr_vertex vertices[3];depth_setup(&state,vertices,&depth);
+    ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+    ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+    assert(backend.begin_depth(backend.context,&surface,&depth));
+    for(unsigned fn=0;fn<8;++fn) {
+        unsigned zpass=fn,zfail=(fn+3u)%8u,sfail=(fn+5u)%8u;
+        state.registers[0x105]=1u|(fn<<4)|(0xa6u<<8)|(0x3du<<16)|(0x5au<<24);
+        state.registers[0x106]=(zpass<<8)|(zfail<<4)|sfail;
+        state.registers[0x107]=0xf00u;rectangle_count=0;
+        assert(backend.draw(backend.context,&state,vertices,3,NULL));
+        assert(!captured_depth_test && !captured_depth_write && captured_stencil_test && captured_stencil_backface);
+        for(unsigned face=0;face<2;++face) {
+            const unsigned actions[8]={GX2_STENCIL_FUNCTION_KEEP,GX2_STENCIL_FUNCTION_ZERO,
+                GX2_STENCIL_FUNCTION_REPLACE,GX2_STENCIL_FUNCTION_INCR_CLAMP,GX2_STENCIL_FUNCTION_DECR_CLAMP,
+                GX2_STENCIL_FUNCTION_INV,GX2_STENCIL_FUNCTION_INCR_WRAP,GX2_STENCIL_FUNCTION_DECR_WRAP};
+            assert(captured_stencil_actions[face][0]==actions[zpass] &&
+                captured_stencil_actions[face][1]==actions[zfail] && captured_stencil_actions[face][2]==actions[sfail]);
+            assert(captured_stencil_mask[face]==0x5au && captured_stencil_write_mask[face]==0xa6u &&
+                captured_stencil_reference[face]==0x3du);
+            assert(captured_stencil_function[face]==captured_stencil_function[0]);
+        }
+        /* Ref is the left comparison operand. All byte pairs independently
+         * check captured enum semantics; mask/reference uploads are checked
+         * separately above and across every byte below. */
+        for(unsigned reference=0;reference<256;++reference)for(unsigned stored=0;stored<256;++stored)
+            assert(gx2_alpha(captured_stencil_function[0],(float)reference,(float)stored)==
+                pica_alpha(fn,reference,stored));
+        const unsigned refs[3]={0u,0x53u,255u};
+        for(unsigned r=0;r<3;++r)for(unsigned stored=0;stored<256;++stored)
+            for(unsigned mask=0;mask<256;++mask) {
+                unsigned actual=gx2_stencil_action(captured_stencil_actions[0][0],stored,refs[r]);
+                unsigned expected=original_stencil_result(zpass,stored,refs[r]);
+                assert(((actual&mask)|(stored&(255u^mask)))==((expected&mask)|(stored&(255u^mask))));
+            }
+    }
+    /* Every byte in each mask/reference field, both write-gate states, and
+     * state retention share the same owned packed depth surface. */
+    for(unsigned gate=0;gate<2;++gate)for(unsigned value=0;value<256;++value) {
+        state.registers[0x105]=0x11u|(value<<8)|((value^0x3cu)<<16)|((value^0xa5u)<<24);
+        state.registers[0x106]=0x234u;state.registers[0x115]=gate?3u:0u;
+        state.registers[0x107]=0x1000u;rectangle_count=0;
+        assert(backend.draw(backend.context,&state,vertices,3,NULL));
+        assert(captured_depth_test==(bool)gate && captured_depth_write==(bool)gate &&
+            captured_depth_function==GX2_COMPARE_FUNC_ALWAYS && captured_write_mask==0u);
+        for(unsigned face=0;face<2;++face)assert(captured_stencil_mask[face]==(value^0xa5u) &&
+            captured_stencil_reference[face]==(value^0x3cu) && captured_stencil_write_mask[face]==(gate?value:0u));
+    }
+    state.registers[0x105]&=~1u;state.registers[0x107]=0xf00u;rectangle_count=0;
+    assert(backend.draw(backend.context,&state,vertices,3,NULL));stencil_disabled();
+    assert(stencil_mask_sets==scene.draws && depth_control_sets==scene.draws);
+    assert(backend.end_depth(backend.context,&surface,&result));
+    assert(depth_copies==2u && depth_invalidates==2u && read_invalidates==2u);
+    const uint8_t marker[4]={0x3cu,0xa5u,0x71u,0xd2u};
+    for(unsigned i=0;i<sizeof(readback);++i)assert(readback[i]==(i<4u?marker[i]:seed[i]));
+    assert(bytes[0]==17u && bytes[3]==255u && bytes[64]==0x55u && bytes[1160]==0x55u);clean(&scene);
+    /* A later color-only transaction resets both faces, mask/ref and late-Z. */
+    setup(&state,vertices);expected_depth=NULL;rectangle_count=0;
+    assert(backend.begin(backend.context,&surface));
+    assert(backend.draw(backend.context,&state,vertices,3,NULL));stencil_disabled();
+    assert(bound_pixel_metadata.regs.db_shader_control==16u);
+    assert(backend.end(backend.context,&surface));clean(&scene);
+}
+static void stencil_failures(void) {
+    uint8_t bytes[1024]={0},zbytes[1024]={0};
+    ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
+    ctr_scene_depth_surface depth={zbytes,sizeof(zbytes),16,16,64,0x18020000u,3};
+    for(unsigned retained=0;retained<2;++retained)for(unsigned failure=0;failure<19;++failure) {
+        reset();ctr_scene_state state;ctr_vertex vertices[3];depth_setup(&state,vertices,&depth);
+        state.registers[0x105]=0xff35a511u;state.registers[0x106]=0x234u;
+        ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+        ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+        assert(backend.begin_depth(backend.context,&surface,&depth));
+        if(retained)assert(backend.draw(backend.context,&state,vertices,3,NULL));
+        unsigned allocations=alloc_attempts;
+        if(failure<4u)state.register_defined[0x105u+failure%2u]=failure<2u?0u:14u;
+        else switch(failure) {
+        case 4:state.registers[0x105]|=2u;break;
+        case 5:state.registers[0x105]|=4u;break;
+        case 6:state.registers[0x105]|=8u;break;
+        case 7:state.registers[0x105]|=128u;break;
+        case 8:state.registers[0x106]|=8u;break;
+        case 9:state.registers[0x106]|=128u;break;
+        case 10:state.registers[0x106]|=2048u;break;
+        case 11:state.registers[0x106]|=UINT32_C(0x80000000);break;
+        case 12:state.registers[0x114]=2u;break;
+        case 13:state.registers[0x115]=2u;break;
+        case 14:state.registers[0x114]=0u;break;
+        case 15:state.registers[0x116]=0u;break;
+        case 16:state.registers[0x116]=2u;break;
+        case 17:state.registers[0x11c]++;break;
+        case 18:state.register_defined[0x116]=14u;break;
+        }
+        assert(!backend.draw(backend.context,&state,vertices,3,NULL));
+        assert(scene.result==CTR_WIIU_GX2_SCENE_ARGUMENT && scene.draws==retained && gpu_draws==retained &&
+            compile_attempts==retained && depth_control_sets==retained && stencil_mask_sets==retained &&
+            alloc_attempts==allocations);
+        backend.abort(backend.context);clean(&scene);
+    }
+    /* Stencil configuration cannot be discarded by a legacy color-only or D16
+     * transaction, including when the enable bit is clear. */
+    for(unsigned format=0;format<2;++format)for(unsigned reg=0x105;reg<=0x106;++reg) {
+        reset();ctr_scene_state state;ctr_vertex vertices[3];
+        if(format) { depth.format=0;depth.stride=32;depth.size=512;depth_setup(&state,vertices,&depth); }
+        else setup(&state,vertices);
+        state.registers[reg]=1u;state.register_defined[reg]=15u;
+        ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+        ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+        assert(format?backend.begin_depth(backend.context,&surface,&depth):backend.begin(backend.context,&surface));
+        assert(!backend.draw(backend.context,&state,vertices,3,NULL));assert(!compile_attempts && !gpu_draws);
+        backend.abort(backend.context);clean(&scene);
+    }
+    depth.format=3u;depth.stride=64u;depth.size=sizeof(zbytes);
+    for(unsigned failure=0;failure<6;++failure) {
+        reset();ctr_scene_depth_surface bad=depth;expected_depth=&bad;
+        const unsigned formats[4]={1u,2u,4u,UINT32_MAX};
+        if(failure<4u)bad.format=formats[failure];
+        else if(failure==4u)bad.stride=63u;
+        else bad.size=CTR_SCENE_MAX_D24S8_BYTES+1u;
+        ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+        ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+        assert(!backend.begin_depth(backend.context,&surface,&bad));
+        assert(scene.result==CTR_WIIU_GX2_SCENE_ARGUMENT && !alloc_attempts && !depth_copies);
+        backend.abort(backend.context);clean(&scene);
+    }
+    /* A mismatched readback format cannot copy or release the owned pair. */
+    reset();expected_depth=&depth;
+    ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+    ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+    assert(backend.begin_depth(backend.context,&surface,&depth));
+    ctr_scene_depth_surface wrong=depth;wrong.format=0u;
+    assert(!backend.end_depth(backend.context,&surface,&wrong));assert(depth_copies==1u && scene.private_state);
+    backend.abort(backend.context);clean(&scene);
+    uint8_t *large=malloc(CTR_SCENE_MAX_D24S8_BYTES);assert(large);
+    memset(large,0x29,CTR_SCENE_MAX_D24S8_BYTES);depth.bytes=large;depth.size=CTR_SCENE_MAX_D24S8_BYTES;
+    reset();expected_depth=&depth;ctr_wiiu_gx2_scene_init(&scene,&native_context);backend=ctr_wiiu_gx2_scene_backend(&scene);
+    assert(backend.begin_depth(backend.context,&surface,&depth));
+    assert(backend.end_depth(backend.context,&surface,&depth));clean(&scene);free(large);
 }
 static void texture_pixels(uint8_t *bytes,unsigned width,unsigned height) {
     for(unsigned y=0;y<height;++y)for(unsigned x=0;x<width;++x)
@@ -1238,8 +1443,12 @@ int main(int argc,char **argv) {
     baseline();allocation_failures();scissor_modes();failures();readback_observer();
     fragment_bindings();alpha_comparison_vectors();fragment_failures();
     blend_bindings();blend_constant_lists();blend_failures();
-    depth_bindings();depth_failures();depth_readback_observer();
+    depth_bindings();
+    for(unsigned format=0;format<2;++format) {
+        depth_failures_format(format?3u:0u);depth_readback_observer_format(format?3u:0u);
+    }
+    stencil_bindings();stencil_failures();
     textured_bindings(false);combiner_programs(false);texture_reuse();texture_dimensions();texture_failures();
-    puts("GX2 native API model: lifetime, texture/depth retirement/quarantine, original inputs, sampler/TEV bytecode, fragment/blend/depth mappings, 1048576 alpha and 1048576 D16 comparisons, pitched paired upload, scissor and readback passed");
+    puts("GX2 native API model: lifetime, texture/depth retirement/quarantine, original inputs, sampler/TEV bytecode, fragment/blend/depth mappings, 1048576 alpha, 1048576 D16 and 524288 stencil comparisons, 1572864 stencil action/mask vectors, pitched paired upload, scissor and readback passed");
     return 0;
 }

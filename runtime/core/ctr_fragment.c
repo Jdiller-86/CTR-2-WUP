@@ -5,6 +5,60 @@
 static const unsigned base_registers[]={0x100u,0x102u,0x104u,0x107u,0x112u,0x113u};
 static const unsigned merger_registers[]={0x100u,0x101u,0x102u,0x103u,0x104u,0x107u,0x112u,0x113u};
 
+bool ctr_stencil_register_value(unsigned reg,uint32_t value) {
+    if(reg==0x105u)return !(value&~UINT32_C(0xffffff71));
+    if(reg==0x106u)return !(value&~UINT32_C(0x777));
+    return false;
+}
+bool ctr_stencil_decode(const uint32_t registers[],const uint8_t defined[],
+                        bool allowed,ctr_stencil_state *out) {
+    if(!registers || !defined || !out)return false;
+    ctr_stencil_state trial={0};
+    for(unsigned reg=0x105u;reg<=0x106u;++reg) {
+        if(allowed) {
+            if(defined[reg]!=15u || !ctr_stencil_register_value(reg,registers[reg]))return false;
+        } else if(registers[reg] || (defined[reg] && defined[reg]!=15u))return false;
+    }
+    if(allowed) {
+        uint32_t test=registers[0x105u],actions=registers[0x106u];
+        trial.enabled=(test&1u)!=0u;trial.function=(uint8_t)((test>>4)&7u);
+        trial.write_mask=(uint8_t)(test>>8);trial.reference=(uint8_t)(test>>16);
+        trial.input_mask=(uint8_t)(test>>24);
+        for(unsigned i=0;i<3;++i)trial.action[i]=(uint8_t)((actions>>(i*4u))&7u);
+    }
+    *out=trial;return true;
+}
+bool ctr_stencil_passes(const ctr_stencil_state *state,uint8_t stored) {
+    if(!state->enabled)return true;
+    unsigned reference=state->reference&state->input_mask,destination=stored&state->input_mask;
+    switch(state->function) {
+    case 0:return false;
+    case 1:return true;
+    case 2:return reference==destination;
+    case 3:return reference!=destination;
+    case 4:return reference<destination;
+    case 5:return reference<=destination;
+    case 6:return reference>destination;
+    case 7:return reference>=destination;
+    default:return false;
+    }
+}
+uint8_t ctr_stencil_apply(const ctr_stencil_state *state,unsigned action,uint8_t stored) {
+    unsigned result;
+    switch(action) {
+    case 0:result=stored;break;
+    case 1:result=0u;break;
+    case 2:result=state->reference;break;
+    case 3:result=stored<255u?stored+1u:255u;break;
+    case 4:result=stored?stored-1u:0u;break;
+    case 5:result=(unsigned)stored^255u;break;
+    case 6:result=(uint8_t)(stored+1u);break;
+    case 7:result=(uint8_t)(stored-1u);break;
+    default:return stored;
+    }
+    return (uint8_t)(((unsigned)stored&~(unsigned)state->write_mask)|(result&state->write_mask));
+}
+
 bool ctr_fragment_register(unsigned reg) {
     for(unsigned i=0;i<sizeof(merger_registers)/sizeof(*merger_registers);++i)
         if(reg==merger_registers[i])return true;

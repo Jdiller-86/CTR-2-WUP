@@ -51,6 +51,7 @@ typedef struct {
     unsigned depth_stride;
     size_t depth_size;
     uint32_t depth_address;
+    unsigned depth_format,depth_bytes;
     bool pending,depth_enabled;
     uint32_t pixel_constants[8][4];
 } scene_private;
@@ -127,14 +128,18 @@ static bool layout(GX2Surface *surface,unsigned width,unsigned height,GX2TileMod
         surface->alignment<=65536u && !surface->mipmapSize;
 }
 static bool depth_dimensions(const ctr_scene_depth_surface *depth,const ctr_scene_surface *color) {
-    return depth && depth->bytes && depth->width==color->width && depth->height==color->height &&
-        depth->stride>=depth->width*2u &&
-        (uint64_t)depth->stride*depth->height<=depth->size &&
-        depth->size<=CTR_SCENE_MAX_DEPTH_BYTES;
+    if(!depth || (depth->format!=0u && depth->format!=3u))return false;
+    unsigned bytes=depth->format==3u?4u:2u;
+    size_t limit=depth->format==3u?CTR_SCENE_MAX_D24S8_BYTES:CTR_SCENE_MAX_DEPTH_BYTES;
+    return depth->bytes && depth->width==color->width && depth->height==color->height &&
+        depth->stride>=depth->width*bytes &&
+        (uint64_t)depth->stride*depth->height<=depth->size && depth->size<=limit;
 }
-static bool depth_layout(GX2Surface *surface,unsigned width,unsigned height,GX2TileMode tile) {
+static bool depth_layout(GX2Surface *surface,unsigned width,unsigned height,GX2TileMode tile,
+                          unsigned format) {
     surface->dim=GX2_SURFACE_DIM_TEXTURE_2D;surface->width=width;surface->height=height;
-    surface->depth=1;surface->mipLevels=1;surface->format=GX2_SURFACE_FORMAT_UNORM_R16;
+    surface->depth=1;surface->mipLevels=1;
+    surface->format=format==3u?GX2_SURFACE_FORMAT_UNORM_R24_X8:GX2_SURFACE_FORMAT_UNORM_R16;
     surface->aa=GX2_AA_MODE1X;
     /* Both copy endpoints carry depth usage: depth microtiling differs from
      * color, even for the same element size (Decaf e6c528a gx2_surface.cpp). */
@@ -142,7 +147,7 @@ static bool depth_layout(GX2Surface *surface,unsigned width,unsigned height,GX2T
     surface->tileMode=tile;GX2CalcSurfaceSizeAndAlignment(surface);
     return surface->tileMode==tile && surface->pitch>=width &&
         surface->imageSize && surface->imageSize<=MAX_IMAGE_BYTES &&
-        (uint64_t)surface->pitch*height*2u<=surface->imageSize &&
+        (uint64_t)surface->pitch*height*(format==3u?4u:2u)<=surface->imageSize &&
         surface->alignment && !(surface->alignment&(surface->alignment-1u)) &&
         surface->alignment<=65536u && !surface->mipmapSize;
 }
@@ -332,14 +337,15 @@ static bool begin_targets(void *context,const ctr_scene_surface *initial,
     p->depth_enabled=depth!=NULL;
     if(depth) {
         p->depth_stride=depth->stride;p->depth_size=depth->size;p->depth_address=depth->address;
+        p->depth_format=depth->format;p->depth_bytes=depth->format==3u?4u:2u;
     }
     if(!layout(&p->target.surface,p->width,p->height,GX2_TILE_MODE_TILED_2D_THIN1) ||
        !layout(&p->linear,p->width,p->height,GX2_TILE_MODE_LINEAR_ALIGNED) ||
        (uint64_t)p->linear.pitch*p->height*4u>p->linear.imageSize) {
         s->result=CTR_WIIU_GX2_SCENE_LAYOUT;goto error;
     }
-    if(depth && (!depth_layout(&p->depth_target.surface,p->width,p->height,GX2_TILE_MODE_TILED_2D_THIN1) ||
-                  !depth_layout(&p->depth_linear,p->width,p->height,GX2_TILE_MODE_LINEAR_ALIGNED))) {
+    if(depth && (!depth_layout(&p->depth_target.surface,p->width,p->height,GX2_TILE_MODE_TILED_2D_THIN1,p->depth_format) ||
+                  !depth_layout(&p->depth_linear,p->width,p->height,GX2_TILE_MODE_LINEAR_ALIGNED,p->depth_format))) {
         s->result=CTR_WIIU_GX2_SCENE_LAYOUT;goto error;
     }
     p->context=allocate(s,256,sizeof(*p->context));
@@ -374,11 +380,13 @@ static bool begin_targets(void *context,const ctr_scene_surface *initial,
      * overwrite rendered pixels with the allocator's initial zeros. */
     DCFlushRange(p->target.surface.image,p->target.surface.imageSize);
     if(depth) {
-        /* Raw little-endian D16 elements remain bytes on big-endian PowerPC.
-         * GX2 performs only the pitched-linear/depth-tile conversion. */
+        /* Raw LE D16/D24S8 remain bytes on big-endian PowerPC. D24S8 is
+         * depth in bits0..23 and stencil in bits24..31; DEPTH_8_24 matches
+         * pinned R600 Z24_UNORM_S8_UINT packing (Mesa f1f246c). GX2 performs
+         * only the pitched-linear/depth-tile conversion, with no byte rotation. */
         for(unsigned y=0;y<p->height;++y)
-            memcpy((uint8_t *)p->depth_linear.image+(size_t)y*p->depth_linear.pitch*2u,
-                   (const uint8_t *)depth->bytes+(size_t)y*depth->stride,p->width*2u);
+            memcpy((uint8_t *)p->depth_linear.image+(size_t)y*p->depth_linear.pitch*p->depth_bytes,
+                   (const uint8_t *)depth->bytes+(size_t)y*depth->stride,p->width*p->depth_bytes);
         DCFlushRange(p->depth_linear.image,p->depth_linear.imageSize);
         GX2Invalidate(GX2_INVALIDATE_MODE_CPU_TEXTURE,p->depth_linear.image,p->depth_linear.imageSize);
         DCFlushRange(p->depth_target.surface.image,p->depth_target.surface.imageSize);
@@ -464,36 +472,56 @@ static bool native_fragment(const ctr_fragment_state *fragment) {
     }
     return true;
 }
-static bool native_depth(const scene_private *p,const ctr_scene_state *state) {
+static bool native_depth(const scene_private *p,const ctr_scene_state *state,
+                          ctr_stencil_state *stencil) {
+    if(!ctr_stencil_decode(state->registers,state->register_defined,
+                           p->depth_enabled && p->depth_format==3u,stencil))return false;
     if(!p->depth_enabled)return true;
     static const unsigned full[]={0x04du,0x04eu,0x06du,0x114u,0x115u,0x116u,0x11cu};
     for(unsigned i=0;i<sizeof(full)/sizeof(*full);++i)
         if(state->register_defined[full[i]]!=15u)return false;
     uint32_t read=state->registers[0x114u],write=state->registers[0x115u];
+    unsigned gate=p->depth_format==3u?3u:2u;
     return state->registers[0x04du]==UINT32_C(0xbf0000) &&
         (state->registers[0x04eu]&~UINT32_C(0x800000))==0u &&
-        state->registers[0x06du]==1u && state->registers[0x116u]==0u &&
+        state->registers[0x06du]==1u && state->registers[0x116u]==p->depth_format &&
         !(state->registers[0x11cu]&UINT32_C(0xf0000000)) &&
         (uint64_t)state->registers[0x11cu]*8u==p->depth_address &&
-        (read==0u || read==2u) && (write==0u || write==2u) &&
-        (!(state->registers[0x107u]&1u) || read==2u);
+        (read==0u || read==gate) && (write==0u || write==gate) &&
+        (!((state->registers[0x107u]&1u) || stencil->enabled) || read==gate);
 }
-static void depth_state(const scene_private *p,const ctr_scene_state *state) {
+static void depth_state(const scene_private *p,const ctr_scene_state *state,
+                         const ctr_stencil_state *stencil) {
     static const GX2CompareFunction compare[8]={
         GX2_COMPARE_FUNC_NEVER,GX2_COMPARE_FUNC_ALWAYS,GX2_COMPARE_FUNC_EQUAL,
         GX2_COMPARE_FUNC_NOT_EQUAL,GX2_COMPARE_FUNC_LESS,GX2_COMPARE_FUNC_LEQUAL,
         GX2_COMPARE_FUNC_GREATER,GX2_COMPARE_FUNC_GEQUAL
     };
+    static const GX2StencilFunction actions[8]={
+        GX2_STENCIL_FUNCTION_KEEP,GX2_STENCIL_FUNCTION_ZERO,GX2_STENCIL_FUNCTION_REPLACE,
+        GX2_STENCIL_FUNCTION_INCR_CLAMP,GX2_STENCIL_FUNCTION_DECR_CLAMP,
+        GX2_STENCIL_FUNCTION_INV,GX2_STENCIL_FUNCTION_INCR_WRAP,GX2_STENCIL_FUNCTION_DECR_WRAP
+    };
     bool test=p->depth_enabled && (state->registers[0x107u]&1u)!=0u;
-    bool write=p->depth_enabled && (state->registers[0x107u]&0x1000u)!=0u &&
-        state->registers[0x115u]==2u;
-    /* PICA writes with its test disabled. Enabling GX2's ALWAYS test while
-     * writing gives that behavior without relying on disabled-Z writes. */
+    bool gate=p->depth_enabled && state->registers[0x115u]==(p->depth_format==3u?3u:2u);
+    bool write=gate && (state->registers[0x107u]&0x1000u)!=0u;
+    bool enabled=p->depth_enabled && p->depth_format==3u && stencil->enabled;
+    GX2CompareFunction function=enabled?compare[stencil->function]:GX2_COMPARE_FUNC_ALWAYS;
+    GX2StencilFunction pass=enabled?actions[stencil->action[2]]:GX2_STENCIL_FUNCTION_KEEP;
+    GX2StencilFunction zfail=enabled?actions[stencil->action[1]]:GX2_STENCIL_FUNCTION_KEEP;
+    GX2StencilFunction fail_action=enabled?actions[stencil->action[0]]:GX2_STENCIL_FUNCTION_KEEP;
+    /* PICA writes with its depth test disabled. ALWAYS gives that behavior
+     * without relying on disabled-Z writes. Stencil's ZPASS action still runs
+     * with depth disabled, as in the standard depth/stencil pipeline. */
     GX2SetDepthStencilControl(test || write,write,
-        test?compare[(state->registers[0x107u]>>4)&7u]:GX2_COMPARE_FUNC_ALWAYS,false,false,
-        GX2_COMPARE_FUNC_ALWAYS,GX2_STENCIL_FUNCTION_KEEP,GX2_STENCIL_FUNCTION_KEEP,
-        GX2_STENCIL_FUNCTION_KEEP,GX2_COMPARE_FUNC_ALWAYS,GX2_STENCIL_FUNCTION_KEEP,
-        GX2_STENCIL_FUNCTION_KEEP,GX2_STENCIL_FUNCTION_KEEP);
+        test?compare[(state->registers[0x107u]>>4)&7u]:GX2_COMPARE_FUNC_ALWAYS,enabled,enabled,
+        function,pass,zfail,fail_action,function,pass,zfail,fail_action);
+    /* WUT order is input mask, write mask, reference, for each face. Rebind
+     * both faces every draw; a closed write gate only suppresses writes. */
+    uint8_t mask=enabled?stencil->input_mask:0u;
+    uint8_t write_mask=enabled && gate?stencil->write_mask:0u;
+    uint8_t reference=enabled?stencil->reference:0u;
+    GX2SetStencilMask(mask,write_mask,reference,mask,write_mask,reference);
 }
 static void fragment_state(const ctr_fragment_state *fragment) {
     /* PICA's enum order is neither GX2's ROP3 truth table nor its comparison
@@ -565,9 +593,9 @@ static bool draw(void *context,const ctr_scene_state *state,const ctr_vertex *ve
     if(!p || !state || !vertices || !count || count>CTR_SCENE_MAX_VERTICES || count%3u)
         return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
     if(s->quarantined)return fail(s,CTR_WIIU_GX2_SCENE_WAIT);
-    ctr_fragment_state fragment;
+    ctr_fragment_state fragment;ctr_stencil_state stencil;
     if(!ctr_fragment_decode_depth(state->registers,state->register_defined,true,p->depth_enabled,&fragment) ||
-       !native_fragment(&fragment) || !native_depth(p,state))
+       !native_fragment(&fragment) || !native_depth(p,state,&stencil))
         return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
     s->shader_result=ctr_gx2_shader_compile(&state->shader,(uint16_t)state->registers[0x2bdu],
         &state->registers[0x050u],state->registers[0x04fu],p->compiled);
@@ -609,7 +637,7 @@ static bool draw(void *context,const ctr_scene_state *state,const ctr_vertex *ve
     for(unsigned uniform=0;uniform<CTR_SHADER_UNIFORMS;++uniform)if(p->compiled->uniform_used[uniform])
         GX2SetVertexUniformReg(uniform*4u,4,state->shader.uniforms[uniform]);
     fragment_state(&fragment);
-    depth_state(p,state);
+    depth_state(p,state,&stencil);
     GX2SetAlphaToMask(false,GX2_ALPHA_TO_MASK_MODE_NON_DITHERED);
     GX2SetStreamOutEnable(false);
     unsigned cull=state->registers[0x040u]&3u;
@@ -645,7 +673,7 @@ static bool end_targets(void *context,const ctr_scene_surface *readback,
        readback->stride!=p->stride || readback->size!=p->size ||
        p->depth_enabled!=(depth!=NULL) ||
        (depth && (!depth_dimensions(depth,readback) || depth->stride!=p->depth_stride ||
-                  depth->size!=p->depth_size || depth->address!=p->depth_address)))
+                  depth->size!=p->depth_size || depth->address!=p->depth_address || depth->format!=p->depth_format)))
         return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
     if(s->quarantined)return fail(s,CTR_WIIU_GX2_SCENE_WAIT);
     GX2SetContextState(p->context);
@@ -663,7 +691,7 @@ static bool end_targets(void *context,const ctr_scene_surface *readback,
                (const uint8_t *)p->linear.image+(size_t)y*p->linear.pitch*4u,p->width*4u);
     if(depth)for(unsigned y=0;y<p->height;++y)
         memcpy((uint8_t *)depth->bytes+(size_t)y*depth->stride,
-               (const uint8_t *)p->depth_linear.image+(size_t)y*p->depth_linear.pitch*2u,p->width*2u);
+               (const uint8_t *)p->depth_linear.image+(size_t)y*p->depth_linear.pitch*p->depth_bytes,p->width*p->depth_bytes);
     if(s->observe_readback)s->observe_readback(s->readback_context,readback);
     if(depth && s->observe_depth_readback)s->observe_depth_readback(s->readback_context,depth);
     if(!restore(s))return false;

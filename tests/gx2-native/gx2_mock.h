@@ -15,6 +15,7 @@ typedef unsigned GX2CompareFunction;
 typedef unsigned GX2ChannelMask;
 typedef unsigned GX2RenderTarget;
 typedef unsigned GX2BlendMode;
+typedef unsigned GX2StencilFunction;
 typedef unsigned GX2BlendCombineMode;
 struct GX2ContextState { uint32_t marker; };
 typedef struct {
@@ -56,7 +57,7 @@ typedef struct {
 } GX2ViewportReg;
 enum {
     GX2_SURFACE_DIM_TEXTURE_2D=1,GX2_SURFACE_FORMAT_UNORM_R8_G8_B8_A8=0x1a,
-    GX2_SURFACE_FORMAT_UNORM_R16=5,
+    GX2_SURFACE_FORMAT_UNORM_R16=5,GX2_SURFACE_FORMAT_UNORM_R24_X8=0x11,
     GX2_AA_MODE1X=0,GX2_SURFACE_USE_TEXTURE=1,GX2_SURFACE_USE_COLOR_BUFFER=2,GX2_SURFACE_USE_DEPTH_BUFFER=4,
     GX2_TILE_MODE_TILED_2D_THIN1=4,GX2_TILE_MODE_LINEAR_ALIGNED=1,
     GX2_INVALIDATE_MODE_CPU_TEXTURE=66,GX2_INVALIDATE_MODE_COLOR_BUFFER=16,GX2_INVALIDATE_MODE_DEPTH_BUFFER=32,
@@ -83,6 +84,9 @@ enum {
     GX2_BLEND_COMBINE_MODE_ADD=0,GX2_BLEND_COMBINE_MODE_SUB=1,GX2_BLEND_COMBINE_MODE_MIN=2,
     GX2_BLEND_COMBINE_MODE_MAX=3,GX2_BLEND_COMBINE_MODE_REV_SUB=4,
     GX2_CHANNEL_MASK_RGBA=15,GX2_STENCIL_FUNCTION_KEEP=0,
+    GX2_STENCIL_FUNCTION_ZERO=1,GX2_STENCIL_FUNCTION_REPLACE=2,
+    GX2_STENCIL_FUNCTION_INCR_CLAMP=3,GX2_STENCIL_FUNCTION_DECR_CLAMP=4,
+    GX2_STENCIL_FUNCTION_INV=5,GX2_STENCIL_FUNCTION_INCR_WRAP=6,GX2_STENCIL_FUNCTION_DECR_WRAP=7,
     GX2_ALPHA_TO_MASK_MODE_NON_DITHERED=0,GX2_FRONT_FACE_CCW=0,
     GX2_TEX_CLAMP_MODE_WRAP=0,GX2_TEX_CLAMP_MODE_MIRROR=1,GX2_TEX_CLAMP_MODE_CLAMP=2,
     GX2_TEX_XY_FILTER_MODE_POINT=0,GX2_TEX_XY_FILTER_MODE_LINEAR=1,GX2_TEX_Z_FILTER_MODE_NONE=0,GX2_TEX_MIP_FILTER_MODE_NONE=0
@@ -110,6 +114,8 @@ void GX2SetDepthBuffer(const GX2DepthBuffer *target);
 void GX2SetDepthStencilControl(bool test,bool write,unsigned function,bool stencil,bool backface,
     unsigned front,unsigned front_pass,unsigned front_fail,unsigned front_stencil,
     unsigned back,unsigned back_pass,unsigned back_fail,unsigned back_stencil);
+void GX2SetStencilMask(uint8_t frontMask,uint8_t frontWriteMask,uint8_t frontRef,
+                       uint8_t backMask,uint8_t backWriteMask,uint8_t backRef);
 void GX2SetShaderModeEx(unsigned mode,unsigned vs,unsigned vsstack,unsigned gs,unsigned gsstack,unsigned ps,unsigned psstack);
 void GX2SetVertexShader(const GX2VertexShader *shader);
 void GX2SetPixelShader(const GX2PixelShader *shader);

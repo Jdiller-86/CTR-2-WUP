@@ -866,9 +866,165 @@ static void guest_depth_queues(void) {
     CHECK(g.shared[g.gsp.relay_shared].storage[1]==1 && g.shared[g.gsp.relay_shared].storage[12]==5);
     CHECK(g.events[g.gsp.relay_event].signaled);depth_golden(&g,0);ctr_guest_close(&g);
 }
+enum { STENCIL_BYTES=64u*64u*4u };
+static size_t stencil_offset(unsigned x,unsigned y) { return depth_offset(x,y)*2u; }
+static uint32_t stencil_seed(unsigned x,unsigned y) {
+    const uint32_t depth[]={0u,UINT32_C(0x1234ab),UINT32_C(0x800102),UINT32_C(0xffffff)};
+    const uint32_t stencil[]={0u,UINT32_C(0x2b),UINT32_C(0xb1),UINT32_C(0xff)};
+    return depth[(5u*x+3u*y)&3u]|stencil[(x/2u+7u*y)&3u]<<24;
+}
+static bool stencil_covered(unsigned x,unsigned y) { return x>=8u && x<56u && y>=8u && y<56u; }
+static uint32_t stencil_prepared(unsigned x,unsigned y) {
+    uint32_t value=stencil_seed(x,y);
+    return stencil_covered(x,y)?(value&UINT32_C(0xf0ffffff))|UINT32_C(0x05000000):value;
+}
+static void stencil_setup(ctr_guest *g,list *l,bool textured) {
+    depth_setup(g,l,textured);set(l,0x116,3);set(l,0x114,3);set(l,0x115,3);
+    /* Color/depth writes off; ALWAYS/REPLACE changes only the stencil low
+       nibble. The packed 24-bit depth is independently seeded and preserved. */
+    set(l,0x107,0);set(l,0x105,UINT32_C(0xffa50f11));set(l,0x106,0x200);
+    for(unsigned y=0;y<64;++y)for(unsigned x=0;x<64;++x)
+        put32(backing(g)+0x6000u+stencil_offset(x,y),stencil_seed(x,y));
+}
+static void stencil_prepass_golden(ctr_guest *g) {
+    uint8_t pixels[BYTES];CHECK(ctr_texture_decode(backing(g)+0x2000u,BYTES,0,64,64,pixels,sizeof(pixels))==CTR_TEXTURE_OK);
+    const uint8_t background[]={16,32,48,255};
+    for(unsigned y=0;y<64;++y)for(unsigned x=0;x<64;++x) {
+        CHECK(!memcmp(pixels+(y*64u+x)*4u,background,4));
+        CHECK(word(backing(g)+0x6000u+stencil_offset(x,y))==stencil_prepared(x,y));
+    }
+}
+static void stencil_draws(list *l,bool shorts) {
+    unsigned flag=shorts?UINT32_C(0x80000000):0u,width=shorts?2u:1u;
+    add(l,0x227,flag|64u);add(l,0x22f,1);add(l,0x227,flag|(64u+3u*width));add(l,0x22f,1);finish(l);
+}
+static void guest_stencil_success(void) {
+    for(unsigned shorts=0;shorts<2;++shorts) {
+        ctr_guest g;list l;ctr_gx_completion c;open(&g,&l,shorts!=0);stencil_setup(&g,&l,false);
+        CHECK(ctr_memory_map(&g.memory,0x30000000u,STENCIL_BYTES,CTR_MEM_READ|CTR_MEM_EXEC,
+                             backing(&g)+0x6000u,STENCIL_BYTES)==CTR_MEM_OK);
+        CHECK(ctr_memory_write_bytes(&g.memory,BASE,l.bytes,(uint32_t)l.size)==CTR_MEM_OK);
+        uint64_t generation=g.memory.generation,code=g.memory.code_generation;g.cpu.exclusive_valid=true;
+        CHECK(submit(&g,&l,&c)==CTR_GX_OK && c.signal && c.irq==5);
+        CHECK(g.memory.generation==generation+1 && g.memory.code_generation==code+1 && !g.cpu.exclusive_valid);
+        CHECK(g.gsp.pica_draws==2 && g.gsp.pica_fragments==2304);stencil_prepass_golden(&g);
+        /* Retained state compares masked reference 0x50 against stored high
+           nibbles. Reversing that comparison admits the opposite seed classes.
+           Fractional D24 depth separates low/high seeded depth bytes exactly. */
+        for(unsigned i=0;i<4;++i)write_word(&g,RESOURCE+i*16u+8u,UINT32_C(0xbf000000));
+        memset(&l,0,sizeof(l));add(&l,0x105,UINT32_C(0xf053ff41));add(&l,0x106,0x245);
+        add(&l,0x107,0x1f41);add(&l,0xc0,UINT32_C(0xe000e));add(&l,0xc3,UINT32_C(0xffeeddcc));
+        stencil_draws(&l,shorts!=0);CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK && c.signal);
+        uint8_t pixels[BYTES];CHECK(ctr_texture_decode(backing(&g)+0x2000u,BYTES,0,64,64,pixels,sizeof(pixels))==CTR_TEXTURE_OK);
+        unsigned stencil_failed=0,depth_failed=0,passed=0;
+        for(unsigned y=0;y<64;++y)for(unsigned x=0;x<64;++x) {
+            uint32_t packed=stencil_prepared(x,y),z=packed&UINT32_C(0xffffff),stencil=packed>>24;
+            uint8_t expected[]={16,32,48,255};
+            if(stencil_covered(x,y)) {
+                if((stencil&0xf0u)<=0x50u) { stencil^=255u;++stencil_failed; }
+                else if(z<=UINT32_C(0x7fffff)) { --stencil;++depth_failed; }
+                else { z=UINT32_C(0x7fffff);stencil=0x53;expected[0]=204;expected[1]=221;expected[2]=238;++passed; }
+            }
+            CHECK(!memcmp(pixels+(y*64u+x)*4u,expected,4));
+            CHECK(word(backing(&g)+0x6000u+stencil_offset(x,y))==(z|(stencil<<24)));
+        }
+        CHECK(stencil_failed && depth_failed && passed && stencil_failed+depth_failed+passed==2304);
+        CHECK(g.gsp.pica_draws==4 && g.gsp.pica_fragments==4608);
+        uint8_t color[BYTES],packed[STENCIL_BYTES];memcpy(color,backing(&g)+0x2000u,BYTES);memcpy(packed,backing(&g)+0x6000u,STENCIL_BYTES);
+        /* A failed stencil test with REPLACE still preserves both targets when
+           the whole depth/stencil write gate is zero. */
+        memset(&l,0,sizeof(l));add(&l,0x115,0);add(&l,0x105,UINT32_C(0xffa5ff01));add(&l,0x106,0x222);
+        stencil_draws(&l,shorts!=0);CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK && c.signal);
+        CHECK(!memcmp(color,backing(&g)+0x2000u,BYTES) && !memcmp(packed,backing(&g)+0x6000u,STENCIL_BYTES));
+        /* Alpha NEVER precedes stencil/depth, even with every pass action and
+           depth write enabled. */
+        memset(&l,0,sizeof(l));add(&l,0x115,3);add(&l,0x104,1);add(&l,0x105,UINT32_C(0xff3cff11));add(&l,0x107,0x1f11);
+        stencil_draws(&l,shorts!=0);CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK && c.signal);
+        CHECK(!memcmp(color,backing(&g)+0x2000u,BYTES) && !memcmp(packed,backing(&g)+0x6000u,STENCIL_BYTES));
+        /* Disabled tests permit depth-only writes without a read gate. The
+           stencil byte remains untouched by each packed depth update. */
+        for(unsigned i=0;i<4;++i)write_word(&g,RESOURCE+i*16u+8u,0);
+        memset(&l,0,sizeof(l));add(&l,0x104,0);add(&l,0x105,0);add(&l,0x106,0);add(&l,0x114,0);add(&l,0x107,0x1000);
+        stencil_draws(&l,shorts!=0);CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK && c.signal);
+        CHECK(!memcmp(color,backing(&g)+0x2000u,BYTES));
+        for(unsigned y=0;y<64;++y)for(unsigned x=0;x<64;++x) {
+            size_t offset=stencil_offset(x,y);uint32_t expected=word(packed+offset);
+            if(stencil_covered(x,y))expected&=UINT32_C(0xff000000);
+            CHECK(word(backing(&g)+0x6000u+offset)==expected);
+        }
+        CHECK(g.gsp.pica_draws==10 && g.gsp.pica_fragments==11520);ctr_guest_close(&g);
+    }
+}
+static void guest_stencil_rollback(void) {
+    for(unsigned retained=0;retained<2;++retained)for(unsigned kind=0;kind<18;++kind) {
+        ctr_guest g;list l;ctr_gx_completion c;bool textured=kind==12u;
+        if(textured)textured_open(&g,&l,false);else open(&g,&l,false);
+        stencil_setup(&g,&l,textured);if(retained)CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK);
+        ctr_gx_result expected=CTR_GX_UNSUPPORTED;uint32_t command_address=BASE;
+        if(kind==0) { trim(&l);add(&l,0x105,2);finish(&l); }
+        if(kind==1) { trim(&l);add(&l,0x106,8);finish(&l); }
+        if(kind==2)set(&l,0x116,2);
+        if(kind==3)set(&l,0x114,2);
+        if(kind==4)set(&l,0x115,2);
+        if(kind==5) { insert_at(&l,find(&l,0x22f,1),0x116,0);trim(&l);finish(&l); }
+        if(kind==6) { insert_at(&l,find(&l,0x22f,1),0x11c,(PHYSICAL+0xa000u)/8u);trim(&l);finish(&l); }
+        if(kind==7)set(&l,0x11c,0);
+        if(kind==8) { CHECK(ctr_memory_change_range(&g.memory,DEPTH+8u,8,CTR_MEM_READ,false)==CTR_MEM_OK);expected=CTR_GX_MEMORY; }
+        if(kind==9) { set(&l,0x11c,(PHYSICAL+0x2000u)/8u);expected=CTR_GX_MEMORY; }
+        if(kind==10) { set(&l,0x11c,PHYSICAL/8u);expected=CTR_GX_MEMORY; }
+        if(kind==11) { set(&l,0x11c,(PHYSICAL+0x1000u)/8u);expected=CTR_GX_MEMORY; }
+        if(kind==12) { set(&l,0x085,DEPTH_PA/8u);expected=CTR_GX_MEMORY; }
+        if(kind==13) {
+            CHECK(ctr_memory_change_range(&g.memory,DEPTH,STENCIL_BYTES,CTR_MEM_READ,false)==CTR_MEM_OK);
+            for(size_t i=0;i<g.memory.count;++i)if(g.memory.maps[i].base==DEPTH) {
+                g.memory.maps[i].permissions=3;g.memory.maps[i].storage=backing(&g)+0x2000u;
+            }
+            expected=CTR_GX_MEMORY;
+        }
+        if(kind==14) { size_t at=find(&l,0x105,0);put32(l.bytes+at,0x13);put32(l.bytes+at+4u,UINT32_C(0x10000)|0x105u); }
+        if(kind==16) { set(&l,0x11c,(PHYSICAL+0xe000u)/8u);expected=CTR_GX_MEMORY; }
+        if(kind==17) {
+            command_address=0x30002000u;expected=CTR_GX_MEMORY;
+            CHECK(ctr_memory_map(&g.memory,command_address,STENCIL_BYTES,3,backing(&g)+0x6000u,STENCIL_BYTES)==CTR_MEM_OK);
+        }
+        relay(&g);ctr_guest_shared *shared=&g.shared[g.gsp.relay_shared];uint8_t irq[CTR_GUEST_PAGE];
+        CHECK(shared->size==sizeof(irq));memcpy(irq,shared->storage,sizeof(irq));
+        backend_mock m={0};ctr_scene_backend backend=mock_backend(&m);
+        if(kind!=15) { backend.begin_depth=depth_unexpected_begin;backend.end_depth=depth_unexpected_end; }
+        ctr_guest_set_scene_backend(&g,&backend);
+        CHECK(ctr_memory_write_bytes(&g.memory,command_address,l.bytes,(uint32_t)l.size)==CTR_MEM_OK);
+        ctr_scene_state before={0};if(retained)before=*g.gsp.pica_scene;ctr_pica_state pica=g.gsp.pica;
+        uint8_t all[65536];memcpy(all,backing(&g),sizeof(all));
+        uint64_t generation=g.memory.generation,code=g.memory.code_generation;g.cpu.exclusive_valid=true;
+        uint32_t commands[]={0x01000101,command_address,(uint32_t)l.size,0,0,0,0,1};
+        CHECK(ctr_gx_execute(&g,commands,&c)==expected && !c.signal);
+        CHECK(!m.begins && !m.draws && !m.ends && !m.aborts);
+        CHECK(!memcmp(all,backing(&g),sizeof(all)) && !memcmp(&pica,&g.gsp.pica,sizeof(pica)));
+        CHECK(retained?g.gsp.pica_scene && !memcmp(&before,g.gsp.pica_scene,sizeof(before)):!g.gsp.pica_scene);
+        CHECK(g.memory.generation==generation && g.memory.code_generation==code && g.cpu.exclusive_valid);
+        CHECK(!memcmp(irq,shared->storage,sizeof(irq)) && !g.events[g.gsp.relay_event].signaled);ctr_guest_close(&g);
+    }
+}
+static void guest_stencil_queues(void) {
+    ctr_guest g;list good,bad;open(&g,&good,false);stencil_setup(&g,&good,false);bad=good;
+    trim(&bad);add(&bad,0x106,8);finish(&bad);unsigned owner=relay(&g);
+    CHECK(ctr_memory_write_bytes(&g.memory,BASE,good.bytes,(uint32_t)good.size)==CTR_MEM_OK);
+    CHECK(ctr_memory_write_bytes(&g.memory,BASE+0x800u,bad.bytes,(uint32_t)bad.size)==CTR_MEM_OK);
+    write_word(&g,0x10002800,14u|(2u<<8));
+    for(unsigned entry=0;entry<2;++entry) {
+        uint32_t w[]={0x01000101,BASE+(entry?0x800u:0),(uint32_t)(entry?bad.size:good.size),0,0,0,0,1};
+        for(unsigned i=0;i<8;++i)write_word(&g,0x10002820u+(entry?0:14u)*32u+i*4u,w[i]);
+    }
+    uint32_t trigger[]={0xc0000},out[8];unsigned count;
+    CHECK(!ctr_gsp_request(&g,owner,trigger,out,&count) && g.state==CTR_GUEST_FAULTED);
+    CHECK(read_word(&g,0x10002800)==0x100u && g.gsp.gx_commands==1 && g.gsp.gx_pica==1 && g.gsp.pica_draws==2);
+    CHECK(g.shared[g.gsp.relay_shared].storage[1]==1 && g.shared[g.gsp.relay_shared].storage[12]==5);
+    CHECK(g.events[g.gsp.relay_event].signaled);stencil_prepass_golden(&g);ctr_guest_close(&g);
+}
 int main(void) {
     successful();rollback();shader_capacity();arithmetic_draws();queues();native_backend_success();native_backend_rollback();
     guest_texture_success();guest_linear_texture();guest_texture_snapshots();guest_texture_rollback();guest_texture_queues();
     guest_fragment_output();guest_blending();guest_depth_success();guest_depth_rollback();guest_depth_queues();
+    guest_stencil_success();guest_stencil_rollback();guest_stencil_queues();
     printf("guest PICA draw tests: %u assertions passed\n",assertions);return 0;
 }

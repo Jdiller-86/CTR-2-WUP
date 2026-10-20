@@ -197,10 +197,10 @@ def main():
             if name in ('graphics','interactive','transfer') and result['frames']!=[0x00ff00ff,0xff0000ff,0x00ff00ff]:raise RuntimeError('Require all three exact two-screen RGB565 frames')
             if name=='transfer' and result['gx']!={'commands':17,'dma':3,'fills':8,'transfers':3,'copies':1,'cache':1,'pica':1}:raise RuntimeError('Original application did not execute all expected GX operations')
             if name=='transfer' and result['pica_state']!={'lists':1,'writes':11,'finalizers':1,'viewport_width':0x12bb56dd}:raise RuntimeError('Original GPUCMD configuration state did not match masked/grouped writes')
-            if name in ('draw','textured') and (result['frames']!=[0x102031ff] or result['pica_render']!=({'draws':6,'triangles':6,'fragments':145770,'shader_instructions':72} if name=='textured' else {'draws':4,'triangles':4,'fragments':97200,'shader_instructions':36})
-                                or result['gx']!={'commands':6,'dma':0,'fills':2,'transfers':2,'copies':0,'cache':0,'pica':2}):
+            if name in ('draw','textured') and (result['frames']!=[0x102031ff] or result['pica_render']!=({'draws':9,'triangles':9,'fragments':210570,'shader_instructions':108} if name=='textured' else {'draws':4,'triangles':4,'fragments':97200,'shader_instructions':36})
+                                or result['gx']!=({'commands':7,'dma':0,'fills':2,'transfers':2,'copies':0,'cache':0,'pica':3} if name=='textured' else {'commands':6,'dma':0,'fills':2,'transfers':2,'copies':0,'cache':0,'pica':2})):
                 raise RuntimeError('Original program did not execute and present all expected PICA draws')
-            if name=='textured' and 'CTR2WUP compiled D16 depth PASS' not in result['messages']:raise RuntimeError('Original textured guest did not complete all D16 sample checks')
+            if name=='textured' and any(message not in result['messages'] for message in ('CTR2WUP compiled D16 depth PASS','CTR2WUP compiled stencil preparation PASS','CTR2WUP compiled D24S8 stencil PASS')):raise RuntimeError('Original textured guest did not complete all prepared/final depth and stencil sample checks')
             if name=='input' and result['input_samples']!=3:raise RuntimeError('Require all three standard HID publications')
             if name=='interactive' and result['input_samples']!=4:raise RuntimeError('Require three input-driven frames and the guest B-button exit')
             if name=='filesystem':

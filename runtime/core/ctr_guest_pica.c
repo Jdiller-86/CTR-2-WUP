@@ -75,13 +75,12 @@ static void layout(uint8_t *linear_bytes,uint8_t *raw,unsigned width,unsigned he
         else for(unsigned lane=0;lane<4;++lane)p[lane]=q[3u-lane];
     }
 }
-/* D16 uses the same 8x8 Morton indices as color, with two little-endian
- * bytes per sample. Keep raw bytes explicit on both host endian orders. */
-static void depth_layout(uint8_t *pixels,uint8_t *raw,unsigned width,unsigned height,bool encode) {
+/* Depth uses the same 8x8 Morton indices as color: D16 has two bytes;
+ * D24S8 has little-endian depth bytes 0..2 and stencil byte 3. */
+static void depth_layout(uint8_t *pixels,uint8_t *raw,unsigned width,unsigned height,unsigned element,bool encode) {
     for(unsigned y=0;y<height;++y)for(unsigned x=0;x<width;++x) {
-        uint8_t *p=pixels+((size_t)y*width+x)*2u,*q=raw+tiled(x,y,width)/2u;
-        if(encode) { q[0]=p[0];q[1]=p[1]; }
-        else { p[0]=q[0];p[1]=q[1]; }
+        uint8_t *p=pixels+((size_t)y*width+x)*element,*q=raw+(tiled(x,y,width)/4u)*element;
+        if(encode)memcpy(q,p,element);else memcpy(p,q,element);
     }
 }
 static void diagnostic(ctr_guest *g,const ctr_scene_report *r) {
@@ -167,7 +166,7 @@ ctr_gx_result ctr_guest_pica_execute(ctr_guest *g,const void *commands,size_t si
        markers>UINT64_MAX-g->gsp.pica.finalizations) { report.result=CTR_SCENE_OVERFLOW;goto done; }
     uint32_t resource_address=0,resource_bytes=0,target_address=0,target_bytes=4,color_address=0;
     uint32_t depth_address=0,depth_virtual=0,depth_bytes=0;
-    unsigned width=1,height=1;uint8_t empty[4]={0};
+    unsigned width=1,height=1,depth_element=2;uint8_t empty[4]={0};
     ctr_scene_resources resources={0};ctr_scene_surface surface={empty,4,1,1,4};
     ctr_scene_depth_surface depth={0};
     if(draws) {
@@ -183,9 +182,10 @@ ctr_gx_result ctr_guest_pica_execute(ctr_guest *g,const void *commands,size_t si
             report.result=CTR_SCENE_LAYOUT;goto done;
         }
         target_bytes=width*height*4u;
-        if(bound[4] || (bound[5]&UINT32_C(0xf0000000))) { report.result=CTR_SCENE_UNSUPPORTED;goto done; }
+        if((bound[4]!=0u && bound[4]!=3u) || (bound[5]&UINT32_C(0xf0000000))) { report.result=CTR_SCENE_UNSUPPORTED;goto done; }
         depth_address=bound[5]*8u;
-        if(depth_address)depth_bytes=width*height*2u;
+        depth_element=bound[4]==3u?4u:2u;
+        if(depth_address)depth_bytes=width*height*depth_element;
         result=linear(g,color_address,target_bytes,CTR_MEM_READ|CTR_MEM_WRITE,&target_address,NULL,c);
         if(result!=CTR_GX_OK) { report.result=CTR_SCENE_LAYOUT;goto done; }
         if(command_alias(g,target_address,target_bytes,command_address,(uint32_t)size)) {
@@ -229,8 +229,8 @@ ctr_gx_result ctr_guest_pica_execute(ctr_guest *g,const void *commands,size_t si
             if(!depth_raw || !depth_pixels) { result=CTR_GX_NO_MEMORY;report.result=CTR_SCENE_NO_MEMORY;goto done; }
             c->memory=ctr_memory_read_bytes(&g->memory,depth_virtual,depth_raw,depth_bytes);
             if(c->memory!=CTR_MEM_OK) { result=CTR_GX_MEMORY;report.result=CTR_SCENE_LAYOUT;goto done; }
-            depth_layout(depth_pixels,depth_raw,width,height,false);
-            depth=(ctr_scene_depth_surface){depth_pixels,depth_bytes,width,height,width*2u,depth_address};
+            depth_layout(depth_pixels,depth_raw,width,height,depth_element,false);
+            depth=(ctr_scene_depth_surface){depth_pixels,depth_bytes,width,height,width*depth_element,depth_address,bound[4]};
         }
         size_t total_texture_bytes=0;
         for(unsigned i=0;i<texture_count;) {
@@ -268,7 +268,7 @@ ctr_gx_result ctr_guest_pica_execute(ctr_guest *g,const void *commands,size_t si
     if(draws) {
         layout(pixels,raw,width,height,true);
         ctr_memory_write_range targets[2]={{target_address,raw,target_bytes},{depth_virtual,depth_raw,depth_bytes}};
-        if(depth_bytes)depth_layout(depth_pixels,depth_raw,width,height,true);
+        if(depth_bytes)depth_layout(depth_pixels,depth_raw,width,height,depth_element,true);
         c->memory=ctr_memory_write_ranges(&g->memory,targets,depth_bytes?2u:1u);
         if(c->memory!=CTR_MEM_OK) { result=CTR_GX_MEMORY;report.result=CTR_SCENE_LAYOUT;goto done; }
     }
