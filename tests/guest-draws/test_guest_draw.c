@@ -591,8 +591,60 @@ static void guest_texture_queues(void) {
     CHECK(g.shared[g.gsp.relay_shared].storage[1]==1 && g.shared[g.gsp.relay_shared].storage[12]==5 && g.events[g.gsp.relay_event].signaled);
     texture_golden(&g,false,false,true);ctr_guest_close(&g);
 }
+static void guest_fragment_output(void) {
+    /* Byte-domain constant passes alpha EQUAL127, then XOR updates only R/B.
+     * Raw guest tiled storage and executable aliases commit together. */
+    for(unsigned shorts=0;shorts<2;++shorts) {
+        ctr_guest g;list l;ctr_gx_completion c;open(&g,&l,shorts!=0);
+        set(&l,0xc0,UINT32_C(0xe000e));insert_at(&l,find(&l,0x22f,0),0xc3,UINT32_C(0x7fab5313));
+        trim(&l);finish(&l);
+        set(&l,0x104,1u|(2u<<4)|(127u<<8));set(&l,0x102,11);set(&l,0x107,5u<<8);set(&l,0x112,15);
+        CHECK(ctr_memory_map(&g.memory,0x30000000u,BYTES,CTR_MEM_READ|CTR_MEM_EXEC,backing(&g)+0x2000u,BYTES)==CTR_MEM_OK);
+        CHECK(ctr_memory_write_bytes(&g.memory,BASE,l.bytes,(uint32_t)l.size)==CTR_MEM_OK);
+        uint64_t generation=g.memory.generation,code=g.memory.code_generation;g.cpu.exclusive_valid=true;
+        CHECK(submit(&g,&l,&c)==CTR_GX_OK && c.signal && c.irq==5);
+        CHECK(g.memory.generation==generation+1 && g.memory.code_generation==code+1 && !g.cpu.exclusive_valid);
+        uint8_t pixels[BYTES];
+        CHECK(ctr_texture_decode(backing(&g)+0x2000u,BYTES,0,64,64,pixels,sizeof(pixels))==CTR_TEXTURE_OK);
+        for(unsigned y=0;y<64;++y)for(unsigned x=0;x<64;++x) {
+            const uint8_t inside[]={3,32,155,255},outside[]={16,32,48,255};
+            CHECK(!memcmp(pixels+(y*64u+x)*4u,x>=8 && x<56 && y>=8 && y<56?inside:outside,4));
+        }
+        /* A retained list tests the same constant with GREATER127: no pixel
+         * changes, while successful covered work and P3D completion advance. */
+        memset(&l,0,sizeof(l));add(&l,0x104,1u|(6u<<4)|(127u<<8));add(&l,0x22f,1);finish(&l);
+        CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK && c.signal && c.irq==5);
+        uint8_t after[BYTES];CHECK(ctr_texture_decode(backing(&g)+0x2000u,BYTES,0,64,64,after,sizeof(after))==CTR_TEXTURE_OK);
+        CHECK(!memcmp(after,pixels,sizeof(after)) && g.gsp.pica_draws==3 && g.gsp.pica_fragments==3480);
+        ctr_guest_close(&g);
+    }
+    /* Invalid fields after valid staged draws must preserve both fresh and
+     * retained guest state, memory generations, exclusive state and IRQ data. */
+    const unsigned regs[]={0x100,0x102,0x104,0x107,0x112,0x113,0x102};
+    const uint32_t values[]={0x100,16,2,0x1000,1,1,11};
+    for(unsigned retained=0;retained<2;++retained)for(unsigned kind=0;kind<7;++kind) {
+        ctr_guest g;list l;ctr_gx_completion c;open(&g,&l,false);
+        if(retained)CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK);
+        trim(&l);add(&l,regs[kind],values[kind]);if(kind==6)add(&l,0x22f,1);finish(&l);
+        relay(&g);ctr_guest_shared *shared=&g.shared[g.gsp.relay_shared];uint8_t irq[CTR_GUEST_PAGE];
+        CHECK(shared->size==sizeof(irq));memcpy(irq,shared->storage,sizeof(irq));
+        ctr_scene_state before={0};if(retained)before=*g.gsp.pica_scene;
+        ctr_pica_state pica=g.gsp.pica;uint8_t pixels[BYTES];memcpy(pixels,backing(&g)+0x2000u,BYTES);
+        backend_mock m={0};ctr_scene_backend backend=mock_backend(&m);ctr_guest_set_scene_backend(&g,&backend);
+        CHECK(ctr_memory_write_bytes(&g.memory,BASE,l.bytes,(uint32_t)l.size)==CTR_MEM_OK);
+        uint64_t generation=g.memory.generation,code=g.memory.code_generation;g.cpu.exclusive_valid=true;
+        CHECK(submit(&g,&l,&c)==CTR_GX_UNSUPPORTED && !c.signal);
+        CHECK(!m.begins && !m.draws && !m.ends && !m.aborts);
+        CHECK(!memcmp(pixels,backing(&g)+0x2000u,BYTES) && !memcmp(&pica,&g.gsp.pica,sizeof(pica)));
+        CHECK(retained?!memcmp(&before,g.gsp.pica_scene,sizeof(before)):!g.gsp.pica_scene);
+        CHECK(g.memory.generation==generation && g.memory.code_generation==code && g.cpu.exclusive_valid);
+        CHECK(!memcmp(irq,shared->storage,sizeof(irq)) && !g.events[g.gsp.relay_event].signaled);
+        ctr_guest_close(&g);
+    }
+}
 int main(void) {
     successful();rollback();shader_capacity();arithmetic_draws();queues();native_backend_success();native_backend_rollback();
     guest_texture_success();guest_linear_texture();guest_texture_snapshots();guest_texture_rollback();guest_texture_queues();
+    guest_fragment_output();
     printf("guest PICA draw tests: %u assertions passed\n",assertions);return 0;
 }

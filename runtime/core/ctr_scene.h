@@ -3,6 +3,7 @@
 #include "ctr_pica.h"
 #include "ctr_shader.h"
 #include "ctr_tev.h"
+#include "ctr_fragment.h"
 
 #define CTR_SCENE_MAX_VERTICES 256u
 #define CTR_SCENE_MAX_DRAWS 32u
@@ -93,7 +94,9 @@ void ctr_scene_init(ctr_scene_state *state);
  * clamp/repeat/mirror and signed exact Q16 UVs in [-16,16]. Six TEV stages use
  * primary, Texture0, constants and Previous with separate RGB/alpha operations,
  * operands and scale; see ctr_tev.h for byte-domain quantization. V=0 samples
- * the last raw texture row. Depth/blend, DOT3/buffers, other textures,
+ * the last raw texture row. Alpha comparisons, RGBA masks, explicit color gates
+ * and all sixteen bytewise logic operations run after TEV. Depth/blend,
+ * DOT3/buffers, other textures,
  * unsupported arithmetic and geometry fail.
  * Every list stages state and the complete target before any commit, so late
  * errors preserve previous state/pixels. Inputs must be owned/aligned/stable.
@@ -106,8 +109,8 @@ ctr_scene_result ctr_scene_execute(ctr_scene_state *state,const void *commands,
                                   const ctr_scene_surface *surface,
                                   ctr_scene_report *report);
 /* Same owned staging boundary with explicit PICA framebuffer/fragment state.
- * Requires a completely defined supported six-stage TEV pipeline, logic
- * COPY, full RGBA writes, no depth/stencil/alpha/blend, RGBA8, 8x8 tiles,
+ * Requires a completely defined supported six-stage TEV/output-merger pipeline,
+ * no depth/stencil/blend, RGBA8, 8x8 tiles,
  * and unflipped dimensions/address matching the caller-resolved linear target.
  * The caller resolves, snapshots and commits guest tiled storage separately;
  * this API never follows an address or reads/writes a guest mapping. */

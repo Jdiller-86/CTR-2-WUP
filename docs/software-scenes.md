@@ -28,12 +28,15 @@ The bounded path supports:
   volume, exact 1/16-pixel coordinates, viewport origin/extent, winding cull,
   include/exclude scissor, degenerate triangles and integer edge evaluation.
   Each triangle has a constant opaque endpoint color: RGBA lanes are 0 or 1,
-  alpha 1. Fragments replace the target with depth and blend disabled.
+  alpha 1. Final TEV alpha can reject fragments; logic operations and channel
+  masks control destination writes, with depth and blend disabled.
 - Optional Texture0 UV outputs (semantics 12/13), exact Q16 in −16..16 with W=1;
   affine nearest/bilinear sampling of all 14 base formats with independent clamp/repeat/
   mirror S/T. Six TEV stages combine Texture0, primary, constants and Previous
   with independent RGB/alpha operations, component operands and 1/2/4 scale.
   See [texture and combiner rules](textures.md).
+- All eight final-alpha comparisons, all 16 bytewise logic operations and RGBA
+  write masks with checked read/write gates; see [fragment output](textures.md#fragment-output).
 
 Limits are 256 vertices per draw, 32 draws per list, 512 vertex shader code words,
 128 descriptors, 96 float uniforms, 12 attributes/loaders, a 4 MiB geometry span,
@@ -41,7 +44,7 @@ Limits are 256 vertices per draw, 32 draws per list, 512 vertex shader code word
 larger than 512×512. Separate texture spans cannot overlap geometry or each
 other. No primitive is carried across lists. Unknown state, inexact shader
 arithmetic, other opcodes, relative addressing, geometry, clipping, perspective,
-varying primary color, mixed min/mag filters, mipmaps, DOT3/combiner buffers and blending
+varying primary color, mixed min/mag filters, mipmaps, DOT3/combiner buffers, depth/stencil and blending
 fail visibly. This is not a general PICA renderer.
 
 `runtime/core/ctr_shader.c` accepts only finite normal values exactly

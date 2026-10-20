@@ -28,7 +28,9 @@ static u32 expected(unsigned x,unsigned y,unsigned width,unsigned height) {
     /* Triangle 1 averages to (128,128,128,255). Its six byte-domain stages
      * produce (89,36,116,194), (126,187,135,161), (126,146,129,252),
      * (255,170,255,174), (128,108,128,174), then (184,212,157,191). */
-    if((2*x+1)*height+(2*y+1)*width>=2*width*height)result=0xb8d49dbf;
+    if((2*x+1)*height+(2*y+1)*width>=2*width*height)return 0xa820adff;
+    /* Alpha selects Texture0 red; a zero red byte fails GEQUAL 128. */
+    if(!(u&1u))result=0x102030ff;
     return result;
 }
 static u16 rgb565(u32 rgba) { return (u16)(((rgba>>27)<<11)|(((rgba>>18)&63)<<5)|((rgba>>11)&31)); }
@@ -71,6 +73,7 @@ static void combiner(bool chain) {
     };
     for(unsigned stage=0;stage<6;++stage)for(unsigned field=0;field<5;++field)
         GPUCMD_AddWrite(bases[stage]+field,chain?stages[stage][field]:field?0:stage?0xf000f:0x30003);
+    if(!chain)GPUCMD_AddWrite(bases[0]+1,2u<<12); /* Alpha = Texture0 red. */
 }
 static void color(bool green) {
     const u32 packed[]={green?0x3f000000:0x3f00003f,0x3f00,green?0:0x003f0000};
@@ -103,6 +106,12 @@ int main(void) {
         GPUCMD_AddWrite(GPUREG_VIEWPORT_HEIGHT,screen?0x464000:0x469000);
         for(unsigned triangle=0;triangle<2;++triangle) {
             color(triangle!=0);combiner(triangle!=0);
+            /* Test TEV alpha before logic; preserve green/alpha on XOR. Each
+             * screen resets retained output state before its first draw. */
+            GPUCMD_AddWrite(GPUREG_FRAGOP_ALPHA_TEST,1u|((triangle?GPU_EQUAL:GPU_GEQUAL)<<4)|((triangle?191u:128u)<<8));
+            GPUCMD_AddWrite(GPUREG_LOGIC_OP,triangle?GPU_LOGICOP_XOR:GPU_LOGICOP_COPY);
+            GPUCMD_AddWrite(GPUREG_DEPTH_COLOR_MASK,(triangle?5u:15u)<<8);
+            GPUCMD_AddWrite(GPUREG_COLORBUFFER_READ,triangle?15u:0u);
             GPUCMD_AddWrite(GPUREG_TEXUNIT0_PARAM,triangle?
                 GPU_TEXTURE_MAG_FILTER(GPU_LINEAR)|GPU_TEXTURE_MIN_FILTER(GPU_LINEAR):0);
             if(triangle) {

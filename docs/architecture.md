@@ -47,7 +47,8 @@ independently of handles. Unsupported interfaces fail with PC/opcode or IPC cont
 [guest draws](guest-pica-draws.md). The optional native scene backend translates
 PICA MOV/ADD/MUL/NOP/END to Latte vertex code and submits original inputs through
 GX2. [Base textures](textures.md) support nearest/bilinear Texture0 sampling and bounded
-six-stage RGB/alpha TEV; decoded uploads retain guest UV and explicit ownership.
+six-stage RGB/alpha TEV, alpha tests, logic operations and write masks; decoded
+uploads retain guest UV and explicit ownership.
 Complete software preflight and byte-exact GPU readback precede atomic guest
 commit; unsupported state or backend failure cannot fall back silently.
 Physical GPU parity remains unverified. [Audio](audio.md) separates checked

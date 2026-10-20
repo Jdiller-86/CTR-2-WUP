@@ -5,6 +5,7 @@
  * e6c528a20a41c34e0f9eb91dd3da40f119db2dee, src/libgpu/latte definitions.
  * No pretransformed reference vertices or software raster pixels are submitted. */
 #include "gx2_scene.h"
+#include "ctr_fragment.h"
 #ifdef CTR_GX2_SCENE_MOCK
 #include "gx2_mock.h"
 #else
@@ -378,12 +379,47 @@ static void rectangle(ctr_wiiu_gx2_scene *s,unsigned x,unsigned y,unsigned w,uns
     scene_private *p=s->private_state;GX2SetScissor(x,y,w,h);
     GX2DrawEx(GX2_PRIMITIVE_MODE_TRIANGLES,count,0,1);p->pending=true;++s->submissions;
 }
+static void fragment_state(const ctr_fragment_state *fragment) {
+    /* PICA's enum order is neither GX2's ROP3 truth table nor its comparison
+     * order. Use the named SDK values instead of casting the guest fields. */
+    static const GX2LogicOp logic[16]={
+        GX2_LOGIC_OP_CLEAR,GX2_LOGIC_OP_AND,GX2_LOGIC_OP_REV_AND,GX2_LOGIC_OP_COPY,
+        GX2_LOGIC_OP_SET,GX2_LOGIC_OP_INV_COPY,GX2_LOGIC_OP_NOP,GX2_LOGIC_OP_INV,
+        GX2_LOGIC_OP_NOT_AND,GX2_LOGIC_OP_OR,GX2_LOGIC_OP_NOR,GX2_LOGIC_OP_XOR,
+        GX2_LOGIC_OP_EQUIV,GX2_LOGIC_OP_INV_AND,GX2_LOGIC_OP_REV_OR,GX2_LOGIC_OP_INV_OR
+    };
+    static const GX2CompareFunction compare[8]={
+        GX2_COMPARE_FUNC_NEVER,GX2_COMPARE_FUNC_ALWAYS,GX2_COMPARE_FUNC_EQUAL,
+        GX2_COMPARE_FUNC_NOT_EQUAL,GX2_COMPARE_FUNC_LESS,GX2_COMPARE_FUNC_LEQUAL,
+        GX2_COMPARE_FUNC_GREATER,GX2_COMPARE_FUNC_GEQUAL
+    };
+    GX2CompareFunction function=compare[fragment->alpha_function];
+    float reference=(float)fragment->alpha_reference*real(UINT32_C(0x3b808081));
+    if(fragment->alpha_reference==255u) {
+        /* The shader's final binary32 multiply exports byte 255 slightly above
+         * one; all other bytes stay below one. A threshold at one and these
+         * equivalent comparisons work whether GX2 clamps alpha/reference or
+         * retains the shader value. Other references match that same multiply. */
+        static const GX2CompareFunction endpoint[8]={
+            GX2_COMPARE_FUNC_NEVER,GX2_COMPARE_FUNC_ALWAYS,GX2_COMPARE_FUNC_GEQUAL,
+            GX2_COMPARE_FUNC_LESS,GX2_COMPARE_FUNC_LESS,GX2_COMPARE_FUNC_ALWAYS,
+            GX2_COMPARE_FUNC_NEVER,GX2_COMPARE_FUNC_GEQUAL
+        };
+        function=endpoint[fragment->alpha_function];reference=1.0f;
+    }
+    GX2SetColorControl(logic[fragment->logic_op],0,false,true);
+    GX2SetTargetChannelMasks((GX2ChannelMask)fragment->write_mask,0,0,0,0,0,0,0);
+    GX2SetAlphaTest(fragment->alpha_enabled,function,reference);
+}
 static bool draw(void *context,const ctr_scene_state *state,const ctr_vertex *vertices,unsigned count,
                  const ctr_scene_texture *texture) {
     ctr_wiiu_gx2_scene *s=context;scene_private *p=s?s->private_state:NULL;
     if(!p || !state || !vertices || !count || count>CTR_SCENE_MAX_VERTICES || count%3u)
         return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
     if(s->quarantined)return fail(s,CTR_WIIU_GX2_SCENE_WAIT);
+    ctr_fragment_state fragment;
+    if(!ctr_fragment_decode(state->registers,state->register_defined,true,&fragment))
+        return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
     s->shader_result=ctr_gx2_shader_compile(&state->shader,(uint16_t)state->registers[0x2bdu],
         &state->registers[0x050u],state->registers[0x04fu],p->compiled);
     if(s->shader_result!=CTR_GX2_SHADER_OK)return fail(s,CTR_WIIU_GX2_SCENE_SHADER);
@@ -422,13 +458,11 @@ static bool draw(void *context,const ctr_scene_state *state,const ctr_vertex *ve
     GX2SetAttribBuffer(0,count*VERTEX_STRIDE,VERTEX_STRIDE,p->vertices);
     for(unsigned uniform=0;uniform<CTR_SHADER_UNIFORMS;++uniform)if(p->compiled->uniform_used[uniform])
         GX2SetVertexUniformReg(uniform*4u,4,state->shader.uniforms[uniform]);
-    GX2SetColorControl(GX2_LOGIC_OP_COPY,0,false,true);
-    GX2SetTargetChannelMasks(GX2_CHANNEL_MASK_RGBA,0,0,0,0,0,0,0);
+    fragment_state(&fragment);
     GX2SetDepthStencilControl(false,false,GX2_COMPARE_FUNC_ALWAYS,false,false,
         GX2_COMPARE_FUNC_ALWAYS,GX2_STENCIL_FUNCTION_KEEP,GX2_STENCIL_FUNCTION_KEEP,
         GX2_STENCIL_FUNCTION_KEEP,GX2_COMPARE_FUNC_ALWAYS,GX2_STENCIL_FUNCTION_KEEP,
         GX2_STENCIL_FUNCTION_KEEP,GX2_STENCIL_FUNCTION_KEEP);
-    GX2SetAlphaTest(false,GX2_COMPARE_FUNC_ALWAYS,0.0f);
     GX2SetAlphaToMask(false,GX2_ALPHA_TO_MASK_MODE_NON_DITHERED);
     GX2SetStreamOutEnable(false);
     unsigned cull=state->registers[0x040u]&3u;
