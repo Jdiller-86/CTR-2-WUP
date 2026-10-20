@@ -165,11 +165,15 @@ class UpdateTests(unittest.TestCase):
             return self.issue_response
         def project(self):
             return copy.deepcopy(self.data)
+        def add_item(self, project_id, issue_id):
+            self.calls.append(('addProjectV2ItemById', 'AddProjectV2ItemByIdInput',
+                               {'projectId': project_id, 'contentId': issue_id}))
+            row = issue(self.issue_response['number'], state=self.issue_response['state'].upper())
+            row.update(__typename='ProjectV2Item', project={'id': project_id})
+            self.data['items'].append(row)
+            return copy.deepcopy(row)
         def mutate(self, name, input_type, payload):
             self.calls.append((name, input_type, payload))
-            if name == 'addProjectV2ItemById':
-                self.data['items'].append(issue(self.issue_response['number']))
-                return
             row = next(row for row in self.data['items'] if row['id'] == payload['itemId'])
             if name == 'unarchiveProjectV2Item':
                 row['isArchived'] = False
@@ -182,6 +186,13 @@ class UpdateTests(unittest.TestCase):
             else:
                 row['waiting'] = {'__typename': 'ProjectV2ItemFieldTextValue',
                                   'text': payload['value']['text']}
+
+    def new_issue_client(self, state='open'):
+        client = self.Client()
+        client.issue_response = {'number': 130, 'node_id': 'issue-130', 'state': state,
+            'repository_url': f'https://api.github.com/repos/{project.REPOSITORY}',
+            'html_url': f'https://github.com/{project.REPOSITORY}/issues/130'}
+        return client
 
     def test_preview_never_writes_and_apply_updates_only_named_public_fields(self):
         client, data = self.Client(), fixture()
@@ -216,6 +227,108 @@ class UpdateTests(unittest.TestCase):
         client.issue_response['pull_request'] = {}
         with self.assertRaises(project.TrackingError):
             project.update_item(client, data, 130, 'In progress')
+
+    def test_addition_updates_returned_identity_before_connection_refresh(self):
+        client = self.new_issue_client('closed')
+        original_add = client.add_item
+        def add(project_id, issue_id):
+            row = original_add(project_id, issue_id)
+            row['id'] = client.data['items'][-1]['id'] = 'opaque-created-item'
+            return row
+        client.add_item = add
+        original_read = client.project
+        def readback():
+            self.assertEqual([call[0] for call in client.calls], [
+                'addProjectV2ItemById', 'updateProjectV2ItemFieldValue', 'clearProjectV2ItemFieldValue'])
+            return original_read()
+        client.project = readback
+        with patch.object(project, 'trusted_main', return_value=SHA):
+            result = project.update_item(client, fixture(), 130, 'Done', [], True)
+        self.assertTrue(result['verified'])
+        self.assertEqual([call[2]['itemId'] for call in client.calls[1:]],
+                         ['opaque-created-item', 'opaque-created-item'])
+        self.assertEqual(client.data['items'][-1]['content']['state'], 'CLOSED')
+
+    def test_addition_rejects_absent_malformed_or_wrong_public_identity_before_field_writes(self):
+        good = issue(130)
+        good.update(__typename='ProjectV2Item', project={'id': 'project'})
+        bad = [('missing', None), ('empty', {}), ('list', [])]
+        for path, value in [
+            (('__typename',), 'Issue'), (('id',), ''), (('id',), 130),
+            (('isArchived',), None), (('project',), []), (('project', 'id'), 'other'),
+            (('content',), 'malformed'), (('content', '__typename'), 'PullRequest'),
+            (('content', 'id'), 'issue-131'), (('content', 'number'), 131),
+            (('content', 'number'), True), (('content', 'url'), 'https://example.com'),
+            (('content', 'state'), 'CLOSED'), (('content', 'repository'), []),
+            (('content', 'repository', 'isPrivate'), True),
+            (('content', 'repository', 'nameWithOwner'), 'other/repository')]:
+            row = copy.deepcopy(good)
+            target = row
+            for key in path[:-1]:
+                target = target[key]
+            target[path[-1]] = value
+            bad.append(('.'.join(path), row))
+        for name, row in bad:
+            with self.subTest(name=name):
+                client = self.new_issue_client()
+                original_add = client.add_item
+                def add(project_id, issue_id):
+                    original_add(project_id, issue_id)
+                    return copy.deepcopy(row)
+                client.add_item = add
+                with patch.object(project, 'trusted_main', return_value=SHA):
+                    with self.assertRaisesRegex(project.TrackingError, 'addition could not be verified'):
+                        project.update_item(client, fixture(), 130, 'Done', [], True)
+                self.assertEqual([call[0] for call in client.calls], ['addProjectV2ItemById'])
+
+    def test_addition_still_requires_full_connection_membership_and_field_readback(self):
+        for failure in ('missing', 'duplicate', 'item', 'issue', 'project', 'archived',
+                        'status', 'waiting', 'fields'):
+            with self.subTest(failure=failure):
+                client = self.new_issue_client()
+                original_read = client.project
+                def readback():
+                    data = original_read()
+                    row = data['items'][-1]
+                    if failure == 'missing':
+                        data['items'].pop()
+                    elif failure == 'duplicate':
+                        data['items'].append(copy.deepcopy(row))
+                    elif failure == 'item':
+                        row['id'] = 'other-item'
+                    elif failure == 'issue':
+                        row['content']['id'] = 'other-issue'
+                    elif failure == 'project':
+                        data['id'] = 'other-project'
+                    elif failure == 'archived':
+                        row['isArchived'] = True
+                    elif failure == 'status':
+                        row['status'].update(optionId='Planned', name='Planned')
+                    elif failure == 'waiting':
+                        row['waiting'] = {'__typename': 'ProjectV2ItemFieldTextValue', 'text': 'private text'}
+                    else:
+                        data['fields'][0]['id'] = 'different-status-field'
+                    return data
+                client.project = readback
+                with patch.object(project, 'trusted_main', return_value=SHA):
+                    with self.assertRaises(project.TrackingError):
+                        project.update_item(client, fixture(), 130, 'Done', [], True)
+                self.assertEqual(len(client.calls), 3)
+
+    def test_archived_returned_item_is_unarchived_before_setting_fields(self):
+        client = self.new_issue_client()
+        original_add = client.add_item
+        def add(project_id, issue_id):
+            row = original_add(project_id, issue_id)
+            row['isArchived'] = client.data['items'][-1]['isArchived'] = True
+            return row
+        client.add_item = add
+        with patch.object(project, 'trusted_main', return_value=SHA):
+            result = project.update_item(client, fixture(), 130, 'Done', apply=True)
+        self.assertTrue(result['verified'])
+        self.assertTrue(result['will_unarchive'])
+        self.assertEqual([call[0] for call in client.calls], [
+            'addProjectV2ItemById', 'unarchiveProjectV2Item', 'updateProjectV2ItemFieldValue'])
 
     def test_explicit_archived_update_unarchives_and_mismatched_readback_fails(self):
         data = fixture()
@@ -270,6 +383,22 @@ class UpdateTests(unittest.TestCase):
 
 
 class PaginationTests(unittest.TestCase):
+    def test_add_item_requests_materialized_membership_identity(self):
+        client = project.GitHub()
+        row = issue(130)
+        row.update(__typename='ProjectV2Item', project={'id': 'project'})
+        with patch.object(client, 'graphql', return_value={'addProjectV2ItemById': {'item': row}}) as query:
+            self.assertEqual(client.add_item('project', 'issue-130'), row)
+        source, variables = query.call_args.args
+        for selection in ('item {', '__typename id isArchived project { id }',
+                          'id number url state', 'repository { nameWithOwner isPrivate }'):
+            self.assertIn(selection, source)
+        self.assertEqual(variables, {'input': {'projectId': 'project', 'contentId': 'issue-130'}})
+        for response in ({}, {'addProjectV2ItemById': None},
+                         {'addProjectV2ItemById': {'clientMutationId': None}}):
+            with patch.object(client, 'graphql', return_value=response):
+                self.assertIsNone(client.add_item('project', 'issue-130'))
+
     def test_connection_reads_archived_rows_across_multiple_pages(self):
         client = project.GitHub()
         pages = [
