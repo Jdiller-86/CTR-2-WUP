@@ -564,7 +564,7 @@ static void backend_full_target(void) {
     for(unsigned kind=0;kind<3;++kind) {
         state=initial;memcpy(pixels,old,sizeof(pixels));surface.bytes=pixels;
         padded_backend context={reference,sizeof(reference),kind==1u?256u:kind==2u?sizeof(reference)-1u:0u,0,0,0,0};
-        ctr_scene_backend backend={&context,padded_begin,padded_draw,padded_end,padded_abort};
+        ctr_scene_backend backend={&context,padded_begin,padded_draw,padded_end,padded_abort,NULL,NULL};
         CHECK(ctr_scene_execute_target_backend(&state,f.commands,f.command_bytes,&resources,&surface,
               UINT32_C(0x18010000),&backend,&report)==(kind?CTR_SCENE_BACKEND:CTR_SCENE_OK));
         CHECK(context.begins==1 && context.draws==2 && context.ends==1 && context.aborts==(kind?1u:0u));
@@ -576,7 +576,7 @@ static void backend_full_target(void) {
      * incomplete callback sets fail before any native invocation. */
     padded_backend context={reference,sizeof(reference),0,0,0,0,0};
     union { ctr_scene_backend backend;ctr_scene_report report; } alias;
-    alias.backend=(ctr_scene_backend){&context,padded_begin,padded_draw,padded_end,padded_abort};
+    alias.backend=(ctr_scene_backend){&context,padded_begin,padded_draw,padded_end,padded_abort,NULL,NULL};
     ctr_scene_backend previous=alias.backend;
     CHECK(ctr_scene_execute_target_backend(&state,f.commands,f.command_bytes,&resources,&surface,
           UINT32_C(0x18010000),&alias.backend,&alias.report)==CTR_SCENE_ALIAS);
@@ -767,7 +767,7 @@ static void textured_rollback(void) {
             textured_fixture(&f,false,0,filter?6u:0u,0,1,0,1);resources.size=f.resource_bytes;
             target_state(&state);previous=state;memcpy(pixels,before,sizeof(pixels));
             texture_backend context={reference,0,0,0,0,corrupt!=0};
-            ctr_scene_backend backend={&context,texture_begin,texture_draw,texture_end,texture_abort};
+            ctr_scene_backend backend={&context,texture_begin,texture_draw,texture_end,texture_abort,NULL,NULL};
             CHECK(ctr_scene_execute_target_backend(&state,f.commands,f.command_bytes,&resources,&surface,
                   UINT32_C(0x18010000),&backend,&report)==(corrupt?CTR_SCENE_BACKEND:CTR_SCENE_OK));
             CHECK(context.begins==1 && context.draws==2 && context.ends==1 && context.aborts==corrupt);
@@ -805,7 +805,7 @@ static void textured_rollback(void) {
             memset(raw,0,sizeof(raw));put32(raw+4,UINT32_C(0x702)); /* Invalid ETC differential block. */
         }
         texture_backend context={reference,0,0,0,0,false};
-        ctr_scene_backend backend={&context,texture_begin,texture_draw,texture_end,texture_abort};
+        ctr_scene_backend backend={&context,texture_begin,texture_draw,texture_end,texture_abort,NULL,NULL};
         CHECK(ctr_scene_execute_target_backend(&state,f.commands,f.command_bytes,&resources,&surface,
               UINT32_C(0x18010000),&backend,&report)!=CTR_SCENE_OK);
         CHECK(!context.begins && !context.draws && !context.ends && !context.aborts);
@@ -925,7 +925,7 @@ static void fragment_contract(void) {
         CHECK(ctr_fragment_register_value(0x102,word)==(bit<4u));
         CHECK(ctr_fragment_register_value(0x103,word));
         CHECK(ctr_fragment_register_value(0x104,word)==((word&UINT32_C(0xff71))!=0u));
-        CHECK(ctr_fragment_register_value(0x107,word)==(bit>=8u && bit<12u));
+        CHECK(ctr_fragment_register_value(0x107,word)==((word&UINT32_C(0x1f71))!=0u));
         CHECK(!ctr_fragment_register_value(0x112,word));CHECK(!ctr_fragment_register_value(0x113,word));
     }
     for(unsigned function=0;function<8;++function)for(unsigned reference=0;reference<256;++reference)
@@ -1153,9 +1153,329 @@ static void blend_scenes(void) {
         CHECK(!memcmp(&state,&before,sizeof(state)) && !memcmp(pixels,original,sizeof(pixels)));
     }
 }
+enum { DEPTH_COLOR_STRIDE=260,DEPTH_STRIDE=132,
+       DEPTH_COLOR_BYTES=64*DEPTH_COLOR_STRIDE+12,DEPTH_BYTES=64*DEPTH_STRIDE+12 };
+static void depth_state(ctr_scene_state *state,unsigned control) {
+    target_state(state);
+    const unsigned regs[]={0x04d,0x04e,0x06d,0x107,0x114,0x115,0x116,0x11c};
+    const uint32_t values[]={UINT32_C(0xbf0000),0,1,control,2,2,0,UINT32_C(0x03004000)};
+    for(unsigned i=0;i<sizeof(regs)/sizeof(*regs);++i) {
+        state->registers[regs[i]]=values[i];state->register_defined[regs[i]]=15;
+    }
+}
+static void depth_position(ctr_scene_fixture *fixture,uint32_t z) {
+    for(unsigned vertex=0;vertex<4;++vertex)put32(fixture->resources+vertex*16u+8u,z);
+}
+static void depth_initial(uint8_t color[DEPTH_COLOR_BYTES],uint8_t depth[DEPTH_BYTES]) {
+    static const unsigned stored[]={0,1,32766,32767,32768,65534,65535};
+    memset(color,0x6d,DEPTH_COLOR_BYTES);memset(depth,0xa5,DEPTH_BYTES);
+    for(unsigned y=0;y<64;++y)for(unsigned x=0;x<64;++x) {
+        static const uint8_t background[]={16,32,48,255};
+        memcpy(color+y*DEPTH_COLOR_STRIDE+x*4u,background,4);
+        unsigned z=stored[(x+3u*y)%7u];
+        depth[y*DEPTH_STRIDE+x*2u]=(uint8_t)z;
+        depth[y*DEPTH_STRIDE+x*2u+1u]=(uint8_t)(z>>8);
+    }
+}
+static ctr_scene_result depth_execute(ctr_scene_fixture *fixture,ctr_scene_state *state,
+                                      uint8_t *color,uint8_t *depth,ctr_scene_report *report) {
+    ctr_scene_resources resources={UINT32_C(0x18000000),fixture->resources,fixture->resource_bytes,NULL,0};
+    ctr_scene_surface surface={color,DEPTH_COLOR_BYTES,64,64,DEPTH_COLOR_STRIDE};
+    ctr_scene_depth_surface z={depth,DEPTH_BYTES,64,64,DEPTH_STRIDE,UINT32_C(0x18020000)};
+    return ctr_scene_execute_targets(state,fixture->commands,fixture->command_bytes,&resources,
+                                     &surface,UINT32_C(0x18010000),&z,report);
+}
+static bool depth_relation(unsigned function,unsigned incoming,unsigned stored) {
+    const bool relation[]={false,true,incoming==stored,incoming!=stored,incoming<stored,
+        incoming<=stored,incoming>stored,incoming>=stored};
+    return relation[function];
+}
+static void depth_comparisons(void) {
+    /* These independently chosen dyadics cover signed zero, just below/above
+     * the first D16 quantum, the half-depth truncation and both endpoints.
+     * In particular (1-2^-17)*65535 lies strictly between 65534 and 65535. */
+    static const struct { uint32_t position;unsigned quantized; } values[]={
+        {0,0},{UINT32_C(0x80000000),0},{UINT32_C(0xb7800000),0},
+        {UINT32_C(0xb8000000),1},{UINT32_C(0xbf000000),32767},
+        {UINT32_C(0xbf7fff80),65534},{UINT32_C(0xbf800000),65535}
+    };
+    ctr_scene_fixture fixture;ctr_scene_state state;ctr_scene_report report;
+    uint8_t color[DEPTH_COLOR_BYTES],old_color[DEPTH_COLOR_BYTES],expected_color[DEPTH_COLOR_BYTES];
+    uint8_t depth[DEPTH_BYTES],old_depth[DEPTH_BYTES],expected_depth[DEPTH_BYTES];
+    depth_initial(old_color,old_depth);
+    for(unsigned function=0;function<8;++function)for(unsigned number=0;number<sizeof(values)/sizeof(values[0]);++number)
+        for(unsigned control=0;control<8;++control) {
+        bool test=(control&1u)!=0u,write=(control&2u)!=0u,gate=(control&4u)!=0u;
+        unsigned incoming=values[number].quantized;
+        ctr_scene_fixture_make(&fixture,false);depth_position(&fixture,values[number].position);
+        depth_state(&state,0xf00u|(function<<4)|(test?1u:0u)|(write?0x1000u:0u));
+        state.registers[0x115]=gate?2u:0u;
+        memcpy(color,old_color,sizeof(color));memcpy(depth,old_depth,sizeof(depth));
+        memcpy(expected_color,old_color,sizeof(color));memcpy(expected_depth,old_depth,sizeof(depth));
+        for(unsigned y=8;y<56;++y)for(unsigned x=8;x<56;++x) {
+            size_t at=y*DEPTH_STRIDE+x*2u;
+            unsigned stored=old_depth[at]|(unsigned)old_depth[at+1u]<<8;
+            bool pass=!test || depth_relation(function,incoming,stored);
+            if(pass) {
+                const uint8_t pixel[]={(uint8_t)(x+y<63u?255u:0u),(uint8_t)(x+y<63u?0u:255u),0,255};
+                memcpy(expected_color+y*DEPTH_COLOR_STRIDE+x*4u,pixel,4);
+                if(write && gate) {
+                    expected_depth[at]=(uint8_t)incoming;expected_depth[at+1u]=(uint8_t)(incoming>>8);
+                }
+            }
+        }
+        ctr_scene_result actual=depth_execute(&fixture,&state,color,depth,&report);
+        if(actual!=CTR_SCENE_OK)fprintf(stderr,"D16 function=%u value=%u control=%u: %s reg=%x\n",
+            function,number,control,ctr_scene_result_name(actual),report.reg);
+        CHECK(actual==CTR_SCENE_OK && report.draws==2 && report.triangles==2 && report.fragments==2304);
+        CHECK(!memcmp(color,expected_color,sizeof(color)));
+        CHECK(!memcmp(depth,expected_depth,sizeof(depth)));
+        CHECK(state.draws==2 && state.fragments==2304 && state.lists==1);
+    }
+    /* Alpha failure precedes the otherwise unconditional depth write. */
+    ctr_scene_fixture_make(&fixture,false);depth_state(&state,0x1f00);
+    state.registers[0x104]=1;memcpy(color,old_color,sizeof(color));memcpy(depth,old_depth,sizeof(depth));
+    CHECK(depth_execute(&fixture,&state,color,depth,&report)==CTR_SCENE_OK && report.fragments==2304);
+    CHECK(!memcmp(color,old_color,sizeof(color)) && !memcmp(depth,old_depth,sizeof(depth)));
+    /* A masked color target still allows a depth-only prepass. Depth gates use
+     * 2, independently of the color gate's 15 and channel write mask. */
+    ctr_scene_fixture_make(&fixture,false);depth_state(&state,0x1000);
+    state.registers[0x114]=0;memcpy(color,old_color,sizeof(color));memcpy(depth,old_depth,sizeof(depth));
+    CHECK(depth_execute(&fixture,&state,color,depth,&report)==CTR_SCENE_OK);
+    CHECK(!memcmp(color,old_color,sizeof(color)));
+    for(unsigned y=0;y<64;++y)for(unsigned x=0;x<64;++x) {
+        size_t at=y*DEPTH_STRIDE+x*2u;bool covered=x>=8 && x<56 && y>=8 && y<56;
+        CHECK(depth[at]==(covered?255u:old_depth[at]) && depth[at+1u]==(covered?127u:old_depth[at+1u]));
+    }
+    /* Retained state and shader storage supply a configuration-free second
+     * list. Disable depth writes; equality must read committed D16 bytes. */
+    fixture.command_bytes=0;append(&fixture,0x107,0xf21);append(&fixture,0x114,2);append(&fixture,0x22f,1);
+    CHECK(depth_execute(&fixture,&state,color,depth,&report)==CTR_SCENE_OK && report.draws==1 && state.lists==2);
+    for(unsigned y=0;y<64;++y)for(unsigned x=0;x<64;++x) {
+        const uint8_t green[]={0,255,0,255};bool covered=x>=8 && x<56 && y>=8 && y<56 && x+y>=63u;
+        CHECK(!memcmp(color+y*DEPTH_COLOR_STRIDE+x*4u,
+                      covered?green:old_color+y*DEPTH_COLOR_STRIDE+x*4u,4));
+    }
+}
+static void depth_overdraw(void) {
+    ctr_scene_fixture fixture;ctr_scene_state state;ctr_scene_report report;
+    uint8_t color[DEPTH_COLOR_BYTES],old_color[DEPTH_COLOR_BYTES],depth[DEPTH_BYTES];
+    uint8_t old_depth[DEPTH_BYTES];depth_initial(old_color,old_depth);
+    for(unsigned kind=0;kind<4;++kind) {
+        ctr_scene_fixture_make(&fixture,false);
+        uint8_t positions[48];memcpy(positions,fixture.resources,sizeof(positions));
+        memcpy(fixture.resources,positions,sizeof(positions));memcpy(fixture.resources+48u,positions,sizeof(positions));
+        const uint8_t order[]={0,1,2,3,4,5};memcpy(fixture.resources+96u,order,sizeof(order));fixture.resource_bytes=102;
+        for(unsigned vertex=0;vertex<6;++vertex)put32(fixture.resources+vertex*16u+8u,
+            vertex<3u?UINT32_C(0xbf000000):kind==0u?UINT32_C(0xbe800000):
+            kind==1u?UINT32_C(0xbf400000):UINT32_C(0xbf000000));
+        put32(fixture.commands+find(&fixture,0x227,0),96);put32(fixture.commands+find(&fixture,0x227,1),99);
+        depth_state(&state,kind>=2u?0x1000u:0x1f41u);
+        if(kind>=2u) {
+            insert(&fixture,find(&fixture,0x22f,1),0x107,kind==2u?0xf21u:0xf41u);finish(&fixture);
+        }
+        memcpy(color,old_color,sizeof(color));memset(depth,255,sizeof(depth));
+        CHECK(depth_execute(&fixture,&state,color,depth,&report)==CTR_SCENE_OK);
+        CHECK(report.fragments==2256 && report.draws==2 && report.triangles==2);
+        for(unsigned y=0;y<64;++y)for(unsigned x=0;x<64;++x) {
+            bool covered=x>=8 && x<56 && y>=8 && y<56 && x+y<63u;
+            uint8_t pixel[4];memcpy(pixel,old_color+y*DEPTH_COLOR_STRIDE+x*4u,4);
+            if(covered && kind!=3u) {
+                pixel[0]=kind==1u?255u:0u;pixel[1]=kind==1u?0u:255u;pixel[2]=0;pixel[3]=255;
+            }
+            CHECK(!memcmp(color+y*DEPTH_COLOR_STRIDE+x*4u,pixel,4));
+            size_t at=y*DEPTH_STRIDE+x*2u;
+            unsigned expected=!covered?65535u:kind==0u?16383u:32767u;
+            CHECK((depth[at]|(unsigned)depth[at+1u]<<8)==expected);
+        }
+    }
+}
+static void depth_quantization(void) {
+    /* An 8x8 target contains one analytic two-pixel-square draw. The first
+     * triangle covers (0,0) and the second covers its complement; only depth
+     * writes are enabled. Exercise every normal float24 exponent admitted by
+     * clip Z and seven significand boundaries without rendering large images.
+     * Binary64 exactly represents this <=33-significant-bit dyadic product;
+     * truncating it provides a numeric oracle separate from integer bit shifts. */
+    static const unsigned fractions[]={0,1,2,32767,32768,65534,65535};
+    ctr_scene_fixture fixture;ctr_scene_state state;ctr_scene_report report;
+    uint8_t color[8u*8u*4u],depth[8u*8u*2u];
+    ctr_scene_resources resources={UINT32_C(0x18000000),fixture.resources,0,NULL,0};
+    ctr_scene_surface surface={color,sizeof(color),8,8,32};
+    ctr_scene_depth_surface z={depth,sizeof(depth),8,8,16,UINT32_C(0x18020000)};
+    unsigned cases=0;
+    for(unsigned exponent=1;exponent<=63;++exponent)
+        for(unsigned index=0;index<sizeof(fractions)/sizeof(fractions[0]);++index) {
+        unsigned fraction=fractions[index];
+        if(exponent==63u && fraction)continue;
+        double magnitude=ldexp(1.0+(double)fraction/65536.0,(int)exponent-63);
+        unsigned expected=(unsigned)(magnitude*65535.0);
+        ctr_scene_fixture_make(&fixture,false);depth_position(&fixture,bits((float)-magnitude));
+        for(unsigned vertex=0;vertex<4;++vertex) {
+            put32(fixture.resources+vertex*16u,bits(vertex&1u?-0.5f:-1.0f));
+            put32(fixture.resources+vertex*16u+4u,bits(vertex&2u?-0.5f:-1.0f));
+        }
+        set(&fixture,0x041,UINT32_C(0x410000));set(&fixture,0x043,UINT32_C(0x410000));
+        depth_state(&state,0x1000);state.registers[0x11e]=UINT32_C(0x01007008);
+        memset(color,0xa6,sizeof(color));memset(depth,0x39,sizeof(depth));resources.size=fixture.resource_bytes;
+        CHECK(ctr_scene_execute_targets(&state,fixture.commands,fixture.command_bytes,&resources,
+              &surface,UINT32_C(0x18010000),&z,&report)==CTR_SCENE_OK);
+        CHECK(report.fragments==4 && report.draws==2);
+        for(unsigned y=0;y<8;++y)for(unsigned x=0;x<8;++x) {
+            unsigned stored=depth[(y*8u+x)*2u]|(unsigned)depth[(y*8u+x)*2u+1u]<<8;
+            CHECK(stored==(x<2u && y<2u?expected:0x3939u));
+        }
+        for(unsigned byte=0;byte<sizeof(color);++byte)CHECK(color[byte]==0xa6u);
+        ++cases;
+    }
+    CHECK(cases==435);
+}
+static void depth_rollback(void) {
+    ctr_scene_fixture fixture;ctr_scene_state state,previous;ctr_scene_report report;
+    uint8_t color[DEPTH_COLOR_BYTES],old_color[DEPTH_COLOR_BYTES],depth[DEPTH_BYTES],old_depth[DEPTH_BYTES];
+    depth_initial(old_color,old_depth);
+    const unsigned regs[]={0x114,0x115,0x116,0x11c,0x04d,0x04e,0x06d,0x107};
+    const uint32_t invalid[]={1,3,2,UINT32_C(0x10000000),UINT32_C(0x3f0000),UINT32_C(0x3f0000),0,4};
+    for(unsigned kind=0;kind<sizeof(regs)/sizeof(*regs);++kind) {
+        ctr_scene_fixture_make(&fixture,false);depth_state(&state,0x1f11);previous=state;
+        memcpy(color,old_color,sizeof(color));memcpy(depth,old_depth,sizeof(depth));append(&fixture,regs[kind],invalid[kind]);
+        CHECK(depth_execute(&fixture,&state,color,depth,&report)!=CTR_SCENE_OK);
+        CHECK(report.draws==2 && report.reg==regs[kind]);
+        CHECK(!memcmp(&state,&previous,sizeof(state)) && !memcmp(color,old_color,sizeof(color)) &&
+              !memcmp(depth,old_depth,sizeof(depth)));
+    }
+    /* Every required depth register must be completely defined at the actual
+     * draw. Disabled gates do not turn malformed state into an implicit default. */
+    for(unsigned kind=0;kind<sizeof(regs)/sizeof(*regs);++kind) {
+        ctr_scene_fixture_make(&fixture,false);depth_state(&state,0x1f11);state.register_defined[regs[kind]]=1;previous=state;
+        memcpy(color,old_color,sizeof(color));memcpy(depth,old_depth,sizeof(depth));
+        CHECK(depth_execute(&fixture,&state,color,depth,&report)!=CTR_SCENE_OK && !report.draws);
+        CHECK(!memcmp(&state,&previous,sizeof(state)) && !memcmp(color,old_color,sizeof(color)) &&
+              !memcmp(depth,old_depth,sizeof(depth)));
+    }
+    /* Varying Z and non-float24 geometry fail after a valid first primitive;
+     * neither the staged color nor its paired depth may leak through. */
+    for(unsigned kind=0;kind<2;++kind) {
+        ctr_scene_fixture_make(&fixture,false);depth_state(&state,0x1f11);previous=state;
+        put32(fixture.resources+3u*16u+8u,kind?UINT32_C(0xbf000001):UINT32_C(0xbe800000));
+        memcpy(color,old_color,sizeof(color));memcpy(depth,old_depth,sizeof(depth));
+        CHECK(depth_execute(&fixture,&state,color,depth,&report)!=CTR_SCENE_OK && report.draws==1);
+        CHECK(!memcmp(&state,&previous,sizeof(state)) && !memcmp(color,old_color,sizeof(color)) &&
+              !memcmp(depth,old_depth,sizeof(depth)));
+    }
+    for(unsigned kind=0;kind<15;++kind) {
+        ctr_scene_fixture_make(&fixture,false);depth_state(&state,0x1f11);previous=state;
+        memcpy(color,old_color,sizeof(color));memcpy(depth,old_depth,sizeof(depth));
+        ctr_scene_resources resources={UINT32_C(0x18000000),fixture.resources,fixture.resource_bytes,NULL,0};
+        ctr_scene_surface surface={color,sizeof(color),64,64,DEPTH_COLOR_STRIDE};
+        ctr_scene_depth_surface z={depth,sizeof(depth),64,64,DEPTH_STRIDE,UINT32_C(0x18020000)};
+        ctr_scene_report *output=&report;
+        if(kind==0)z.bytes=color;
+        if(kind==1)z.bytes=&state;
+        if(kind==2)z.bytes=&report;
+        if(kind==3)z.bytes=fixture.resources;
+        if(kind==4)z.bytes=fixture.commands;
+        if(kind==5)z.bytes=&surface;
+        if(kind==6)z.bytes=&z;
+        if(kind==7)z.stride=127;
+        if(kind==8)z.size=64u*127u;
+        if(kind==9)z.width=63;
+        if(kind==10)z.height=63;
+        if(kind==11)z.address=UINT32_C(0x18010000);
+        if(kind==12)z.address=UINT32_C(0x18000000);
+        if(kind==13)z.bytes=(void *)(UINTPTR_MAX-3u);
+        if(kind==14)output=(ctr_scene_report *)depth;
+        CHECK(ctr_scene_execute_targets(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
+              UINT32_C(0x18010000),&z,output)!=CTR_SCENE_OK);
+        CHECK(!memcmp(&state,&previous,sizeof(state)) && !memcmp(color,old_color,sizeof(color)) &&
+              !memcmp(depth,old_depth,sizeof(depth)));
+    }
+}
+typedef struct {
+    const uint8_t *color,*depth;
+    unsigned begins,draws,ends,aborts,fail;
+    size_t color_corruption,depth_corruption;
+} depth_backend;
+static bool depth_backend_legacy_begin(void *context,const ctr_scene_surface *initial) {
+    (void)context;(void)initial;CHECK(false);return false;
+}
+static bool depth_backend_legacy_end(void *context,const ctr_scene_surface *readback) {
+    (void)context;(void)readback;CHECK(false);return false;
+}
+static bool depth_backend_begin(void *context,const ctr_scene_surface *initial,const ctr_scene_depth_surface *depth) {
+    depth_backend *backend=context;++backend->begins;
+    CHECK(initial->size==DEPTH_COLOR_BYTES && initial->stride==DEPTH_COLOR_STRIDE);
+    CHECK(depth->size==DEPTH_BYTES && depth->stride==DEPTH_STRIDE && depth->address==UINT32_C(0x18020000));
+    return backend->fail!=1u;
+}
+static bool depth_backend_draw(void *context,const ctr_scene_state *state,const ctr_vertex *vertices,
+                                unsigned count,const ctr_scene_texture *texture) {
+    depth_backend *backend=context;++backend->draws;(void)vertices;
+    CHECK(count==3 && !texture && state->registers[0x11c]==UINT32_C(0x03004000));
+    return backend->fail!=2u;
+}
+static bool depth_backend_end(void *context,const ctr_scene_surface *readback,const ctr_scene_depth_surface *depth) {
+    depth_backend *backend=context;++backend->ends;
+    memcpy(readback->bytes,backend->color,readback->size);memcpy(depth->bytes,backend->depth,depth->size);
+    if(backend->color_corruption)((uint8_t *)readback->bytes)[backend->color_corruption]^=1u;
+    if(backend->depth_corruption)((uint8_t *)depth->bytes)[backend->depth_corruption]^=1u;
+    return backend->fail!=3u;
+}
+static void depth_backend_abort(void *context) { depth_backend *backend=context;++backend->aborts; }
+static void depth_backend_parity(void) {
+    ctr_scene_fixture fixture;ctr_scene_fixture_make(&fixture,false);
+    depth_position(&fixture,UINT32_C(0xbf800000));
+    ctr_scene_state state,initial,expected;depth_state(&initial,0x1f11);expected=initial;
+    ctr_scene_report report;
+    uint8_t color[DEPTH_COLOR_BYTES],old_color[DEPTH_COLOR_BYTES],reference_color[DEPTH_COLOR_BYTES];
+    uint8_t depth[DEPTH_BYTES],old_depth[DEPTH_BYTES],reference_depth[DEPTH_BYTES];
+    depth_initial(old_color,old_depth);memcpy(reference_color,old_color,sizeof(old_color));
+    memcpy(reference_depth,old_depth,sizeof(old_depth));
+    CHECK(depth_execute(&fixture,&expected,reference_color,reference_depth,&report)==CTR_SCENE_OK);
+    ctr_scene_resources resources={UINT32_C(0x18000000),fixture.resources,fixture.resource_bytes,NULL,0};
+    ctr_scene_surface surface={color,sizeof(color),64,64,DEPTH_COLOR_STRIDE};
+    ctr_scene_depth_surface z={depth,sizeof(depth),64,64,DEPTH_STRIDE,UINT32_C(0x18020000)};
+    /* A correct color image cannot authorize a corrupted depth image, even if
+     * the only changed byte is row padding or the final byte after all rows. */
+    for(unsigned kind=0;kind<9;++kind) {
+        state=initial;memcpy(color,old_color,sizeof(color));memcpy(depth,old_depth,sizeof(depth));
+        depth_backend context={reference_color,reference_depth,0,0,0,0,kind>=4u && kind<=6u?kind-3u:0u,
+            kind==1u?256u:0u,kind==2u?128u:kind==3u?sizeof(depth)-1u:0u};
+        ctr_scene_backend backend={&context,depth_backend_legacy_begin,depth_backend_draw,depth_backend_legacy_end,
+            depth_backend_abort,depth_backend_begin,depth_backend_end};
+        if(kind==7u)backend.begin_depth=NULL;
+        if(kind==8u)backend.end_depth=NULL;
+        ctr_scene_result result=ctr_scene_execute_targets_backend(&state,fixture.commands,fixture.command_bytes,
+            &resources,&surface,UINT32_C(0x18010000),&z,&backend,&report);
+        CHECK(result==(kind>=7u?CTR_SCENE_UNSUPPORTED:kind?CTR_SCENE_BACKEND:CTR_SCENE_OK));
+        CHECK(!memcmp(&state,kind?&initial:&expected,sizeof(state)));
+        CHECK(!memcmp(color,kind?old_color:reference_color,sizeof(color)));
+        CHECK(!memcmp(depth,kind?old_depth:reference_depth,sizeof(depth)));
+        if(kind>=7u)CHECK(!context.begins && !context.draws && !context.ends && !context.aborts);
+        else CHECK(context.begins==1 && context.aborts==(kind?1u:0u));
+        if(kind>=1u && kind<=3u)CHECK(report.backend_stage==CTR_SCENE_BACKEND_PARITY);
+    }
+    /* Fractional software depth is explicitly outside native admission and
+     * must reject before any native allocation, upload or callback. */
+    for(unsigned kind=0;kind<3;++kind) {
+        ctr_scene_fixture_make(&fixture,false);depth_position(&fixture,kind?UINT32_C(0xbf800000):UINT32_C(0xbf000000));
+        if(kind==1u)append(&fixture,0x114,1);
+        if(kind==2u)put32(fixture.resources+3u*16u+8u,0);
+        state=initial;memcpy(color,old_color,sizeof(color));memcpy(depth,old_depth,sizeof(depth));
+        depth_backend context={reference_color,reference_depth,0,0,0,0,0,0,0};
+        ctr_scene_backend backend={&context,depth_backend_legacy_begin,depth_backend_draw,depth_backend_legacy_end,
+            depth_backend_abort,depth_backend_begin,depth_backend_end};
+        CHECK(ctr_scene_execute_targets_backend(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
+              UINT32_C(0x18010000),&z,&backend,&report)==CTR_SCENE_UNSUPPORTED);
+        CHECK(report.draws==(kind==1u?2u:kind==2u?1u:0u));
+        CHECK(!context.begins && !context.draws && !context.ends && !context.aborts);
+        CHECK(!memcmp(&state,&initial,sizeof(state)) && !memcmp(color,old_color,sizeof(color)) && !memcmp(depth,old_depth,sizeof(depth)));
+    }
+}
 int main(void) {
     floats24();shader_patterns();shader_arithmetic();arithmetic_boundaries();shader_errors();shader_capacity();
     scenes();arithmetic_scenes();scene_capacity();scene_errors();backend_full_target();textured_scenes();textured_rollback();
     fragment_contract();fragment_scenes();blend_contract();blend_scenes();
+    depth_comparisons();depth_overdraw();depth_quantization();depth_rollback();depth_backend_parity();
     printf("original shader/scene tests: %u assertions passed\n",assertions);return 0;
 }

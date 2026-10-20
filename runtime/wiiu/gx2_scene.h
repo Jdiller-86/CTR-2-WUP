@@ -25,6 +25,9 @@ typedef struct {
      * failure. The surface is read-only and valid only during the callback;
      * the observer must not call GX2 or reenter this backend. */
     void (*observe_readback)(void *context,const ctr_scene_surface *readback);
+    /* Same borrowed, read-only/no-GX2 contract; called after the color and D16
+     * copies both retire, before a possible context-restore failure. */
+    void (*observe_depth_readback)(void *context,const ctr_scene_depth_surface *readback);
     void *readback_context;
 } ctr_wiiu_gx2_scene;
 
@@ -32,7 +35,12 @@ typedef struct {
  * restores it before returning from every callback. Inputs remain PICA shader
  * inputs: the CPU reference never supplies transformed positions, colors or UV.
  * Texture callbacks borrow checked decoded RGBA storage only for the call; the
- * backend owns its pitched GPU upload until all references have retired. */
+ * backend owns its pitched GPU upload until all references have retired.
+ * Paired callbacks additionally own a D16 target and pitched staging image.
+ * Depth bytes stay little-endian, HiZ is disabled, and canonical depth=-Z/W
+ * uses only endpoint incoming depths under the shared paired-backend preflight.
+ * Both target copies retire before readback; full pair parity remains the
+ * scene executor's publication gate. */
 void ctr_wiiu_gx2_scene_init(ctr_wiiu_gx2_scene *scene,GX2ContextState *restore_context);
 ctr_scene_backend ctr_wiiu_gx2_scene_backend(ctr_wiiu_gx2_scene *scene);
 void ctr_wiiu_gx2_scene_abort(ctr_wiiu_gx2_scene *scene);

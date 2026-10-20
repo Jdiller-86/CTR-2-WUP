@@ -35,17 +35,30 @@ static bool fragment_register(unsigned reg) {
     static const unsigned tev[]={0xc0,0xc8,0xd0,0xd8,0xf0,0xf8};
     for(unsigned i=0;i<6;++i)if(reg>=tev[i] && reg<=tev[i]+4u)return true;
     return (reg>=0x080u && reg<=0x08bu) || reg==0x08eu || reg==0x08fu ||
-        reg==0x0e0u || reg==0x0fdu || ctr_fragment_register(reg);
+        reg==0x0e0u || reg==0x0fdu || reg==0x04du || reg==0x04eu || reg==0x06du ||
+        reg==0x114u || reg==0x115u || reg==0x116u || reg==0x11cu || ctr_fragment_register(reg);
 }
 static bool configured(const ctr_scene_state *s,unsigned reg,uint32_t value) {
     return s->register_defined[reg]==15u && s->registers[reg]==value;
 }
 static ctr_scene_result target_pipeline(const ctr_scene_state *s,const ctr_scene_surface *surface,
-                                        uint32_t color_address) {
-    static const unsigned disabled[]={0x08f,0x105,0x106,0x114,0x115,0x117,0x11b};
+                                        uint32_t color_address,const ctr_scene_depth_surface *depth) {
+    static const unsigned disabled[]={0x08f,0x105,0x106,0x117,0x11b};
     for(unsigned i=0;i<sizeof(disabled)/sizeof(*disabled);++i)
         if(!configured(s,disabled[i],0u))return CTR_SCENE_UNSUPPORTED;
-    if(s->registers[0x0e0u] || s->registers[0x116u] || s->registers[0x11cu])return CTR_SCENE_UNSUPPORTED;
+    if(s->registers[0x0e0u])return CTR_SCENE_UNSUPPORTED;
+    if(depth) {
+        if(s->register_defined[0x114u]!=15u || s->register_defined[0x115u]!=15u ||
+           (s->registers[0x114u]!=0u && s->registers[0x114u]!=2u) ||
+           (s->registers[0x115u]!=0u && s->registers[0x115u]!=2u) ||
+           !configured(s,0x116u,0u) || !configured(s,0x11cu,depth->address>>3) ||
+           !configured(s,0x04du,UINT32_C(0xbf0000)) ||
+           s->register_defined[0x04eu]!=15u ||
+           (s->registers[0x04eu]!=0u && s->registers[0x04eu]!=UINT32_C(0x800000)) ||
+           !configured(s,0x06du,1u) ||
+           ((s->registers[0x107u]&1u) && s->registers[0x114u]!=2u))return CTR_SCENE_UNSUPPORTED;
+    } else if(!configured(s,0x114u,0u) || !configured(s,0x115u,0u) ||
+              s->registers[0x116u] || s->registers[0x11cu])return CTR_SCENE_UNSUPPORTED;
     uint32_t dimensions=surface->width|((surface->height-1u)<<12)|UINT32_C(0x01000000);
     if((color_address&7u) || (surface->width&7u) || (surface->height&7u) ||
        !configured(s,0x11du,color_address>>3) || !configured(s,0x11eu,dimensions))return CTR_SCENE_LAYOUT;
@@ -109,6 +122,12 @@ static ctr_scene_result fragment(const ctr_scene_state *s,const ctr_scene_resour
  * unsupported filter, texture mode or combiner behind the last trigger. */
 static bool fragment_value(unsigned reg,uint32_t value) {
     if(ctr_fragment_register(reg))return ctr_fragment_register_value(reg,value);
+    if(reg==0x04du)return value==UINT32_C(0xbf0000);
+    if(reg==0x04eu)return value==0u || value==UINT32_C(0x800000);
+    if(reg==0x06du)return value==1u;
+    if(reg==0x114u || reg==0x115u)return value==0u || value==2u;
+    if(reg==0x116u)return value==0u;
+    if(reg==0x11cu)return value<=UINT32_C(0x0fffffff);
     if(reg==0x080u)return value<=1u;
     if(reg==0x082u)return !(value&~UINT32_C(0x07ff07ff));
     if(reg==0x083u)return !(value&~UINT32_C(0x3326)) &&
@@ -363,12 +382,37 @@ static uint8_t bilinear_byte(unsigned a,unsigned b,unsigned c,unsigned d,
     }
     return (uint8_t)estimate;
 }
+/* Canonical scale -1/offset 0 means the exact dyadic is simply -clip_z.
+ * Shader output is an already checked finite normal float24 or signed zero.
+ * Multiply its integer significand before one truncating binary division. */
+static uint16_t depth_value(float z) {
+    uint32_t bits;memcpy(&bits,&z,sizeof(bits));bits&=UINT32_C(0x7fffffff);
+    if(!bits)return 0u;
+    unsigned exponent=bits>>23,shift=150u-exponent;
+    uint64_t numerator=(uint64_t)((bits&UINT32_C(0x7fffff))|UINT32_C(0x800000))*65535u;
+    return shift>=64u?0u:(uint16_t)(numerator>>shift);
+}
+static bool depth_passes(unsigned function,unsigned incoming,unsigned stored) {
+    switch(function) {
+    case 0:return false;
+    case 1:return true;
+    case 2:return incoming==stored;
+    case 3:return incoming!=stored;
+    case 4:return incoming<stored;
+    case 5:return incoming<=stored;
+    case 6:return incoming>stored;
+    case 7:return incoming>=stored;
+    default:return false;
+    }
+}
 static void raster(const ctr_scene_state *s,const ctr_scene_surface *surface,
                    uint8_t *pixels,scene_vertex v[3],ctr_scene_report *report,
                    const ctr_scene_texture *texture,const ctr_tev_program *combiner,
-                   const ctr_fragment_state *merger) {
+                   const ctr_fragment_state *merger,const ctr_scene_depth_surface *depth,
+                   uint8_t *depth_pixels) {
     uint8_t primary[4];
     for(unsigned lane=0;lane<4;++lane)primary[lane]=v[0].color[lane]==1.0f?255u:0u;
+    uint16_t incoming=depth?depth_value(v[0].position[2]):0u;
     int64_t area=edge(v[0],v[1],v[2].x,v[2].y);unsigned cull=s->registers[0x040u]&3u;
     if(!area || (cull==1u && area>0) || (cull==2u && area<0))return;
     if(area<0) { scene_vertex t=v[1];v[1]=v[2];v[2]=t;area=-area; }
@@ -429,21 +473,32 @@ static void raster(const ctr_scene_state *s,const ctr_scene_surface *surface,
                 }
             }
             uint8_t source[4];ctr_tev_evaluate(combiner,primary,sampled,source);
-            ctr_fragment_apply(merger,source,pixel);
             ++report->fragments;
+            if(!ctr_fragment_alpha_passes(merger,source[3]))continue;
+            if(depth) {
+                uint8_t *z=depth_pixels+(size_t)y*depth->stride+(size_t)x*2u;
+                uint32_t control=s->registers[0x107u];
+                if((control&1u) && !depth_passes((control>>4)&7u,incoming,
+                                               (unsigned)z[0]|(unsigned)z[1]<<8))continue;
+                if((control&UINT32_C(0x1000)) && s->registers[0x115u]==2u) {
+                    z[0]=(uint8_t)incoming;z[1]=(uint8_t)(incoming>>8);
+                }
+            }
+            ctr_fragment_apply(merger,source,pixel);
         }
     }
 }
 static ctr_scene_result draw(ctr_scene_state *s,const ctr_scene_resources *resources,
                              const ctr_scene_surface *surface,bool indexed,
                              ctr_vertex *decoded,uint8_t *pixels,ctr_scene_report *report,
-                             bool bound,uint32_t color_address,const ctr_scene_backend *backend) {
+                             bool bound,uint32_t color_address,const ctr_scene_depth_surface *depth,
+                             uint8_t *depth_pixels,bool depth_endpoints,const ctr_scene_backend *backend) {
     if(bound) {
-        ctr_scene_result result=target_pipeline(s,surface,color_address);
+        ctr_scene_result result=target_pipeline(s,surface,color_address,depth);
         if(result!=CTR_SCENE_OK)return result;
     }
     ctr_fragment_state merger;
-    if(!ctr_fragment_decode(s->registers,s->register_defined,bound,&merger))return CTR_SCENE_UNSUPPORTED;
+    if(!ctr_fragment_decode_depth(s->registers,s->register_defined,bound,depth!=NULL,&merger))return CTR_SCENE_UNSUPPORTED;
     unsigned count=s->registers[0x228u];
     if(!count || count%3u)return CTR_SCENE_LAYOUT;
     if(count>CTR_SCENE_MAX_VERTICES || report->draws==CTR_SCENE_MAX_DRAWS)return CTR_SCENE_LIMIT;
@@ -478,8 +533,14 @@ static ctr_scene_result draw(ctr_scene_state *s,const ctr_scene_resources *resou
         if(vertex%3u==2u) {
             for(unsigned i=1;i<3;++i)for(unsigned lane=0;lane<4;++lane)
                 if(primitive[i].color[lane]!=primitive[0].color[lane])result=CTR_SCENE_UNSUPPORTED;
+            if(depth) {
+                for(unsigned i=1;i<3;++i)if(primitive[i].position[2]!=primitive[0].position[2])
+                    result=CTR_SCENE_UNSUPPORTED;
+                if(depth_endpoints && primitive[0].position[2]!=0.0f && primitive[0].position[2]!=-1.0f)
+                    result=CTR_SCENE_UNSUPPORTED;
+            }
             if(result!=CTR_SCENE_OK)break;
-            raster(s,surface,pixels,primitive,report,sampling,&combiner,&merger);++report->triangles;
+            raster(s,surface,pixels,primitive,report,sampling,&combiner,&merger,depth,depth_pixels);++report->triangles;
         }
     }
     free(texture_allocation);
@@ -491,7 +552,8 @@ static ctr_scene_result replay(ctr_scene_state *trial,const void *commands,
                                 const ctr_pica_write *writes,size_t count,
                                 const ctr_scene_resources *resources,const ctr_scene_surface *surface,
                                 ctr_vertex *decoded,uint8_t *pixels,ctr_scene_report *report,
-                                bool bound,uint32_t color_address,const ctr_scene_backend *backend) {
+                                bool bound,uint32_t color_address,const ctr_scene_depth_surface *depth,
+                                uint8_t *depth_pixels,bool depth_endpoints,const ctr_scene_backend *backend) {
     ctr_scene_result result=CTR_SCENE_OK;
     unsigned markers=0,fixed_reg=0,uniform_reg=0;size_t fixed_offset=0,uniform_offset=0;
     for(size_t i=0;i<count;++i) {
@@ -507,7 +569,8 @@ static ctr_scene_result replay(ctr_scene_state *trial,const void *commands,
         } else if(markers)result=CTR_SCENE_WIRE;
         else if(reg==0x22eu || reg==0x22fu) {
             if(mask!=15u || value!=1u)result=CTR_SCENE_UNSUPPORTED;
-            else result=draw(trial,resources,surface,reg==0x22fu,decoded,pixels,report,bound,color_address,backend);
+            else result=draw(trial,resources,surface,reg==0x22fu,decoded,pixels,report,
+                             bound,color_address,depth,depth_pixels,depth_endpoints,backend);
         } else if(reg==0x25fu) {
             if(mask!=15u || value!=1u)result=CTR_SCENE_UNSUPPORTED;
             /* Complete lists have no carried partial primitive to restart. */
@@ -516,6 +579,10 @@ static ctr_scene_result replay(ctr_scene_state *trial,const void *commands,
             trial->register_defined[reg]|=(uint8_t)mask;
             if(fragment_register(reg) && trial->register_defined[reg]==15u &&
                !fragment_value(reg,trial->registers[reg]))result=CTR_SCENE_UNSUPPORTED;
+            if(reg==0x107u && !depth && trial->register_defined[reg]==15u &&
+               (trial->registers[reg]&~UINT32_C(0xf00)))result=CTR_SCENE_UNSUPPORTED;
+            if((reg==0x114u || reg==0x115u || reg==0x11cu) && !depth &&
+               trial->register_defined[reg]==15u && trial->registers[reg])result=CTR_SCENE_UNSUPPORTED;
         } else if(bound && (reg==0x110u || reg==0x111u)) {
             if(mask!=15u || value!=1u)result=CTR_SCENE_UNSUPPORTED;
             /* The caller owns cache/coherency for any native scratch target. */
@@ -536,12 +603,15 @@ static ctr_scene_result replay(ctr_scene_state *trial,const void *commands,
 static ctr_scene_result execute(ctr_scene_state *state,const void *commands,size_t size,
                                   const ctr_scene_resources *resources,
                                   const ctr_scene_surface *surface,ctr_scene_report *out,
-                                  bool bound,uint32_t color_address,const ctr_scene_backend *backend) {
+                                  bool bound,uint32_t color_address,const ctr_scene_depth_surface *depth,
+                                  const ctr_scene_backend *backend) {
     if(!state || !resources || !surface)return CTR_SCENE_ARGUMENT;
     if(!span(state,sizeof(*state)) || !span(resources,sizeof(*resources)) ||
        !span(surface,sizeof(*surface)) || !span(commands,size) ||
-       (out && !span(out,sizeof(*out))) || (backend && !span(backend,sizeof(*backend))))return CTR_SCENE_OVERFLOW;
+       (out && !span(out,sizeof(*out))) || (backend && !span(backend,sizeof(*backend))) ||
+       (depth && !span(depth,sizeof(*depth))))return CTR_SCENE_OVERFLOW;
     if(!span(resources->bytes,resources->size) || !span(surface->bytes,surface->size))return CTR_SCENE_OVERFLOW;
+    if(depth && !span(depth->bytes,depth->size))return CTR_SCENE_OVERFLOW;
     const void *objects[]={commands,resources,resources->bytes,surface};
     size_t lengths[]={size,sizeof(*resources),resources->size,sizeof(*surface)};
     if(overlap(state,sizeof(*state),surface->bytes,surface->size) ||
@@ -550,6 +620,17 @@ static ctr_scene_result execute(ctr_scene_state *state,const void *commands,size
     for(unsigned i=0;i<4;++i)if(overlap(state,sizeof(*state),objects[i],lengths[i]) ||
         overlap(surface->bytes,surface->size,objects[i],lengths[i]) ||
         (out && overlap(out,sizeof(*out),objects[i],lengths[i])))return CTR_SCENE_ALIAS;
+    if(depth) {
+        if(overlap(depth,sizeof(*depth),state,sizeof(*state)) ||
+           overlap(depth,sizeof(*depth),surface->bytes,surface->size) ||
+           overlap(depth,sizeof(*depth),depth->bytes,depth->size) ||
+           overlap(depth->bytes,depth->size,state,sizeof(*state)) ||
+           overlap(depth->bytes,depth->size,surface->bytes,surface->size) ||
+           (out && (overlap(out,sizeof(*out),depth,sizeof(*depth)) ||
+                    overlap(out,sizeof(*out),depth->bytes,depth->size))))return CTR_SCENE_ALIAS;
+        for(unsigned i=0;i<4;++i)if(overlap(depth,sizeof(*depth),objects[i],lengths[i]) ||
+            overlap(depth->bytes,depth->size,objects[i],lengths[i]))return CTR_SCENE_ALIAS;
+    }
     ctr_scene_report report={0};
     if(resources->texture_count>CTR_SCENE_MAX_TEXTURE_SPANS)
         return publish(out,report,CTR_SCENE_LIMIT);
@@ -557,16 +638,22 @@ static ctr_scene_result execute(ctr_scene_state *state,const void *commands,size
     if(!span(resources->textures,span_bytes))return CTR_SCENE_OVERFLOW;
     if(overlap(resources->textures,span_bytes,state,sizeof(*state)) ||
        overlap(resources->textures,span_bytes,surface->bytes,surface->size) ||
+       (depth && (overlap(resources->textures,span_bytes,depth,sizeof(*depth)) ||
+                  overlap(resources->textures,span_bytes,depth->bytes,depth->size))) ||
        (out && overlap(resources->textures,span_bytes,out,sizeof(*out))))return CTR_SCENE_ALIAS;
     for(unsigned i=0;i<resources->texture_count;++i) {
         const ctr_scene_resource_span *p=&resources->textures[i];
         if(!span(p->bytes,p->size))return CTR_SCENE_OVERFLOW;
         if(overlap(p->bytes,p->size,state,sizeof(*state)) ||
            overlap(p->bytes,p->size,surface->bytes,surface->size) ||
+           (depth && (overlap(p->bytes,p->size,depth,sizeof(*depth)) ||
+                      overlap(p->bytes,p->size,depth->bytes,depth->size))) ||
            (out && overlap(p->bytes,p->size,out,sizeof(*out))))return CTR_SCENE_ALIAS;
     }
     if(backend && (overlap(backend,sizeof(*backend),state,sizeof(*state)) ||
        overlap(backend,sizeof(*backend),surface->bytes,surface->size) ||
+       (depth && (overlap(backend,sizeof(*backend),depth,sizeof(*depth)) ||
+                  overlap(backend,sizeof(*backend),depth->bytes,depth->size))) ||
        (out && overlap(backend,sizeof(*backend),out,sizeof(*out)))))return CTR_SCENE_ALIAS;
     if(backend && (!backend->begin || !backend->draw || !backend->end || !backend->abort))
         return publish(out,report,CTR_SCENE_ARGUMENT);
@@ -577,8 +664,21 @@ static ctr_scene_result execute(ctr_scene_state *state,const void *commands,size
     if(one_bits!=UINT32_C(0x3f800000))return publish(out,report,CTR_SCENE_UNSUPPORTED);
     if(resources->size>CTR_VERTEX_MAX_SOURCE_BYTES || surface->size>CTR_SCENE_MAX_SURFACE_BYTES)
         return publish(out,report,CTR_SCENE_LIMIT);
+    if(depth && depth->size>CTR_SCENE_MAX_DEPTH_BYTES)return publish(out,report,CTR_SCENE_LIMIT);
     if((uint64_t)resources->base_address+resources->size>(uint64_t)UINT32_MAX+1u)
         return publish(out,report,CTR_SCENE_OVERFLOW);
+    if(depth) {
+        if(depth->width>512u || depth->height>512u)return publish(out,report,CTR_SCENE_LAYOUT);
+        uint64_t first=depth->address,last=first+(uint64_t)depth->width*depth->height*2u;
+        if(!bound || !depth->width || depth->width!=surface->width || depth->height!=surface->height ||
+           depth->stride<depth->width*2u || (uint64_t)depth->height*depth->stride>depth->size ||
+           (depth->address&UINT32_C(0x80000007)) || last>(uint64_t)UINT32_MAX+1u)
+            return publish(out,report,CTR_SCENE_LAYOUT);
+        uint64_t color_end=(uint64_t)color_address+(uint64_t)surface->width*surface->height*4u;
+        if((first<color_end && color_address<last) ||
+           (first<(uint64_t)resources->base_address+resources->size && resources->base_address<last))
+            return publish(out,report,CTR_SCENE_ALIAS);
+    }
     size_t texture_bytes=0;
     for(unsigned i=0;i<resources->texture_count;++i) {
         const ctr_scene_resource_span *p=&resources->textures[i];
@@ -588,6 +688,8 @@ static ctr_scene_result execute(ctr_scene_state *state,const void *commands,size
         if(!p->size)return publish(out,report,CTR_SCENE_LAYOUT);
         uint64_t end=(uint64_t)p->base_address+p->size;
         if(end>(uint64_t)UINT32_MAX+1u)return publish(out,report,CTR_SCENE_OVERFLOW);
+        if(depth && p->base_address<(uint64_t)depth->address+(uint64_t)depth->width*depth->height*2u &&
+           depth->address<end)return publish(out,report,CTR_SCENE_ALIAS);
         if(p->base_address<(uint64_t)resources->base_address+resources->size &&
            resources->base_address<end)return publish(out,report,CTR_SCENE_ALIAS);
         for(unsigned j=0;j<i;++j) {
@@ -610,71 +712,93 @@ static ctr_scene_result execute(ctr_scene_state *state,const void *commands,size
     ctr_pica_write *writes=malloc(wire.writes*sizeof(*writes));
     ctr_scene_state *trial=malloc(sizeof(*trial));
     uint8_t *pixels=malloc(surface->size);
+    uint8_t *depth_pixels=depth?malloc(depth->size):NULL;
     ctr_vertex *decoded=malloc(CTR_SCENE_MAX_VERTICES*sizeof(*decoded));
-    if(!writes || !trial || !pixels || !decoded) {
-        free(writes);free(trial);free(pixels);free(decoded);return publish(out,report,CTR_SCENE_NO_MEMORY);
+    if(!writes || !trial || !pixels || !decoded || (depth && !depth_pixels)) {
+        free(writes);free(trial);free(pixels);free(depth_pixels);free(decoded);return publish(out,report,CTR_SCENE_NO_MEMORY);
     }
     *trial=*state;memcpy(pixels,surface->bytes,surface->size);
+    if(depth)memcpy(depth_pixels,depth->bytes,depth->size);
     ctr_pica_inspect(commands,size,CTR_PICA_MAX_WRITES,writes,wire.writes,&wire);
     ctr_scene_result result=replay(trial,commands,writes,wire.writes,resources,surface,
-                                    decoded,pixels,&report,bound,color_address,NULL);
+                                    decoded,pixels,&report,bound,color_address,depth,depth_pixels,backend && depth,NULL);
     if(result==CTR_SCENE_OK && (trial->lists==UINT64_MAX || report.draws>UINT64_MAX-trial->draws ||
        report.triangles>UINT64_MAX-trial->triangles || report.fragments>UINT64_MAX-trial->fragments ||
        report.shader_instructions>UINT64_MAX-trial->shader_instructions))result=CTR_SCENE_OVERFLOW;
     if(result==CTR_SCENE_OK && backend && report.draws) {
         ctr_scene_state *native=malloc(sizeof(*native));uint8_t *readback=malloc(surface->size);
-        if(!native || !readback)result=CTR_SCENE_NO_MEMORY;
+        uint8_t *depth_readback=depth?malloc(depth->size):NULL;
+        if(depth && (!backend->begin_depth || !backend->end_depth))result=CTR_SCENE_UNSUPPORTED;
+        else if(!native || !readback || (depth && !depth_readback))result=CTR_SCENE_NO_MEMORY;
         else {
             *native=*state;memcpy(readback,surface->bytes,surface->size);
             ctr_scene_surface target=*surface;target.bytes=readback;
+            ctr_scene_depth_surface depth_target={0};
+            if(depth) { depth_target=*depth;depth_target.bytes=depth_readback;memcpy(depth_readback,depth->bytes,depth->size); }
             report.backend_stage=CTR_SCENE_BACKEND_BEGIN;
-            if(!backend->begin(backend->context,surface))result=CTR_SCENE_BACKEND;
+            bool began=depth?backend->begin_depth(backend->context,surface,depth):backend->begin(backend->context,surface);
+            if(!began)result=CTR_SCENE_BACKEND;
             else {
                 ctr_scene_report native_report={0};
                 result=replay(native,commands,writes,wire.writes,resources,surface,
-                              decoded,NULL,&native_report,bound,color_address,backend);
+                              decoded,NULL,&native_report,bound,color_address,depth,NULL,true,backend);
                 if(result!=CTR_SCENE_OK) {
                     report.byte_offset=native_report.byte_offset;report.reg=native_report.reg;
                     report.backend_stage=native_report.backend_stage;
                 } else {
                     report.backend_stage=CTR_SCENE_BACKEND_END;
-                    if(!backend->end(backend->context,&target))result=CTR_SCENE_BACKEND;
-                    else if(memcmp(readback,pixels,surface->size)) {
+                    bool ended=depth?backend->end_depth(backend->context,&target,&depth_target):backend->end(backend->context,&target);
+                    if(!ended)result=CTR_SCENE_BACKEND;
+                    else if(memcmp(readback,pixels,surface->size) ||
+                            (depth && memcmp(depth_readback,depth_pixels,depth->size))) {
                         report.backend_stage=CTR_SCENE_BACKEND_PARITY;result=CTR_SCENE_BACKEND;
                     } else {
                         /* Publish actual native bytes after exact software parity. */
                         memcpy(pixels,readback,surface->size);report.backend_stage=CTR_SCENE_BACKEND_NONE;
+                        if(depth)memcpy(depth_pixels,depth_readback,depth->size);
                     }
                 }
             }
             if(result!=CTR_SCENE_OK)backend->abort(backend->context);
         }
-        free(native);free(readback);
+        free(native);free(readback);free(depth_readback);
     }
     if(result==CTR_SCENE_OK) {
         ++trial->lists;trial->draws+=report.draws;trial->triangles+=report.triangles;
         trial->fragments+=report.fragments;trial->shader_instructions+=report.shader_instructions;
         *state=*trial;memcpy(surface->bytes,pixels,surface->size);
+        if(depth)memcpy(depth->bytes,depth_pixels,depth->size);
         report.byte_offset=size;report.reg=0;
     }
-    free(writes);free(trial);free(pixels);free(decoded);return publish(out,report,result);
+    free(writes);free(trial);free(pixels);free(depth_pixels);free(decoded);return publish(out,report,result);
 }
 ctr_scene_result ctr_scene_execute(ctr_scene_state *state,const void *commands,size_t size,
                                   const ctr_scene_resources *resources,
                                   const ctr_scene_surface *surface,ctr_scene_report *out) {
-    return execute(state,commands,size,resources,surface,out,false,0,NULL);
+    return execute(state,commands,size,resources,surface,out,false,0,NULL,NULL);
 }
 ctr_scene_result ctr_scene_execute_target(ctr_scene_state *state,const void *commands,size_t size,
                                          const ctr_scene_resources *resources,
                                          const ctr_scene_surface *surface,uint32_t color_address,
                                          ctr_scene_report *out) {
-    return execute(state,commands,size,resources,surface,out,true,color_address,NULL);
+    return execute(state,commands,size,resources,surface,out,true,color_address,NULL,NULL);
 }
 ctr_scene_result ctr_scene_execute_target_backend(ctr_scene_state *state,const void *commands,size_t size,
                                                   const ctr_scene_resources *resources,
                                                   const ctr_scene_surface *surface,uint32_t color_address,
                                                   const ctr_scene_backend *backend,ctr_scene_report *out) {
-    return execute(state,commands,size,resources,surface,out,true,color_address,backend);
+    return execute(state,commands,size,resources,surface,out,true,color_address,NULL,backend);
+}
+ctr_scene_result ctr_scene_execute_targets(ctr_scene_state *state,const void *commands,size_t size,
+                                           const ctr_scene_resources *resources,const ctr_scene_surface *surface,
+                                           uint32_t color_address,const ctr_scene_depth_surface *depth,ctr_scene_report *out) {
+    return execute(state,commands,size,resources,surface,out,true,color_address,depth,NULL);
+}
+ctr_scene_result ctr_scene_execute_targets_backend(ctr_scene_state *state,const void *commands,size_t size,
+                                                   const ctr_scene_resources *resources,const ctr_scene_surface *surface,
+                                                   uint32_t color_address,const ctr_scene_depth_surface *depth,
+                                                   const ctr_scene_backend *backend,ctr_scene_report *out) {
+    return execute(state,commands,size,resources,surface,out,true,color_address,depth,backend);
 }
 const char *ctr_scene_result_name(ctr_scene_result result) {
     static const char *const names[]={"ok","argument","overflow","alias","limit","no-memory",

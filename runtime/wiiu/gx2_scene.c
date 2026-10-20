@@ -37,6 +37,8 @@ typedef struct {
     GX2ContextState *context;
     GX2ColorBuffer target;
     GX2Surface linear;
+    GX2DepthBuffer depth_target;
+    GX2Surface depth_linear;
     GX2FetchShader fetch;
     GX2VertexShader vertex;
     GX2PixelShader pixel;
@@ -46,7 +48,10 @@ typedef struct {
     void *vertex_program,*pixel_program,*fetch_program,*vertices;
     unsigned width,height,stride;
     size_t size;
-    bool pending;
+    unsigned depth_stride;
+    size_t depth_size;
+    uint32_t depth_address;
+    bool pending,depth_enabled;
     uint32_t pixel_constants[8][4];
 } scene_private;
 
@@ -88,6 +93,7 @@ static void release(ctr_wiiu_gx2_scene *s,scene_private *p) {
     dispose(s,p->vertices);dispose(s,p->fetch_program);
     dispose(s,p->pixel_program);dispose(s,p->vertex_program);
     dispose(s,p->compiled);dispose(s,p->linear.image);
+    dispose(s,p->depth_linear.image);dispose(s,p->depth_target.surface.image);
     dispose(s,p->target.surface.image);dispose(s,p->context);dispose(s,p);
     s->private_state=NULL;s->quarantined=false;
 }
@@ -117,6 +123,26 @@ static bool layout(GX2Surface *surface,unsigned width,unsigned height,GX2TileMod
     surface->tileMode=tile;GX2CalcSurfaceSizeAndAlignment(surface);
     return surface->tileMode==tile && surface->pitch>=width &&
         surface->imageSize && surface->imageSize<=MAX_IMAGE_BYTES &&
+        surface->alignment && !(surface->alignment&(surface->alignment-1u)) &&
+        surface->alignment<=65536u && !surface->mipmapSize;
+}
+static bool depth_dimensions(const ctr_scene_depth_surface *depth,const ctr_scene_surface *color) {
+    return depth && depth->bytes && depth->width==color->width && depth->height==color->height &&
+        depth->stride>=depth->width*2u &&
+        (uint64_t)depth->stride*depth->height<=depth->size &&
+        depth->size<=CTR_SCENE_MAX_DEPTH_BYTES;
+}
+static bool depth_layout(GX2Surface *surface,unsigned width,unsigned height,GX2TileMode tile) {
+    surface->dim=GX2_SURFACE_DIM_TEXTURE_2D;surface->width=width;surface->height=height;
+    surface->depth=1;surface->mipLevels=1;surface->format=GX2_SURFACE_FORMAT_UNORM_R16;
+    surface->aa=GX2_AA_MODE1X;
+    /* Both copy endpoints carry depth usage: depth microtiling differs from
+     * color, even for the same element size (Decaf e6c528a gx2_surface.cpp). */
+    surface->use=GX2_SURFACE_USE_TEXTURE|GX2_SURFACE_USE_DEPTH_BUFFER;
+    surface->tileMode=tile;GX2CalcSurfaceSizeAndAlignment(surface);
+    return surface->tileMode==tile && surface->pitch>=width &&
+        surface->imageSize && surface->imageSize<=MAX_IMAGE_BYTES &&
+        (uint64_t)surface->pitch*height*2u<=surface->imageSize &&
         surface->alignment && !(surface->alignment&(surface->alignment-1u)) &&
         surface->alignment<=65536u && !surface->mipmapSize;
 }
@@ -229,7 +255,10 @@ static bool pixel_shader(scene_private *p,const ctr_scene_state *state,bool text
     p->pixel.regs.spi_ps_input_cntls[0]=UINT32_C(0x100);
     if(textured)p->pixel.regs.spi_ps_input_cntls[1]=UINT32_C(0x101);
     p->pixel.regs.cb_shader_mask=15;p->pixel.regs.cb_shader_control=1;
-    p->pixel.regs.db_shader_control=UINT32_C(0x10);
+    /* DB_Z_ORDER bits4..5:0 is LATE_Z, 1 EARLY_Z_THEN_LATE_Z. Alpha test
+     * precedes PICA depth updates; HiZ and early depth writes stay disabled.
+     * Source: Decaf e6c528a latte_registers_db.h / latte_enum_db.h. */
+    p->pixel.regs.db_shader_control=p->depth_enabled?0u:UINT32_C(0x10);
     GX2Invalidate(GX2_INVALIDATE_MODE_CPU_SHADER,program,p->pixel.size);return true;
 }
 static bool upload_texture(ctr_wiiu_gx2_scene *s,scene_private *p,
@@ -289,23 +318,37 @@ static bool upload_texture(ctr_wiiu_gx2_scene *s,scene_private *p,
     ++s->texture_uploads;s->texture_bytes+=(uint64_t)source->width*source->height*4u;
     return true;
 }
-static bool begin(void *context,const ctr_scene_surface *initial) {
+static bool begin_targets(void *context,const ctr_scene_surface *initial,
+                          const ctr_scene_depth_surface *depth) {
     ctr_wiiu_gx2_scene *s=context;
-    if(!s || !s->restore_context || !dimensions(initial))return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
+    if(!s || !s->restore_context || !dimensions(initial) ||
+       (depth && !depth_dimensions(depth,initial)))return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
     if(s->private_state)return fail(s,CTR_WIIU_GX2_SCENE_BUSY);
     s->result=CTR_WIIU_GX2_SCENE_OK;
     scene_private *p=allocate(s,256,sizeof(*p));
     if(!p)return fail(s,CTR_WIIU_GX2_SCENE_ALLOCATION);
     s->private_state=p;p->width=initial->width;p->height=initial->height;
     p->stride=initial->stride;p->size=initial->size;
+    p->depth_enabled=depth!=NULL;
+    if(depth) {
+        p->depth_stride=depth->stride;p->depth_size=depth->size;p->depth_address=depth->address;
+    }
     if(!layout(&p->target.surface,p->width,p->height,GX2_TILE_MODE_TILED_2D_THIN1) ||
        !layout(&p->linear,p->width,p->height,GX2_TILE_MODE_LINEAR_ALIGNED) ||
        (uint64_t)p->linear.pitch*p->height*4u>p->linear.imageSize) {
         s->result=CTR_WIIU_GX2_SCENE_LAYOUT;goto error;
     }
+    if(depth && (!depth_layout(&p->depth_target.surface,p->width,p->height,GX2_TILE_MODE_TILED_2D_THIN1) ||
+                  !depth_layout(&p->depth_linear,p->width,p->height,GX2_TILE_MODE_LINEAR_ALIGNED))) {
+        s->result=CTR_WIIU_GX2_SCENE_LAYOUT;goto error;
+    }
     p->context=allocate(s,256,sizeof(*p->context));
     p->target.surface.image=allocate(s,p->target.surface.alignment,p->target.surface.imageSize);
     p->linear.image=allocate(s,p->linear.alignment,p->linear.imageSize);
+    if(depth) {
+        p->depth_target.surface.image=allocate(s,p->depth_target.surface.alignment,p->depth_target.surface.imageSize);
+        p->depth_linear.image=allocate(s,p->depth_linear.alignment,p->depth_linear.imageSize);
+    }
     p->compiled=allocate(s,256,sizeof(*p->compiled));
     p->vertex_program=allocate(s,256,sizeof(p->compiled->program));
     p->pixel_program=allocate(s,256,PIXEL_BYTES);
@@ -317,7 +360,8 @@ static bool begin(void *context,const ctr_scene_surface *initial) {
     p->fetch_program=allocate(s,256,fetch_size);
     p->vertices=allocate(s,256,CTR_SCENE_MAX_VERTICES*VERTEX_STRIDE);
     if(!p->context || !p->target.surface.image || !p->linear.image || !p->compiled ||
-       !p->vertex_program || !p->pixel_program || !p->fetch_program || !p->vertices) {
+       !p->vertex_program || !p->pixel_program || !p->fetch_program || !p->vertices ||
+       (depth && (!p->depth_target.surface.image || !p->depth_linear.image))) {
         s->result=CTR_WIIU_GX2_SCENE_ALLOCATION;goto error;
     }
     for(unsigned y=0;y<p->height;++y)
@@ -329,11 +373,27 @@ static bool begin(void *context,const ctr_scene_surface *initial) {
      * before the GPU first writes this target; a later eviction must not
      * overwrite rendered pixels with the allocator's initial zeros. */
     DCFlushRange(p->target.surface.image,p->target.surface.imageSize);
+    if(depth) {
+        /* Raw little-endian D16 elements remain bytes on big-endian PowerPC.
+         * GX2 performs only the pitched-linear/depth-tile conversion. */
+        for(unsigned y=0;y<p->height;++y)
+            memcpy((uint8_t *)p->depth_linear.image+(size_t)y*p->depth_linear.pitch*2u,
+                   (const uint8_t *)depth->bytes+(size_t)y*depth->stride,p->width*2u);
+        DCFlushRange(p->depth_linear.image,p->depth_linear.imageSize);
+        GX2Invalidate(GX2_INVALIDATE_MODE_CPU_TEXTURE,p->depth_linear.image,p->depth_linear.imageSize);
+        DCFlushRange(p->depth_target.surface.image,p->depth_target.surface.imageSize);
+    }
     GX2SetupContextStateEx(p->context,true);GX2SetContextState(p->context);
     p->target.viewNumSlices=1;GX2InitColorBufferRegs(&p->target);
     GX2CopySurface(&p->linear,0,0,&p->target.surface,0,0);p->pending=true;
+    if(depth) {
+        p->depth_target.viewNumSlices=1;GX2InitDepthBufferRegs(&p->depth_target);
+        GX2InitDepthBufferHiZEnable(&p->depth_target,false);
+        GX2CopySurface(&p->depth_linear,0,0,&p->depth_target.surface,0,0);
+    }
     if(!retire(s,p))goto error;
     GX2Invalidate(GX2_INVALIDATE_MODE_COLOR_BUFFER,p->target.surface.image,p->target.surface.imageSize);
+    if(depth)GX2Invalidate(GX2_INVALIDATE_MODE_DEPTH_BUFFER,p->depth_target.surface.image,p->depth_target.surface.imageSize);
     GX2AttribStream attributes[16];memset(attributes,0,sizeof(attributes));
     for(unsigned input=0;input<16;++input) {
         attributes[input].location=input;attributes[input].buffer=0;
@@ -350,6 +410,14 @@ static bool begin(void *context,const ctr_scene_surface *initial) {
     ++s->begins;return true;
 error:
     ctr_wiiu_gx2_scene_abort(s);return false;
+}
+static bool begin(void *context,const ctr_scene_surface *initial) {
+    return begin_targets(context,initial,NULL);
+}
+static bool begin_depth(void *context,const ctr_scene_surface *initial,
+                        const ctr_scene_depth_surface *depth) {
+    if(!depth)return fail(context,CTR_WIIU_GX2_SCENE_ARGUMENT);
+    return begin_targets(context,initial,depth);
 }
 static uint32_t bits(float value) { uint32_t result;memcpy(&result,&value,4);return result; }
 static float real(uint32_t value) { float result;memcpy(&result,&value,4);return result; }
@@ -369,9 +437,14 @@ static bool viewport(scene_private *p,const ctr_scene_state *state) {
      * and retain that row convention through both seed and readback copies. */
     v.pa_cl_vport_xscale=bits(hx);v.pa_cl_vport_xoffset=bits(hx+(float)ox);
     v.pa_cl_vport_yscale=bits(hy);v.pa_cl_vport_yoffset=bits(hy+(float)oy);
+    if(p->depth_enabled) {
+        /* Canonical Z buffering is depth=-clipZ/W. GX2's convenience 0..1
+         * viewport instead uses scale=.5,offset=.5 and cannot be inherited. */
+        v.pa_cl_vport_zscale=bits(-1.0f);v.pa_cl_vport_zoffset=bits(0.0f);
+    }
     GX2SetViewportReg(&v);
     /* PICA's accepted z interval [-w,0] is inside the full GX2 [-w,+w]
-     * interval. Depth testing/writes are disabled; do not rewrite shader z. */
+     * interval; retain the original shader Z. */
     GX2SetRasterizerClipControlEx(true,true,false);return true;
 }
 static void rectangle(ctr_wiiu_gx2_scene *s,unsigned x,unsigned y,unsigned w,unsigned h,unsigned count) {
@@ -390,6 +463,37 @@ static bool native_fragment(const ctr_fragment_state *fragment) {
             return false;
     }
     return true;
+}
+static bool native_depth(const scene_private *p,const ctr_scene_state *state) {
+    if(!p->depth_enabled)return true;
+    static const unsigned full[]={0x04du,0x04eu,0x06du,0x114u,0x115u,0x116u,0x11cu};
+    for(unsigned i=0;i<sizeof(full)/sizeof(*full);++i)
+        if(state->register_defined[full[i]]!=15u)return false;
+    uint32_t read=state->registers[0x114u],write=state->registers[0x115u];
+    return state->registers[0x04du]==UINT32_C(0xbf0000) &&
+        (state->registers[0x04eu]&~UINT32_C(0x800000))==0u &&
+        state->registers[0x06du]==1u && state->registers[0x116u]==0u &&
+        !(state->registers[0x11cu]&UINT32_C(0xf0000000)) &&
+        (uint64_t)state->registers[0x11cu]*8u==p->depth_address &&
+        (read==0u || read==2u) && (write==0u || write==2u) &&
+        (!(state->registers[0x107u]&1u) || read==2u);
+}
+static void depth_state(const scene_private *p,const ctr_scene_state *state) {
+    static const GX2CompareFunction compare[8]={
+        GX2_COMPARE_FUNC_NEVER,GX2_COMPARE_FUNC_ALWAYS,GX2_COMPARE_FUNC_EQUAL,
+        GX2_COMPARE_FUNC_NOT_EQUAL,GX2_COMPARE_FUNC_LESS,GX2_COMPARE_FUNC_LEQUAL,
+        GX2_COMPARE_FUNC_GREATER,GX2_COMPARE_FUNC_GEQUAL
+    };
+    bool test=p->depth_enabled && (state->registers[0x107u]&1u)!=0u;
+    bool write=p->depth_enabled && (state->registers[0x107u]&0x1000u)!=0u &&
+        state->registers[0x115u]==2u;
+    /* PICA writes with its test disabled. Enabling GX2's ALWAYS test while
+     * writing gives that behavior without relying on disabled-Z writes. */
+    GX2SetDepthStencilControl(test || write,write,
+        test?compare[(state->registers[0x107u]>>4)&7u]:GX2_COMPARE_FUNC_ALWAYS,false,false,
+        GX2_COMPARE_FUNC_ALWAYS,GX2_STENCIL_FUNCTION_KEEP,GX2_STENCIL_FUNCTION_KEEP,
+        GX2_STENCIL_FUNCTION_KEEP,GX2_COMPARE_FUNC_ALWAYS,GX2_STENCIL_FUNCTION_KEEP,
+        GX2_STENCIL_FUNCTION_KEEP,GX2_STENCIL_FUNCTION_KEEP);
 }
 static void fragment_state(const ctr_fragment_state *fragment) {
     /* PICA's enum order is neither GX2's ROP3 truth table nor its comparison
@@ -462,8 +566,8 @@ static bool draw(void *context,const ctr_scene_state *state,const ctr_vertex *ve
         return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
     if(s->quarantined)return fail(s,CTR_WIIU_GX2_SCENE_WAIT);
     ctr_fragment_state fragment;
-    if(!ctr_fragment_decode(state->registers,state->register_defined,true,&fragment) ||
-       !native_fragment(&fragment))
+    if(!ctr_fragment_decode_depth(state->registers,state->register_defined,true,p->depth_enabled,&fragment) ||
+       !native_fragment(&fragment) || !native_depth(p,state))
         return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
     s->shader_result=ctr_gx2_shader_compile(&state->shader,(uint16_t)state->registers[0x2bdu],
         &state->registers[0x050u],state->registers[0x04fu],p->compiled);
@@ -496,6 +600,7 @@ static bool draw(void *context,const ctr_scene_state *state,const ctr_vertex *ve
     GX2SetContextState(p->context);
     if(!viewport(p,state))return fail(s,CTR_WIIU_GX2_SCENE_LAYOUT);
     GX2SetColorBuffer(&p->target,GX2_RENDER_TARGET_0);
+    if(p->depth_enabled)GX2SetDepthBuffer(&p->depth_target);
     GX2SetShaderModeEx(GX2_SHADER_MODE_UNIFORM_REGISTER,64,64,0,0,184,192);
     GX2SetFetchShader(&p->fetch);GX2SetVertexShader(&p->vertex);GX2SetPixelShader(&p->pixel);
     if(texture) { GX2SetPixelTexture(&p->texture,0);GX2SetPixelSampler(&p->sampler,0); }
@@ -504,10 +609,7 @@ static bool draw(void *context,const ctr_scene_state *state,const ctr_vertex *ve
     for(unsigned uniform=0;uniform<CTR_SHADER_UNIFORMS;++uniform)if(p->compiled->uniform_used[uniform])
         GX2SetVertexUniformReg(uniform*4u,4,state->shader.uniforms[uniform]);
     fragment_state(&fragment);
-    GX2SetDepthStencilControl(false,false,GX2_COMPARE_FUNC_ALWAYS,false,false,
-        GX2_COMPARE_FUNC_ALWAYS,GX2_STENCIL_FUNCTION_KEEP,GX2_STENCIL_FUNCTION_KEEP,
-        GX2_STENCIL_FUNCTION_KEEP,GX2_COMPARE_FUNC_ALWAYS,GX2_STENCIL_FUNCTION_KEEP,
-        GX2_STENCIL_FUNCTION_KEEP,GX2_STENCIL_FUNCTION_KEEP);
+    depth_state(p,state);
     GX2SetAlphaToMask(false,GX2_ALPHA_TO_MASK_MODE_NON_DITHERED);
     GX2SetStreamOutEnable(false);
     unsigned cull=state->registers[0x040u]&3u;
@@ -536,29 +638,51 @@ static bool draw(void *context,const ctr_scene_state *state,const ctr_vertex *ve
     ++s->draws;s->shader_instructions+=p->compiled->pica_instructions;
     s->result=CTR_WIIU_GX2_SCENE_OK;return true;
 }
-static bool end(void *context,const ctr_scene_surface *readback) {
+static bool end_targets(void *context,const ctr_scene_surface *readback,
+                        const ctr_scene_depth_surface *depth) {
     ctr_wiiu_gx2_scene *s=context;scene_private *p=s?s->private_state:NULL;
     if(!p || !dimensions(readback) || readback->width!=p->width || readback->height!=p->height ||
-       readback->stride!=p->stride || readback->size!=p->size)return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
+       readback->stride!=p->stride || readback->size!=p->size ||
+       p->depth_enabled!=(depth!=NULL) ||
+       (depth && (!depth_dimensions(depth,readback) || depth->stride!=p->depth_stride ||
+                  depth->size!=p->depth_size || depth->address!=p->depth_address)))
+        return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
     if(s->quarantined)return fail(s,CTR_WIIU_GX2_SCENE_WAIT);
     GX2SetContextState(p->context);
     GX2Invalidate(GX2_INVALIDATE_MODE_COLOR_BUFFER,p->target.surface.image,p->target.surface.imageSize);
     GX2CopySurface(&p->target.surface,0,0,&p->linear,0,0);p->pending=true;
+    if(depth) {
+        GX2Invalidate(GX2_INVALIDATE_MODE_DEPTH_BUFFER,p->depth_target.surface.image,p->depth_target.surface.imageSize);
+        GX2CopySurface(&p->depth_target.surface,0,0,&p->depth_linear,0,0);
+    }
     if(!retire(s,p))return fail(s,CTR_WIIU_GX2_SCENE_WAIT);
     DCInvalidateRange(p->linear.image,p->linear.imageSize);
+    if(depth)DCInvalidateRange(p->depth_linear.image,p->depth_linear.imageSize);
     for(unsigned y=0;y<p->height;++y)
         memcpy((uint8_t *)readback->bytes+(size_t)y*readback->stride,
                (const uint8_t *)p->linear.image+(size_t)y*p->linear.pitch*4u,p->width*4u);
+    if(depth)for(unsigned y=0;y<p->height;++y)
+        memcpy((uint8_t *)depth->bytes+(size_t)y*depth->stride,
+               (const uint8_t *)p->depth_linear.image+(size_t)y*p->depth_linear.pitch*2u,p->width*2u);
     if(s->observe_readback)s->observe_readback(s->readback_context,readback);
+    if(depth && s->observe_depth_readback)s->observe_depth_readback(s->readback_context,depth);
     if(!restore(s))return false;
     ++s->readbacks;s->result=CTR_WIIU_GX2_SCENE_OK;release(s,p);return true;
+}
+static bool end(void *context,const ctr_scene_surface *readback) {
+    return end_targets(context,readback,NULL);
+}
+static bool end_depth(void *context,const ctr_scene_surface *readback,
+                      const ctr_scene_depth_surface *depth) {
+    if(!depth)return fail(context,CTR_WIIU_GX2_SCENE_ARGUMENT);
+    return end_targets(context,readback,depth);
 }
 void ctr_wiiu_gx2_scene_init(ctr_wiiu_gx2_scene *s,GX2ContextState *restore_context) {
     if(s) { memset(s,0,sizeof(*s));s->restore_context=restore_context; }
 }
 static void abort_callback(void *context) { ctr_wiiu_gx2_scene_abort(context); }
 ctr_scene_backend ctr_wiiu_gx2_scene_backend(ctr_wiiu_gx2_scene *s) {
-    return (ctr_scene_backend){s,begin,draw,end,abort_callback};
+    return (ctr_scene_backend){s,begin,draw,end,abort_callback,begin_depth,end_depth};
 }
 const char *ctr_wiiu_gx2_scene_result_name(ctr_wiiu_gx2_scene_result result) {
     static const char *const names[]={"ok","argument","allocation","layout","shader","wait","busy"};

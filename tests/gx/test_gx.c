@@ -41,6 +41,81 @@ static void bulk(void) {
     CHECK(ctr_memory_write_bytes(&m,0x1000,NULL,0)==CTR_MEM_OK && m.generation==generation);
     CHECK(ctr_memory_read_bytes(&m,0x1000,NULL,1)==CTR_MEM_OVERFLOW);
 }
+static void bulk_ranges(void) {
+    ctr_memory m;ctr_memory_init(&m);uint8_t storage[64]={0},input[64];
+    for(unsigned i=0;i<sizeof(input);++i)input[i]=(uint8_t)(i+1);
+    CHECK(ctr_memory_map(&m,0x1000,16,3,storage,16)==CTR_MEM_OK);
+    CHECK(ctr_memory_map(&m,0x1010,16,3,storage+16,16)==CTR_MEM_OK);
+    CHECK(ctr_memory_map(&m,0x1100,32,3,storage+32,32)==CTR_MEM_OK);
+    CHECK(ctr_memory_map(&m,0x2000,16,5,storage+16,16)==CTR_MEM_OK);
+    CHECK(ctr_memory_map(&m,0x2100,8,5,storage+40,8)==CTR_MEM_OK);
+    CHECK(ctr_memory_map(&m,0x3000,16,3,storage+8,16)==CTR_MEM_OK);
+    ctr_memory_write_range ranges[CTR_MEMORY_MAX_WRITE_RANGES]={{0x1008,input,16},{0x1100,input+16,32}};
+    uint64_t generation=m.generation,code=m.code_generation;
+    CHECK(ctr_memory_write_ranges(&m,ranges,2)==CTR_MEM_OK);
+    CHECK(m.generation==generation+1 && m.code_generation==code+1);
+    CHECK(!memcmp(storage+8,input,16) && !memcmp(storage+32,input+16,32));
+    for(unsigned i=0;i<8;++i)CHECK(!storage[i] && !storage[24+i]);
+    /* Separate non-executable outputs still invalidate exclusives once, while
+       unchanged executable aliases preserve translated code snapshots. */
+    ranges[0]=(ctr_memory_write_range){0x1000,input,8};
+    ranges[1]=(ctr_memory_write_range){0x1118,input,8};
+    generation=m.generation;code=m.code_generation;
+    CHECK(ctr_memory_write_ranges(&m,ranges,2)==CTR_MEM_OK);
+    CHECK(m.generation==generation+1 && m.code_generation==code);
+    CHECK(!memcmp(storage,input,8) && !memcmp(storage+56,input,8));
+    generation=m.generation;
+    CHECK(ctr_memory_write_ranges(&m,NULL,0)==CTR_MEM_OK && m.generation==generation);
+    ranges[0]=(ctr_memory_write_range){UINT32_MAX,NULL,0};ranges[1]=ranges[0];
+    CHECK(ctr_memory_write_ranges(&m,ranges,2)==CTR_MEM_OK && m.generation==generation);
+    /* Adjacent destination bytes and shared owned input bytes are permitted. */
+    for(unsigned i=0;i<CTR_MEMORY_MAX_WRITE_RANGES;++i)
+        ranges[i]=(ctr_memory_write_range){0x1100+i,input,1};
+    CHECK(ctr_memory_write_ranges(&m,ranges,CTR_MEMORY_MAX_WRITE_RANGES)==CTR_MEM_OK);
+    CHECK(m.generation==generation+1 && m.code_generation==code+1);
+    for(unsigned i=32;i<64;++i)CHECK(storage[i]==input[0]);
+    for(unsigned kind=0;kind<10;++kind) {
+        ranges[0]=(ctr_memory_write_range){0x1000,input,16};
+        ranges[1]=(ctr_memory_write_range){0x1100,input+16,32};
+        ctr_mem_result expected=CTR_MEM_OVERLAP;
+        if(kind==0) { ranges[1].address=0x1110;expected=CTR_MEM_UNMAPPED; }
+        if(kind==1) { ranges[1].address=0x2000;ranges[1].size=16;expected=CTR_MEM_PERMISSION; }
+        if(kind==2) { ranges[1].address=0xfffffff0;expected=CTR_MEM_OVERFLOW; }
+        if(kind==3) { ranges[1].input=NULL;expected=CTR_MEM_OVERFLOW; }
+        if(kind==4)ranges[1].input=storage;
+        if(kind==5) { ranges[1].address=0x100f;ranges[1].size=1; }
+        if(kind==6) { ranges[1].address=0x3000;ranges[1].size=8; }
+        if(kind==7) { ranges[1].input=(const void*)(UINTPTR_MAX-15u);ranges[1].size=32; }
+        if(kind==8) { ranges[0].address=0x1100;ranges[0].size=32;ranges[1].address=0x1110;ranges[1].size=16; }
+        if(kind==9) { ranges[0].address=0x1017;ranges[0].size=8;ranges[1].address=0x300f;ranges[1].size=1; }
+        uint8_t before[64];memcpy(before,storage,sizeof(before));ctr_memory previous=m;
+        CHECK(ctr_memory_write_ranges(&m,ranges,2)==expected);
+        CHECK(!memcmp(before,storage,sizeof(before)) && !memcmp(&previous,&m,sizeof(m)));
+    }
+    ctr_memory previous=m;uint8_t before[64];memcpy(before,storage,sizeof(before));
+    CHECK(ctr_memory_write_ranges(&m,NULL,1)==CTR_MEM_OVERFLOW);
+    CHECK(ctr_memory_write_ranges(&m,ranges,SIZE_MAX)==CTR_MEM_CAPACITY);
+    CHECK(ctr_memory_write_ranges(&m,(const ctr_memory_write_range*)(UINTPTR_MAX-sizeof(*ranges)+1u),1)==CTR_MEM_OVERFLOW);
+    CHECK(!memcmp(before,storage,sizeof(before)) && !memcmp(&previous,&m,sizeof(m)));
+    /* Descriptors themselves must survive until every output has committed. */
+    CHECK(ctr_memory_map(&m,0x4000,(uint32_t)sizeof(ranges),3,(uint8_t*)ranges,sizeof(ranges))==CTR_MEM_OK);
+    previous=m;
+    CHECK(ctr_memory_write_ranges(&m,ranges,2)==CTR_MEM_OVERLAP);
+    CHECK(!memcmp(before,storage,sizeof(before)) && !memcmp(&previous,&m,sizeof(m)));
+    /* A single output must not publish conflicting bytes through adjacent
+       mappings that share backing. The legacy single-write API retains its
+       established sequential copy behavior. */
+    ctr_memory_init(&m);memset(storage,0,sizeof(storage));
+    CHECK(ctr_memory_map(&m,0x1000,16,3,storage,16)==CTR_MEM_OK);
+    CHECK(ctr_memory_map(&m,0x1010,16,3,storage+8,16)==CTR_MEM_OK);
+    ranges[0]=(ctr_memory_write_range){0x1000,input,32};previous=m;
+    CHECK(ctr_memory_write_ranges(&m,ranges,1)==CTR_MEM_OVERLAP);
+    CHECK(!memcmp(&previous,&m,sizeof(m)));
+    for(unsigned i=0;i<sizeof(storage);++i)CHECK(!storage[i]);
+    CHECK(ctr_memory_write_bytes(&m,0x1000,input,32)==CTR_MEM_OK);
+    CHECK(m.generation==previous.generation+1);
+    CHECK(!memcmp(storage,input,8) && !memcmp(storage+8,input+16,16));
+}
 static void transfers(void) {
     uint8_t source[512],out[512],back[512];for(unsigned i=0;i<512;++i)source[i]=(uint8_t)(i*19);
     for(unsigned format=0;format<5;++format) {
@@ -185,6 +260,6 @@ static void pica_commands(void) {
     }
 }
 int main(void) {
-    bulk();transfers();operations();rejection();queue();pica_commands();
+    bulk();bulk_ranges();transfers();operations();rejection();queue();pica_commands();
     printf("{\"ok\":true,\"assertions\":%u,\"gx_queue\":true,\"cpu_transfers\":true,\"console_verified\":false}\n",assertions);return 0;
 }

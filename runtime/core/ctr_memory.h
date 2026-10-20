@@ -6,6 +6,7 @@
 #include <stdbool.h>
 
 #define CTR_MEMORY_MAX_MAPS 32u
+#define CTR_MEMORY_MAX_WRITE_RANGES 32u
 enum { CTR_MEM_READ = 1u, CTR_MEM_WRITE = 2u, CTR_MEM_EXEC = 4u };
 typedef enum {
     CTR_MEM_OK = 0, CTR_MEM_UNMAPPED, CTR_MEM_PERMISSION,
@@ -51,6 +52,18 @@ ctr_mem_result ctr_memory_check_range(const ctr_memory *memory, uint32_t address
  * exclusive/code generations once and detect executable storage aliases. */
 ctr_mem_result ctr_memory_read_bytes(const ctr_memory *memory,uint32_t address,void *output,uint32_t size);
 ctr_mem_result ctr_memory_write_bytes(ctr_memory *memory,uint32_t address,const void *input,uint32_t size);
+typedef struct {
+    uint32_t address;
+    const void *input;
+    uint32_t size;
+} ctr_memory_write_range;
+/* Publish up to CTR_MEMORY_MAX_WRITE_RANGES owned buffers as one transaction.
+ * Preflight every destination and source before mutation. Destinations must not
+ * overlap, including through backing aliases; the descriptor array and inputs
+ * must not alias guest backing. Nonempty commits advance each affected
+ * generation once. An empty array or all-zero sizes is a successful no-op. */
+ctr_mem_result ctr_memory_write_ranges(ctr_memory *memory,
+                                       const ctr_memory_write_range *ranges,size_t count);
 /* Atomically split a fully mapped range to change permissions or remove it.
    Zero permissions create a guard mapping. A hole/capacity failure changes nothing. */
 ctr_mem_result ctr_memory_change_range(ctr_memory *memory, uint32_t address,

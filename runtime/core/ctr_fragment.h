@@ -11,7 +11,8 @@
  * Products remain exact integers until one truncating division by 255, then
  * clamp to a byte. MIN/MAX apply the factors. These are explicit software
  * rules; physical PICA/GX2 rounding remains unverified.
- * Depth/stencil and other fragment operation modes remain unsupported. */
+ * Descriptor-aware scenes perform D16 depth test/write between alpha acceptance
+ * and color output. Stencil and other fragment operation modes are unsupported. */
 typedef struct {
     uint8_t logic_op,write_mask,alpha_function,alpha_reference;
     bool alpha_enabled;
@@ -31,6 +32,12 @@ bool ctr_fragment_register_value(unsigned reg,uint32_t value);
  * blending retains partial configuration but fully defined 0x101 still validates. */
 bool ctr_fragment_decode(const uint32_t registers[],const uint8_t defined[],
                          bool required,ctr_fragment_state *out);
+/* Descriptor-aware scene entry. Depth bits in 0x107 are admitted only when the
+ * caller owns and validates a corresponding depth surface. The ordinary
+ * decoder keeps rejecting depth for color-only/native legacy callers. */
+bool ctr_fragment_decode_depth(const uint32_t registers[],const uint8_t defined[],
+                               bool required,bool depth_allowed,ctr_fragment_state *out);
+bool ctr_fragment_alpha_passes(const ctr_fragment_state *state,uint8_t alpha);
 /* Internal evaluation for a successfully decoded state. Sources and the old
  * destination are captured before writes. Alpha failure preserves all bytes;
  * the return value reports alpha acceptance, independently of write masks. */

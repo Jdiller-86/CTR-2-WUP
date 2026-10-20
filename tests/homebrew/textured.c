@@ -1,6 +1,6 @@
-/* Original normal-CRT/libctru texture/TEV program. No external assets.
- * Geometry and texture occupy separate owned linear allocations. Every tiled
- * render-target and RGB565 display pixel is checked by the guest before PASS. */
+/* Original normal-CRT/libctru texture/TEV/depth program. No external assets.
+ * Geometry, texture, color and D16 targets use owned linear allocations. Every
+ * tiled color/depth sample and RGB565 display pixel is checked before PASS. */
 #include <3ds.h>
 #include <stdlib.h>
 #include <string.h>
@@ -33,12 +33,22 @@ static u32 expected(unsigned x,unsigned y,unsigned width,unsigned height) {
     if(!(u&1u))result=0x102030ff;
     return result;
 }
+static u16 expected_depth(unsigned x,unsigned y,unsigned width,unsigned height) {
+    if(x<width/8 || x>=width*7/8 || y<height/8 || y>=height*7/8)return 65535;
+    if((2*x+1)*height+(2*y+1)*width>=2*width*height)return 0;
+    unsigned u=((2*x+1-width/4)*16)/(width*3/2);
+    return (u&1u)?0:65535; /* Alpha-rejected cutouts retain their far clear. */
+}
 static u16 rgb565(u32 rgba) { return (u16)(((rgba>>27)<<11)|(((rgba>>18)&63)<<5)|((rgba>>11)&31)); }
 static void pipeline(void) {
-    const u16 disabled[]={0x08f,0x100,0x104,0x105,0x106,0x112,0x114,0x115,0x117,0x11b};
+    const u16 disabled[]={0x08f,0x100,0x104,0x105,0x106,0x112,0x117,0x11b};
     for(unsigned i=0;i<sizeof(disabled)/sizeof(*disabled);++i)GPUCMD_AddWrite(disabled[i],0);
     GPUCMD_AddWrite(GPUREG_LOGIC_OP,3);GPUCMD_AddWrite(GPUREG_DEPTH_COLOR_MASK,0xf00);
     GPUCMD_AddWrite(GPUREG_COLORBUFFER_WRITE,15);
+    GPUCMD_AddWrite(GPUREG_DEPTHBUFFER_READ,2);GPUCMD_AddWrite(GPUREG_DEPTHBUFFER_WRITE,2);
+    GPUCMD_AddWrite(GPUREG_DEPTHBUFFER_FORMAT,0);
+    GPUCMD_AddWrite(GPUREG_DEPTHMAP_SCALE,0xbf0000); /* Canonical -1 float24. */
+    GPUCMD_AddWrite(GPUREG_DEPTHMAP_OFFSET,0);GPUCMD_AddWrite(GPUREG_DEPTHMAP_ENABLE,1);
     GPUCMD_AddWrite(GPUREG_TEXUNIT_CONFIG,1);
     GPUCMD_AddWrite(GPUREG_TEXUNIT0_DIM,(16u<<16)|8u);
     GPUCMD_AddWrite(GPUREG_TEXUNIT0_PARAM,0);GPUCMD_AddWrite(GPUREG_TEXUNIT0_LOD,0);
@@ -82,12 +92,16 @@ static void color(bool green) {
 int main(void) {
     gfxInit(GSP_RGB565_OES,GSP_RGB565_OES,false);
     u32 *texture=linearMemAlign(16*8*4,128);
-    u32 *commands=linearAlloc(4096);u8 *geometry=linearMemAlign(128,16);
+    u32 *commands=linearAlloc(4096);u8 *geometry=linearMemAlign(256,16);
     u32 *targets[2]={linearAlloc(240*400*4),linearAlloc(240*320*4)};
-    if(!commands || !geometry || !texture || !targets[0] || !targets[1])fail();
-    static const float vertices[4][6]={{-.75f,-.75f,-.5f,1.f,0.f,0.f},{.75f,-.75f,-.5f,1.f,1.f,0.f},
-        {-.75f,.75f,-.5f,1.f,0.f,1.f},{.75f,.75f,-.5f,1.f,1.f,1.f}};
-    const u8 indices[]={0,1,2,1,3,2};memset(geometry,0,128);memcpy(geometry,vertices,sizeof(vertices));
+    u8 *depths[2]={linearAlloc(240*400*2),linearAlloc(240*320*2)};
+    if(!commands || !geometry || !texture || !targets[0] || !targets[1] || !depths[0] || !depths[1])fail();
+    static const float vertices[4][6]={{-.75f,-.75f,0.f,1.f,0.f,0.f},{.75f,-.75f,0.f,1.f,1.f,0.f},
+        {-.75f,.75f,0.f,1.f,0.f,1.f},{.75f,.75f,0.f,1.f,1.f,1.f}};
+    const u8 indices[]={0,1,2,1,3,2};memset(geometry,0,256);memcpy(geometry,vertices,sizeof(vertices));
+    float far_vertices[4][6];memcpy(far_vertices,vertices,sizeof(far_vertices));
+    for(unsigned i=0;i<4;++i)far_vertices[i][2]=-1.f;
+    memcpy(geometry+128,far_vertices,sizeof(far_vertices));
     memcpy(geometry+96,indices,sizeof(indices));
     for(unsigned i=0;i<6;++i)((u16*)(geometry+112))[i]=indices[i];
     for(unsigned y=0;y<8;++y)for(unsigned x=0;x<16;++x)texture[tile(x,y,16)]=texel(x,y);
@@ -95,25 +109,30 @@ int main(void) {
         u16 width,height;u16 *output=(u16*)gfxGetFramebuffer(screen?GFX_BOTTOM:GFX_TOP,GFX_LEFT,&width,&height);
         if(width!=240 || height!=(screen?320:400))fail();
         unsigned pixels=(unsigned)width*height;
-        request(GX_MemoryFill(targets[screen],0x102030ff,targets[screen]+pixels,GX_FILL_32BIT_DEPTH|GX_FILL_TRIGGER,NULL,0,NULL,0));gspWaitForPSC0();
+        request(GX_MemoryFill(targets[screen],0x102030ff,targets[screen]+pixels,GX_FILL_32BIT_DEPTH|GX_FILL_TRIGGER,
+            (u32*)depths[screen],65535,(u32*)(depths[screen]+pixels*2),GX_FILL_16BIT_DEPTH|GX_FILL_TRIGGER));gspWaitForPSC0();
         GPUCMD_SetBuffer(commands,1024,0);
         if(!screen) { pipeline();GPUCMD_AddWrite(GPUREG_TEXUNIT0_ADDR1,osConvertVirtToPhys(texture)/8); }
         /* The second list reuses the original texture/shader state, not an upload. */
         GPUCMD_AddWrite(GPUREG_ATTRIBBUFFERS_LOC,(osConvertVirtToPhys(geometry)/16)*2);
         GPUCMD_AddWrite(GPUREG_COLORBUFFER_LOC,osConvertVirtToPhys(targets[screen])/8);
+        GPUCMD_AddWrite(GPUREG_DEPTHBUFFER_LOC,osConvertVirtToPhys(depths[screen])/8);
         GPUCMD_AddWrite(GPUREG_FRAMEBUFFER_DIM,width|((height-1)<<12)|(1<<24));
         GPUCMD_AddWrite(GPUREG_VIEWPORT_WIDTH,0x45e000);
         GPUCMD_AddWrite(GPUREG_VIEWPORT_HEIGHT,screen?0x464000:0x469000);
-        for(unsigned triangle=0;triangle<2;++triangle) {
+        for(unsigned triangle=0;triangle<3;++triangle) {
+            /* The third draw repeats the first triangle at far Z with alpha
+             * disabled. LESS must reject it against both near and clear depth. */
+            GPUCMD_AddWrite(GPUREG_ATTRIBBUFFER0_OFFSET,triangle==2?128:0);
             color(triangle!=0);combiner(triangle!=0);
             /* Alpha testing precedes the merger. RGB adds ONE/ONE to the
              * seeded target; alpha uses ONE/ZERO. Reset blend mode on the
              * first triangle of each retained list. */
-            GPUCMD_AddWrite(GPUREG_FRAGOP_ALPHA_TEST,1u|((triangle?GPU_EQUAL:GPU_GEQUAL)<<4)|((triangle?191u:128u)<<8));
+            GPUCMD_AddWrite(GPUREG_FRAGOP_ALPHA_TEST,triangle==2?0:1u|((triangle?GPU_EQUAL:GPU_GEQUAL)<<4)|((triangle?191u:128u)<<8));
             GPUCMD_AddWrite(GPUREG_COLOR_OPERATION,triangle?0x100u:0u);
             GPUCMD_AddWrite(GPUREG_BLEND_FUNC,0x01110000u);
             GPUCMD_AddWrite(GPUREG_LOGIC_OP,GPU_LOGICOP_COPY);
-            GPUCMD_AddWrite(GPUREG_DEPTH_COLOR_MASK,15u<<8);
+            GPUCMD_AddWrite(GPUREG_DEPTH_COLOR_MASK,1u|(GPU_LESS<<4)|(15u<<8)|(1u<<12));
             GPUCMD_AddWrite(GPUREG_COLORBUFFER_READ,triangle?15u:0u);
             GPUCMD_AddWrite(GPUREG_TEXUNIT0_PARAM,triangle?
                 GPU_TEXTURE_MAG_FILTER(GPU_LINEAR)|GPU_TEXTURE_MIN_FILTER(GPU_LINEAR):0);
@@ -124,21 +143,27 @@ int main(void) {
             }
             GPUCMD_AddWrite(0x2cb,2);
             GPUCMD_AddWrite(0x2cc,triangle?0x4c420000:0x4c402000); /* o2 = c0 / v2 */
-            GPUCMD_AddWrite(GPUREG_INDEXBUFFER_CONFIG,(screen?0x80000000:0)|(screen?112+triangle*6:96+triangle*3));
+            GPUCMD_AddWrite(GPUREG_INDEXBUFFER_CONFIG,(screen?0x80000000:0)|(screen?112+(triangle%2)*6:96+(triangle%2)*3));
             GPUCMD_AddWrite(GPUREG_DRAWELEMENTS,1);
         }
         GPUCMD_AddWrite(GPUREG_FRAMEBUFFER_FLUSH,1);
         u32 *submitted,words;GPUCMD_Split(&submitted,&words);
         if(submitted!=commands || words>1024 || (words&3))fail();
         request(GX_ProcessCommandList(submitted,words*4,2));gspWaitForP3D();
-        for(unsigned y=0;y<height;++y)for(unsigned x=0;x<width;++x)
-            if(targets[screen][tile(x,y,width)]!=expected(x,y,width,height))fail();
+        for(unsigned y=0;y<height;++y)for(unsigned x=0;x<width;++x) {
+            unsigned index=tile(x,y,width);u16 z=expected_depth(x,y,width,height);
+            const u8 *stored=depths[screen]+index*2;
+            if(targets[screen][index]!=expected(x,y,width,height) ||
+               stored[0]!=(u8)z || stored[1]!=(u8)(z>>8))fail();
+        }
         request(GX_DisplayTransfer(targets[screen],GX_BUFFER_DIM(width,height),(u32*)output,GX_BUFFER_DIM(width,height),GX_TRANSFER_OUT_FORMAT(GX_TRANSFER_FMT_RGB565)));gspWaitForPPF();
         for(unsigned y=0;y<height;++y)for(unsigned x=0;x<width;++x)
             if(output[y*width+x]!=rgb565(expected(x,y,width,height)))fail();
     }
     gfxFlushBuffers();gfxSwapBuffers();gspWaitForVBlank();
     static const char ready[]="CTR2WUP DRAW READY";svcOutputDebugString(ready,sizeof(ready)-1);svcSleepThread(250000000);
-    linearFree(commands);linearFree(geometry);linearFree(texture);linearFree(targets[0]);linearFree(targets[1]);gfxExit();
+    linearFree(commands);linearFree(geometry);linearFree(texture);linearFree(targets[0]);linearFree(targets[1]);linearFree(depths[0]);linearFree(depths[1]);gfxExit();
+    static const char depth_pass[]="CTR2WUP compiled D16 depth PASS";
+    svcOutputDebugString(depth_pass,sizeof(depth_pass)-1);
     static const char message[]="CTR2WUP compiled textured PICA PASS";svcOutputDebugString(message,sizeof(message)-1);return 0;
 }

@@ -40,3 +40,7 @@ bool ctr_draw_observation_ready(bool decoded,uint64_t serial,uint64_t draws,uint
                                 uint64_t fragments,uint64_t shader_steps) {
     return decoded && serial>=2 && draws==4 && triangles==4 && fragments==97200 && shader_steps==36;
 }
+bool ctr_textured_draw_observation_ready(bool decoded,uint64_t serial,uint64_t draws,uint64_t triangles,
+                                         uint64_t fragments,uint64_t shader_steps) {
+    return decoded && serial>=2 && draws==6 && triangles==6 && fragments==145770 && shader_steps==72;
+}

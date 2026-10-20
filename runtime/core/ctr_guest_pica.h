@@ -4,8 +4,9 @@
 #include "ctr_scene.h"
 
 /* Original synchronous guest adapter. Resolves only owned Old-family linear
- * allocations (VA 0x14000000 -> PA 0x20000000). One vertex base and one tiled
- * RGBA8 target per list; target feedback and command/relay aliases fail.
+ * allocations (VA 0x14000000 -> PA 0x20000000). One vertex base and a stable tiled
+ * RGBA8/color + optional D16/depth pair per list; target feedback and
+ * command/relay aliases fail. Both outputs publish in one memory transaction.
  * Validated command/resources/target snapshots survive guest aliases safely.
  * Publishes guest bytes/generations, shader state and counters only after the
  * entire list succeeds. Caller owns GPU right, queue and P3D completion. */

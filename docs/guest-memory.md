@@ -77,6 +77,13 @@ invalidating unchanged executable snapshots. Adding/removing executable mappings
 changing execute protection and writes through executable aliases still invalidate
 AOT. Dynamic heap management therefore preserves normal translated execution.
 
+`ctr_memory_write_ranges` publishes up to 32 owned output ranges atomically.
+It validates every destination, source and descriptor before copying; overlapping
+virtual destinations or backing aliases reject. A successful nonempty batch
+advances the memory generation once and the code generation once if any output
+touches executable backing. This supports a single color/depth publication;
+a late invalid range leaves all bytes and generations unchanged.
+
 Linear backing is contiguous for checked CPU accesses. The bounded guest-draw
 adapter maps owned Old-family linear allocations to physical resources; general
 FCRAM/VRAM/DSP mapping and asynchronous GPU coherency remain unsupported. MAP/UNMAP aliases, RESERVE, system/base regions, New-family linear

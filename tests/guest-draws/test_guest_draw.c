@@ -290,7 +290,7 @@ static bool backend_end(void *context,const ctr_scene_surface *readback) {
 }
 static void backend_abort(void *context) { backend_mock *m=context;++m->aborts;m->active=false; }
 static ctr_scene_backend mock_backend(backend_mock *m) {
-    ctr_scene_backend backend={m,backend_begin,backend_draw,backend_end,backend_abort};return backend;
+    ctr_scene_backend backend={m,backend_begin,backend_draw,backend_end,backend_abort,NULL,NULL};return backend;
 }
 static void native_backend_success(void) {
     for(unsigned kind=0;kind<4;++kind) {
@@ -524,7 +524,7 @@ static void guest_texture_snapshots(void) {
     ctr_guest g;list l;ctr_gx_completion c;textured_open(&g,&l,false);
     insert_at(&l,find(&l,0x22f,1),0x085,(TEXTURE_PA+1024u)/8u);trim(&l);finish(&l);
     guest_texture_backend m={0};m.guest=&g;
-    ctr_scene_backend backend={&m,guest_texture_begin,guest_texture_draw,guest_texture_end,guest_texture_abort};
+    ctr_scene_backend backend={&m,guest_texture_begin,guest_texture_draw,guest_texture_end,guest_texture_abort,NULL,NULL};
     ctr_guest_set_scene_backend(&g,&backend);
     CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK && c.signal && c.irq==5);
     CHECK(m.begins==1 && m.draws==2 && m.ends==1 && !m.aborts);texture_golden(&g,true,false,true);
@@ -715,9 +715,160 @@ static void guest_blending(void) {
         ctr_guest_close(&g);
     }
 }
+enum { DEPTH=BASE+0x6000u, DEPTH_PA=PHYSICAL+0x6000u, DEPTH_BYTES=64u*64u*2u };
+static size_t depth_offset(unsigned x,unsigned y) {
+    unsigned morton=0;
+    for(unsigned bit=0;bit<3;++bit)morton|=((x>>bit)&1u)<<(2u*bit)|((y>>bit)&1u)<<(2u*bit+1u);
+    return (((size_t)(y/8u)*8u+x/8u)*64u+morton)*2u;
+}
+static unsigned depth_seed(unsigned x,unsigned y) {
+    const unsigned values[]={0u,0x12abu,0x8001u,65535u};return values[(17u*x+31u*y)&3u];
+}
+static void depth_setup(ctr_guest *g,list *l,bool textured) {
+    set(l,0x114,2);set(l,0x115,2);set(l,0x107,0x1f41);
+    const unsigned regs[]={0x116,0x11c,0x04d,0x04e,0x06d};
+    const uint32_t values[]={0,DEPTH_PA/8u,0xbf0000,0,1};size_t at=find(l,0x22f,0);
+    for(unsigned i=0;i<sizeof(regs)/sizeof(*regs);++i,at+=8u)insert_at(l,at,regs[i],values[i]);
+    trim(l);finish(l);
+    for(unsigned i=0;i<4;++i)write_word(g,RESOURCE+i*(textured?24u:16u)+8u,0);
+    uint8_t *raw=backing(g)+0x6000u;
+    for(unsigned y=0;y<64;++y)for(unsigned x=0;x<64;++x) {
+        unsigned z=depth_seed(x,y);size_t p=depth_offset(x,y);raw[p]=(uint8_t)z;raw[p+1]=(uint8_t)(z>>8);
+    }
+}
+static void depth_golden(ctr_guest *g,unsigned phase) {
+    uint8_t pixels[BYTES];CHECK(ctr_texture_decode(backing(g)+0x2000u,BYTES,0,64,64,pixels,sizeof(pixels))==CTR_TEXTURE_OK);
+    for(unsigned y=0;y<64;++y)for(unsigned x=0;x<64;++x) {
+        bool covered=x>=8 && x<56 && y>=8 && y<56,upper=x+y>=63u;
+        uint8_t expected[]={16,32,48,255};unsigned z=depth_seed(x,y);
+        if(covered) {
+            z=phase==1u && upper?65535u:0u;
+            if(phase && upper) { expected[0]=204;expected[1]=221;expected[2]=238; }
+            else if(depth_seed(x,y)) { expected[0]=upper?0:255;expected[1]=upper?255:0;expected[2]=0; }
+        }
+        CHECK(!memcmp(pixels+(y*64u+x)*4u,expected,4));size_t p=depth_offset(x,y);
+        CHECK(backing(g)[0x6000u+p]==(uint8_t)z && backing(g)[0x6000u+p+1]==(uint8_t)(z>>8));
+    }
+}
+static bool depth_unexpected_begin(void *context,const ctr_scene_surface *surface,const ctr_scene_depth_surface *depth) {
+    (void)surface;(void)depth;++((backend_mock*)context)->begins;return false;
+}
+static bool depth_unexpected_end(void *context,const ctr_scene_surface *surface,const ctr_scene_depth_surface *depth) {
+    (void)surface;(void)depth;++((backend_mock*)context)->ends;return false;
+}
+static void guest_depth_success(void) {
+    for(unsigned shorts=0;shorts<2;++shorts) {
+        ctr_guest g;list l;ctr_gx_completion c;open(&g,&l,shorts!=0);depth_setup(&g,&l,false);
+        /* Only depth aliases executable storage; the paired publication must
+           invalidate both generations once and clear the exclusive monitor. */
+        CHECK(ctr_memory_map(&g.memory,0x30000000u,DEPTH_BYTES,CTR_MEM_READ|CTR_MEM_EXEC,
+                             backing(&g)+0x6000u,DEPTH_BYTES)==CTR_MEM_OK);
+        CHECK(ctr_memory_write_bytes(&g.memory,BASE,l.bytes,(uint32_t)l.size)==CTR_MEM_OK);
+        uint64_t generation=g.memory.generation,code=g.memory.code_generation;g.cpu.exclusive_valid=true;
+        CHECK(submit(&g,&l,&c)==CTR_GX_OK && c.signal && c.irq==5);
+        CHECK(g.memory.generation==generation+1 && g.memory.code_generation==code+1 && !g.cpu.exclusive_valid);
+        CHECK(g.gsp.pica_draws==2 && g.gsp.pica_triangles==2 && g.gsp.pica_fragments==2304);
+        depth_golden(&g,0);
+        /* Reuse retained indices/state with far depth and a different color.
+           GREATER passes every previously prepared upper-triangle sample. */
+        for(unsigned i=0;i<4;++i)write_word(&g,RESOURCE+i*16u+8u,UINT32_C(0xbf800000));
+        memset(&l,0,sizeof(l));add(&l,0x107,0x1f61);add(&l,0xc0,0xe000e);
+        add(&l,0xc3,UINT32_C(0xffeeddcc));add(&l,0x22f,1);finish(&l);
+        CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK && c.signal);depth_golden(&g,1);
+        uint8_t color[BYTES],depth[DEPTH_BYTES];memcpy(color,backing(&g)+0x2000u,BYTES);memcpy(depth,backing(&g)+0x6000u,DEPTH_BYTES);
+        memset(&l,0,sizeof(l));add(&l,0x22f,1);finish(&l);
+        CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK && c.signal);
+        CHECK(!memcmp(color,backing(&g)+0x2000u,BYTES) && !memcmp(depth,backing(&g)+0x6000u,DEPTH_BYTES));
+        /* Disabled depth testing still permits a depth-only write. */
+        for(unsigned i=0;i<4;++i)write_word(&g,RESOURCE+i*16u+8u,0);
+        memset(&l,0,sizeof(l));add(&l,0x107,0x1000);add(&l,0x114,0);add(&l,0x22f,1);finish(&l);
+        CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK && c.signal);depth_golden(&g,2);
+        CHECK(g.gsp.pica_draws==5 && g.gsp.pica_fragments==5832);ctr_guest_close(&g);
+    }
+    /* A fractional software depth distinguishes little-endian 0x12ab/0x8001
+       reads from byte-swapped values, and truncates half-range to 32767. */
+    ctr_guest g;list l;ctr_gx_completion c;open(&g,&l,false);depth_setup(&g,&l,false);
+    for(unsigned i=0;i<4;++i)write_word(&g,RESOURCE+i*16u+8u,UINT32_C(0xbf000000));
+    CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK && c.signal);uint8_t pixels[BYTES];
+    CHECK(ctr_texture_decode(backing(&g)+0x2000u,BYTES,0,64,64,pixels,sizeof(pixels))==CTR_TEXTURE_OK);
+    for(unsigned y=0;y<64;++y)for(unsigned x=0;x<64;++x) {
+        unsigned z=depth_seed(x,y);uint8_t expected[]={16,32,48,255};
+        if(x>=8 && x<56 && y>=8 && y<56 && z>32767u) {
+            z=32767;expected[0]=x+y<63u?255:0;expected[1]=x+y<63u?0:255;expected[2]=0;
+        }
+        CHECK(!memcmp(pixels+(y*64u+x)*4u,expected,4));size_t p=depth_offset(x,y);
+        CHECK(backing(&g)[0x6000u+p]==(uint8_t)z && backing(&g)[0x6000u+p+1]==(uint8_t)(z>>8));
+    }
+    ctr_guest_close(&g);
+}
+static void guest_depth_rollback(void) {
+    for(unsigned retained=0;retained<2;++retained)for(unsigned kind=0;kind<15;++kind) {
+        ctr_guest g;list l;ctr_gx_completion c;
+        bool textured=kind==5u;
+        if(textured)textured_open(&g,&l,false);else open(&g,&l,false);
+        depth_setup(&g,&l,textured);if(retained)CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK);
+        ctr_gx_result expected=CTR_GX_UNSUPPORTED;uint32_t command_address=BASE;
+        if(kind==0) { trim(&l);add(&l,0x04d,0x3f0000);finish(&l); }
+        if(kind==1) { CHECK(ctr_memory_change_range(&g.memory,DEPTH+8u,8,CTR_MEM_READ,false)==CTR_MEM_OK);expected=CTR_GX_MEMORY; }
+        if(kind==2) { set(&l,0x11c,(PHYSICAL+0x2000u)/8u);expected=CTR_GX_MEMORY; }
+        if(kind==3) { set(&l,0x11c,PHYSICAL/8u);expected=CTR_GX_MEMORY; }
+        if(kind==4) { set(&l,0x11c,(PHYSICAL+0x1000u)/8u);expected=CTR_GX_MEMORY; }
+        if(kind==5) { set(&l,0x085,DEPTH_PA/8u);expected=CTR_GX_MEMORY; }
+        if(kind==6) {
+            CHECK(ctr_memory_change_range(&g.memory,DEPTH,DEPTH_BYTES,CTR_MEM_READ,false)==CTR_MEM_OK);
+            for(size_t i=0;i<g.memory.count;++i)if(g.memory.maps[i].base==DEPTH) {
+                g.memory.maps[i].permissions=3;g.memory.maps[i].storage=backing(&g)+0x2000u;
+            }
+            expected=CTR_GX_MEMORY;
+        }
+        if(kind==7) { insert_at(&l,find(&l,0x22f,1),0x11c,(PHYSICAL+0x8000u)/8u);trim(&l);finish(&l); }
+        if(kind==8)set(&l,0x116,2);
+        if(kind==9)set(&l,0x114,3);
+        if(kind==10)set(&l,0x115,3);
+        if(kind==11)set(&l,0x11c,0);
+        if(kind==12) { trim(&l);add(&l,0x06d,0);finish(&l); }
+        if(kind==14) {
+            command_address=0x30002000u;expected=CTR_GX_MEMORY;
+            CHECK(ctr_memory_map(&g.memory,command_address,DEPTH_BYTES,3,backing(&g)+0x6000u,DEPTH_BYTES)==CTR_MEM_OK);
+        }
+        relay(&g);ctr_guest_shared *shared=&g.shared[g.gsp.relay_shared];uint8_t irq[CTR_GUEST_PAGE];
+        CHECK(shared->size==sizeof(irq));memcpy(irq,shared->storage,sizeof(irq));
+        backend_mock m={0};ctr_scene_backend backend=mock_backend(&m);
+        if(kind!=13) { backend.begin_depth=depth_unexpected_begin;backend.end_depth=depth_unexpected_end; }
+        ctr_guest_set_scene_backend(&g,&backend);
+        CHECK(ctr_memory_write_bytes(&g.memory,command_address,l.bytes,(uint32_t)l.size)==CTR_MEM_OK);
+        ctr_scene_state before={0};if(retained)before=*g.gsp.pica_scene;ctr_pica_state pica=g.gsp.pica;
+        uint8_t all[65536];memcpy(all,backing(&g),sizeof(all));
+        uint64_t generation=g.memory.generation,code=g.memory.code_generation;g.cpu.exclusive_valid=true;
+        uint32_t commands[]={0x01000101,command_address,(uint32_t)l.size,0,0,0,0,1};
+        CHECK(ctr_gx_execute(&g,commands,&c)==expected && !c.signal);
+        CHECK(!m.begins && !m.draws && !m.ends && !m.aborts);
+        CHECK(!memcmp(all,backing(&g),sizeof(all)) && !memcmp(&pica,&g.gsp.pica,sizeof(pica)));
+        CHECK(retained?g.gsp.pica_scene && !memcmp(&before,g.gsp.pica_scene,sizeof(before)):!g.gsp.pica_scene);
+        CHECK(g.memory.generation==generation && g.memory.code_generation==code && g.cpu.exclusive_valid);
+        CHECK(!memcmp(irq,shared->storage,sizeof(irq)) && !g.events[g.gsp.relay_event].signaled);
+        ctr_guest_close(&g);
+    }
+}
+static void guest_depth_queues(void) {
+    ctr_guest g;list good,bad;open(&g,&good,false);depth_setup(&g,&good,false);bad=good;
+    trim(&bad);add(&bad,0x115,3);finish(&bad);unsigned owner=relay(&g);
+    CHECK(ctr_memory_write_bytes(&g.memory,BASE,good.bytes,(uint32_t)good.size)==CTR_MEM_OK);
+    CHECK(ctr_memory_write_bytes(&g.memory,BASE+0x800u,bad.bytes,(uint32_t)bad.size)==CTR_MEM_OK);
+    write_word(&g,0x10002800,14u|(2u<<8));
+    for(unsigned entry=0;entry<2;++entry) {
+        uint32_t w[]={0x01000101,BASE+(entry?0x800u:0),(uint32_t)(entry?bad.size:good.size),0,0,0,0,1};
+        for(unsigned i=0;i<8;++i)write_word(&g,0x10002820u+(entry?0:14u)*32u+i*4u,w[i]);
+    }
+    uint32_t trigger[]={0xc0000},out[8];unsigned count;
+    CHECK(!ctr_gsp_request(&g,owner,trigger,out,&count) && g.state==CTR_GUEST_FAULTED);
+    CHECK(read_word(&g,0x10002800)==0x100u && g.gsp.gx_commands==1 && g.gsp.gx_pica==1 && g.gsp.pica_draws==2);
+    CHECK(g.shared[g.gsp.relay_shared].storage[1]==1 && g.shared[g.gsp.relay_shared].storage[12]==5);
+    CHECK(g.events[g.gsp.relay_event].signaled);depth_golden(&g,0);ctr_guest_close(&g);
+}
 int main(void) {
     successful();rollback();shader_capacity();arithmetic_draws();queues();native_backend_success();native_backend_rollback();
     guest_texture_success();guest_linear_texture();guest_texture_snapshots();guest_texture_rollback();guest_texture_queues();
-    guest_fragment_output();guest_blending();
+    guest_fragment_output();guest_blending();guest_depth_success();guest_depth_rollback();guest_depth_queues();
     printf("guest PICA draw tests: %u assertions passed\n",assertions);return 0;
 }
