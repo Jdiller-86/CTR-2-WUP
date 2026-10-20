@@ -31,7 +31,10 @@ static unsigned scissor[4],rectangles[4][4],rectangle_count;
 static float half_x,half_y,offset_x,offset_y;
 static bool cull_front,cull_back;
 static unsigned color_control_sets,channel_mask_sets,alpha_test_sets;
+static unsigned blend_control_sets,blend_constant_sets,compile_attempts;
 static unsigned captured_logic,captured_write_mask,captured_alpha_function;
+static unsigned captured_blend_enable,captured_blend_source[2],captured_blend_destination[2],captured_blend_equation[2];
+static float captured_blend_constant[4];
 static bool captured_alpha_enabled;
 static float captured_alpha_reference;
 
@@ -124,7 +127,8 @@ void GX2DrawEx(unsigned type,unsigned count,unsigned first,unsigned instances) {
     assert(bound_target && active_context!=&native_context);++gpu_draws;gpu_pending=true;
     assert(!expected_texture || (bound_texture && bound_sampler && bound_pixel_program));
     assert(color_control_sets==uniform_uploads && channel_mask_sets==uniform_uploads &&
-        alpha_test_sets==uniform_uploads);
+        alpha_test_sets==uniform_uploads && blend_control_sets==uniform_uploads &&
+        blend_constant_sets==uniform_uploads);
     /* A visible nonrendering marker distinguishes target readback from a stale
      * or substituted reference buffer. It deliberately ignores fragment state;
      * fixed-state calls and numerical comparisons are checked separately. */
@@ -256,9 +260,41 @@ void GX2SetColorControl(GX2LogicOp logic,uint8_t blend,bool multi_write,bool col
     static const unsigned expected[16]={0x00,0x88,0x44,0xcc,0xff,0x33,0xaa,0x55,
         0x77,0xee,0x11,0x66,0x99,0x22,0xdd,0xbb};
     assert(expected_state->registers[0x102]<16u);
-    assert(logic==expected[expected_state->registers[0x102]]);
-    assert(!blend && !multi_write && color_write);
-    captured_logic=logic;++color_control_sets;
+    bool blending=(expected_state->registers[0x100]&0x100u)!=0;
+    assert(logic==(blending?0xccu:expected[expected_state->registers[0x102]]));
+    assert(blend==(blending?1u:0u) && !multi_write && color_write);
+    captured_logic=logic;captured_blend_enable=blend;++color_control_sets;
+}
+void GX2SetBlendControl(GX2RenderTarget target,GX2BlendMode color_source,GX2BlendMode color_destination,
+                        GX2BlendCombineMode color_equation,bool separate_alpha,GX2BlendMode alpha_source,
+                        GX2BlendMode alpha_destination,GX2BlendCombineMode alpha_equation) {
+    static const unsigned factor[15]={0,1,2,3,8,9,4,5,6,7,13,14,19,20,10};
+    static const unsigned equation[5]={0,1,4,2,3};
+    assert(!target && separate_alpha);
+    captured_blend_source[0]=color_source;captured_blend_source[1]=alpha_source;
+    captured_blend_destination[0]=color_destination;captured_blend_destination[1]=alpha_destination;
+    captured_blend_equation[0]=color_equation;captured_blend_equation[1]=alpha_equation;
+    bool blending=(expected_state->registers[0x100]&0x100u)!=0;
+    uint32_t config=blending?expected_state->registers[0x101]:0x01010000u;
+    for(unsigned side=0;side<2;++side) {
+        unsigned source=(config>>(16u+side*8u))&15u,destination=(config>>(20u+side*8u))&15u;
+        assert(source<15u && destination<14u && ((config>>(side*8u))&7u)<5u);
+        unsigned mapped_source=side && source==14u?1u:factor[source];
+        assert(captured_blend_source[side]==mapped_source && captured_blend_destination[side]==factor[destination]);
+        assert(captured_blend_equation[side]==equation[(config>>(side*8u))&7u]);
+    }
+    ++blend_control_sets;
+}
+void GX2SetBlendConstantColor(float red,float green,float blue,float alpha) {
+    const float values[4]={red,green,blue,alpha};
+    uint32_t constant=(expected_state->registers[0x100]&0x100u) &&
+        expected_state->register_defined[0x103]==15u?expected_state->registers[0x103]:0u;
+    for(unsigned lane=0;lane<4;++lane) {
+        float expected=(float)((double)((constant>>(lane*8u))&255u)/255.0);
+        assert(values[lane]==expected && values[lane]>=0.0f && values[lane]<=1.0f);
+        captured_blend_constant[lane]=values[lane];
+    }
+    ++blend_constant_sets;
 }
 void GX2SetTargetChannelMasks(GX2ChannelMask a,GX2ChannelMask b,GX2ChannelMask c,GX2ChannelMask d,
                               GX2ChannelMask e,GX2ChannelMask f,GX2ChannelMask g,GX2ChannelMask h) {
@@ -280,6 +316,7 @@ bool ctr_shader_f24_decode(uint32_t raw,uint32_t *value) {
 }
 ctr_gx2_shader_result ctr_gx2_shader_compile(const ctr_shader_program *program,uint16_t mask,
                                            const uint32_t *maps,unsigned total,ctr_gx2_shader *out) {
+    ++compile_attempts;
     assert(program==expected_shader && mask==(expected_uv?7u:3u) && total==(expected_uv?3u:2u));
     assert(maps[0]==0x03020100 && maps[1]==0x0b0a0908);
     if(expected_uv)assert(maps[2]==0x1f1f0d0c);
@@ -297,6 +334,12 @@ static void reset(void) {
     bound_texture=NULL;bound_sampler=NULL;bound_pixel_program=NULL;texture_image=NULL;
     texture_inits=0;texture_binds=0;sampler_binds=0;texture_flushes=0;texture_invalidates=0;
     color_control_sets=channel_mask_sets=alpha_test_sets=0;
+    blend_control_sets=blend_constant_sets=compile_attempts=0;
+    captured_blend_enable=0;
+    memset(captured_blend_source,0,sizeof(captured_blend_source));
+    memset(captured_blend_destination,0,sizeof(captured_blend_destination));
+    memset(captured_blend_equation,0,sizeof(captured_blend_equation));
+    memset(captured_blend_constant,0,sizeof(captured_blend_constant));
     captured_logic=captured_write_mask=captured_alpha_function=0;
     captured_alpha_enabled=false;captured_alpha_reference=0.0f;
 }
@@ -590,6 +633,121 @@ static void fragment_failures(void) {
         assert(scene.result==CTR_WIIU_GX2_SCENE_ARGUMENT && scene.draws==retained && gpu_draws==retained &&
             scene.texture_uploads==retained && texture_inits==retained && texture_binds==retained &&
             color_control_sets==retained && channel_mask_sets==retained && alpha_test_sets==retained &&
+            blend_control_sets==retained && blend_constant_sets==retained && compile_attempts==retained &&
+            alloc_attempts==allocations);
+        backend.abort(backend.context);clean(&scene);
+    }
+}
+static void blend_config(ctr_scene_state *state,unsigned rgb_equation,unsigned rgb_source,unsigned rgb_destination,
+                          unsigned alpha_equation,unsigned alpha_source,unsigned alpha_destination) {
+    state->registers[0x100]=0x100u;
+    state->register_defined[0x101]=state->register_defined[0x103]=15u;
+    state->registers[0x101]=rgb_equation|(alpha_equation<<8)|(rgb_source<<16)|
+        (rgb_destination<<20)|(alpha_source<<24)|(alpha_destination<<28);
+    state->registers[0x103]=UINT32_C(0x0953a7ed);
+}
+static void blend_bindings(void) {
+    reset();uint8_t bytes[1024]={0};ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
+    ctr_scene_state state;ctr_vertex vertices[3];setup(&state,vertices);
+    ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+    ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+    assert(backend.begin(backend.context,&surface));
+    state.registers[0x102]=11; /* The blend route must bind COPY regardless. */
+    for(unsigned side=0;side<2;++side)for(unsigned equation=0;equation<3;++equation)
+        for(unsigned source=0;source<15;++source)for(unsigned destination=0;destination<14;++destination) {
+            blend_config(&state,side?0u:equation,side?1u:source,side?0u:destination,
+                side?equation:0u,side?source:1u,side?destination:0u);rectangle_count=0;
+            assert(backend.draw(backend.context,&state,vertices,3,NULL));
+            assert(captured_logic==0xccu && captured_blend_enable==1u);
+            if(side && source==14u)assert(captured_blend_source[1]==1u);
+        }
+    /* ONE/ONE makes factor-aware and factor-ignoring MIN/MAX equivalent. Both
+     * equations remain independently selectable for RGB and alpha. */
+    for(unsigned rgb=0;rgb<5;++rgb)for(unsigned alpha=0;alpha<5;++alpha) {
+        blend_config(&state,rgb,1,1,alpha,1,1);rectangle_count=0;
+        assert(backend.draw(backend.context,&state,vertices,3,NULL));
+    }
+    /* Every byte is observed in every constant lane; these check normalized
+     * API arguments only, without claiming a hardware blend numeric model. */
+    for(unsigned value=0;value<256;++value) {
+        blend_config(&state,0,10,11,2,12,13);
+        state.registers[0x103]=value|((255u-value)<<8)|((value^0xa5u)<<16)|(((value*3u+17u)&255u)<<24);
+        rectangle_count=0;assert(backend.draw(backend.context,&state,vertices,3,NULL));
+    }
+    for(unsigned mask=0;mask<16;++mask) {
+        blend_config(&state,0,1,1,0,1,1);state.registers[0x107]=mask<<8;rectangle_count=0;
+        assert(backend.draw(backend.context,&state,vertices,3,NULL));assert(captured_write_mask==mask);
+    }
+    blend_config(&state,0,1,0,2,1,0);state.registers[0x112]=0;state.registers[0x107]=0xf00u;
+    rectangle_count=0;assert(backend.draw(backend.context,&state,vertices,3,NULL));
+    /* Reset complete controls and constants on a blend -> logic -> blend
+     * sequence, including retained valid inactive blend configuration. */
+    state.registers[0x100]=0;state.registers[0x102]=3;rectangle_count=0;
+    assert(backend.draw(backend.context,&state,vertices,3,NULL));
+    assert(!captured_blend_enable && captured_blend_source[0]==1u && captured_blend_source[1]==1u &&
+        !captured_blend_destination[0] && !captured_blend_destination[1] &&
+        !captured_blend_equation[0] && !captured_blend_equation[1]);
+    for(unsigned lane=0;lane<4;++lane)assert(captured_blend_constant[lane]==0.0f);
+    blend_config(&state,1,10,11,0,12,13);state.registers[0x112]=15;rectangle_count=0;
+    assert(backend.draw(backend.context,&state,vertices,3,NULL));assert(captured_blend_enable==1u);
+    assert(backend.end(backend.context,&surface));clean(&scene);
+}
+static void blend_constant_lists(void) {
+    reset();uint8_t bytes[1024]={0};ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
+    ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+    ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+    for(unsigned list=0;list<3;++list) {
+        ctr_scene_state state;ctr_vertex vertices[3];setup(&state,vertices);
+        blend_config(&state,0,10,11,2,12,13);
+        state.registers[0x103]=list?UINT32_C(0x71e5932b):UINT32_C(0x2d9b63e7);
+        if(list==1u) {
+            blend_config(&state,0,1,0,0,1,0);
+            state.registers[0x103]=UINT32_MAX;state.register_defined[0x103]=1u;
+        }
+        rectangle_count=0;assert(backend.begin(backend.context,&surface));
+        assert(backend.draw(backend.context,&state,vertices,3,NULL));
+        if(list==1u)for(unsigned lane=0;lane<4;++lane)assert(captured_blend_constant[lane]==0.0f);
+        assert(backend.end(backend.context,&surface));clean(&scene);
+    }
+    assert(blend_control_sets==3u && blend_constant_sets==3u && scene.draws==3u);
+}
+static void blend_failures(void) {
+    uint8_t pixels[8u*8u*4u]={0},bytes[1024]={0};
+    ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
+    for(unsigned retained=0;retained<2;++retained)for(unsigned failure=0;failure<24;++failure) {
+        reset();ctr_scene_state state;ctr_vertex vertices[3];textured_setup(&state,vertices);
+        blend_config(&state,0,1,0,0,1,0);
+        ctr_scene_texture texture={pixels,8,8,0x18010000u,0,0};expected_texture=&texture;
+        ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+        ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+        assert(backend.begin(backend.context,&surface));
+        if(retained)assert(backend.draw(backend.context,&state,vertices,3,&texture));
+        unsigned allocations=alloc_attempts;
+        if(failure<2u) {
+            if(failure)blend_config(&state,0,1,0,0,1,14);
+            else blend_config(&state,0,1,14,0,1,0);
+        } else if(failure<14u) {
+            unsigned index=failure-2u,side=index/6u,equation=3u+(index%6u)/3u,variation=index%3u;
+            unsigned source=variation==0u?0u:variation==1u?1u:2u,destination=variation==1u?0u:1u;
+            blend_config(&state,side?0u:equation,side?1u:source,side?0u:destination,
+                side?equation:0u,side?source:1u,side?destination:0u);
+        } else switch(failure) {
+            case 14:state.register_defined[0x101]=0;break;
+            case 15:state.register_defined[0x101]=14;break;
+            case 16:blend_config(&state,0,10,0,0,1,0);state.register_defined[0x103]=0;break;
+            case 17:blend_config(&state,0,1,0,0,12,0);state.register_defined[0x103]=14;break;
+            case 18:blend_config(&state,5,1,0,0,1,0);break;
+            case 19:blend_config(&state,0,15,0,0,1,0);break;
+            case 20:state.registers[0x101]|=8u;break;
+            case 21:state.registers[0x100]|=1u;break;
+            case 22:blend_config(&state,0,1,1,0,1,0);state.registers[0x112]=0;break;
+            case 23:blend_config(&state,0,14,0,0,1,0);state.registers[0x112]=0;break;
+        }
+        assert(!backend.draw(backend.context,&state,vertices,3,&texture));
+        assert(scene.result==CTR_WIIU_GX2_SCENE_ARGUMENT && scene.draws==retained && gpu_draws==retained &&
+            scene.texture_uploads==retained && texture_inits==retained && texture_binds==retained &&
+            color_control_sets==retained && channel_mask_sets==retained && alpha_test_sets==retained &&
+            blend_control_sets==retained && blend_constant_sets==retained && compile_attempts==retained &&
             alloc_attempts==allocations);
         backend.abort(backend.context);clean(&scene);
     }
@@ -824,7 +982,8 @@ int main(int argc,char **argv) {
     assert(argc==1);
     baseline();allocation_failures();scissor_modes();failures();readback_observer();
     fragment_bindings();alpha_comparison_vectors();fragment_failures();
+    blend_bindings();blend_constant_lists();blend_failures();
     textured_bindings(false);combiner_programs(false);texture_reuse();texture_dimensions();texture_failures();
-    puts("GX2 native API model: lifetime, texture retirement/quarantine, original inputs, sampler/TEV bytecode, fragment mappings, 1048576 alpha comparisons, pitched upload, scissor and readback passed");
+    puts("GX2 native API model: lifetime, texture retirement/quarantine, original inputs, sampler/TEV bytecode, fragment/blend mappings, 1048576 alpha comparisons, pitched upload, scissor and readback passed");
     return 0;
 }

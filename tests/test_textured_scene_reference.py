@@ -210,6 +210,49 @@ class TexturedSceneReferenceTests(unittest.TestCase):
         for case in cases:
             with self.subTest(case=case.name):ORACLE.execute_case(self.binary,self.output,case)
 
+    def test_blend_factors_have_manual_rgb_and_alpha_byte_anchors(self):
+        source,destination,constant = (31,83,173,127),(211,61,19,97),(43,149,227,191)
+        expected_rgb = (0,255,31,224,211,44,127,128,97,158,43,212,191,64,127)
+        expected_alpha = (0,255,127,128,97,158,127,128,97,158,191,64,191,64,255)
+        for factor in range(15):
+            self.assertEqual(ORACLE.blend_factor_reference(factor,0,constant,source,destination)*255,
+                             expected_rgb[factor])
+            self.assertEqual(ORACLE.blend_factor_reference(factor,3,constant,source,destination)*255,
+                             expected_alpha[factor])
+
+    def test_blend_divides_once_after_equation_and_truncates_instead_of_rounding(self):
+        for source,destination,expected in ((1,0,0),(1,1,1),(2,0,1),(127,128,128),
+                                             (128,128,128),(254,254,254),(255,254,255)):
+            with self.subTest(source=source,destination=destination):
+                actual = ORACLE.blend_reference((0,10,10),(0,10,10),(128,)*4,
+                                                (source,)*4,(destination,)*4)
+                self.assertEqual(actual,bytes((expected,)*4))
+        # (2*128 - 2*1)/255 = 254/255 truncates to zero. Rounding either
+        # product first would incorrectly give 1-0 = 1.
+        for equation,source_factor,destination_factor in ((1,12,10),(2,10,12)):
+            self.assertEqual(ORACLE.blend_reference((equation,source_factor,destination_factor),
+                (0,1,0),(1,1,1,128),(2,)*4,(2,)*4),bytes((0,0,0,2)))
+        self.assertEqual(ORACLE.blend_reference((0,1,1),(1,1,1),(0,)*4,
+            (200,200,200,10),(100,100,100,11)),bytes((255,255,255,0)))
+
+    def test_blend_min_max_apply_factors_and_saturate_alpha_is_one(self):
+        source,destination = (100,200,17,127),(200,100,9,191)
+        self.assertEqual(ORACLE.blend_reference((3,0,1),(3,0,1),(0,)*4,
+                         source,destination),bytes((0,)*4))
+        self.assertEqual(ORACLE.blend_reference((4,0,1),(4,0,1),(0,)*4,
+                         source,destination),bytes(destination))
+        source,destination = (255,128,1,200),(17,99,201,100)
+        self.assertEqual(ORACLE.blend_reference((0,14,0),(0,14,0),(0,)*4,
+                         source,destination),bytes((155,77,0,200)))
+        self.assertEqual(ORACLE.blend_reference((0,0,14),(0,0,14),(0,)*4,
+                         source,destination),bytes((10,60,122,100)))
+
+    def test_blend_scenes_factors_equations_retained_state_and_late_rollback(self):
+        cases = ORACLE.blend_cases()
+        self.assertEqual(len(cases),57)
+        for case in cases:
+            with self.subTest(case=case.name):ORACLE.execute_case(self.binary,self.output,case)
+
     def test_fragment_undefined_gpr_and_missing_constants_fail(self):
         row = self.mutate('replace', 256, 511)
         with self.assertRaisesRegex(ValueError, 'Undefined'):

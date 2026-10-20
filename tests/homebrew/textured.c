@@ -28,7 +28,7 @@ static u32 expected(unsigned x,unsigned y,unsigned width,unsigned height) {
     /* Triangle 1 averages to (128,128,128,255). Its six byte-domain stages
      * produce (89,36,116,194), (126,187,135,161), (126,146,129,252),
      * (255,170,255,174), (128,108,128,174), then (184,212,157,191). */
-    if((2*x+1)*height+(2*y+1)*width>=2*width*height)return 0xa820adff;
+    if((2*x+1)*height+(2*y+1)*width>=2*width*height)return 0xc8f4cdbf;
     /* Alpha selects Texture0 red; a zero red byte fails GEQUAL 128. */
     if(!(u&1u))result=0x102030ff;
     return result;
@@ -106,11 +106,14 @@ int main(void) {
         GPUCMD_AddWrite(GPUREG_VIEWPORT_HEIGHT,screen?0x464000:0x469000);
         for(unsigned triangle=0;triangle<2;++triangle) {
             color(triangle!=0);combiner(triangle!=0);
-            /* Test TEV alpha before logic; preserve green/alpha on XOR. Each
-             * screen resets retained output state before its first draw. */
+            /* Alpha testing precedes the merger. RGB adds ONE/ONE to the
+             * seeded target; alpha uses ONE/ZERO. Reset blend mode on the
+             * first triangle of each retained list. */
             GPUCMD_AddWrite(GPUREG_FRAGOP_ALPHA_TEST,1u|((triangle?GPU_EQUAL:GPU_GEQUAL)<<4)|((triangle?191u:128u)<<8));
-            GPUCMD_AddWrite(GPUREG_LOGIC_OP,triangle?GPU_LOGICOP_XOR:GPU_LOGICOP_COPY);
-            GPUCMD_AddWrite(GPUREG_DEPTH_COLOR_MASK,(triangle?5u:15u)<<8);
+            GPUCMD_AddWrite(GPUREG_COLOR_OPERATION,triangle?0x100u:0u);
+            GPUCMD_AddWrite(GPUREG_BLEND_FUNC,0x01110000u);
+            GPUCMD_AddWrite(GPUREG_LOGIC_OP,GPU_LOGICOP_COPY);
+            GPUCMD_AddWrite(GPUREG_DEPTH_COLOR_MASK,15u<<8);
             GPUCMD_AddWrite(GPUREG_COLORBUFFER_READ,triangle?15u:0u);
             GPUCMD_AddWrite(GPUREG_TEXUNIT0_PARAM,triangle?
                 GPU_TEXTURE_MAG_FILTER(GPU_LINEAR)|GPU_TEXTURE_MIN_FILTER(GPU_LINEAR):0);

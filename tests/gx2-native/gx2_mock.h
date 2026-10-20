@@ -13,6 +13,9 @@ typedef unsigned GX2TexClampMode;
 typedef unsigned GX2LogicOp;
 typedef unsigned GX2CompareFunction;
 typedef unsigned GX2ChannelMask;
+typedef unsigned GX2RenderTarget;
+typedef unsigned GX2BlendMode;
+typedef unsigned GX2BlendCombineMode;
 struct GX2ContextState { uint32_t marker; };
 typedef struct {
     unsigned dim,width,height,depth,mipLevels,format,aa,use,imageSize;
@@ -64,6 +67,14 @@ enum {
     GX2_COMPARE_FUNC_NEVER=0,GX2_COMPARE_FUNC_LESS=1,GX2_COMPARE_FUNC_EQUAL=2,
     GX2_COMPARE_FUNC_LEQUAL=3,GX2_COMPARE_FUNC_GREATER=4,GX2_COMPARE_FUNC_NOT_EQUAL=5,
     GX2_COMPARE_FUNC_GEQUAL=6,GX2_COMPARE_FUNC_ALWAYS=7,
+    GX2_BLEND_MODE_ZERO=0,GX2_BLEND_MODE_ONE=1,GX2_BLEND_MODE_SRC_COLOR=2,
+    GX2_BLEND_MODE_INV_SRC_COLOR=3,GX2_BLEND_MODE_SRC_ALPHA=4,GX2_BLEND_MODE_INV_SRC_ALPHA=5,
+    GX2_BLEND_MODE_DST_ALPHA=6,GX2_BLEND_MODE_INV_DST_ALPHA=7,GX2_BLEND_MODE_DST_COLOR=8,
+    GX2_BLEND_MODE_INV_DST_COLOR=9,GX2_BLEND_MODE_SRC_ALPHA_SAT=10,
+    GX2_BLEND_MODE_BLEND_FACTOR=13,GX2_BLEND_MODE_INV_BLEND_FACTOR=14,
+    GX2_BLEND_MODE_CONSTANT_ALPHA=19,GX2_BLEND_MODE_INV_CONSTANT_ALPHA=20,
+    GX2_BLEND_COMBINE_MODE_ADD=0,GX2_BLEND_COMBINE_MODE_SUB=1,GX2_BLEND_COMBINE_MODE_MIN=2,
+    GX2_BLEND_COMBINE_MODE_MAX=3,GX2_BLEND_COMBINE_MODE_REV_SUB=4,
     GX2_CHANNEL_MASK_RGBA=15,GX2_STENCIL_FUNCTION_KEEP=0,
     GX2_ALPHA_TO_MASK_MODE_NON_DITHERED=0,GX2_FRONT_FACE_CCW=0,
     GX2_TEX_CLAMP_MODE_WRAP=0,GX2_TEX_CLAMP_MODE_MIRROR=1,GX2_TEX_CLAMP_MODE_CLAMP=2,
@@ -104,6 +115,10 @@ void GX2SetColorControl(GX2LogicOp logic,uint8_t blend,bool multi_write,bool col
 void GX2SetTargetChannelMasks(GX2ChannelMask a,GX2ChannelMask b,GX2ChannelMask c,GX2ChannelMask d,
                               GX2ChannelMask e,GX2ChannelMask f,GX2ChannelMask g,GX2ChannelMask h);
 void GX2SetAlphaTest(bool enabled,GX2CompareFunction function,float reference);
+void GX2SetBlendControl(GX2RenderTarget target,GX2BlendMode color_source,GX2BlendMode color_destination,
+                        GX2BlendCombineMode color_equation,bool separate_alpha,GX2BlendMode alpha_source,
+                        GX2BlendMode alpha_destination,GX2BlendCombineMode alpha_equation);
+void GX2SetBlendConstantColor(float red,float green,float blue,float alpha);
 #define GX2SetupContextStateEx(p,flag) ((void)(p),(void)(flag))
 #define GX2InitColorBufferRegs(p) ((void)(p))
 #define GX2SetFetchShader(p) ((void)(p))

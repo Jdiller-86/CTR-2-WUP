@@ -34,9 +34,9 @@ static uint32_t draw_pixel(unsigned x,unsigned y,unsigned screen) {
         ((((tx>>2)^(ty>>1))&1u)?UINT32_C(0x00ff0000):0u)|
         ((((tx>>3)^ty)&1u)?UINT32_C(0x0000ff00):0u)|255u;
     if(!(tx&1u))result=UINT32_C(0x102031ff);
-    /* TEV alpha191 passes EQUAL; XOR only R/B against the seeded target
-     * gives(168,32,173,255), expanded through RGB565 to(173,32,173). */
-    if((2u*px+1u)*height+(2u*py+1u)*240u>=480u*height)result=UINT32_C(0xad20adff);
+    /* TEV alpha191 passes EQUAL; RGB adds the seeded(16,32,48), while
+     * alpha is replaced: raw(200,244,205,191), RGB565(206,247,206). */
+    if((2u*px+1u)*height+(2u*py+1u)*240u>=480u*height)result=UINT32_C(0xcef7ceff);
     return result;
 #else
     return (2u*px+1u)*height+(2u*py+1u)*240u<480u*height?UINT32_C(0xff0000ff):UINT32_C(0x00ff00ff);

@@ -621,7 +621,7 @@ static void guest_fragment_output(void) {
     /* Invalid fields after valid staged draws must preserve both fresh and
      * retained guest state, memory generations, exclusive state and IRQ data. */
     const unsigned regs[]={0x100,0x102,0x104,0x107,0x112,0x113,0x102};
-    const uint32_t values[]={0x100,16,2,0x1000,1,1,11};
+    const uint32_t values[]={1,16,2,0x1000,1,1,11};
     for(unsigned retained=0;retained<2;++retained)for(unsigned kind=0;kind<7;++kind) {
         ctr_guest g;list l;ctr_gx_completion c;open(&g,&l,false);
         if(retained)CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK);
@@ -642,9 +642,82 @@ static void guest_fragment_output(void) {
         ctr_guest_close(&g);
     }
 }
+static void guest_blending(void) {
+    for(unsigned shorts=0;shorts<2;++shorts) {
+        ctr_guest g;list l;ctr_gx_completion c;open(&g,&l,shorts!=0);
+        set(&l,0xc0,UINT32_C(0xe000e));insert_at(&l,find(&l,0x22f,0),0xc3,UINT32_C(0x7fab5313));
+        insert_at(&l,find(&l,0x22f,0),0x101,UINT32_C(0x01760000));
+        set(&l,0x100,0x100);set(&l,0x112,15);trim(&l);finish(&l);
+        CHECK(ctr_memory_map(&g.memory,0x30000000u,BYTES,CTR_MEM_READ|CTR_MEM_EXEC,backing(&g)+0x2000u,BYTES)==CTR_MEM_OK);
+        CHECK(ctr_memory_write_bytes(&g.memory,BASE,l.bytes,(uint32_t)l.size)==CTR_MEM_OK);
+        uint64_t generation=g.memory.generation,code=g.memory.code_generation;g.cpu.exclusive_valid=true;
+        CHECK(submit(&g,&l,&c)==CTR_GX_OK && c.signal && c.irq==5);
+        CHECK(g.memory.generation==generation+1 && g.memory.code_generation==code+1 && !g.cpu.exclusive_valid);
+        uint8_t pixels[BYTES];
+        CHECK(ctr_texture_decode(backing(&g)+0x2000u,BYTES,0,64,64,pixels,sizeof(pixels))==CTR_TEXTURE_OK);
+        for(unsigned y=0;y<64;++y)for(unsigned x=0;x<64;++x) {
+            /* Source(19,83,171,127), destination(16,32,48,255), source-alpha
+             * over: floor((S*127+D*128)/255), alpha replaced independently. */
+            const uint8_t inside[]={17,57,109,127},outside[]={16,32,48,255};
+            CHECK(!memcmp(pixels+(y*64u+x)*4u,x>=8 && x<56 && y>=8 && y<56?inside:outside,4));
+        }
+        /* Retain the second triangle and use constant-alpha128 for overdraw. */
+        memset(&l,0,sizeof(l));add(&l,0x101,UINT32_C(0x01dc0000));
+        add(&l,0x103,UINT32_C(0x800d0b09));add(&l,0x22f,1);finish(&l);
+        CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK && c.signal);
+        CHECK(ctr_texture_decode(backing(&g)+0x2000u,BYTES,0,64,64,pixels,sizeof(pixels))==CTR_TEXTURE_OK);
+        for(unsigned y=8;y<56;++y)for(unsigned x=8;x<56;++x) {
+            const uint8_t first[]={17,57,109,127},over[]={18,70,140,127};
+            CHECK(!memcmp(pixels+(y*64u+x)*4u,x+y<63u?first:over,4));
+        }
+        /* Switching back to logic must stop blending; preserve green/alpha. */
+        memset(&l,0,sizeof(l));add(&l,0x100,0);add(&l,0x107,5u<<8);add(&l,0x22f,1);finish(&l);
+        CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK && c.signal);
+        CHECK(ctr_texture_decode(backing(&g)+0x2000u,BYTES,0,64,64,pixels,sizeof(pixels))==CTR_TEXTURE_OK);
+        for(unsigned y=8;y<56;++y)for(unsigned x=8;x<56;++x) {
+            const uint8_t first[]={17,57,109,127},copied[]={19,70,171,127};
+            CHECK(!memcmp(pixels+(y*64u+x)*4u,x+y<63u?first:copied,4));
+        }
+        CHECK(g.gsp.pica_draws==4 && g.gsp.pica_fragments==4656 &&
+              g.gsp.pica_scene->registers[0x103]==UINT32_C(0x800d0b09));
+        ctr_guest_close(&g);
+    }
+    for(unsigned retained=0;retained<2;++retained)for(unsigned kind=0;kind<7;++kind) {
+        ctr_guest g;list l;ctr_gx_completion c;open(&g,&l,false);
+        if(retained)CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK);
+        trim(&l);
+        if(kind<3) {
+            const uint32_t invalid[]={8u,5u,UINT32_C(0x000f0000)};
+            add(&l,0x101,invalid[kind]);
+        } else {
+            add(&l,0x100,0x100);
+            if(kind==4 || kind==6) { add(&l,0x101,UINT32_C(0x01dc0000));add(&l,0x112,15); }
+            if(kind==5)add(&l,0x101,UINT32_C(0x01110000)); /* Read gate remains zero. */
+            if(kind==6) {
+                add(&l,0x103,UINT32_C(0x800d0b09));
+                put32(l.bytes+l.size-4u,UINT32_C(0x70000)|0x103u); /* Missing alpha byte. */
+            }
+            add(&l,0x22f,1);
+        }
+        finish(&l);relay(&g);ctr_guest_shared *shared=&g.shared[g.gsp.relay_shared];uint8_t irq[CTR_GUEST_PAGE];
+        CHECK(shared->size==sizeof(irq));memcpy(irq,shared->storage,sizeof(irq));
+        ctr_scene_state before={0};if(retained)before=*g.gsp.pica_scene;
+        ctr_pica_state pica=g.gsp.pica;uint8_t pixels[BYTES];memcpy(pixels,backing(&g)+0x2000u,BYTES);
+        backend_mock m={0};ctr_scene_backend backend=mock_backend(&m);ctr_guest_set_scene_backend(&g,&backend);
+        CHECK(ctr_memory_write_bytes(&g.memory,BASE,l.bytes,(uint32_t)l.size)==CTR_MEM_OK);
+        uint64_t generation=g.memory.generation,code=g.memory.code_generation;g.cpu.exclusive_valid=true;
+        CHECK(submit(&g,&l,&c)==CTR_GX_UNSUPPORTED && !c.signal);
+        CHECK(!m.begins && !m.draws && !m.ends && !m.aborts);
+        CHECK(!memcmp(pixels,backing(&g)+0x2000u,BYTES) && !memcmp(&pica,&g.gsp.pica,sizeof(pica)));
+        CHECK(retained?!memcmp(&before,g.gsp.pica_scene,sizeof(before)):!g.gsp.pica_scene);
+        CHECK(g.memory.generation==generation && g.memory.code_generation==code && g.cpu.exclusive_valid);
+        CHECK(!memcmp(irq,shared->storage,sizeof(irq)) && !g.events[g.gsp.relay_event].signaled);
+        ctr_guest_close(&g);
+    }
+}
 int main(void) {
     successful();rollback();shader_capacity();arithmetic_draws();queues();native_backend_success();native_backend_rollback();
     guest_texture_success();guest_linear_texture();guest_texture_snapshots();guest_texture_rollback();guest_texture_queues();
-    guest_fragment_output();
+    guest_fragment_output();guest_blending();
     printf("guest PICA draw tests: %u assertions passed\n",assertions);return 0;
 }

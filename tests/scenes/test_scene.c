@@ -457,7 +457,7 @@ static void scene_errors(void) {
     uint8_t pixels[CTR_SCENE_FIXTURE_BYTES],old_pixels[CTR_SCENE_FIXTURE_BYTES];
 #define RESET() do { ctr_scene_fixture_make(&f,false);ctr_scene_init(&state);previous=state;ctr_scene_fixture_background(pixels,sizeof(pixels));memcpy(old_pixels,pixels,sizeof(pixels)); } while(0)
 #define FAIL(expected) do { CHECK(execute(&f,&state,pixels,&report)==expected);CHECK(!memcmp(&state,&previous,sizeof(state)));CHECK(!memcmp(pixels,old_pixels,sizeof(pixels))); } while(0)
-    RESET();append(&f,0x100,0x100);FAIL(CTR_SCENE_UNSUPPORTED);CHECK(report.draws==2 && report.fragments==2304);
+    RESET();append(&f,0x100,1);FAIL(CTR_SCENE_UNSUPPORTED);CHECK(report.draws==2 && report.fragments==2304);
     RESET();f.resources[69]=255;FAIL(CTR_SCENE_VERTEX);CHECK(report.draws==1 && report.vertex_result==CTR_VERTEX_RANGE);
     RESET();put32(f.resources+48,UINT32_C(0x7fc00000));FAIL(CTR_SCENE_VERTEX);CHECK(report.draws==1);
     RESET();set(&f,0x25e,256);FAIL(CTR_SCENE_UNSUPPORTED);
@@ -859,7 +859,7 @@ static uint8_t merger_expected(unsigned op,unsigned source,unsigned destination)
     return (uint8_t)result;
 }
 static void fragment_contract(void) {
-    ctr_fragment_state state={3,15,0,0,false},out,previous;
+    ctr_fragment_state state={.logic_op=3,.write_mask=15},out,previous;
     /* Every source/destination byte pair for every operation, including channel
      * independence and source/destination aliases. No renderer code is an oracle. */
     for(unsigned op=0;op<16;++op)for(unsigned a=0;a<256;++a)for(unsigned b=0;b<256;++b) {
@@ -876,7 +876,7 @@ static void fragment_contract(void) {
         for(unsigned lane=0;lane<4;++lane)
             CHECK(pixel[lane]==(mask&(1u<<lane)?merger_expected(op,old[lane],old[lane]):old[lane]));
     }
-    state=(ctr_fragment_state){4,15,0,0,true};
+    state=(ctr_fragment_state){.logic_op=4,.write_mask=15,.alpha_enabled=true};
     /* Exhaust all 256x256 alpha/reference pairs for every comparison. The
      * expected ordering is independent of comparison dispatch implementation. */
     for(unsigned function=0;function<8;++function)for(unsigned alpha=0;alpha<256;++alpha)
@@ -913,15 +913,17 @@ static void fragment_contract(void) {
             else CHECK(out.logic_op==op && out.write_mask==(write?mask:0u));
         }
     for(unsigned reg=0;reg<CTR_PICA_REGISTER_COUNT;++reg) {
-        bool recognized=false;
+        bool recognized=reg==0x101u || reg==0x103u;
         for(unsigned i=0;i<sizeof(regs)/sizeof(*regs);++i)if(reg==regs[i])recognized=true;
         CHECK(ctr_fragment_register(reg)==recognized);
         if(!recognized)CHECK(!ctr_fragment_register_value(reg,0));
     }
     for(unsigned bit=0;bit<32;++bit) {
         uint32_t word=UINT32_C(1)<<bit;
-        CHECK(!ctr_fragment_register_value(0x100,word));
+        CHECK(ctr_fragment_register_value(0x100,word)==(bit==8u));
+        CHECK(ctr_fragment_register_value(0x101,word)==(bit<3u || (bit>=8u && bit<11u) || bit>=16u));
         CHECK(ctr_fragment_register_value(0x102,word)==(bit<4u));
+        CHECK(ctr_fragment_register_value(0x103,word));
         CHECK(ctr_fragment_register_value(0x104,word)==((word&UINT32_C(0xff71))!=0u));
         CHECK(ctr_fragment_register_value(0x107,word)==(bit>=8u && bit<12u));
         CHECK(!ctr_fragment_register_value(0x112,word));CHECK(!ctr_fragment_register_value(0x113,word));
@@ -964,7 +966,7 @@ static void fragment_scenes(void) {
         CHECK(!memcmp(pixels,before,sizeof(pixels)));
     }
     const unsigned regs[]={0x100,0x102,0x104,0x107,0x112,0x113};
-    const uint32_t invalid[]={0x100,16,2,1,1,1};
+    const uint32_t invalid[]={1,16,2,1,1,1};
     for(unsigned bound=0;bound<2;++bound)for(unsigned i=0;i<sizeof(regs)/sizeof(*regs);++i) {
         ctr_scene_fixture_make(&f,false);target_state(&state);previous=state;
         memcpy(pixels,before,sizeof(pixels));append(&f,regs[i],invalid[i]);
@@ -982,9 +984,178 @@ static void fragment_scenes(void) {
     CHECK(execute(&f,&state,pixels,&report)==CTR_SCENE_UNSUPPORTED && !report.draws);
     CHECK(!memcmp(&state,&previous,sizeof(state)) && !memcmp(pixels,before,sizeof(pixels)));
 }
+/* The reference constructs all fifteen scalar weights together and evaluates
+ * a binary64 rational quotient. Integer products/sums <=130050 are exact in
+ * binary64; division cannot cross an integer boundary except at exact integral
+ * quotients, which are representable. No runtime factor/equation helper is used. */
+static unsigned blend_weight(unsigned factor,unsigned lane,const uint8_t source[4],
+                              const uint8_t old[4],const uint8_t constant[4]) {
+    unsigned saturated=lane==3u?255u:(source[3]+old[3]<=255u?source[3]:255u-old[3]);
+    const unsigned weights[]={0,255,source[lane],255u-source[lane],old[lane],255u-old[lane],
+        source[3],255u-source[3],old[3],255u-old[3],constant[lane],255u-constant[lane],
+        constant[3],255u-constant[3],saturated};
+    return weights[factor];
+}
+static uint8_t blend_expected(unsigned equation,unsigned sf,unsigned df,unsigned lane,
+                               const uint8_t source[4],const uint8_t old[4],const uint8_t constant[4]) {
+    double a=(double)source[lane]*blend_weight(sf,lane,source,old,constant);
+    double b=(double)old[lane]*blend_weight(df,lane,source,old,constant);
+    double expressions[]={a+b,a-b,b-a,fmin(a,b),fmax(a,b)};
+    double result=expressions[equation]/255.0;
+    return result<=0.0?0u:result>=255.0?255u:(uint8_t)floor(result);
+}
+static uint32_t blend_word(unsigned rgb,unsigned alpha,unsigned srgb,unsigned drgb,unsigned sa,unsigned da) {
+    return rgb|(alpha<<8)|(srgb<<16)|(drgb<<20)|(sa<<24)|(da<<28);
+}
+static void blend_contract(void) {
+    ctr_fragment_state state={.write_mask=15,.blend_enabled=true,.blend_source={6,1},.blend_destination={7,0}};
+    uint8_t source[]={90,195,105,126},pixel[]={16,32,48,255};
+    CHECK(ctr_fragment_apply(&state,source,pixel));
+    const uint8_t over[]={52,112,76,126};CHECK(!memcmp(pixel,over,4));
+    /* One final division: floor(127/255 + 128/255) = 1, while separately
+     * truncating the products would incorrectly produce zero. */
+    state.blend_source[0]=10;state.blend_destination[0]=12;
+    memset(state.blend_constant,127,3);state.blend_constant[3]=128;
+    memset(source,1,4);memset(pixel,1,4);CHECK(ctr_fragment_apply(&state,source,pixel));
+    for(unsigned lane=0;lane<4;++lane)CHECK(pixel[lane]==1);
+    /* Factor-aware MIN/MAX differ from ordinary unweighted color MIN/MAX. */
+    memset(source,200,4);memset(pixel,100,4);memset(state.blend_constant,32,3);state.blend_constant[3]=200;
+    state.blend_equation[0]=3;CHECK(ctr_fragment_apply(&state,source,pixel));
+    for(unsigned lane=0;lane<3;++lane)CHECK(pixel[lane]==25);
+    memset(pixel,100,4);state.blend_equation[0]=4;CHECK(ctr_fragment_apply(&state,source,pixel));
+    for(unsigned lane=0;lane<3;++lane)CHECK(pixel[lane]==78);
+    /* Saturate is min(Sa,255-Da) for RGB and ONE for alpha. */
+    state=(ctr_fragment_state){.write_mask=15,.blend_enabled=true,.blend_source={14,14}};
+    const uint8_t saturated_source[]={200,100,50,64},saturated_old[]={70,80,90,233},saturated_expected[]={17,8,4,64};
+    memcpy(pixel,saturated_old,4);CHECK(ctr_fragment_apply(&state,saturated_source,pixel));CHECK(!memcmp(pixel,saturated_expected,4));
+    unsigned vectors=0;
+    for(unsigned sf=0;sf<15;++sf)for(unsigned df=0;df<15;++df)
+        for(unsigned equation=0;equation<5;++equation)for(unsigned vector=0;vector<16;++vector) {
+        uint8_t old[4];
+        for(unsigned lane=0;lane<4;++lane) {
+            source[lane]=(uint8_t)(vector*43u+lane*67u);
+            old[lane]=(uint8_t)(vector*71u+lane*19u+3u);
+            state.blend_constant[lane]=(uint8_t)(vector*29u+lane*53u+127u);
+        }
+        state.blend_equation[0]=(uint8_t)equation;state.blend_equation[1]=(uint8_t)((equation+2u)%5u);
+        state.blend_source[0]=(uint8_t)sf;state.blend_source[1]=(uint8_t)((sf+7u)%15u);
+        state.blend_destination[0]=(uint8_t)df;state.blend_destination[1]=(uint8_t)((df+11u)%15u);
+        state.logic_op=(uint8_t)(vector&15u);memcpy(pixel,old,4);
+        CHECK(ctr_fragment_apply(&state,source,pixel));++vectors;
+        for(unsigned lane=0;lane<4;++lane) {
+            unsigned side=lane==3u;
+            CHECK(pixel[lane]==blend_expected(state.blend_equation[side],state.blend_source[side],
+                state.blend_destination[side],lane,source,old,state.blend_constant));
+        }
+    }
+    CHECK(vectors==18000u);
+    /* Every byte pair for all equations under source-alpha interpolation and
+     * source-alpha-saturate. Endpoints and negative/saturating numerators are
+     * included; alpha has independent factors and sees the captured old bytes. */
+    for(unsigned mode=0;mode<2;++mode)for(unsigned equation=0;equation<5;++equation)
+        for(unsigned a=0;a<256;++a)for(unsigned b=0;b<256;++b) {
+        uint8_t old[]={(uint8_t)b,(uint8_t)a,(uint8_t)(255u-b),(uint8_t)b};
+        source[0]=(uint8_t)a;source[1]=(uint8_t)b;source[2]=173;source[3]=(uint8_t)a;
+        state.blend_equation[0]=state.blend_equation[1]=(uint8_t)equation;
+        state.blend_source[0]=state.blend_source[1]=(uint8_t)(mode?14u:6u);
+        state.blend_destination[0]=state.blend_destination[1]=7;memcpy(pixel,old,4);
+        CHECK(ctr_fragment_apply(&state,source,pixel));
+        for(unsigned lane=0;lane<4;++lane)CHECK(pixel[lane]==blend_expected(equation,mode?14u:6u,7,lane,source,old,state.blend_constant));
+    }
+    for(unsigned mask=0;mask<16;++mask) {
+        uint8_t storage[]={19,67,139,211,47},old[4],input[4];memcpy(old,storage,4);memcpy(input,storage+1,4);
+        state.write_mask=(uint8_t)mask;
+        CHECK(ctr_fragment_apply(&state,storage+1,storage));
+        for(unsigned lane=0;lane<4;++lane)CHECK(storage[lane]==(mask&(1u<<lane)?
+            blend_expected(4,14,7,lane,input,old,state.blend_constant):old[lane]));
+    }
+    state.alpha_enabled=true;state.alpha_function=0;memcpy(pixel,source,4);
+    CHECK(!ctr_fragment_apply(&state,source,pixel) && !memcmp(pixel,source,4));
+
+    uint32_t registers[CTR_PICA_REGISTER_COUNT]={0};uint8_t defined[CTR_PICA_REGISTER_COUNT]={0};
+    const unsigned base[]={0x100,0x102,0x104,0x107,0x112,0x113};
+    for(unsigned i=0;i<sizeof(base)/sizeof(*base);++i)defined[base[i]]=15;
+    registers[0x100]=0x100;registers[0x102]=15;registers[0x107]=0xf00;registers[0x112]=registers[0x113]=15;
+    ctr_fragment_state decoded,before;memset(&before,0xa5,sizeof(before));decoded=before;
+    CHECK(!ctr_fragment_decode(registers,defined,true,&decoded) && !memcmp(&decoded,&before,sizeof(decoded)));
+    defined[0x101]=15;registers[0x101]=blend_word(0,2,6,7,1,0);
+    CHECK(ctr_fragment_decode(registers,defined,true,&decoded));
+    CHECK(decoded.blend_enabled && decoded.logic_op==15 && decoded.blend_equation[1]==2);
+    CHECK(decoded.blend_source[0]==6 && decoded.blend_destination[0]==7 && decoded.blend_source[1]==1 && !decoded.blend_destination[1]);
+    const uint8_t zero[4]={0};CHECK(!memcmp(decoded.blend_constant,zero,4));
+    for(unsigned shift=16;shift<32;shift+=4u)for(unsigned factor=0;factor<16;++factor)
+        CHECK(ctr_fragment_register_value(0x101,factor<<shift)==(factor<15u));
+    for(unsigned side=0;side<2;++side)for(unsigned equation=0;equation<8;++equation)
+        CHECK(ctr_fragment_register_value(0x101,equation<<(side*8u))==(equation<5u));
+    for(unsigned factor=10;factor<14;++factor)for(unsigned slot=0;slot<4;++slot)for(unsigned mask=0;mask<15;++mask) {
+        registers[0x101]=factor<<(16u+slot*4u);defined[0x103]=(uint8_t)mask;
+        registers[0x107]=0;decoded=before;
+        CHECK(!ctr_fragment_decode(registers,defined,true,&decoded) && !memcmp(&decoded,&before,sizeof(decoded)));
+    }
+    defined[0x103]=15;registers[0x103]=UINT32_C(0x537b8d25);
+    const uint8_t constants[]={37,141,123,83};
+    for(unsigned sf=0;sf<15;++sf)for(unsigned df=0;df<15;++df)for(unsigned mask=0;mask<16;++mask)
+        for(unsigned read=0;read<2;++read) {
+        unsigned as=(sf+7u)%15u,ad=(df+11u)%15u;
+        registers[0x101]=blend_word(3,4,sf,df,as,ad);registers[0x107]=mask<<8;registers[0x112]=read?15u:0u;
+        bool needs=((mask&7u) && (df || ((UINT32_C(0x4330)>>sf)&1u))) ||
+                   ((mask&8u) && (ad || ((UINT32_C(0x330)>>as)&1u)));
+        decoded=before;CHECK(ctr_fragment_decode(registers,defined,true,&decoded)==(!needs || read));
+        if(needs && !read)CHECK(!memcmp(&decoded,&before,sizeof(decoded)));
+        else CHECK(decoded.write_mask==mask && !memcmp(decoded.blend_constant,constants,4));
+    }
+    registers[0x113]=0;registers[0x112]=0;CHECK(ctr_fragment_decode(registers,defined,true,&decoded) && !decoded.write_mask);
+    registers[0x100]=0;registers[0x102]=3;defined[0x101]=defined[0x103]=1;
+    CHECK(ctr_fragment_decode(registers,defined,true,&decoded) && !decoded.blend_enabled && !memcmp(decoded.blend_constant,zero,4));
+    defined[0x101]=15;registers[0x101]=5;decoded=before;
+    CHECK(!ctr_fragment_decode(registers,defined,true,&decoded) && !memcmp(&decoded,&before,sizeof(decoded)));
+}
+static void blend_scenes(void) {
+    ctr_scene_fixture fixture;ctr_scene_state state,before;ctr_scene_report report;
+    uint8_t pixels[CTR_SCENE_FIXTURE_BYTES],original[CTR_SCENE_FIXTURE_BYTES];
+    ctr_scene_fixture_background(original,sizeof(original));
+    /* Original constant-TEV fragments blend with a seeded target. RGB uses
+     * source alpha and its complement; alpha independently replaces its byte. */
+    const uint8_t rgb[5][3]={{52,112,76},{36,80,27},{0,0,0},{8,16,24},{44,96,51}};
+    for(unsigned bound=0;bound<2;++bound)for(unsigned equation=0;equation<5;++equation) {
+        ctr_scene_fixture_make(&fixture,false);target_state(&state);memcpy(pixels,original,sizeof(pixels));
+        state.registers[0xc0]=UINT32_C(0xe000e);state.registers[0xc3]=UINT32_C(0x7e69c35a);state.register_defined[0xc3]=15;
+        state.registers[0x100]=0x100;state.registers[0x101]=blend_word(equation,0,6,7,1,0);state.register_defined[0x101]=15;
+        state.registers[0x112]=15;
+        ctr_scene_resources resources={UINT32_C(0x18000000),fixture.resources,fixture.resource_bytes,NULL,0};
+        ctr_scene_surface surface={pixels,sizeof(pixels),64,64,256};
+        ctr_scene_result result=bound?ctr_scene_execute_target(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
+            UINT32_C(0x18010000),&report):execute(&fixture,&state,pixels,&report);
+        CHECK(result==CTR_SCENE_OK && report.draws==2 && report.fragments==2304);
+        for(unsigned y=0;y<64;++y)for(unsigned x=0;x<64;++x) {
+            uint8_t expected[]={16,32,48,255};
+            if(x>=8 && x<56 && y>=8 && y<56) { memcpy(expected,rgb[equation],3);expected[3]=126; }
+            CHECK(!memcmp(pixels+(y*64u+x)*4u,expected,4));
+        }
+        if(!equation) {
+            /* Retained blending reads the committed prior target on the next
+             * list, rather than replaying against its original background. */
+            CHECK(execute(&fixture,&state,pixels,&report)==CTR_SCENE_OK && state.draws==4);
+            const uint8_t second[]={70,153,90,126};
+            for(unsigned y=8;y<56;++y)for(unsigned x=8;x<56;++x)
+                CHECK(!memcmp(pixels+(y*64u+x)*4u,second,4));
+        }
+    }
+    const uint32_t invalid[]={5,1u<<3,1u<<11,15u<<16,15u<<28};
+    for(unsigned bound=0;bound<2;++bound)for(unsigned index=0;index<sizeof(invalid)/sizeof(*invalid);++index) {
+        ctr_scene_fixture_make(&fixture,false);target_state(&state);memcpy(pixels,original,sizeof(pixels));
+        before=state;append(&fixture,0x101,invalid[index]);
+        ctr_scene_resources resources={UINT32_C(0x18000000),fixture.resources,fixture.resource_bytes,NULL,0};
+        ctr_scene_surface surface={pixels,sizeof(pixels),64,64,256};
+        ctr_scene_result result=bound?ctr_scene_execute_target(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
+            UINT32_C(0x18010000),&report):execute(&fixture,&state,pixels,&report);
+        CHECK(result==CTR_SCENE_UNSUPPORTED && report.draws==2 && report.reg==0x101);
+        CHECK(!memcmp(&state,&before,sizeof(state)) && !memcmp(pixels,original,sizeof(pixels)));
+    }
+}
 int main(void) {
     floats24();shader_patterns();shader_arithmetic();arithmetic_boundaries();shader_errors();shader_capacity();
     scenes();arithmetic_scenes();scene_capacity();scene_errors();backend_full_target();textured_scenes();textured_rollback();
-    fragment_contract();fragment_scenes();
+    fragment_contract();fragment_scenes();blend_contract();blend_scenes();
     printf("original shader/scene tests: %u assertions passed\n",assertions);return 0;
 }
