@@ -62,9 +62,9 @@ def package(folder, report_path, application, sdk_receipt, backend='software'):
     guest = app.get('guest', {})
     if (guest.get('state') != 'exited' or guest.get('fault') != 'ok' or guest.get('fallback') != 0
             or ('CTR2WUP compiled textured PICA PASS' if textured else 'CTR2WUP compiled PICA draws PASS') not in guest.get('messages', [])
-            or guest.get('pica_render') != ({'draws': 9, 'triangles': 9, 'fragments': 210570, 'shader_instructions': 108} if textured else {'draws': 4, 'triangles': 4, 'fragments': 97200, 'shader_instructions': 36})
-            or (textured and any(message not in guest.get('messages', []) for message in ('CTR2WUP compiled D16 depth PASS', 'CTR2WUP compiled stencil preparation PASS', 'CTR2WUP compiled D24S8 stencil PASS')))
-            or guest.get('gx') != ({'commands': 7, 'dma': 0, 'fills': 2, 'transfers': 2, 'copies': 0, 'cache': 0, 'pica': 3} if textured else {'commands': 6, 'dma': 0, 'fills': 2, 'transfers': 2, 'copies': 0, 'cache': 0, 'pica': 2})
+            or guest.get('pica_render') != ({'draws': 10, 'triangles': 10, 'fragments': 237540, 'shader_instructions': 120} if textured else {'draws': 4, 'triangles': 4, 'fragments': 97200, 'shader_instructions': 36})
+            or (textured and any(message not in guest.get('messages', []) for message in ('CTR2WUP compiled TEV buffer PASS', 'CTR2WUP compiled D16 depth PASS', 'CTR2WUP compiled stencil preparation PASS', 'CTR2WUP compiled D24S8 stencil PASS')))
+            or guest.get('gx') != ({'commands': 9, 'dma': 0, 'fills': 3, 'transfers': 2, 'copies': 0, 'cache': 0, 'pica': 4} if textured else {'commands': 6, 'dma': 0, 'fills': 2, 'transfers': 2, 'copies': 0, 'cache': 0, 'pica': 2})
             or app.get('generation', {}).get('input_identity', {}).get('program_id') != '000400000ff00f0c'):
         raise ValueError('Require the exercised original guest and exact rendering counters')
     if gpu:

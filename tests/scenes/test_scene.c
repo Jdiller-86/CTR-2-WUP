@@ -1835,11 +1835,228 @@ static void stencil_capacity(void) {
     free(color);free(packed);free(expected_color);free(expected_packed);
 }
 
+/* Analytic untextured buffer scenes keep numeric TEV operation testing in the
+ * independent texture/native references. These exercise real scene admission,
+ * delayed publication, retained command-byte writes and transaction boundaries. */
+static void buffer_state(ctr_scene_state *state) {
+    target_state(state);
+    state->register_defined[0x0e0]=state->register_defined[0x0fd]=15;
+    state->registers[0x0fd]=UINT32_C(0x7b513719);
+    for(unsigned stage=0;stage<6;++stage) {
+        unsigned base=ctr_tev_registers[stage];
+        state->register_defined[base+3u]=15;
+        state->registers[base+3u]=UINT32_C(0x654f351f)+stage*UINT32_C(0x11111111);
+    }
+}
+static void buffer_image(const uint8_t *pixels,size_t stride,const uint8_t *before,
+                          const uint8_t color[4],bool primary_rgb) {
+    for(unsigned y=0;y<64;++y)for(unsigned x=0;x<64;++x)for(unsigned lane=0;lane<4;++lane) {
+        size_t at=(size_t)y*stride+x*4u+lane;uint8_t expected=before[at];
+        if(x>=8u && x<56u && y>=8u && y<56u) {
+            expected=color[lane];
+            if(primary_rgb && lane<3u)
+                expected=lane==0u?(x+y<63u?255u:0u):lane==1u?(x+y<63u?0u:255u):0u;
+        }
+        CHECK(pixels[at]==expected);
+    }
+}
+static void buffer_images(void) {
+    static const uint8_t colors[][4]={
+        {0,0,0,0}, {0x19,0x37,0x51,0x7b}, {0x19,0x37,0x51,0x7b},
+        {0x19,0x37,0x51,0x7b}, {0x1f,0x35,0x4f,0x65},
+        {0x1f,0x35,0x4f,0x7b}, {0x1f,0x35,0x4f,0x76},
+        {0x52,0x68,0x82,0x98}, {0x30,0x46,0x60,0x76},
+        {0x52,0x68,0x82,0x7b}
+    };
+    ctr_scene_fixture fixture;ctr_scene_state state;ctr_scene_report report;
+    uint8_t pixels[CTR_SCENE_FIXTURE_BYTES],before[CTR_SCENE_FIXTURE_BYTES];
+    ctr_scene_fixture_background(before,sizeof(before));
+    for(unsigned bound=0;bound<2;++bound)for(unsigned kind=0;kind<10;++kind) {
+        ctr_scene_fixture_make(&fixture,false);buffer_state(&state);memcpy(pixels,before,sizeof(pixels));
+        if(kind==0u)state.registers[0xc0]=UINT32_C(0x0d000d); /* Stage 0 sees zero. */
+        if(kind==1u)state.registers[0xc8]=UINT32_C(0x0d000d); /* Stage 1 sees initial RGBA. */
+        if(kind==2u)state.registers[0xd0]=UINT32_C(0x0d000d);
+        if(kind>=3u && kind<=6u) {
+            state.registers[0xc0]=UINT32_C(0x0e000e);
+            state.registers[0x0e0]=kind<5u?UINT32_C(0x1100):UINT32_C(0x2100);
+            if(kind==3u)state.registers[0xc8]=UINT32_C(0x0d000d); /* Not the stage 0 result yet. */
+            else {
+                state.registers[0xc8]=UINT32_C(0x0e000e);
+                state.registers[kind==6u?0xd8:0xd0]=UINT32_C(0x0d000d);
+            }
+        }
+        if(kind==7u || kind==9u) {
+            state.registers[0xd8]=UINT32_C(0x0e000e);
+            state.registers[0x0e0]=kind==7u?UINT32_C(0x8800):UINT32_C(0x0800);
+            /* Stage 4 is passthrough, but must publish stage 3 for stage 5. */
+            state.registers[0xf8]=UINT32_C(0x0d000d);
+        }
+        if(kind==8u) {
+            state.registers[0xc8]=UINT32_C(0x0e000e);
+            state.registers[0xd8]=UINT32_C(0x0e000e);
+            /* Stage 2 is passthrough and still writes the stage 1 output. */
+            state.registers[0x0e0]=UINT32_C(0x4400);state.registers[0xf0]=UINT32_C(0x0d000d);
+        }
+        ctr_scene_resources resources={UINT32_C(0x18000000),fixture.resources,fixture.resource_bytes,NULL,0};
+        ctr_scene_surface surface={pixels,sizeof(pixels),64,64,256};
+        ctr_scene_result result=bound?ctr_scene_execute_target(&state,fixture.commands,fixture.command_bytes,
+            &resources,&surface,UINT32_C(0x18010000),&report):execute(&fixture,&state,pixels,&report);
+        CHECK(result==CTR_SCENE_OK && report.draws==2 && report.fragments==2304 && report.shader_instructions==18);
+        buffer_image(pixels,256,before,colors[kind],false);
+    }
+}
+static void buffer_retention(void) {
+    ctr_scene_fixture fixture;ctr_scene_state state;ctr_scene_report report;
+    uint8_t pixels[CTR_SCENE_FIXTURE_BYTES],before[CTR_SCENE_FIXTURE_BYTES];
+    const uint8_t initial[]={0x19,0x37,0x51,0x7b},updated[]={0x19,0xd2,0x51,0xe1};
+    const uint8_t alpha_only[]={0,0,0,0xe1};
+    buffer_state(&state);state.register_defined[0x0e0]=state.register_defined[0x0fd]=0;
+    state.registers[0x0fd]=0;state.registers[0xd0]=UINT32_C(0x0d000d);
+    ctr_scene_fixture_make(&fixture,false);
+    insert(&fixture,0,0x0e0,0);insert(&fixture,8,0x0fd,UINT32_C(0x7b513719));finish(&fixture);
+    ctr_scene_fixture_background(pixels,sizeof(pixels));memcpy(before,pixels,sizeof(before));
+    CHECK(execute(&fixture,&state,pixels,&report)==CTR_SCENE_OK);
+    CHECK(state.register_defined[0x0e0]==15 && state.register_defined[0x0fd]==15);
+    buffer_image(pixels,256,before,initial,false);
+    /* Complete retained definitions permit individual command-byte updates. */
+    ctr_scene_fixture_make(&fixture,false);insert(&fixture,0,0x0e0,UINT32_C(0x100));
+    put32(fixture.commands+4u,UINT32_C(0x20000)|0x0e0u);
+    insert(&fixture,8,0x0fd,UINT32_C(0xe1000000));put32(fixture.commands+12u,UINT32_C(0x80000)|0x0fdu);finish(&fixture);
+    CHECK(execute(&fixture,&state,pixels,&report)==CTR_SCENE_OK);
+    CHECK(state.registers[0x0e0]==UINT32_C(0x100) && state.registers[0x0fd]==UINT32_C(0xe1513719));
+    buffer_image(pixels,256,before,alpha_only,true);
+    /* Closing the RGB update restores initial-buffer RGB; fragments/lists do
+     * not carry the prior fragment's pending/visible values. */
+    ctr_scene_fixture_make(&fixture,false);insert(&fixture,0,0x0e0,0);
+    put32(fixture.commands+4u,UINT32_C(0x20000)|0x0e0u);
+    insert(&fixture,8,0x0fd,UINT32_C(0xd200));put32(fixture.commands+12u,UINT32_C(0x20000)|0x0fdu);finish(&fixture);
+    CHECK(execute(&fixture,&state,pixels,&report)==CTR_SCENE_OK);
+    CHECK(state.registers[0x0e0]==0 && state.registers[0x0fd]==UINT32_C(0xe151d219));
+    CHECK(state.lists==3 && state.draws==6 && state.fragments==6912 && state.shader_instructions==54);
+    buffer_image(pixels,256,before,updated,false);
+    /* Two partial fresh writes may finish the complete definition before a
+     * draw; a single partial write is rejected in buffer_rollback below. */
+    buffer_state(&state);state.register_defined[0x0e0]=state.register_defined[0x0fd]=0;
+    state.registers[0x0e0]=state.registers[0x0fd]=0;state.registers[0xc8]=UINT32_C(0x0d000d);
+    ctr_scene_fixture_make(&fixture,false);insert(&fixture,0,0x0fd,UINT32_C(0x00003719));
+    put32(fixture.commands+4u,UINT32_C(0x30000)|0x0fdu);
+    insert(&fixture,8,0x0fd,UINT32_C(0x7b510000));put32(fixture.commands+12u,UINT32_C(0xc0000)|0x0fdu);
+    insert(&fixture,16,0x0e0,0);put32(fixture.commands+20u,UINT32_C(0x70000)|0x0e0u);
+    insert(&fixture,24,0x0e0,0);put32(fixture.commands+28u,UINT32_C(0x80000)|0x0e0u);finish(&fixture);
+    CHECK(execute(&fixture,&state,pixels,&report)==CTR_SCENE_OK);
+    CHECK(state.register_defined[0x0fd]==15 && state.register_defined[0x0e0]==15);
+    buffer_image(pixels,256,before,initial,false);
+}
+typedef struct {
+    const uint8_t *expected;
+    size_t size,corrupt;
+    unsigned begins,draws,ends,aborts;
+} buffer_backend;
+static bool buffer_backend_begin(void *context,const ctr_scene_surface *initial) {
+    buffer_backend *p=context;++p->begins;CHECK(initial->size==p->size);return true;
+}
+static bool buffer_backend_draw(void *context,const ctr_scene_state *state,const ctr_vertex *vertices,
+                                 unsigned count,const ctr_scene_texture *texture) {
+    buffer_backend *p=context;++p->draws;CHECK(!texture && count==3 && vertices[0].enabled==3);
+    CHECK(state->register_defined[0x0e0]==15 && state->register_defined[0x0fd]==15);return true;
+}
+static bool buffer_backend_end(void *context,const ctr_scene_surface *readback) {
+    buffer_backend *p=context;++p->ends;CHECK(readback->size==p->size);
+    memcpy(readback->bytes,p->expected,p->size);
+    if(p->corrupt)((uint8_t *)readback->bytes)[p->corrupt]^=1u;
+    return true;
+}
+static void buffer_backend_abort(void *context) { ++((buffer_backend*)context)->aborts; }
+static void buffer_rollback(void) {
+    ctr_scene_fixture fixture;ctr_scene_state state,previous;ctr_scene_report report;
+    uint8_t pixels[CTR_SCENE_FIXTURE_BYTES],before[CTR_SCENE_FIXTURE_BYTES];
+    ctr_scene_resources resources={UINT32_C(0x18000000),fixture.resources,0,NULL,0};
+    ctr_scene_surface surface={pixels,sizeof(pixels),64,64,256};
+    /* Even an inactive, zero-valued partial definition cannot inherit the
+     * undefined bytes of a fresh register. Includes both bound/unbound APIs. */
+    for(unsigned bound=0;bound<2;++bound)for(unsigned which=0;which<2;++which)for(unsigned mask=1;mask<15;++mask) {
+        ctr_scene_fixture_make(&fixture,false);buffer_state(&state);unsigned reg=which?0x0fd:0x0e0;
+        state.registers[0x0fd]=0;state.register_defined[reg]=0;
+        insert(&fixture,0,reg,0);put32(fixture.commands+4u,(mask<<16)|reg);finish(&fixture);
+        previous=state;ctr_scene_fixture_background(pixels,sizeof(pixels));memcpy(before,pixels,sizeof(before));
+        resources.size=fixture.resource_bytes;
+        ctr_scene_result result=bound?ctr_scene_execute_target(&state,fixture.commands,fixture.command_bytes,
+            &resources,&surface,UINT32_C(0x18010000),&report):execute(&fixture,&state,pixels,&report);
+        CHECK(result==CTR_SCENE_UNSUPPORTED && !report.draws);
+        CHECK(!memcmp(&state,&previous,sizeof(state)) && !memcmp(pixels,before,sizeof(pixels)));
+    }
+    /* Each activation path independently requires BOTH complete registers. */
+    for(unsigned activation=0;activation<3;++activation)for(unsigned which=0;which<2;++which) {
+        ctr_scene_fixture_make(&fixture,false);buffer_state(&state);state.registers[0x0fd]=0;
+        if(activation==0u)state.registers[0xc8]=UINT32_C(0x0d000d);
+        if(activation==1u)state.registers[0x0e0]=UINT32_C(0x100);
+        if(activation==2u)state.registers[0x0fd]=UINT32_C(0x7b513719);
+        state.register_defined[which?0x0fd:0x0e0]=0;previous=state;
+        ctr_scene_fixture_background(pixels,sizeof(pixels));memcpy(before,pixels,sizeof(before));resources.size=fixture.resource_bytes;
+        buffer_backend context={before,sizeof(before),0,0,0,0,0};
+        ctr_scene_backend backend={&context,buffer_backend_begin,buffer_backend_draw,buffer_backend_end,buffer_backend_abort,NULL,NULL};
+        CHECK(ctr_scene_execute_target_backend(&state,fixture.commands,fixture.command_bytes,&resources,
+              &surface,UINT32_C(0x18010000),&backend,&report)==CTR_SCENE_UNSUPPORTED && !report.draws);
+        CHECK(!context.begins && !context.draws && !context.ends && !context.aborts);
+        CHECK(!memcmp(&state,&previous,sizeof(state)) && !memcmp(pixels,before,sizeof(pixels)));
+    }
+    /* The entirely implicit legacy path stays valid, while declaring a lone
+     * partial buffer register must not bypass TEV admission through defaults. */
+    for(unsigned which=0;which<2;++which) {
+        ctr_scene_fixture_make(&fixture,false);ctr_scene_init(&state);insert(&fixture,0,which?0x0fd:0x0e0,0);
+        put32(fixture.commands+4u,UINT32_C(0x10000)|(which?0x0fd:0x0e0));finish(&fixture);previous=state;
+        ctr_scene_fixture_background(pixels,sizeof(pixels));memcpy(before,pixels,sizeof(before));
+        CHECK(execute(&fixture,&state,pixels,&report)==CTR_SCENE_UNSUPPORTED && !report.draws);
+        CHECK(!memcmp(&state,&previous,sizeof(state)) && !memcmp(pixels,before,sizeof(pixels)));
+    }
+    /* Every reserved/fog bit remains a late-list error, after two staged
+     * draws changed the candidate image. Nothing reaches backend callbacks. */
+    for(unsigned retained=0;retained<2;++retained)for(unsigned bit=0;bit<32;++bit)if(bit<8u || bit>=16u) {
+        buffer_state(&state);state.registers[0xc8]=UINT32_C(0x0d000d);ctr_scene_fixture_make(&fixture,false);
+        ctr_scene_fixture_background(pixels,sizeof(pixels));
+        if(retained)CHECK(execute(&fixture,&state,pixels,&report)==CTR_SCENE_OK);
+        previous=state;memcpy(before,pixels,sizeof(before));
+        ctr_scene_fixture_make(&fixture,false);insert(&fixture,0,0x0fd,UINT32_C(0x936b4527));
+        append(&fixture,0x0e0,UINT32_C(0x1100)|(UINT32_C(1)<<bit));resources.size=fixture.resource_bytes;
+        buffer_backend context={before,sizeof(before),0,0,0,0,0};
+        ctr_scene_backend backend={&context,buffer_backend_begin,buffer_backend_draw,buffer_backend_end,buffer_backend_abort,NULL,NULL};
+        CHECK(ctr_scene_execute_target_backend(&state,fixture.commands,fixture.command_bytes,&resources,
+              &surface,UINT32_C(0x18010000),&backend,&report)==CTR_SCENE_UNSUPPORTED);
+        CHECK(report.draws==2 && report.fragments==2304 && report.reg==0x0e0);
+        CHECK(!context.begins && !context.draws && !context.ends && !context.aborts);
+        CHECK(!memcmp(&state,&previous,sizeof(state)) && !memcmp(pixels,before,sizeof(pixels)));
+    }
+}
+static void buffer_backend_parity(void) {
+    enum { STRIDE=260u,SIZE=64u*STRIDE+12u };
+    ctr_scene_fixture fixture;ctr_scene_fixture_make(&fixture,false);
+    ctr_scene_state initial,expected,state;buffer_state(&initial);initial.registers[0xc8]=UINT32_C(0x0d000d);
+    uint8_t pixels[SIZE],before[SIZE],reference[SIZE];ctr_scene_fixture_background(before,sizeof(before));
+    memcpy(reference,before,sizeof(reference));const uint8_t color[]={0x19,0x37,0x51,0x7b};
+    for(unsigned y=8;y<56;++y)for(unsigned x=8;x<56;++x)memcpy(reference+y*STRIDE+x*4u,color,4);
+    ctr_scene_resources resources={UINT32_C(0x18000000),fixture.resources,fixture.resource_bytes,NULL,0};
+    ctr_scene_surface surface={pixels,sizeof(pixels),64,64,STRIDE};ctr_scene_report report;
+    expected=initial;memcpy(pixels,before,sizeof(pixels));
+    CHECK(ctr_scene_execute_target(&expected,fixture.commands,fixture.command_bytes,&resources,&surface,
+          UINT32_C(0x18010000),&report)==CTR_SCENE_OK && !memcmp(pixels,reference,sizeof(pixels)));
+    for(unsigned kind=0;kind<4;++kind) {
+        size_t corrupt=kind==1u?(16u*STRIDE+16u*4u):kind==2u?256u:kind==3u?SIZE-1u:0u;
+        state=initial;memcpy(pixels,before,sizeof(pixels));buffer_backend context={reference,sizeof(reference),corrupt,0,0,0,0};
+        ctr_scene_backend backend={&context,buffer_backend_begin,buffer_backend_draw,buffer_backend_end,buffer_backend_abort,NULL,NULL};
+        CHECK(ctr_scene_execute_target_backend(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
+              UINT32_C(0x18010000),&backend,&report)==(kind?CTR_SCENE_BACKEND:CTR_SCENE_OK));
+        CHECK(context.begins==1 && context.draws==2 && context.ends==1 && context.aborts==(kind?1u:0u));
+        CHECK(!memcmp(pixels,kind?before:reference,sizeof(pixels)) && !memcmp(&state,kind?&initial:&expected,sizeof(state)));
+        CHECK(report.backend_stage==(kind?CTR_SCENE_BACKEND_PARITY:CTR_SCENE_BACKEND_NONE));
+    }
+}
+
 int main(void) {
     floats24();shader_patterns();shader_arithmetic();arithmetic_boundaries();shader_errors();shader_capacity();
     scenes();arithmetic_scenes();scene_capacity();scene_errors();backend_full_target();textured_scenes();textured_rollback();
     fragment_contract();fragment_scenes();blend_contract();blend_scenes();
     depth_comparisons();depth_overdraw();depth_quantization();depth_rollback();depth_backend_parity();
     stencil_contract();stencil_images();stencil_depth_comparisons();stencil_order_and_retention();stencil_quantization();stencil_rollback();stencil_backend_parity();stencil_capacity();
+    buffer_images();buffer_retention();buffer_rollback();buffer_backend_parity();
     printf("original shader/scene tests: %u assertions passed\n",assertions);return 0;
 }

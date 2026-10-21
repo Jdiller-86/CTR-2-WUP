@@ -8,8 +8,9 @@ Commercial games and the GUI are not supported yet.
 
 1. **Extend GX2 fragment state** ([#29](https://github.com/Jdiller-86/CTR-2-WUP/issues/29)).
    Bounded vertex translation, nearest/bilinear Texture0 sampling and
-   six-stage RGB/alpha TEV, alpha/logic/blend operations, write masks and bounded
-   D16/D24S8 depth/stencil are implemented. Extend depth interpolation and remaining fragment coverage,
+   six-stage RGB/alpha TEV with a combiner buffer, alpha/logic/blend operations,
+   write masks and bounded D16/D24S8 depth/stencil are implemented. Extend Texture1/2
+   material inputs and remaining fragment coverage; establish native depth interpolation,
    then address observed first-game requirements. Keep exact software preflight
    and readback; physical parity and resource-cache costs remain unverified.
 2. **Connect guest audio** ([#25](https://github.com/Jdiller-86/CTR-2-WUP/issues/25)).
@@ -35,7 +36,7 @@ Detailed scope, dependencies and evidence are tracked in the linked issues and
 | [M1: Platform](https://github.com/Jdiller-86/CTR-2-WUP/issues/1) | Reviewed screens, input, tone, stability, scoped exit/save, original installation and installed boot | Installed-title exit/relaunch and automatic SD recovery |
 | [M2: CPU](https://github.com/Jdiller-86/CTR-2-WUP/issues/2) | ARM/Thumb/VFP AOT, checked ABI/memory and original fixtures | Exercised instruction coverage, fallback/traces and useful Espresso performance |
 | [M3: Runtime](https://github.com/Jdiller-86/CTR-2-WUP/issues/3) | Compiled original guests, kernel/services, filesystem and mixer | Required services/modules, guest DSP and runtime acceptance |
-| [M4: Graphics](https://github.com/Jdiller-86/CTR-2-WUP/issues/4) | GSP/PICA, software reference, GX2 vertex translation, nearest/bilinear textures, six-stage TEV, alpha/logic/blend/write controls and D16/D24S8 depth/stencil | Physical GPU parity, broader filtering/fragment state, coherency and measured costs |
+| [M4: Graphics](https://github.com/Jdiller-86/CTR-2-WUP/issues/4) | GSP/PICA, software reference, GX2 vertex translation, nearest/bilinear textures, six-stage TEV with a combiner buffer, alpha/logic/blend/write controls and D16/D24S8 depth/stencil | Physical GPU parity, broader filtering/fragment state, coherency and measured costs |
 | [M5: First game](https://github.com/Jdiller-86/CTR-2-WUP/issues/5) | Verified private Mario 3D Land revision and selected asset analysis | Implement observed gaps and prove boot, gameplay, audio and saves |
 | [M6: Conversion](https://github.com/Jdiller-86/CTR-2-WUP/issues/6) | Intake/decryption, AOT builds, original WUP packing and integrity checks | Complete supported-game pipeline, Windows execution and installed rebuild/save continuity |
 | [M7: GUI](https://github.com/Jdiller-86/CTR-2-WUP/issues/7) | Windows toolchain and workflow design | Responsive Select → Configure → Inject → WUP over the proven engine |

@@ -1,6 +1,6 @@
 # Textured Guest
 
-Build @VERSION@, source @SOURCE_COMMIT@. This app exercises guest textures, TEV, blending and D16/D24S8 depth/stencil through GX2. Move any existing sd:/ctr2wup/results/ folder aside, FTP sd-card/ contents to the SD root in binary mode, close FTP and launch CTR2WUP Textured Guest in Aroma.
+Build @VERSION@, source @SOURCE_COMMIT@. This app exercises guest textures, TEV buffers, blending and D16/D24S8 depth/stencil through GX2. Move any existing sd:/ctr2wup/results/ folder aside, FTP sd-card/ contents to the SD root in binary mode, close FTP and launch CTR2WUP Textured Guest in Aroma.
 
 Compare both screens with images/: one diagonal half has a striped colored pattern with cutouts; the other is pale green from a bilinear combiner chain and additive blending. R confirms the pictures and L records a problem. Wait for the automatic color/depth/stencil readback result, then press Minus to exit; keep partial results if the app stops responding.
 

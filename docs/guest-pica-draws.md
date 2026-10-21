@@ -83,7 +83,7 @@ python3 tools/validate-libctru.py --application textured --wiiu --gx2 --sanitize
 
 This distinct original application submits retained shader/texture state and
 tests nearest replacement and a bilinear four-texel average followed by a
-six-stage RGB/alpha combiner chain, alpha cutouts, separate RGB/alpha blending
+six-stage RGB/alpha combiner chain, a delayed-buffer material prepass, alpha cutouts, separate RGB/alpha blending
 and D16/D24S8 depth with stencil preparation, masked rendering and occluded overdraw.
 Its striped-cutout/pale-green top/bottom
 frames receive independent exact host comparison. The native build is named
@@ -93,7 +93,7 @@ notices and one two-step `START-HERE.md` guide accompany the binaries.
 
 The [texture contract](textures.md) covers all 14 base formats, 8..1024 dimensions,
 nearest/bilinear clamp/repeat/mirror, exact Q16 UV with W=1, and six-stage
-combiners with constants, Previous, component operands and separate RGB/alpha. Decoded texture storage has explicit ownership; native pitched upload
+combiners with constants, Previous, PreviousBuffer, component operands and separate RGB/alpha. Decoded texture storage has explicit ownership; native pitched upload
 reverses rows for PICA V origin, flushes caches and retires GPU references before
 reuse/free. Physical sampling parity and performance remain unverified.
 
@@ -121,7 +121,7 @@ reuse/free. Physical sampling parity and performance remain unverified.
   or four for D24S8, with stencil in byte 3. Color/depth, command, geometry and
   texture aliases reject.
 - Supported fragment state is explicitly defined: primary-color replacement or
-  bounded six-stage Texture0/constant/Previous TEV with independent operands and
+  bounded six-stage Texture0/constant/Previous/PreviousBuffer TEV with independent operands and
   scale, all eight alpha tests, 16 logic operations, checked blending and RGBA write masks.
   Lighting remains disabled; [D16 depth](textures.md#d16-depth) and
   [D24S8 stencil](textures.md#d24s8-stencil) have explicit bounded profiles. The
@@ -138,7 +138,7 @@ attribute, uniform and MOV/ADD/MUL/NOP/END shader subset. ADD/MUL
 accept only exact normal float24/signed-zero results with integer evaluation and
 transactional numeric rejection; [original arithmetic checks](software-scenes.md#exact-add-and-mul)
 validate the exact numeric subset separately from this MOV fixture. Broader
-arithmetic, mixed min/mag filters, mipmaps, perspective, DOT3/combiner buffers, clipping and
+arithmetic, mixed min/mag filters, mipmaps, perspective, DOT3, clipping and
 broader depth remains unsupported. Native fractional blend parity remains unverified;
 every target byte must match the explicit software contract before publication.
 A raw VFP push/pop guard fix supports exact bit transfers
