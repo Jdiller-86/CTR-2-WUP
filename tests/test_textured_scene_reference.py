@@ -33,8 +33,11 @@ class TexturedSceneReferenceTests(unittest.TestCase):
                  '-I'+str(ROOT/'tests/gx2-native')]
         obj, binary = cls.output/'native.o', cls.output/'native-probe'
         subprocess.run(cc+flags+['-DCTR_GX2_SCENE_MOCK', '-Dmemalign=ctr_gx2_test_memalign',
+                       '-Dctr_gx2_cache_create=ctr_gx2_test_cache_create',
+                       '-Dctr_gx2_cache_destroy=ctr_gx2_test_cache_destroy',
                        '-Dfree=ctr_gx2_test_free', '-c', str(ROOT/'runtime/wiiu/gx2_scene.c'), '-o', str(obj)], check=True)
         subprocess.run(cc+flags+[str(ROOT/'tests/gx2-native/test_native.c'), str(ROOT/'runtime/core/ctr_tev.c'),
+                       str(ROOT/'runtime/core/ctr_gx2_cache.c'),
                        str(ROOT/'runtime/core/ctr_fragment.c'), str(obj), '-o', str(binary)], check=True)
         cls.capture = json.loads(subprocess.check_output([str(binary), '--fragment-programs'], text=True))
 

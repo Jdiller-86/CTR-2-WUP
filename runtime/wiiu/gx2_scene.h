@@ -2,6 +2,7 @@
 #define CTR_WIIU_GX2_SCENE_H
 #include "ctr_scene.h"
 #include "ctr_gx2_shader.h"
+#include "ctr_gx2_cache.h"
 typedef struct GX2ContextState GX2ContextState;
 
 typedef enum {
@@ -19,6 +20,15 @@ typedef struct {
     uint64_t begins, draws, submissions, readbacks, shader_instructions;
     uint64_t waits, wait_failures, allocations, releases;
     uint64_t texture_uploads,texture_bytes;
+    /* Immutable CPU records survive transactions and foreground release.
+     * Counters are cumulative through explicit cache clears; bytes is current
+     * residency. These allocations are separate from GPU allocations/releases. */
+    ctr_gx2_cache *program_cache;
+    ctr_gx2_cache_statistics cache_stats;
+    uint64_t vertex_translations,pixel_translations;
+    uint64_t vertex_translation_failures,pixel_translation_failures;
+    uint64_t cache_allocation_failures;
+    bool cache_disabled; /* Use the same checked compilers without lookup/store. */
     bool quarantined;
     /* Optional borrowed CPU evidence observer. Called after a retired GPU copy
      * has populated readback, including before any later context-restore
@@ -44,12 +54,16 @@ typedef struct {
  * TEV combiner-buffer programs initialize separate visible/pending byte state
  * per fragment and publish the delayed RGB/alpha updates after every stage.
  * Both target copies retire before readback; full pair parity remains the
- * scene executor's publication gate. */
+ * scene executor's publication gate. Initialize only a fresh owner, or one
+ * whose transaction and CPU cache have both been cleared. */
 void ctr_wiiu_gx2_scene_init(ctr_wiiu_gx2_scene *scene,GX2ContextState *restore_context);
 ctr_scene_backend ctr_wiiu_gx2_scene_backend(ctr_wiiu_gx2_scene *scene);
 void ctr_wiiu_gx2_scene_abort(ctr_wiiu_gx2_scene *scene);
+/* CPU-only: discard immutable program records without changing any GX2 owner,
+ * pending reference or context. Historical counters and peak bytes remain. */
+void ctr_wiiu_gx2_scene_cache_clear(ctr_wiiu_gx2_scene *scene);
 /* Only after GX2/WHB graphics shutdown: release quarantined storage if a failed
- * retirement wait prevented safe reclamation while the GPU was running. */
+ * retirement wait prevented reclamation, and clear the CPU program cache. */
 void ctr_wiiu_gx2_scene_after_shutdown(ctr_wiiu_gx2_scene *scene);
 const char *ctr_wiiu_gx2_scene_result_name(ctr_wiiu_gx2_scene_result result);
 #endif

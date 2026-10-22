@@ -46,6 +46,10 @@ static ctr_gx2_shader_result source(const ctr_shader_program *p,
         unsigned index=reg-32u;uint32_t raw;
         if(!(p->uniform_defined[index]&(1u<<lane)))return CTR_GX2_SHADER_UNDEFINED;
         if(!ctr_shader_f24_exact(p->uniforms[index][lane],&raw))return CTR_GX2_SHADER_NUMERIC;
+        if(!(out->uniform_used[index]&(1u<<lane))) {
+            if(out->uniform_count>=CTR_SHADER_UNIFORMS*4u)return CTR_GX2_SHADER_LIMIT;
+            out->uniform_order[out->uniform_count++]=(uint16_t)(index*4u+lane);
+        }
         out->uniform_used[index]|=(uint8_t)(1u<<lane);*selector=256u+index;
     }
     return CTR_GX2_SHADER_OK;
@@ -156,6 +160,31 @@ ctr_gx2_shader_result ctr_gx2_shader_compile(const ctr_shader_program *p,uint16_
     ctr_gx2_shader_result result=compile(p,mask,maps,total,trial);
     if(result==CTR_GX2_SHADER_OK)*out=*trial;
     free(trial);return result;
+}
+ctr_gx2_shader_result ctr_gx2_shader_validate_uniforms(const ctr_shader_program *p,
+                                                       const ctr_gx2_shader *compiled) {
+    if(!p || !compiled)return CTR_GX2_SHADER_ARGUMENT;
+    if((uintptr_t)p%_Alignof(ctr_shader_program) ||
+       (uintptr_t)compiled%_Alignof(ctr_gx2_shader))return CTR_GX2_SHADER_ARGUMENT;
+    if(!span(p,sizeof(*p)) || !span(compiled,sizeof(*compiled)))return CTR_GX2_SHADER_OVERFLOW;
+    if(compiled->uniform_count>CTR_SHADER_UNIFORMS*4u)return CTR_GX2_SHADER_ARGUMENT;
+    /* Validate the complete record before reading dynamic values: malformed
+     * metadata must not hide a missing or duplicated dependency. */
+    uint8_t seen[CTR_SHADER_UNIFORMS]={0};
+    for(unsigned i=0;i<compiled->uniform_count;++i) {
+        unsigned slot=compiled->uniform_order[i];
+        if(slot>=CTR_SHADER_UNIFORMS*4u)return CTR_GX2_SHADER_ARGUMENT;
+        unsigned index=slot/4u,lane=slot%4u;
+        if(seen[index]&(1u<<lane))return CTR_GX2_SHADER_ARGUMENT;
+        seen[index]|=(uint8_t)(1u<<lane);
+    }
+    if(memcmp(seen,compiled->uniform_used,sizeof(seen)))return CTR_GX2_SHADER_ARGUMENT;
+    for(unsigned i=0;i<compiled->uniform_count;++i) {
+        unsigned slot=compiled->uniform_order[i],index=slot/4u,lane=slot%4u;uint32_t raw;
+        if(!(p->uniform_defined[index]&(1u<<lane)))return CTR_GX2_SHADER_UNDEFINED;
+        if(!ctr_shader_f24_exact(p->uniforms[index][lane],&raw))return CTR_GX2_SHADER_NUMERIC;
+    }
+    return CTR_GX2_SHADER_OK;
 }
 const char *ctr_gx2_shader_result_name(ctr_gx2_shader_result result) {
     static const char *const names[]={"ok","argument","overflow","alias","range",

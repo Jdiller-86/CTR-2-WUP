@@ -20,6 +20,8 @@ typedef struct {
     uint16_t input_mask;
     bool texcoord0; /* Complete optional PICA semantics 12 and 13. */
     uint8_t uniform_used[CTR_SHADER_UNIFORMS]; /* Read lane masks. */
+    uint16_t uniform_order[CTR_SHADER_UNIFORMS*4]; /* Unique lanes, first-read order. */
+    uint16_t uniform_count;
 } ctr_gx2_shader;
 
 /* Compile MOV/ADD/MUL/NOP/END, including masks, independent source swizzles,
@@ -41,5 +43,11 @@ ctr_gx2_shader_result ctr_gx2_shader_compile(const ctr_shader_program *program,
                                             const uint32_t *output_maps,
                                             unsigned output_count,
                                             ctr_gx2_shader *output);
+/* Recheck current uniform definitions and exact float24 values for a previously
+ * compiled program with unchanged code/entry/descriptors and output semantics. The
+ * recorded first-read order preserves compile diagnostics. Invalid lane-order
+ * metadata returns ARGUMENT. Neither object is changed; both must be stable. */
+ctr_gx2_shader_result ctr_gx2_shader_validate_uniforms(const ctr_shader_program *program,
+                                                       const ctr_gx2_shader *compiled);
 const char *ctr_gx2_shader_result_name(ctr_gx2_shader_result result);
 #endif

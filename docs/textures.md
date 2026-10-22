@@ -188,6 +188,9 @@ scalar Latte encoder implements the admitted combiner chain using nine GPRs,
 or eleven with separate visible/pending buffers, and bounded shader storage.
 Pixel uniforms carry stage constants and initial buffer bytes; explicit byte
 quantization and floor division preserve the software stage boundaries.
+The [native program cache](software-scenes.md#native-program-cache) reuses compiled
+topology while validating current TEV state and uploading current constants.
+Texture snapshots, uploads and samplers retain their existing ownership path.
 CPU cache flushes and texture invalidation precede drawing; retirement precedes
 reuse/free. Failed waits quarantine GPU allocations until graphics shutdown.
 Complete software preflight and exact GPU readback precede guest commit.
@@ -214,7 +217,7 @@ Surface/copy facts follow the
 pinned [GX2 implementation reference](https://github.com/decaf-emu/decaf-emu/blob/e6c528a20a41c34e0f9eb91dd3da40f119db2dee/src/libdecaf/src/cafe/libraries/gx2/gx2_surface.cpp#L430).
 
 Mipmaps, mixed min/mag filters, projective/perspective coordinates, DOT3,
-resource caching and broader depth remain unsupported. Physical sampling/blending/depth/stencil parity
+texture/target caching and broader depth remain unsupported. Physical sampling/blending/depth/stencil parity
 and useful GPU performance remain unverified. The full-target byte comparison
 stays exact, including for bilinear draws; differing hardware rounding rejects
 the list without guest publication or software fallback.

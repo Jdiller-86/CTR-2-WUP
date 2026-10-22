@@ -9,6 +9,9 @@
 #endif
 
 static unsigned alloc_attempts,fail_allocation,live_allocations,fetch_bytes=512;
+static unsigned cache_create_attempts,cache_destroy_calls,live_cache_owners;
+static bool fail_cache_create;
+static unsigned invalid_compiled_record;
 static bool wait_ok=true,compile_ok=true,layout_ok=true;
 static bool gpu_pending,gpu_stopped,expected_uv;
 static GX2ContextState native_context,*active_context;
@@ -33,6 +36,11 @@ static const GX2Texture *bound_texture;
 static const GX2Sampler *bound_sampler;
 static const uint8_t *bound_pixel_program;
 static GX2PixelShader bound_pixel_metadata;
+static const uint8_t *bound_vertex_program;
+static GX2VertexShader bound_vertex_metadata;
+static uint32_t bound_vertex_uniforms[4];
+static const uint8_t *bound_vertices;
+static unsigned bound_vertex_bytes;
 static void *texture_image;
 static unsigned texture_inits,texture_binds,sampler_binds,texture_flushes,texture_invalidates;
 static unsigned expected_count,gpu_draws,read_invalidates,uniform_uploads;
@@ -48,6 +56,35 @@ static unsigned captured_blend_enable,captured_blend_source[2],captured_blend_de
 static float captured_blend_constant[4];
 static bool captured_alpha_enabled;
 static float captured_alpha_reference;
+
+/* These bytes are deliberately input dependent: a hit for a different code,
+ * descriptor or export key cannot masquerade as an equivalent mock shader. */
+static uint32_t mock_hash_word(uint32_t hash,uint32_t value) {
+    for(unsigned byte=0;byte<4u;++byte)hash=(hash^((value>>(byte*8u))&255u))*UINT32_C(16777619);
+    return hash;
+}
+static uint32_t mock_vertex_signature(const ctr_shader_program *program,uint16_t mask,
+                                        const uint32_t *maps,unsigned total) {
+    uint32_t hash=mock_hash_word(UINT32_C(2166136261),program->entry);
+    hash=mock_hash_word(mock_hash_word(hash,mask),total);
+    for(unsigned i=0;i<CTR_SHADER_MAX_CODE;++i)
+        hash=mock_hash_word(mock_hash_word(hash,program->code[i]),program->code_defined[i]);
+    for(unsigned i=0;i<CTR_SHADER_MAX_DESCRIPTORS;++i)
+        hash=mock_hash_word(mock_hash_word(hash,program->descriptors[i]),program->descriptor_defined[i]);
+    for(unsigned i=0;i<total;++i)hash=mock_hash_word(hash,maps[i]);
+    return hash;
+}
+
+ctr_gx2_cache *ctr_gx2_test_cache_create(void) {
+    ++cache_create_attempts;
+    if(fail_cache_create)return NULL;
+    ctr_gx2_cache *cache=ctr_gx2_cache_create();
+    assert(cache);++live_cache_owners;return cache;
+}
+void ctr_gx2_test_cache_destroy(ctr_gx2_cache *cache) {
+    if(cache) { assert(live_cache_owners);--live_cache_owners;++cache_destroy_calls; }
+    ctr_gx2_cache_destroy(cache);
+}
 
 void *ctr_gx2_test_memalign(size_t alignment,size_t bytes) {
     ++alloc_attempts;
@@ -128,6 +165,8 @@ void DCFlushRange(void *bytes,unsigned size) {
 void DCInvalidateRange(void *bytes,unsigned size) { assert(bytes && size);++read_invalidates; }
 void GX2Invalidate(unsigned mode,void *bytes,unsigned size) {
     assert(mode && bytes && size);
+    if(mode==GX2_INVALIDATE_MODE_CPU_SHADER || mode==GX2_INVALIDATE_MODE_CPU_ATTRIBUTE_BUFFER)
+        assert(!gpu_pending);
     if(mode==GX2_INVALIDATE_MODE_DEPTH_BUFFER) {
         assert(bytes==depth_target_image);++depth_invalidates;
     }
@@ -234,6 +273,11 @@ void GX2SetVertexShader(const GX2VertexShader *shader) {
     assert(shader->regs.spi_vs_out_config==(expected_uv?2u:0u));
     for(unsigned i=0;i<16;++i)assert(shader->regs.sq_vtx_semantic[i]==i);
     assert(((uint8_t *)shader->program)[0]==0x12);
+    uint32_t signature=mock_vertex_signature(expected_shader,(uint16_t)expected_state->registers[0x2bd],
+        &expected_state->registers[0x050],expected_state->registers[0x04f]);
+    for(unsigned byte=0;byte<4u;++byte)
+        assert(((uint8_t *)shader->program)[byte+1u]==(uint8_t)(signature>>(byte*8u)));
+    bound_vertex_program=shader->program;bound_vertex_metadata=*shader;
 }
 static uint32_t little32(const uint8_t *p) {
     return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;
@@ -297,6 +341,11 @@ void GX2SetPixelShader(const GX2PixelShader *shader) {
     if(expected_texture)assert(shader->regs.spi_ps_input_cntls[1]==0x101u);
     assert(shader->regs.cb_shader_mask==15u && shader->regs.cb_shader_control==1u &&
         shader->regs.db_shader_control==(expected_depth?0u:16u));
+    assert(!shader->uniformBlockCount && !shader->uniformVarCount && !shader->initialValueCount &&
+        !shader->loopVarCount && !shader->samplerVarCount);
+    assert(!shader->uniformBlocks && !shader->uniformVars && !shader->initialValues &&
+        !shader->loopVars && !shader->samplerVars && !shader->gx2rBuffer.buffer);
+    assert(!shader->gx2rBuffer.flags && !shader->gx2rBuffer.elemSize && !shader->gx2rBuffer.elemCount);
     bound_pixel_program=shader->program;bound_pixel_metadata=*shader;check_pixel_program(shader->program,shader->size);
 }
 void GX2InitTextureRegs(GX2Texture *texture) {
@@ -345,9 +394,11 @@ void GX2SetAttribBuffer(unsigned index,unsigned size,unsigned stride,const void 
     assert(!index && stride==256 && size==expected_count*256u);
     for(unsigned vertex=0;vertex<expected_count;++vertex)
         assert(!memcmp((const uint8_t *)bytes+vertex*256u,expected_vertices[vertex].input,256));
+    bound_vertices=bytes;bound_vertex_bytes=size;
 }
 void GX2SetVertexUniformReg(unsigned offset,unsigned count,const void *bytes) {
-    assert(offset==8 && count==4 && !memcmp(bytes,expected_shader->uniforms[2],16));++uniform_uploads;
+    assert(offset==8 && count==4 && !memcmp(bytes,expected_shader->uniforms[2],16));
+    memcpy(bound_vertex_uniforms,bytes,sizeof(bound_vertex_uniforms));++uniform_uploads;
 }
 void GX2SetPixelUniformReg(unsigned offset,unsigned count,const void *bytes) {
     assert(!offset && count==(expected_buffered()?36u:32u) && bytes && bound_pixel_program);
@@ -424,6 +475,28 @@ bool ctr_shader_f24_decode(uint32_t raw,uint32_t *value) {
     if(raw!=0x420000)return false;
     *value=0x41000000;return true;
 }
+ctr_gx2_shader_result ctr_gx2_shader_validate_uniforms(const ctr_shader_program *program,
+                                                       const ctr_gx2_shader *compiled) {
+    assert(program && compiled);
+    if(compiled->uniform_count>CTR_SHADER_UNIFORMS*4u)return CTR_GX2_SHADER_ARGUMENT;
+    uint8_t seen[CTR_SHADER_UNIFORMS]={0};
+    for(unsigned i=0;i<compiled->uniform_count;++i) {
+        unsigned slot=compiled->uniform_order[i];
+        if(slot>=CTR_SHADER_UNIFORMS*4u || (seen[slot/4u]&(1u<<(slot%4u))))
+            return CTR_GX2_SHADER_ARGUMENT;
+        seen[slot/4u]|=(uint8_t)(1u<<(slot%4u));
+    }
+    if(memcmp(seen,compiled->uniform_used,sizeof(seen)))return CTR_GX2_SHADER_ARGUMENT;
+    for(unsigned i=0;i<compiled->uniform_count;++i) {
+        unsigned slot=compiled->uniform_order[i],index=slot/4u,lane=slot%4u;
+        if(!(program->uniform_defined[index]&(1u<<lane)))return CTR_GX2_SHADER_UNDEFINED;
+        uint32_t bits=program->uniforms[index][lane];
+        unsigned exponent=(bits>>23)&255u,fraction=bits&UINT32_C(0x7fffff);
+        if((exponent || fraction) && (exponent<65u || exponent>190u || (fraction&127u)))
+            return CTR_GX2_SHADER_NUMERIC;
+    }
+    return CTR_GX2_SHADER_OK;
+}
 ctr_gx2_shader_result ctr_gx2_shader_compile(const ctr_shader_program *program,uint16_t mask,
                                            const uint32_t *maps,unsigned total,ctr_gx2_shader *out) {
     ++compile_attempts;
@@ -431,17 +504,33 @@ ctr_gx2_shader_result ctr_gx2_shader_compile(const ctr_shader_program *program,u
     assert(maps[0]==0x03020100 && maps[1]==0x0b0a0908);
     if(expected_uv)assert(maps[2]==0x1f1f0d0c);
     if(!compile_ok)return CTR_GX2_SHADER_UNSUPPORTED;
-    memset(out,0,sizeof(*out));out->program[0]=0x12;out->size=256;out->gprs=expected_uv?54u:53u;
-    out->texcoord0=expected_uv;
-    out->input_mask=expected_uv?7u:3u;out->uniform_used[2]=15;out->pica_instructions=3;return CTR_GX2_SHADER_OK;
+    ctr_gx2_shader compiled;memset(&compiled,0,sizeof(compiled));
+    compiled.program[0]=0x12;compiled.size=256;compiled.gprs=expected_uv?54u:53u;
+    uint32_t signature=mock_vertex_signature(program,mask,maps,total);
+    for(unsigned byte=0;byte<4u;++byte)compiled.program[byte+1u]=(uint8_t)(signature>>(byte*8u));
+    compiled.texcoord0=expected_uv;compiled.input_mask=expected_uv?7u:3u;
+    compiled.uniform_used[2]=15;compiled.uniform_count=4;
+    const uint16_t order[4]={10u,8u,11u,9u};
+    memcpy(compiled.uniform_order,order,sizeof(order));compiled.pica_instructions=3;
+    ctr_gx2_shader_result result=ctr_gx2_shader_validate_uniforms(program,&compiled);
+    if(result!=CTR_GX2_SHADER_OK)return result;
+    if(invalid_compiled_record==1u)compiled.size=0;
+    if(invalid_compiled_record==2u)compiled.gprs=65u;
+    if(invalid_compiled_record==3u)compiled.size=CTR_GX2_SHADER_MAX_BYTES+256u;
+    *out=compiled;return CTR_GX2_SHADER_OK;
 }
 static void reset(void) {
-    assert(!live_allocations);alloc_attempts=0;fail_allocation=0;fetch_bytes=512;
+    assert(!live_allocations && !live_cache_owners);alloc_attempts=0;fail_allocation=0;fetch_bytes=512;
+    cache_create_attempts=cache_destroy_calls=0;fail_cache_create=false;
+    invalid_compiled_record=0;
     wait_ok=true;compile_ok=true;layout_ok=true;active_context=&native_context;bound_target=NULL;
     gpu_draws=0;read_invalidates=0;uniform_uploads=0;rectangle_count=0;context_switches=0;
     wait_calls=0;fail_wait_call=0;
     gpu_pending=false;gpu_stopped=false;expected_uv=false;expected_texture=NULL;
     bound_texture=NULL;bound_sampler=NULL;bound_pixel_program=NULL;texture_image=NULL;
+    bound_vertex_program=NULL;memset(&bound_vertex_metadata,0,sizeof(bound_vertex_metadata));
+    memset(bound_vertex_uniforms,0,sizeof(bound_vertex_uniforms));
+    bound_vertices=NULL;bound_vertex_bytes=0;
     bound_pixel_uniform_count=0;
     texture_inits=0;texture_binds=0;sampler_binds=0;texture_flushes=0;texture_invalidates=0;
     color_control_sets=channel_mask_sets=alpha_test_sets=0;
@@ -485,10 +574,13 @@ static void setup(ctr_scene_state *state,ctr_vertex vertices[3]) {
         vertices[i].input[0][3]=1.0f;vertices[i].input[1][3]=1.0f;
     }
     for(unsigned i=0;i<4;++i)state->shader.uniforms[2][i]=0x3f800000;
+    state->shader.uniform_defined[2]=15u;
     expected_shader=&state->shader;expected_vertices=vertices;expected_count=3;
 }
-static void clean(const ctr_wiiu_gx2_scene *s) {
+static void clean(ctr_wiiu_gx2_scene *s) {
+    ctr_wiiu_gx2_scene_cache_clear(s);
     assert(!s->private_state && !s->quarantined && !live_allocations);
+    assert(!s->program_cache && !live_cache_owners && !s->cache_stats.bytes);
     assert(s->allocations==s->releases && active_context==&native_context);
 }
 static void baseline(void) {
@@ -1595,7 +1687,7 @@ static void buffer_failures(void) {
         }
         assert(!backend.draw(backend.context,&state,vertices,3,NULL));
         assert(scene.result==CTR_WIIU_GX2_SCENE_SHADER && scene.draws==retained && gpu_draws==retained &&
-            uniform_uploads==retained && alloc_attempts==allocations && compile_attempts==retained+1u);
+            uniform_uploads==retained && alloc_attempts==allocations && compile_attempts==1u);
         if(retained)assert(saved_size==bound_pixel_metadata.size && !memcmp(saved,bound_pixel_program,saved_size));
         backend.abort(backend.context);clean(&scene);
     }
@@ -1712,6 +1804,338 @@ static void texture_failures(void) {
         clean(&scene);
     }
 }
+static void cache_kind(const ctr_wiiu_gx2_scene *scene,ctr_gx2_cache_kind kind,
+                       uint64_t lookups,uint64_t hits,uint64_t misses,uint64_t stores,
+                       uint64_t evictions,uint64_t bypasses) {
+    const ctr_gx2_cache_statistics *stats=&scene->cache_stats;
+    assert(stats->lookups[kind]==lookups && stats->hits[kind]==hits && stats->misses[kind]==misses);
+    assert(stats->stores[kind]==stores && stats->evictions[kind]==evictions && stats->bypasses[kind]==bypasses);
+}
+typedef struct {
+    GX2VertexShader vertex;
+    GX2PixelShader pixel;
+    uint8_t vertex_bytes[256],pixel_bytes[8192];
+    uint32_t vertex_constants[4],pixel_constants[36];
+    unsigned pixel_constant_count;
+} cache_snapshot;
+static void cache_snapshot_get(cache_snapshot *snapshot) {
+    memset(snapshot,0,sizeof(*snapshot));
+    snapshot->vertex=bound_vertex_metadata;snapshot->vertex.program=NULL;
+    snapshot->pixel=bound_pixel_metadata;snapshot->pixel.program=NULL;
+    assert(bound_vertex_metadata.size==sizeof(snapshot->vertex_bytes));
+    memcpy(snapshot->vertex_bytes,bound_vertex_program,bound_vertex_metadata.size);
+    memcpy(snapshot->pixel_bytes,bound_pixel_program,bound_pixel_metadata.size);
+    memcpy(snapshot->vertex_constants,bound_vertex_uniforms,sizeof(bound_vertex_uniforms));
+    memcpy(snapshot->pixel_constants,bound_pixel_uniforms,sizeof(bound_pixel_uniforms));
+    snapshot->pixel_constant_count=bound_pixel_uniform_count;
+}
+static void cache_reuse(void) {
+    reset();uint8_t bytes[1024]={0};ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
+    ctr_scene_state state;ctr_vertex vertices[3];setup(&state,vertices);buffer_base(&state,0xa5u,5);
+    ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+    ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+    assert(!scene.program_cache && !cache_create_attempts);
+    assert(backend.begin(backend.context,&surface));unsigned allocations=alloc_attempts;
+    assert(backend.draw(backend.context,&state,vertices,3,NULL));
+    assert(scene.program_cache && live_cache_owners==1u && cache_create_attempts==1u);
+    assert(alloc_attempts==allocations && scene.vertex_translations==1u && scene.pixel_translations==1u);
+    cache_kind(&scene,CTR_GX2_CACHE_VERTEX,1,0,1,1,0,0);
+    cache_kind(&scene,CTR_GX2_CACHE_PIXEL,1,0,1,1,0,0);
+    cache_snapshot cold,warm;cache_snapshot_get(&cold);
+    assert(scene.cache_stats.bytes && scene.cache_stats.bytes<=CTR_GX2_CACHE_MAX_BYTES);
+    rectangle_count=0;assert(backend.draw(backend.context,&state,vertices,3,NULL));cache_snapshot_get(&warm);
+    assert(!memcmp(&cold,&warm,sizeof(cold)) && compile_attempts==1u && uniform_uploads==2u);
+    /* Dynamic lanes, stage colors and initial buffer bytes are refreshed on a
+     * hit. An unrelated undefined/invalid uniform is never consumed. */
+    state.shader.uniforms[2][2]=UINT32_C(0x40000000);
+    state.shader.uniforms[47][1]=UINT32_C(0x7fc00000);state.shader.uniform_defined[47]=1u;
+    state.registers[0xfd]=UINT32_C(0xd1952f67);
+    for(unsigned stage=0;stage<6u;++stage)state.registers[ctr_tev_registers[stage]+3u]^=UINT32_C(0x67d1952f);
+    state.registers[0x104]=1u|(6u<<4)|(93u<<8);state.registers[0x107]=0xa00u;
+    rectangle_count=0;assert(backend.draw(backend.context,&state,vertices,3,NULL));cache_snapshot_get(&warm);
+    assert(!memcmp(cold.vertex_bytes,warm.vertex_bytes,sizeof(cold.vertex_bytes)));
+    assert(!memcmp(cold.pixel_bytes,warm.pixel_bytes,sizeof(cold.pixel_bytes)));
+    assert(memcmp(cold.vertex_constants,warm.vertex_constants,sizeof(cold.vertex_constants)));
+    assert(memcmp(cold.pixel_constants,warm.pixel_constants,sizeof(cold.pixel_constants)));
+    assert(captured_write_mask==10u && captured_alpha_enabled && uniform_uploads==3u);
+    assert(backend.end(backend.context,&surface));
+    assert(!scene.private_state && !live_allocations && live_cache_owners==1u);
+    ctr_scene_state relocated=state;expected_state=&relocated;expected_shader=&relocated.shader;
+    rectangle_count=0;assert(backend.begin(backend.context,&surface));
+    assert(backend.draw(backend.context,&relocated,vertices,3,NULL));
+    assert(compile_attempts==1u && scene.vertex_translations==1u && scene.pixel_translations==1u);
+    backend.abort(backend.context);
+    assert(!scene.private_state && !live_allocations && live_cache_owners==1u);
+    rectangle_count=0;assert(backend.begin(backend.context,&surface));
+    assert(backend.draw(backend.context,&relocated,vertices,3,NULL));
+    cache_kind(&scene,CTR_GX2_CACHE_VERTEX,5,4,1,1,0,0);
+    cache_kind(&scene,CTR_GX2_CACHE_PIXEL,5,4,1,1,0,0);
+    assert(cache_create_attempts==1u && uniform_uploads==5u && scene.draws==5u);
+    assert(backend.end(backend.context,&surface));clean(&scene);
+    assert(cache_destroy_calls==1u && scene.cache_stats.peak_bytes && !scene.cache_stats.bytes);
+}
+static void cache_vertex_fifo(void) {
+    reset();uint8_t bytes[1024]={0};ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
+    ctr_scene_state state;ctr_vertex vertices[3];setup(&state,vertices);
+    ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+    ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+    assert(backend.begin(backend.context,&surface));
+    for(unsigned key=0;key<5u;++key) {
+        state.shader.code[511]=key;state.shader.code_defined[511]=1u;
+        state.shader.descriptors[127]=key*UINT32_C(0x9e3779b9);state.shader.descriptor_defined[127]=1u;
+        rectangle_count=0;assert(backend.draw(backend.context,&state,vertices,3,NULL));
+        assert(compile_attempts==key+1u);
+    }
+    cache_kind(&scene,CTR_GX2_CACHE_VERTEX,5,0,5,5,1,0);
+    state.shader.code[511]=1u;state.shader.descriptors[127]=UINT32_C(0x9e3779b9);
+    rectangle_count=0;assert(backend.draw(backend.context,&state,vertices,3,NULL));assert(compile_attempts==5u);
+    state.shader.code[511]=5u;state.shader.descriptors[127]=5u*UINT32_C(0x9e3779b9);
+    rectangle_count=0;assert(backend.draw(backend.context,&state,vertices,3,NULL));
+    /* A hit does not renew FIFO age: key 1 was evicted by key 5. */
+    state.shader.code[511]=1u;state.shader.descriptors[127]=UINT32_C(0x9e3779b9);
+    rectangle_count=0;assert(backend.draw(backend.context,&state,vertices,3,NULL));
+    cache_kind(&scene,CTR_GX2_CACHE_VERTEX,8,1,7,7,3,0);
+    cache_kind(&scene,CTR_GX2_CACHE_PIXEL,8,7,1,1,0,0);
+    assert(compile_attempts==7u && scene.vertex_translations==7u && scene.pixel_translations==1u);
+    assert(backend.end(backend.context,&surface));clean(&scene);
+}
+static void cache_pixel_fifo(void) {
+    static const unsigned operations[8]={0,1,2,3,4,5,8,9};
+    reset();uint8_t bytes[1024]={0};ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
+    ctr_scene_state state;ctr_vertex vertices[3];setup(&state,vertices);
+    ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+    ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+    assert(backend.begin(backend.context,&surface));
+    for(unsigned key=0;key<8u;++key) {
+        tev_row(&state,0,0,0,operations[key]|operations[key]<<16,0,0);
+        rectangle_count=0;assert(backend.draw(backend.context,&state,vertices,3,NULL));
+        assert(scene.pixel_translations==key+1u);
+    }
+    tev_row(&state,0,0,0,0,0,0);rectangle_count=0;
+    assert(backend.draw(backend.context,&state,vertices,3,NULL));
+    assert(scene.pixel_translations==8u);
+    tev_row(&state,0,0,0,0,0,1);rectangle_count=0;
+    assert(backend.draw(backend.context,&state,vertices,3,NULL));
+    tev_row(&state,0,0,0,0,0,0);rectangle_count=0;
+    assert(backend.draw(backend.context,&state,vertices,3,NULL));
+    cache_kind(&scene,CTR_GX2_CACHE_PIXEL,11,1,10,10,2,0);
+    cache_kind(&scene,CTR_GX2_CACHE_VERTEX,11,10,1,1,0,0);
+    assert(scene.pixel_translations==10u && compile_attempts==1u);
+    assert(backend.end(backend.context,&surface));clean(&scene);
+}
+static void cache_rejection(void) {
+    reset();uint8_t bytes[1024]={0};ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
+    ctr_scene_state state;ctr_vertex vertices[3];setup(&state,vertices);buffer_base(&state,0xa5u,5);
+    ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+    ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+    assert(backend.begin(backend.context,&surface));assert(backend.draw(backend.context,&state,vertices,3,NULL));
+    cache_snapshot saved,current;cache_snapshot_get(&saved);unsigned allocations=alloc_attempts;
+    /* The mock's first-read order is z,x,w,y. Preserve that diagnostic order
+     * on a hit when an earlier numeric error precedes an undefined lane. */
+    state.shader.uniforms[2][2]=UINT32_C(0x7fc00000);state.shader.uniform_defined[2]=14u;
+    for(unsigned mode=0;mode<2u;++mode) {
+        scene.cache_disabled=mode!=0u;
+        assert(!backend.draw(backend.context,&state,vertices,3,NULL));
+        assert(scene.result==CTR_WIIU_GX2_SCENE_SHADER && scene.shader_result==CTR_GX2_SHADER_NUMERIC);
+        state.shader.uniforms[2][2]=UINT32_C(0x3f800000);
+        assert(!backend.draw(backend.context,&state,vertices,3,NULL));
+        assert(scene.shader_result==CTR_GX2_SHADER_UNDEFINED);
+        state.shader.uniforms[2][2]=UINT32_C(0x7fc00000);
+    }
+    scene.cache_disabled=false;state.shader.uniforms[2][2]=UINT32_C(0x3f800000);state.shader.uniform_defined[2]=15u;
+    assert(scene.vertex_translations==3u && scene.vertex_translation_failures==2u && compile_attempts==3u);
+    /* A valid immutable key cannot bypass validation of the current constant
+     * definition, reserved TEV bits or partial buffer registers. */
+    for(unsigned failure=0;failure<3u;++failure) {
+        uint8_t defined=state.register_defined[0xc3];uint32_t operation=state.registers[0xc2];
+        if(failure==0u)state.register_defined[0xc3]=14u;
+        if(failure==1u)state.registers[0xc2]|=1u<<31;
+        if(failure==2u)state.register_defined[0xfd]=14u;
+        assert(!backend.draw(backend.context,&state,vertices,3,NULL));
+        assert(scene.result==CTR_WIIU_GX2_SCENE_SHADER && scene.pixel_translations==1u);
+        state.register_defined[0xc3]=defined;state.registers[0xc2]=operation;state.register_defined[0xfd]=15u;
+    }
+    cache_snapshot_get(&current);assert(!memcmp(&saved,&current,sizeof(saved)));
+    assert(alloc_attempts==allocations && uniform_uploads==1u && gpu_draws==1u);
+    assert(scene.cache_stats.stores[CTR_GX2_CACHE_VERTEX]==1u && scene.cache_stats.stores[CTR_GX2_CACHE_PIXEL]==1u);
+    assert(scene.cache_stats.lookups[CTR_GX2_CACHE_PIXEL]==1u);
+    /* Compiler failure and successful-but-invalid records are never admitted. */
+    state.shader.code[511]=1u;compile_ok=false;
+    assert(!backend.draw(backend.context,&state,vertices,3,NULL));
+    compile_ok=true;
+    for(unsigned invalid=1;invalid<=3u;++invalid) {
+        invalid_compiled_record=invalid;
+        assert(!backend.draw(backend.context,&state,vertices,3,NULL));
+        assert(scene.result==CTR_WIIU_GX2_SCENE_SHADER && scene.cache_stats.stores[CTR_GX2_CACHE_VERTEX]==1u);
+    }
+    invalid_compiled_record=0;rectangle_count=0;
+    assert(backend.draw(backend.context,&state,vertices,3,NULL));
+    assert(scene.vertex_translations==8u && scene.vertex_translation_failures==6u);
+    assert(scene.cache_stats.stores[CTR_GX2_CACHE_VERTEX]==2u && scene.pixel_translations==1u);
+    assert(backend.end(backend.context,&surface));clean(&scene);
+}
+static void cache_parity(void) {
+    cache_snapshot expected[3];
+    for(unsigned mode=0;mode<3u;++mode) {
+        reset();uint8_t bytes[1024]={0};ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
+        ctr_scene_state state;ctr_vertex vertices[3];setup(&state,vertices);buffer_base(&state,0xa5u,5);
+        ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+        scene.cache_disabled=mode==1u;fail_cache_create=mode==2u;
+        ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+        assert(backend.begin(backend.context,&surface));unsigned allocations=alloc_attempts;
+        for(unsigned draw=0;draw<3u;++draw) {
+            state.shader.uniforms[2][draw]=UINT32_C(0x40000000);
+            state.registers[0xfd]^=UINT32_C(0x192b3d4f);
+            state.registers[0xc3]^=UINT32_C(0x5b6d7f91);
+            rectangle_count=0;assert(backend.draw(backend.context,&state,vertices,3,NULL));
+            cache_snapshot actual;cache_snapshot_get(&actual);
+            if(!mode)expected[draw]=actual;else assert(!memcmp(&expected[draw],&actual,sizeof(actual)));
+            assert(alloc_attempts==allocations);
+        }
+        assert(scene.vertex_translations==(mode?3u:1u) && scene.pixel_translations==(mode?3u:1u));
+        for(unsigned kind=0;kind<2u;++kind)
+            cache_kind(&scene,(ctr_gx2_cache_kind)kind,mode?0u:3u,mode?0u:2u,mode?0u:1u,mode?0u:1u,0u,mode?3u:0u);
+        assert(cache_create_attempts==(mode==0u?1u:mode==1u?0u:3u));
+        assert(scene.cache_allocation_failures==(mode==2u?3u:0u));
+        if(mode==2u) {
+            fail_cache_create=false;rectangle_count=0;
+            assert(backend.draw(backend.context,&state,vertices,3,NULL));
+            rectangle_count=0;assert(backend.draw(backend.context,&state,vertices,3,NULL));
+            assert(live_cache_owners==1u && cache_create_attempts==4u && scene.cache_allocation_failures==3u);
+            assert(scene.vertex_translations==4u && scene.pixel_translations==4u);
+            for(unsigned kind=0;kind<2u;++kind)cache_kind(&scene,(ctr_gx2_cache_kind)kind,2,1,1,1,0,3);
+        }
+        assert(backend.end(backend.context,&surface));clean(&scene);
+    }
+}
+static void cache_profiles(void) {
+    reset();uint8_t bytes[1024]={0},pixels[8u*8u*4u]={0},zbytes[512]={0};
+    ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
+    ctr_scene_depth_surface depth={zbytes,sizeof(zbytes),16,16,32,0x18020000u,0};
+    ctr_scene_state state;ctr_vertex vertices[3];setup(&state,vertices);
+    ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+    ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+    assert(backend.begin(backend.context,&surface));assert(backend.draw(backend.context,&state,vertices,3,NULL));
+    /* Initial RGBA alone selects buffered code even without a buffer source
+     * or update mask. Its numeric value remains a dynamic constant. */
+    state.register_defined[0xe0]=state.register_defined[0xfd]=15u;
+    state.registers[0xfd]=UINT32_C(0x192b3d4f);rectangle_count=0;
+    assert(backend.draw(backend.context,&state,vertices,3,NULL));
+    assert(scene.pixel_translations==2u && bound_pixel_metadata.regs.sq_pgm_resources_ps==11u && bound_pixel_uniform_count==36u);
+    uint32_t initial=bound_pixel_uniforms[32];
+    state.registers[0xfd]=UINT32_C(0x91a3b5c7);rectangle_count=0;
+    assert(backend.draw(backend.context,&state,vertices,3,NULL));
+    assert(scene.pixel_translations==2u && bound_pixel_uniform_count==36u && bound_pixel_uniforms[32]!=initial);
+    state.registers[0xfd]=0;rectangle_count=0;
+    assert(backend.draw(backend.context,&state,vertices,3,NULL));
+    assert(scene.pixel_translations==2u && bound_pixel_metadata.regs.sq_pgm_resources_ps==9u && bound_pixel_uniform_count==32u);
+    /* Keeping identical TEV topology while changing only whether an image is
+     * bound still changes PS sampler metadata and the emitted TEX prefix. */
+    textured_setup(&state,vertices);state.registers[0xc0]=0;
+    ctr_scene_texture texture={pixels,8,8,0x18010000u,0,0};expected_texture=&texture;rectangle_count=0;
+    assert(backend.draw(backend.context,&state,vertices,3,&texture));
+    assert(scene.vertex_translations==2u && scene.pixel_translations==3u);
+    assert(backend.end(backend.context,&surface));
+    expected_texture=NULL;expected_uv=false;depth_setup(&state,vertices,&depth);rectangle_count=0;
+    assert(backend.begin_depth(backend.context,&surface,&depth));
+    assert(backend.draw(backend.context,&state,vertices,3,NULL));
+    assert(scene.vertex_translations==2u && scene.pixel_translations==4u);
+    assert(backend.end_depth(backend.context,&surface,&depth));
+    expected_depth=NULL;setup(&state,vertices);rectangle_count=0;
+    assert(backend.begin(backend.context,&surface));
+    assert(backend.draw(backend.context,&state,vertices,3,NULL));
+    assert(scene.vertex_translations==2u && scene.pixel_translations==4u);
+    cache_kind(&scene,CTR_GX2_CACHE_VERTEX,7,5,2,2,0,0);
+    cache_kind(&scene,CTR_GX2_CACHE_PIXEL,7,3,4,4,0,0);
+    assert(backend.end(backend.context,&surface));clean(&scene);
+}
+static void cache_lifetime(void) {
+    reset();uint8_t bytes[1024]={0};ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
+    ctr_scene_state state;ctr_vertex vertices[3];setup(&state,vertices);
+    ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+    ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+    assert(backend.begin(backend.context,&surface));assert(backend.draw(backend.context,&state,vertices,3,NULL));
+    void *private_state=scene.private_state;unsigned live=live_allocations,waits=wait_calls,switches=context_switches;
+    uint64_t releases=scene.releases;size_t peak=scene.cache_stats.peak_bytes;
+    ctr_wiiu_gx2_scene_cache_clear(&scene);ctr_wiiu_gx2_scene_cache_clear(NULL);
+    assert(!scene.program_cache && !live_cache_owners && scene.private_state==private_state);
+    assert(live_allocations==live && scene.releases==releases && wait_calls==waits && context_switches==switches);
+    assert(!scene.cache_stats.bytes && scene.cache_stats.peak_bytes==peak);
+    rectangle_count=0;assert(backend.draw(backend.context,&state,vertices,3,NULL));
+    assert(cache_create_attempts==2u && scene.vertex_translations==2u && scene.pixel_translations==2u);
+    wait_ok=false;rectangle_count=0;
+    assert(!backend.draw(backend.context,&state,vertices,3,NULL));
+    assert(scene.quarantined && scene.result==CTR_WIIU_GX2_SCENE_WAIT && gpu_pending);
+    cache_snapshot saved,current;cache_snapshot_get(&saved);
+    waits=wait_calls;switches=context_switches;
+    ctr_wiiu_gx2_scene_cache_clear(&scene);
+    assert(!live_cache_owners && !scene.program_cache && scene.private_state==private_state);
+    assert(live_allocations==live && scene.releases==releases && wait_calls==waits && context_switches==switches);
+    state.shader.code[511]=1u;
+    assert(!backend.draw(backend.context,&state,vertices,3,NULL));cache_snapshot_get(&current);
+    assert(!memcmp(&saved,&current,sizeof(saved)) && cache_create_attempts==2u && compile_attempts==2u);
+    assert(scene.vertex_translations==2u && scene.pixel_translations==2u && live_allocations==live);
+    backend.abort(backend.context);assert(live_allocations==live && scene.private_state==private_state);
+    gpu_stopped=true;ctr_wiiu_gx2_scene_after_shutdown(&scene);clean(&scene);
+    assert(!scene.restore_context && cache_destroy_calls==2u);
+}
+static void cache_pending_retirement(void) {
+    /* A detached restore context leaves an actual submission pending between
+     * calls. Both a warm hit and a miss must wait before touching its buffers. */
+    for(unsigned mode=0;mode<3u;++mode) {
+        reset();uint8_t bytes[1024]={0};ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
+        ctr_scene_state state;ctr_vertex vertices[3];setup(&state,vertices);
+        ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+        ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+        assert(backend.begin(backend.context,&surface));scene.restore_context=NULL;
+        assert(backend.draw(backend.context,&state,vertices,3,NULL));assert(gpu_pending);
+        cache_snapshot saved,current;cache_snapshot_get(&saved);
+        uint8_t attributes[768];assert(bound_vertex_bytes==sizeof(attributes));
+        memcpy(attributes,bound_vertices,sizeof(attributes));
+        state.shader.uniforms[2][2]=UINT32_C(0x40000000);vertices[0].input[0][0]=0.75f;
+        if(mode==2u)state.shader.code[511]=1u;
+        unsigned waits=wait_calls,switches=context_switches,live=live_allocations;
+        uint64_t releases=scene.releases;rectangle_count=0;wait_ok=mode==0u;
+        assert(backend.draw(backend.context,&state,vertices,3,NULL)==(mode==0u));
+        assert(wait_calls==waits+1u && gpu_pending);
+        if(!mode) {
+            cache_kind(&scene,CTR_GX2_CACHE_VERTEX,2,1,1,1,0,0);
+            cache_kind(&scene,CTR_GX2_CACHE_PIXEL,2,1,1,1,0,0);
+            assert(uniform_uploads==2u && gpu_draws==2u && !scene.quarantined);
+        } else {
+            assert(scene.result==CTR_WIIU_GX2_SCENE_WAIT && scene.quarantined);
+            assert(context_switches==switches && compile_attempts==1u && uniform_uploads==1u && gpu_draws==1u);
+            cache_kind(&scene,CTR_GX2_CACHE_VERTEX,1,0,1,1,0,0);
+            cache_kind(&scene,CTR_GX2_CACHE_PIXEL,1,0,1,1,0,0);
+            cache_snapshot_get(&current);assert(!memcmp(&saved,&current,sizeof(saved)));
+            assert(!memcmp(attributes,bound_vertices,sizeof(attributes)));
+            waits=wait_calls;ctr_wiiu_gx2_scene_cache_clear(&scene);
+            assert(!live_cache_owners && !scene.program_cache && scene.private_state);
+            assert(wait_calls==waits && context_switches==switches && live_allocations==live && scene.releases==releases);
+        }
+        assert(scene.vertex_translations==1u && scene.pixel_translations==1u);
+        wait_ok=true;scene.restore_context=&native_context;backend.abort(backend.context);clean(&scene);
+    }
+}
+static void cache_counter_saturation(void) {
+    reset();uint8_t bytes[1024]={0};ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
+    ctr_scene_state state;ctr_vertex vertices[3];setup(&state,vertices);
+    ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+    ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+    assert(backend.begin(backend.context,&surface));assert(backend.draw(backend.context,&state,vertices,3,NULL));
+    scene.cache_stats.lookups[0]=scene.cache_stats.hits[0]=UINT64_MAX-1u;
+    for(unsigned draw=0;draw<2u;++draw) {
+        rectangle_count=0;assert(backend.draw(backend.context,&state,vertices,3,NULL));
+    }
+    assert(scene.cache_stats.saturated && scene.cache_stats.lookups[0]==UINT64_MAX && scene.cache_stats.hits[0]==UINT64_MAX);
+    scene.vertex_translations=scene.pixel_translations=UINT64_MAX-1u;
+    scene.cache_allocation_failures=UINT64_MAX-1u;ctr_wiiu_gx2_scene_cache_clear(&scene);fail_cache_create=true;
+    for(unsigned draw=0;draw<2u;++draw) {
+        rectangle_count=0;assert(backend.draw(backend.context,&state,vertices,3,NULL));
+    }
+    assert(scene.vertex_translations==UINT64_MAX && scene.pixel_translations==UINT64_MAX && scene.cache_allocation_failures==UINT64_MAX);
+    assert(backend.end(backend.context,&surface));clean(&scene);
+}
 int main(int argc,char **argv) {
     if(argc==2 && !strcmp(argv[1],"--fragment-programs")) { textured_bindings(true);return 0; }
     assert(argc==1);
@@ -1725,6 +2149,9 @@ int main(int argc,char **argv) {
     stencil_bindings();stencil_failures();
     textured_bindings(false);combiner_programs(false);buffer_programs(false);buffer_failures();
     texture_reuse();texture_dimensions();texture_failures();
+    cache_reuse();cache_vertex_fifo();cache_pixel_fifo();cache_rejection();cache_parity();
+    cache_profiles();cache_lifetime();cache_pending_retirement();cache_counter_saturation();
+    puts("GX2 CPU program cache API model: cold/warm and cross-list reuse, dynamic constants, bounded FIFO eviction, current-state rejection, uncached/failure parity, sampler/depth profiles, CPU/GPU ownership and quarantine passed");
     printf("PreviousBuffer native program model: %u independent pixel vectors, maximum %u scalar ALUs, all stage/mask histories and retained rejection passed\n",buffer_pixel_vectors,buffer_max_instructions);
     puts("GX2 native API model: lifetime, texture/depth retirement/quarantine, original inputs, sampler/TEV bytecode, fragment/blend/depth mappings, 1048576 alpha, 1048576 D16 and 524288 stencil comparisons, 1572864 stencil action/mask vectors, pitched paired upload, scissor and readback passed");
     return 0;

@@ -56,6 +56,58 @@ typedef struct {
     uint32_t pixel_constants[9][4];
 } scene_private;
 
+typedef struct {
+    GX2PixelShader metadata;
+    uint8_t program[PIXEL_BYTES];
+} pixel_cache_record;
+_Static_assert(sizeof(pixel_cache_record)<=CTR_GX2_CACHE_PIXEL_PAYLOAD_MAX,
+               "pixel program cache record exceeds its fixed CPU bound");
+
+static void cache_add(ctr_wiiu_gx2_scene *s,uint64_t *counter,uint64_t amount) {
+    if(amount>=UINT64_MAX-*counter) {
+        *counter=UINT64_MAX;s->cache_stats.saturated=true;
+    } else *counter+=amount;
+}
+static void cache_observe(ctr_wiiu_gx2_scene *s,const ctr_gx2_cache_statistics *before) {
+    ctr_gx2_cache_statistics after;
+    ctr_gx2_cache_statistics_get(s->program_cache,&after);
+    for(unsigned kind=0;kind<2u;++kind) {
+#define CACHE_DELTA(field) cache_add(s,&s->cache_stats.field[kind],after.field[kind]-before->field[kind])
+        CACHE_DELTA(lookups);CACHE_DELTA(hits);CACHE_DELTA(misses);
+        CACHE_DELTA(stores);CACHE_DELTA(evictions);CACHE_DELTA(bypasses);
+#undef CACHE_DELTA
+    }
+    s->cache_stats.bytes=after.bytes;
+    if(after.peak_bytes>s->cache_stats.peak_bytes)s->cache_stats.peak_bytes=after.peak_bytes;
+    s->cache_stats.saturated|=after.saturated;
+}
+static bool cache_lookup(ctr_wiiu_gx2_scene *s,ctr_gx2_cache_kind kind,
+                          const uint8_t *key,size_t key_size,void *out,size_t capacity,
+                          size_t *out_size) {
+    ctr_gx2_cache_statistics before;
+    ctr_gx2_cache_statistics_get(s->program_cache,&before);
+    bool hit=ctr_gx2_cache_lookup(s->program_cache,kind,key,key_size,out,capacity,out_size);
+    cache_observe(s,&before);return hit;
+}
+static void cache_store(ctr_wiiu_gx2_scene *s,ctr_gx2_cache_kind kind,
+                         const uint8_t *key,size_t key_size,const void *record,size_t bytes) {
+    ctr_gx2_cache_statistics before;
+    ctr_gx2_cache_statistics_get(s->program_cache,&before);
+    (void)ctr_gx2_cache_store(s->program_cache,kind,key,key_size,record,bytes);
+    cache_observe(s,&before);
+}
+static void cache_prepare(ctr_wiiu_gx2_scene *s) {
+    if(!s->cache_disabled && !s->program_cache) {
+        s->program_cache=ctr_gx2_cache_create();
+        if(!s->program_cache)cache_add(s,&s->cache_allocation_failures,1u);
+    }
+}
+void ctr_wiiu_gx2_scene_cache_clear(ctr_wiiu_gx2_scene *s) {
+    if(!s)return;
+    ctr_gx2_cache_destroy(s->program_cache);s->program_cache=NULL;
+    s->cache_stats.bytes=0;
+}
+
 static bool retire(ctr_wiiu_gx2_scene *s,scene_private *p);
 static bool restore(ctr_wiiu_gx2_scene *s) {
     if(s && s->restore_context) {
@@ -108,6 +160,7 @@ void ctr_wiiu_gx2_scene_abort(ctr_wiiu_gx2_scene *s) {
 void ctr_wiiu_gx2_scene_after_shutdown(ctr_wiiu_gx2_scene *s) {
     if(!s)return;
     if(s->private_state)release(s,s->private_state);
+    ctr_wiiu_gx2_scene_cache_clear(s);
     s->restore_context=NULL;
 }
 static bool dimensions(const ctr_scene_surface *surface) {
@@ -188,21 +241,22 @@ static void pixel_combine(scene_private *p,unsigned *count,unsigned op,unsigned 
     if(op==1u || op==4u || op==8u || op==9u)pixel_divide(p,count,dest,lane);
     if(op==8u)pixel_op(p,count,0,dest,lane,6,lane,false,dest,lane);
 }
-static bool pixel_shader(scene_private *p,const ctr_scene_state *state,bool textured) {
-    ctr_tev_program tev;
-    if(!ctr_tev_decode(state->registers,state->register_defined,textured,&tev))return false;
-    p->buffered=ctr_tev_buffered(&tev);
-    uint8_t *program=p->pixel_program;memset(program,0,PIXEL_BYTES);
-    unsigned count=0,previous=3,destination=7;
+static void pixel_constants(scene_private *p,const ctr_tev_program *tev) {
+    p->buffered=ctr_tev_buffered(tev);
+    memset(p->pixel_constants,0,sizeof(p->pixel_constants));
     for(unsigned stage=0;stage<CTR_TEV_STAGES;++stage)
-        for(unsigned lane=0;lane<4;++lane)p->pixel_constants[stage][lane]=bits((float)tev.stages[stage].constant[lane]);
+        for(unsigned lane=0;lane<4;++lane)p->pixel_constants[stage][lane]=bits((float)tev->stages[stage].constant[lane]);
     p->pixel_constants[6][0]=bits(255.0f);p->pixel_constants[6][1]=bits(128.0f);
     /* The upward binary32 reciprocal gives exact floor(N/255), 0<=N<=65025.
      * Integer products/sums stay exactly representable; no fused operation. */
     p->pixel_constants[6][2]=UINT32_C(0x3b808081);p->pixel_constants[6][3]=bits(0.5f);
     for(unsigned lane=0;lane<4;++lane)p->pixel_constants[7][lane]=bits(lane<3u?(float)(1u<<lane):0.0f);
     if(p->buffered)for(unsigned lane=0;lane<4;++lane)
-        p->pixel_constants[8][lane]=bits((float)tev.buffer_color[lane]);
+        p->pixel_constants[8][lane]=bits((float)tev->buffer_color[lane]);
+}
+static bool pixel_shader(scene_private *p,const ctr_tev_program *tev,bool textured) {
+    uint8_t *program=p->pixel_program;memset(program,0,PIXEL_BYTES);
+    unsigned count=0,previous=3,destination=7;
     for(unsigned lane=0;lane<4;++lane) {
         pixel_op(p,&count,2,0,lane,262,0,false,0,lane);
         pixel_op(p,&count,0,0,lane,262,3,false,0,lane);
@@ -218,7 +272,7 @@ static bool pixel_shader(scene_private *p,const ctr_scene_state *state,bool text
         pixel_op(p,&count,25,264,lane,0,0,false,10,lane);
     }
     for(unsigned stage=0;stage<CTR_TEV_STAGES;++stage) {
-        const ctr_tev_stage *v=&tev.stages[stage];
+        const ctr_tev_stage *v=&tev->stages[stage];
         bool passthrough=ctr_tev_passthrough(v);
         if(!passthrough) {
             for(unsigned lane=0;lane<4;++lane) {
@@ -253,7 +307,7 @@ static bool pixel_shader(scene_private *p,const ctr_scene_state *state,bool text
             for(unsigned lane=0;lane<4;++lane)
                 pixel_op(p,&count,25,10,lane,0,0,false,9,lane);
             if(stage<4u)for(unsigned lane=0;lane<4;++lane)
-                if(tev.buffer_update[lane==3u]&(1u<<stage))
+                if(tev->buffer_update[lane==3u]&(1u<<stage))
                     pixel_op(p,&count,25,previous,lane,0,0,false,10,lane);
         }
     }
@@ -287,6 +341,75 @@ static bool pixel_shader(scene_private *p,const ctr_scene_state *state,bool text
      * Source: Decaf e6c528a latte_registers_db.h / latte_enum_db.h. */
     p->pixel.regs.db_shader_control=p->depth_enabled?0u:UINT32_C(0x10);
     GX2Invalidate(GX2_INVALIDATE_MODE_CPU_SHADER,program,p->pixel.size);return true;
+}
+static bool vertex_program(ctr_wiiu_gx2_scene *s,scene_private *p,
+                            const ctr_scene_state *state,bool textured) {
+    uint8_t key[CTR_GX2_CACHE_VERTEX_KEY_MAX];size_t key_size=0,record_size=0;
+    bool enabled=!s->cache_disabled && s->program_cache;
+    bool keyed=enabled && ctr_gx2_cache_vertex_key(&state->shader,
+        (uint16_t)state->registers[0x2bdu],&state->registers[0x050u],
+        state->registers[0x04fu],key,&key_size);
+    bool hit=keyed && cache_lookup(s,CTR_GX2_CACHE_VERTEX,key,key_size,
+        p->compiled,sizeof(*p->compiled),&record_size);
+    if(!keyed)cache_add(s,&s->cache_stats.bypasses[CTR_GX2_CACHE_VERTEX],1u);
+    if(hit) {
+        if(record_size!=sizeof(*p->compiled)) {
+            s->shader_result=CTR_GX2_SHADER_ARGUMENT;return false;
+        }
+        /* Code identity excludes current uniform contents. Recheck used lanes
+         * in compiler encounter order before any current uniform is uploaded. */
+        s->shader_result=ctr_gx2_shader_validate_uniforms(&state->shader,p->compiled);
+    } else {
+        cache_add(s,&s->vertex_translations,1u);
+        s->shader_result=ctr_gx2_shader_compile(&state->shader,
+            (uint16_t)state->registers[0x2bdu],&state->registers[0x050u],
+            state->registers[0x04fu],p->compiled);
+        if(s->shader_result!=CTR_GX2_SHADER_OK)
+            cache_add(s,&s->vertex_translation_failures,1u);
+    }
+    if(s->shader_result!=CTR_GX2_SHADER_OK)return false;
+    if(!p->compiled->size || p->compiled->size>sizeof(p->compiled->program) ||
+       p->compiled->gprs>64u || (textured && !p->compiled->texcoord0)) {
+        if(!hit)cache_add(s,&s->vertex_translation_failures,1u);
+        return false;
+    }
+    if(keyed && !hit)cache_store(s,CTR_GX2_CACHE_VERTEX,key,key_size,
+        p->compiled,sizeof(*p->compiled));
+    return true;
+}
+static bool pixel_program(ctr_wiiu_gx2_scene *s,scene_private *p,
+                           const ctr_tev_program *tev,bool textured) {
+    uint8_t key[CTR_GX2_CACHE_PIXEL_KEY_MAX];size_t key_size=0,record_size=0;
+    pixel_cache_record record;
+    /* Constants and buffered selection always come from the current decoded
+     * registers, even when their immutable instruction topology is cached. */
+    pixel_constants(p,tev);
+    bool enabled=!s->cache_disabled && s->program_cache;
+    bool keyed=enabled && ctr_gx2_cache_pixel_key(tev,textured,p->depth_enabled,key,&key_size);
+    bool hit=keyed && cache_lookup(s,CTR_GX2_CACHE_PIXEL,key,key_size,
+        &record,sizeof(record),&record_size);
+    if(!keyed)cache_add(s,&s->cache_stats.bypasses[CTR_GX2_CACHE_PIXEL],1u);
+    if(hit) {
+        if(record_size!=sizeof(record) || !record.metadata.size ||
+           record.metadata.size>PIXEL_BYTES || record.metadata.program)return false;
+        memcpy(p->pixel_program,record.program,sizeof(record.program));
+        p->pixel=record.metadata;p->pixel.program=p->pixel_program;
+        GX2Invalidate(GX2_INVALIDATE_MODE_CPU_SHADER,p->pixel_program,p->pixel.size);
+        return true;
+    }
+    cache_add(s,&s->pixel_translations,1u);
+    if(!pixel_shader(p,tev,textured)) {
+        cache_add(s,&s->pixel_translation_failures,1u);return false;
+    }
+    if(keyed) {
+        /* Copy only immutable scalar/register metadata into a cleared object.
+         * All program/reflection/GX2R pointers stay zero in the CPU record. */
+        memset(&record,0,sizeof(record));record.metadata.regs=p->pixel.regs;
+        record.metadata.size=p->pixel.size;record.metadata.mode=p->pixel.mode;
+        memcpy(record.program,p->pixel_program,sizeof(record.program));
+        cache_store(s,CTR_GX2_CACHE_PIXEL,key,key_size,&record,sizeof(record));
+    }
+    return true;
 }
 static bool upload_texture(ctr_wiiu_gx2_scene *s,scene_private *p,
                            const ctr_scene_texture *source) {
@@ -619,13 +742,15 @@ static bool draw(void *context,const ctr_scene_state *state,const ctr_vertex *ve
     if(!ctr_fragment_decode_depth(state->registers,state->register_defined,true,p->depth_enabled,&fragment) ||
        !native_fragment(&fragment) || !native_depth(p,state,&stencil))
         return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
-    s->shader_result=ctr_gx2_shader_compile(&state->shader,(uint16_t)state->registers[0x2bdu],
-        &state->registers[0x050u],state->registers[0x04fu],p->compiled);
-    if(s->shader_result!=CTR_GX2_SHADER_OK)return fail(s,CTR_WIIU_GX2_SCENE_SHADER);
-    if(!p->compiled->size || p->compiled->size>sizeof(p->compiled->program) ||
-       p->compiled->gprs>64u || (texture && !p->compiled->texcoord0))
+    /* No hit or translation may overwrite a program or vertex upload while a
+     * prior draw/context switch still references the transaction's buffers. */
+    if(!retire(s,p))return false;
+    cache_prepare(s);
+    if(!vertex_program(s,p,state,texture!=NULL))return fail(s,CTR_WIIU_GX2_SCENE_SHADER);
+    ctr_tev_program tev;
+    if(!ctr_tev_decode(state->registers,state->register_defined,texture!=NULL,&tev) ||
+       !pixel_program(s,p,&tev,texture!=NULL))
         return fail(s,CTR_WIIU_GX2_SCENE_SHADER);
-    if(!pixel_shader(p,state,texture!=NULL))return fail(s,CTR_WIIU_GX2_SCENE_SHADER);
     if(!upload_texture(s,p,texture))return false;
     for(unsigned vertex=0;vertex<count;++vertex) {
         if((vertices[vertex].enabled&p->compiled->input_mask)!=p->compiled->input_mask)
