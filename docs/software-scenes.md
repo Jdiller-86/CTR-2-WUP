@@ -169,6 +169,32 @@ GPU references before reuse/free; failed retirement quarantines allocations
 until graphics shutdown. Physical parity remains unverified, with preflight and
 readback enabled; this path makes no performance claim.
 
+### Native program cache
+
+`runtime/core/ctr_gx2_cache.c` holds four vertex and eight pixel records in one
+CPU allocation bounded by 384 KiB. Full canonical byte keys use explicit
+little-endian fields, source/build identity and versioned encoder, numeric and
+renderer profiles. Vertex identity includes all code/descriptors and defined
+masks, entry and active output mapping. Pixel identity includes decoded TEV
+topology, buffer update masks, buffered-program selection, texture presence and
+depth profile. FIFO eviction is deterministic; duplicate stores retain their
+original position.
+
+Uniform values and stage/buffer colors remain dynamic. A vertex hit checks
+current used lanes for definition and exact float24 representation in original
+instruction encounter order; every draw uploads current constants and rebinds
+complete state. Invalid state still fails explicitly. Allocation failure bypasses
+the cache and uses the same checked translator. Cache statistics and translation
+failures are separate from GPU allocation and retirement counters.
+
+Records own their bytes and immutable metadata, with no guest or GPU pointers.
+Hits copy into transaction-owned aligned GPU buffers after retirement; CPU-only
+eviction needs no GPU wait. Records survive list completion, abort and foreground
+release, while graphics shutdown or explicit cache clear frees the owner. Clearing
+retains cumulative counters. Complete preflight, ownership checks and exact paired
+readback still precede guest publication. Texture/target caching, source-resource
+generation invalidation and physical performance remain outside this cache.
+
 The independent validator decodes emitted GPU bytes and compares original
 programs against arbitrary-precision rational expectations and the CPU evaluator:
 

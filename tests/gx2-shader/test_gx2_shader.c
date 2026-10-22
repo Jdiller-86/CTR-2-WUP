@@ -54,6 +54,7 @@ static void original_shader(void) {
     CHECK(get32(out.program+512)==UINT32_C(0x80000001));
     CHECK(get32(out.program+516)==UINT32_C(0x06200c90));
     for(unsigned u=0;u<96;++u)CHECK(!out.uniform_used[u]);
+    CHECK(out.uniform_count==0);
 }
 static void inputs_uniforms_and_dependencies(void) {
     init();p.code[0]=mov(15,0,0);p.code[1]=mov(32+95,1,0);
@@ -159,6 +160,115 @@ static void texture_coordinate_exports(void) {
     /* A prior UV result cannot leave its metadata set on an untextured compile. */
     init();CHECK(run()==CTR_GX2_SHADER_OK && !out.texcoord0 && out.gprs==53);
 }
+static void revalidation_matches(ctr_gx2_shader_result expected) {
+    CHECK(ctr_gx2_shader_validate_uniforms(&p,&previous)==expected);
+    out=previous;
+    CHECK(run()==expected);
+    /* Current constant values never change generated code or its metadata,
+     * and a failed recompile must leave the prior output intact. */
+    CHECK(!memcmp(&out,&previous,sizeof(out)));
+}
+static void uniform_revalidation(void) {
+    /* Encounter order differs from both uniform and lane index order. A later
+     * repeat must not add another dependency or change error precedence. */
+    init();p.code[0]=mov(127,0,1);p.code[1]=mov(34,1,0);p.code[2]=mov(127,16,0);
+    p.code[3]=UINT32_C(0x88000000);p.code_defined[3]=p.descriptor_defined[1]=1;
+    p.descriptors[1]=15u|(228u<<5);
+    p.uniform_defined[95]=p.uniform_defined[2]=15;
+    for(unsigned lane=0;lane<4;++lane) {
+        p.uniforms[95][lane]=UINT32_C(0x3f800000);
+        p.uniforms[2][lane]=UINT32_C(0x40000000);
+    }
+    CHECK(run()==CTR_GX2_SHADER_OK);previous=out;
+    CHECK(previous.uniform_count==8 && previous.uniform_used[95]==15 && previous.uniform_used[2]==15);
+    for(unsigned lane=0;lane<4;++lane) {
+        CHECK(previous.uniform_order[lane]==383u-lane);
+        CHECK(previous.uniform_order[4u+lane]==8u+lane);
+    }
+    revalidation_matches(CTR_GX2_SHADER_OK);
+    p.uniforms[95][3]=UINT32_C(0x7fc00000);p.uniform_defined[95]=14;p.uniform_defined[2]=14;
+    revalidation_matches(CTR_GX2_SHADER_NUMERIC);
+    p.uniform_defined[95]=7;p.uniforms[95][3]=UINT32_C(0x3f800000);
+    p.uniforms[95][0]=1;p.uniforms[2][0]=UINT32_C(0x7f800000);
+    revalidation_matches(CTR_GX2_SHADER_UNDEFINED);
+    p.uniform_defined[95]=p.uniform_defined[2]=15;
+    for(unsigned lane=0;lane<4;++lane) {
+        p.uniforms[95][lane]=UINT32_C(0x3f800000);
+        p.uniforms[2][lane]=UINT32_C(0x40000000);
+    }
+    static const struct { uint32_t bits;bool exact; } values[]={
+        {0,true},{UINT32_C(0x80000000),true},{UINT32_C(0xbf800000),true},
+        {UINT32_C(0x3f800000),true},{1,false},{UINT32_C(0x7f800000),false},
+        {UINT32_C(0x7fc00000),false},{UINT32_C(0x3f800001),false}
+    };
+    for(unsigned i=0;i<previous.uniform_count;++i) {
+        unsigned slot=previous.uniform_order[i],u=slot/4u,lane=slot%4u;
+        uint32_t original=p.uniforms[u][lane];
+        for(unsigned value=0;value<sizeof(values)/sizeof(values[0]);++value) {
+            p.uniforms[u][lane]=values[value].bits;
+            revalidation_matches(values[value].exact?CTR_GX2_SHADER_OK:CTR_GX2_SHADER_NUMERIC);
+        }
+        p.uniforms[u][lane]=original;
+    }
+    static ctr_shader_program program_before;
+    static ctr_gx2_shader compiled_before;
+    program_before=p;compiled_before=previous;
+    CHECK(ctr_gx2_shader_validate_uniforms(&p,&previous)==CTR_GX2_SHADER_OK);
+    CHECK(!memcmp(&p,&program_before,sizeof(p)) && !memcmp(&previous,&compiled_before,sizeof(previous)));
+    /* Reject a malformed complete record before examining current values. */
+    p.uniform_defined[95]=0;
+    out=previous;out.uniform_count=CTR_SHADER_UNIFORMS*4u+1u;
+    CHECK(ctr_gx2_shader_validate_uniforms(&p,&out)==CTR_GX2_SHADER_ARGUMENT);
+    out=previous;out.uniform_order[0]=CTR_SHADER_UNIFORMS*4u;
+    CHECK(ctr_gx2_shader_validate_uniforms(&p,&out)==CTR_GX2_SHADER_ARGUMENT);
+    out=previous;out.uniform_order[1]=out.uniform_order[0];
+    CHECK(ctr_gx2_shader_validate_uniforms(&p,&out)==CTR_GX2_SHADER_ARGUMENT);
+    out=previous;out.uniform_used[95]|=16;
+    CHECK(ctr_gx2_shader_validate_uniforms(&p,&out)==CTR_GX2_SHADER_ARGUMENT);
+    out=previous;out.uniform_used[95]=7;
+    CHECK(ctr_gx2_shader_validate_uniforms(&p,&out)==CTR_GX2_SHADER_ARGUMENT);
+    out=previous;out.uniform_count=0;
+    CHECK(ctr_gx2_shader_validate_uniforms(&p,&out)==CTR_GX2_SHADER_ARGUMENT);
+    out=previous;out.uniform_used[0]=1;
+    CHECK(ctr_gx2_shader_validate_uniforms(&p,&out)==CTR_GX2_SHADER_ARGUMENT);
+    CHECK(ctr_gx2_shader_validate_uniforms(NULL,&previous)==CTR_GX2_SHADER_ARGUMENT);
+    CHECK(ctr_gx2_shader_validate_uniforms(&p,NULL)==CTR_GX2_SHADER_ARGUMENT);
+    CHECK(ctr_gx2_shader_validate_uniforms((const ctr_shader_program *)((const uint8_t *)&p+1),&previous)==CTR_GX2_SHADER_ARGUMENT);
+    CHECK(ctr_gx2_shader_validate_uniforms(&p,(const ctr_gx2_shader *)((const uint8_t *)&previous+1))==CTR_GX2_SHADER_ARGUMENT);
+    CHECK(ctr_gx2_shader_validate_uniforms((const ctr_shader_program *)(uintptr_t)(UINTPTR_MAX-3u),&previous)==CTR_GX2_SHADER_OVERFLOW);
+    CHECK(ctr_gx2_shader_validate_uniforms(&p,(const ctr_gx2_shader *)(uintptr_t)(UINTPTR_MAX-3u))==CTR_GX2_SHADER_OVERFLOW);
+    /* Repeated swizzled reads record one lane. All unused constants may be
+     * undefined or nonnumeric; positive and negative zero remain admissible. */
+    init();p.code[0]=mov(127,16,1);p.code[1]=mov(0,0,0);p.code[2]=mov(1,1,0);
+    p.code[3]=UINT32_C(0x88000000);p.code_defined[3]=p.descriptor_defined[1]=1;
+    p.descriptors[1]=15u|(170u<<5);
+    for(unsigned u=0;u<CTR_SHADER_UNIFORMS;++u)
+        for(unsigned lane=0;lane<4;++lane)p.uniforms[u][lane]=UINT32_C(0x7fc00000);
+    p.uniform_defined[95]=4;p.uniforms[95][2]=UINT32_C(0x80000000);
+    CHECK(run()==CTR_GX2_SHADER_OK);previous=out;
+    CHECK(previous.uniform_count==1 && previous.uniform_order[0]==382 && previous.uniform_used[95]==4);
+    revalidation_matches(CTR_GX2_SHADER_OK);
+    p.uniforms[95][2]=0;revalidation_matches(CTR_GX2_SHADER_OK);
+    p.uniform_defined[95]=0;revalidation_matches(CTR_GX2_SHADER_UNDEFINED);
+    /* All 384 lanes fit once, even when first read in descending vector order. */
+    init();
+    for(unsigned i=0;i<CTR_SHADER_UNIFORMS;++i) {
+        unsigned u=CTR_SHADER_UNIFORMS-1u-i;
+        p.code[i]=mov(32u+u,16,0);p.code_defined[i]=1;p.uniform_defined[u]=15;
+        for(unsigned lane=0;lane<4;++lane)p.uniforms[u][lane]=UINT32_C(0x3f800000);
+    }
+    p.code[96]=mov(0,0,0);p.code[97]=mov(1,1,0);p.code[98]=UINT32_C(0x88000000);
+    p.code_defined[96]=p.code_defined[97]=p.code_defined[98]=1;
+    CHECK(run()==CTR_GX2_SHADER_OK);previous=out;
+    CHECK(previous.uniform_count==CTR_SHADER_UNIFORMS*4u);
+    for(unsigned i=0;i<previous.uniform_count;++i)
+        CHECK(previous.uniform_order[i]==(95u-i/4u)*4u+i%4u);
+    revalidation_matches(CTR_GX2_SHADER_OK);
+    p.uniforms[0][3]=1;revalidation_matches(CTR_GX2_SHADER_NUMERIC);
+    init();CHECK(run()==CTR_GX2_SHADER_OK && out.uniform_count==0);
+    for(unsigned i=0;i<CTR_SHADER_UNIFORMS*4u;++i)CHECK(out.uniform_order[i]==0);
+    previous=out;revalidation_matches(CTR_GX2_SHADER_OK);
+}
 static void bounds_and_failures(void) {
     init();p.entry=512;failure(CTR_GX2_SHADER_RANGE);
     init();p.code_defined[1]=0;failure(CTR_GX2_SHADER_UNDEFINED);
@@ -205,6 +315,6 @@ static void bounds_and_failures(void) {
 }
 int main(void) {
     original_shader();inputs_uniforms_and_dependencies();swizzles_and_masks();semantic_maps();
-    texture_coordinate_exports();bounds_and_failures();
+    texture_coordinate_exports();uniform_revalidation();bounds_and_failures();
     printf("gx2 shader PASS: %u assertions\n",assertions);return 0;
 }

@@ -2,9 +2,12 @@
 #define CTR_GX2_NATIVE_MOCK_H
 #include <stdint.h>
 #include <stddef.h>
+#include "ctr_gx2_cache.h"
 
 void *ctr_gx2_test_memalign(size_t alignment,size_t bytes);
 void ctr_gx2_test_free(void *bytes);
+ctr_gx2_cache *ctr_gx2_test_cache_create(void);
+void ctr_gx2_test_cache_destroy(ctr_gx2_cache *cache);
 #include <stdbool.h>
 /* API model for resource lifetime and byte flow only; it does not emulate a
  * shader, rasterizer, GX2 driver, cache coherency or physical Wii U execution. */
@@ -49,6 +52,9 @@ typedef struct {
         unsigned cb_shader_mask,cb_shader_control,db_shader_control;
     } regs;
     unsigned size;void *program;unsigned mode;
+    unsigned uniformBlockCount,uniformVarCount,initialValueCount,loopVarCount,samplerVarCount;
+    const void *uniformBlocks,*uniformVars,*initialValues,*loopVars,*samplerVars;
+    struct { unsigned flags,elemSize,elemCount;void *buffer; } gx2rBuffer;
 } GX2PixelShader;
 typedef struct { unsigned location,buffer,offset,format,type,mask,endianSwap; } GX2AttribStream;
 typedef struct {

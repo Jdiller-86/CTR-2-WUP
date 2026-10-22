@@ -3,9 +3,11 @@ ROOT := ../..
 OUT := $(ROOT)/artifacts/gx2-native-tests
 FLAGS := -std=c11 -O2 -g -Wall -Wextra -Wpedantic -Werror -I$(ROOT)/runtime/core -I$(ROOT)/runtime/wiiu -I.
 SOURCE := $(ROOT)/runtime/wiiu/gx2_scene.c
-HEADERS := gx2_mock.h $(ROOT)/runtime/wiiu/gx2_scene.h $(ROOT)/runtime/core/ctr_gx2_shader.h $(ROOT)/runtime/core/ctr_scene.h $(ROOT)/runtime/core/ctr_tev.h $(ROOT)/runtime/core/ctr_fragment.h
-FRAGMENT := $(ROOT)/runtime/core/ctr_tev.c $(ROOT)/runtime/core/ctr_fragment.c
-MOCK := -DCTR_GX2_SCENE_MOCK -Dmemalign=ctr_gx2_test_memalign -Dfree=ctr_gx2_test_free
+HEADERS := gx2_mock.h $(ROOT)/runtime/wiiu/gx2_scene.h $(ROOT)/runtime/core/ctr_gx2_shader.h $(ROOT)/runtime/core/ctr_gx2_cache.h $(ROOT)/runtime/core/ctr_scene.h $(ROOT)/runtime/core/ctr_tev.h $(ROOT)/runtime/core/ctr_fragment.h
+FRAGMENT := $(ROOT)/runtime/core/ctr_tev.c $(ROOT)/runtime/core/ctr_fragment.c $(ROOT)/runtime/core/ctr_gx2_cache.c
+# Wrap the native owner's CPU-cache calls only. The separately compiled cache
+# keeps its real calloc/free, outside the GPU-allocation lifetime model.
+MOCK := -DCTR_GX2_SCENE_MOCK -Dmemalign=ctr_gx2_test_memalign -Dfree=ctr_gx2_test_free -Dctr_gx2_cache_create=ctr_gx2_test_cache_create -Dctr_gx2_cache_destroy=ctr_gx2_test_cache_destroy
 .PHONY: check sanitize
 $(OUT):
 	mkdir -p "$@"

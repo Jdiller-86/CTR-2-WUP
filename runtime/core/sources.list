@@ -14,6 +14,7 @@ ctr_fragment.c
 ctr_tev.c
 ctr_shader.c
 ctr_gx2_shader.c
+ctr_gx2_cache.c
 ctr_texture.c
 ctr_vertex.c
 ctr_transfer.c
