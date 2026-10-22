@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #define CTR_TEV_STAGES 6u
+#define CTR_TEV_TEXTURES 3u
 typedef struct {
     uint8_t source[2][3],operand[2][3],operation[2],scale[2],constant[4];
 } ctr_tev_stage;
@@ -15,12 +16,12 @@ extern const unsigned ctr_tev_registers[CTR_TEV_STAGES];
 
 /* Internal owned-state boundary: arrays contain the complete PICA register
  * file. Decode rejects unsupported fields and leaves output unchanged on error.
- * Active sources: primary, Texture0, PreviousBuffer, stage constant, and
+ * Active sources: primary, enabled Texture0/1/2, PreviousBuffer, stage constant, and
  * Previous after stage 0. Buffer RGB/alpha update masks select stages 0..3.
  * Eight scalar operations, RGB/alpha operands and 1/2/4 scaling are supported.
- * Lighting, other textures, fog and DOT3 are not implemented. */
+ * texture_mask selects units 0..2. Lighting, Texture3, fog and DOT3 are not implemented. */
 bool ctr_tev_register_value(unsigned reg,uint32_t value);
-bool ctr_tev_decode(const uint32_t *registers,const uint8_t *defined,bool textured,
+bool ctr_tev_decode(const uint32_t *registers,const uint8_t *defined,unsigned texture_mask,
                     ctr_tev_program *out);
 bool ctr_tev_passthrough(const ctr_tev_stage *stage);
 /* Successfully decoded program uses a buffer source, update or initial color. */
@@ -33,6 +34,11 @@ unsigned ctr_tev_arguments(unsigned operation);
  * the pending buffer becomes visible before that stage's selected output
  * updates pending RGB/alpha. Pending starts at buffer_color; stage 1 sees it.
  * Evaluation and passthrough inspection require a successfully decoded program. */
+/* Legacy programs are decoded with mask 0 or 1; texture may be NULL when unused. */
 void ctr_tev_evaluate(const ctr_tev_program *program,const uint8_t primary[4],
                       const uint8_t texture[4],uint8_t output[4]);
+/* Distinct, already sampled RGBA values for the three enabled ordinary units.
+ * The legacy evaluator above supplies only Texture0. */
+void ctr_tev_evaluate_textures(const ctr_tev_program *program,const uint8_t primary[4],
+                               const uint8_t textures[CTR_TEV_TEXTURES][4],uint8_t output[4]);
 #endif

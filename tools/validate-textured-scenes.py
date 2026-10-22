@@ -22,6 +22,19 @@ from host import __version__
 from renderer.texture import decode_texture, required_bytes
 
 BACKGROUND = bytes((16, 32, 48, 255))
+TEXTURE_BASE = 0x1a000000
+TEXTURE_REGISTERS = ((0x82, 0x83, 0x84, 0x85, 0x8e),
+                     (0x92, 0x93, 0x94, 0x95, 0x96),
+                     (0x9a, 0x9b, 0x9c, 0x9d, 0x9e))
+
+
+@dataclass(frozen=True)
+class TextureSpec:
+    format: int = 0
+    dimensions: tuple = (8, 8)
+    wrap: tuple = (0, 0)
+    linear: bool = False
+    variant: int = 0
 
 
 @dataclass(frozen=True)
@@ -48,6 +61,10 @@ class Case:
     buffer_color: tuple = (0, 0, 0, 0)
     buffer_update: tuple = (0, 0)
     buffer_setup: tuple | None = None
+    texture_units: tuple = ()
+    texture_mask: int = 0
+    texture2_coord1: bool = False
+    uv_sets: tuple = ()
 
 
 def original_cases():
@@ -95,7 +112,55 @@ def original_cases():
         dimensions=(1024,8),points=((0,0),(512,0),(0,512),(512,512)),
         uv=((F(-16),F(16)),(F(16),F(-16)),(F(1,2),F(1,2)),(F(15),F(-15))),
         wrap=(2,3),scissor=(3,253,253,255,255)))
-    return cases+tev_cases()+fragment_cases()+blend_cases()+buffer_cases()
+    return cases+tev_cases()+fragment_cases()+blend_cases()+buffer_cases()+material_cases()
+
+
+def material_cases():
+    """A small asymmetric corpus distinguishes units, coordinates and routing."""
+    units = (TextureSpec(0, (8, 16), (2, 3), False, 0),
+             TextureSpec(4, (16, 8), (3, 0), True, 1),
+             TextureSpec(13, (16, 16), (0, 2), False, 2))
+    uv_sets = (((F(-1, 4), F(5, 4)), (F(7, 4), F(5, 4)),
+                (F(-1, 4), F(-1, 4)), (F(7, 4), F(-1, 4))),
+               ((F(1, 16), F(3, 16)), (F(15, 16), F(5, 16)),
+                (F(3, 16), F(13, 16)), (F(13, 16), F(15, 16))),
+               ((F(5, 4), F(-3, 4)), (F(-3, 4), F(-3, 4)),
+                (F(5, 4), F(7, 4)), (F(-3, 4), F(7, 4))))
+    common = dict(texture_units=units, uv_sets=uv_sets, side=16,
+                  points=((0, 0), (16, 0), (0, 16), (16, 16)), scissor=(0, 0, 0, 15, 15))
+    result = []
+    for mask in range(1, 8):
+        sources = [3+unit for unit in range(3) if mask & (1 << unit)]
+        # Replace, then combine each additional independently sampled image.
+        stages = [tev_stage(rgb=(sources[0], 0, 0))]
+        stages += [tev_stage(rgb=(15, source, 14), alpha=(source, 15, 14),
+                              operation=(4, 8), constant=(73, 149, 211, 47)) for source in sources[1:]]
+        for route in ((False, True) if mask & 4 else (False,)):
+            result.append(Case(f'material-mask-{mask}-route-{int(route)}', texture_mask=mask,
+                               texture2_coord1=route, tev=tuple(stages), **common))
+    chain = (tev_stage(rgb=(3, 4, 5), alpha=(5, 4, 3), operation=(4, 4)),
+             tev_stage(rgb=(15, 4, 14), operation=(1, 2), constant=(37, 199, 83, 157)),
+             tev_stage(rgb=(13, 5, 15), alpha=(13, 15, 4), operation=(4, 8)))
+    result.append(Case('material-three-unit-delayed-buffer', texture_mask=7, tev=chain,
+                       buffer_color=(17, 199, 43, 157), buffer_update=(1, 2), **common))
+    for error in ('unit1-filter', 'unit2-binding', 'unit1-format', 'unit2-disabled-source'):
+        result.append(Case('material-late-'+error, texture_mask=7, tev=chain,
+                           buffer_color=(17, 199, 43, 157), buffer_update=(1, 2), late_error=error, **common))
+    result.append(Case('material-late-enable-undefined-unit1', texture_mask=1,
+                       tev=(tev_stage(),), late_error='enable-undefined-unit1', **common))
+    same_size = tuple(TextureSpec(0, (8, 8), unit_spec.wrap, bool(unit & 1), unit+1)
+                      for unit, unit_spec in enumerate(units))
+    offsets = [0, required_bytes(0, 8, 8), required_bytes(0, 8, 8)*2]
+    writes = ((), ((0x85, (TEXTURE_BASE+offsets[1]) >> 3, 15),
+                   (0x95, TEXTURE_BASE >> 3, 15), (0x80, 7 | 1 << 13, 15)),
+              ((0x85, TEXTURE_BASE >> 3, 15),
+               (0x95, (TEXTURE_BASE+offsets[1]) >> 3, 15), (0x80, 7, 15)))
+    result.append(Case('material-retained-address-route-swap', texture_units=same_size,
+                       texture_mask=7, uv_sets=uv_sets, side=16,
+                       points=common['points'], scissor=common['scissor'], tev=chain,
+                       buffer_color=(17, 199, 43, 157), buffer_update=(1, 2),
+                       indices=((0, 1, 2), (0, 1, 2), (1, 3, 2)), draw_output=writes))
+    return result
 
 
 TEV_OPERATIONS = (0, 1, 2, 3, 4, 5, 8, 9)
@@ -424,6 +489,7 @@ def tev_reference(stages, primary, texture, buffer_color=(0, 0, 0, 0), buffer_up
     Publication happens after every stage, independently of output arithmetic.
     Selected stage0 channels become visible at stage2, not stage1.
     """
+    textures = texture if len(texture) == 3 and isinstance(texture[0], (tuple, list, bytes)) else (texture, (0,)*4, (0,)*4)
     previous = (0, 0, 0, 0)
     visible, pending = (0, 0, 0, 0), tuple(buffer_color)
     formulas = {0:lambda a,b,c:a, 1:lambda a,b,c:a*b/255,
@@ -432,7 +498,7 @@ def tev_reference(stages, primary, texture, buffer_color=(0, 0, 0, 0), buffer_up
                 8:lambda a,b,c:a*b/255+c, 9:lambda a,b,c:min(F(255),a+b)*c/255}
     for stage, row in enumerate(stages):
         sources, operands, functions, constant, scales = row
-        colors = {0:primary, 3:texture, 13:visible,
+        colors = {0:primary, 3:textures[0], 4:textures[1], 5:textures[2], 13:visible,
                   14:tuple((constant >> (8*i)) & 255 for i in range(4)), 15:previous}
         next_color = []
         for lane in range(4):
@@ -466,13 +532,13 @@ def morton_coordinates(size=8):
             for x, y in child]
 
 
-def original_texture(format, width, height):
+def original_texture(format, width, height, variant=0):
     data = bytearray()
     if format >= 12:
         for ty in range(height//8):
             for tx in range(width//8):
                 for by, bx in ((0, 0), (0, 1), (1, 0), (1, 1)):
-                    k = (tx+3*ty+bx+5*by) % 13
+                    k = (tx+3*ty+bx+5*by+variant*7) % 13
                     # Individual ETC1 mode: two unequal RGB bases and both
                     # selector planes vary in X/Y. No ETC2 differential mode.
                     high = (((k+1) % 16)*16+(k+7) % 16) << 24
@@ -493,8 +559,8 @@ def original_texture(format, width, height):
         for tx in range(width//8):
             for dx, dy in morton_coordinates():
                 x, y = tx*8+dx, ty*8+dy
-                r, g, b, a = ((29*x+13*y+31) % 256, (7*x+37*y+89) % 256,
-                              (43*x+3*y+149) % 256, (19*x+23*y+53) % 256)
+                r, g, b, a = ((29*x+13*y+31+47*variant) % 256, (7*x+37*y+89+83*variant) % 256,
+                              (43*x+3*y+149+109*variant) % 256, (19*x+23*y+53+31*variant) % 256)
                 if format == 0: data += bytes((a, b, g, r))
                 elif format == 1: data += bytes((b, g, r))
                 elif format == 2: data += struct.pack('<H', ((r//8)<<11)|((g//8)<<6)|((b//8)<<1)|(a//128))
@@ -557,7 +623,80 @@ def sampled_color(rgba, width, height, u, v, wrap, linear):
     return bytes(color)
 
 
+def material_blob(case):
+    data, offsets = bytearray(), []
+    for unit in case.texture_units:
+        offsets.append(len(data))
+        data += original_texture(unit.format, *unit.dimensions, unit.variant)
+    return bytes(data), offsets
+
+
+def material_registers(case):
+    _, offsets = material_blob(case)
+    writes = [(0x80, case.texture_mask | int(case.texture2_coord1) << 13, 15)]
+    for unit, spec in enumerate(case.texture_units):
+        width, height = spec.dimensions
+        params = spec.wrap[0] << 12 | spec.wrap[1] << 8 | (32 if spec.format >= 12 else 0) | (6 if spec.linear else 0)
+        values = (width << 16 | height, params, 0, (TEXTURE_BASE+offsets[unit]) >> 3, spec.format)
+        writes += [(reg, value, 15) for reg, value in zip(TEXTURE_REGISTERS[unit], values)]
+    return tuple(writes)
+
+
+def material_golden(case, texture):
+    pixels = bytearray(BACKGROUND*case.side*case.side)
+    initial = ((0xe0, case.buffer_update[0] << 8 | case.buffer_update[1] << 12, 15),
+               (0xfd, sum(value << (8*lane) for lane, value in enumerate(case.buffer_color)), 15))
+    registers = output_registers(material_registers(case)+initial+case.output)
+    fragments, decoded, shaded = 0, {}, {}
+    for draw, indices in enumerate(case.indices):
+        if draw < len(case.draw_output): registers = output_registers(case.draw_output[draw], registers)
+        points = tuple(tuple(map(F, case.points[index])) for index in indices)
+        coordinate_sets = [tuple(values[index] for index in indices) for values in case.uv_sets]
+        a, b, c = points
+        determinant = (b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0])
+        if not determinant or (case.cull == 1 and determinant > 0) or (case.cull == 2 and determinant < 0): continue
+        if determinant < 0:
+            points = points[0], points[2], points[1]
+            coordinate_sets = [(values[0], values[2], values[1]) for values in coordinate_sets]
+        for y in range(case.side):
+            for x in range(case.side):
+                mode, x1, y1, x2, y2 = case.scissor
+                box = x1 <= x <= x2 and y1 <= y <= y2
+                if (mode == 3 and not box) or (mode == 1 and box): continue
+                weights = barycentric((F(2*x+1, 2), F(2*y+1, 2)), points)
+                if weights is None or any(value < 0 for value in weights): continue
+                if any(weight == 0 and not (points[(lane+2) % 3][1] < points[(lane+1) % 3][1] or
+                       (points[(lane+2) % 3][1] == points[(lane+1) % 3][1] and points[(lane+2) % 3][0] < points[(lane+1) % 3][0]))
+                       for lane, weight in enumerate(weights)): continue
+                samples = [(0,)*4 for _ in range(3)]
+                for unit in range(3):
+                    if not registers[0x80] & (1 << unit): continue
+                    dimensions, params, _, address, format = (registers[reg] for reg in TEXTURE_REGISTERS[unit])
+                    width, height = dimensions >> 16 & 2047, dimensions & 2047
+                    key = dimensions, address, format
+                    if key not in decoded:
+                        begin, size = address*8-TEXTURE_BASE, required_bytes(format, width, height)
+                        decoded[key] = decode_texture(texture[begin:begin+size], format, width, height)
+                    coordinate = 1 if unit == 2 and registers[0x80] & (1 << 13) else unit
+                    uv = coordinate_sets[coordinate]
+                    u, v = (sum(weight*value[axis] for weight, value in zip(weights, uv)) for axis in range(2))
+                    samples[unit] = sampled_color(decoded[key], width, height, u, v,
+                                                  (params >> 12 & 3, params >> 8 & 3), params & 6 == 6)
+                key = tuple(map(tuple, samples)), registers[0xe0], registers[0xfd]
+                if key not in shaded:
+                    initial_color = tuple(registers[0xfd] >> (8*lane) & 255 for lane in range(4))
+                    masks = tuple(registers[0xe0] >> shift & 15 for shift in (8, 12))
+                    shaded[key] = bytes(tev_reference(case_stages(case), tuple(255*value for value in case.color),
+                                                      samples, initial_color, masks))
+                at = (y*case.side+x)*4
+                pixels[at:at+4] = output_reference(registers, shaded[key], pixels[at:at+4])
+                fragments += 1
+    return bytes(pixels), fragments
+
+
 def golden(case, texture):
+    if case.texture_units:
+        return material_golden(case, texture)
     width, height = case.dimensions
     rgba = decode_texture(texture, case.format, width, height)
     pixels = bytearray(BACKGROUND*case.side*case.side)
@@ -615,21 +754,28 @@ def golden(case, texture):
 
 def command_bytes(case):
     commands = []
+    material = bool(case.texture_units)
     def command(reg, value, mask=15): commands.append((value, mask << 16 | reg))
     half=(case.side.bit_length()+61)<<16
     command(0x040, case.cull); command(0x041, half); command(0x043, half)
     mode, x1, y1, x2, y2 = case.scissor
     command(0x065, mode); command(0x066, x1 | y1 << 16); command(0x067, x2 | y2 << 16)
     command(0x068, 0)
-    command(0x04f, 3); command(0x050, 0x03020100); command(0x051, 0x0b0a0908)
+    command(0x04f, 5 if material else 3); command(0x050, 0x03020100); command(0x051, 0x0b0a0908)
     command(0x052, 0x1f1f0d0c)
-    command(0x200, 0x03000000); command(0x201, 0x7ff); command(0x202, 0x20020000)
-    command(0x203, 0); command(0x204, 0x20); command(0x205, 0x20180000)
+    if material:
+        command(0x053, 0x1f1f0f0e); command(0x054, 0x1f1f1716)
+        command(0x064, 1); command(0x06f, 0x703)
+    command(0x200, 0x03000000); command(0x201, 0x777ff if material else 0x7ff)
+    command(0x202, 0x40020000 if material else 0x20020000)
+    command(0x203, 0); command(0x204, 0x4320 if material else 0x20)
+    command(0x205, 0x40280000 if material else 0x20180000)
     command(0x228, 3); command(0x229, 0); command(0x22a, 0); command(0x25e, 0)
-    command(0x2b9, 0xa0000002); command(0x2ba, 0)
-    command(0x2bb, 0x76543210); command(0x2bc, 0xfedcba98); command(0x2bd, 7)
+    command(0x2b9, 0xa0000004 if material else 0xa0000002); command(0x2ba, 0)
+    command(0x2bb, 0x76543210); command(0x2bc, 0xfedcba98); command(0x2bd, 31 if material else 7)
     command(0x2cb, 0)
-    for instruction in (0x4c000000, 0x4c201000, 0x4c402000, 0x88000000):
+    instructions = [0x4c000000 | (index << 21) | (index << 12) for index in range(5 if material else 3)]+[0x88000000]
+    for instruction in instructions:
         command(0x2cc, instruction)
     command(0x2bf, 1); command(0x2d5, 0); command(0x2d6, 0x36f)
     # Fixed input1 is an exact original opaque binary RGBA vector. Upload
@@ -643,6 +789,10 @@ def command_bytes(case):
     params = case.wrap[0] << 12 | case.wrap[1] << 8 | (32 if case.format >= 12 else 0) | (6 if case.linear else 0)
     command(0x083, params); command(0x084, 0); command(0x085, 0x1a000000 >> 3)
     command(0x08e, case.format); command(0x08f, 0)
+    if material:
+        for reg, value, mask in material_registers(case):
+            if case.late_error == 'enable-undefined-unit1' and reg == 0x93: mask = 1
+            command(reg, value, mask)
     if case.buffer_setup is None:
         command(0x0e0, case.buffer_update[0] << 8 | case.buffer_update[1] << 12)
         command(0x0fd, sum(value << (8*lane) for lane,value in enumerate(case.buffer_color)))
@@ -657,8 +807,9 @@ def command_bytes(case):
     vertices = range(len(case.points)) if case.index_bytes else [i for triangle in case.indices for i in triangle]
     for i in vertices:
         x, y = case.points[i]
-        geometry += struct.pack('<6f', float(F(x)*2/case.side-1), float(F(y)*2/case.side-1), -.5, 1,
-                                *map(float, case.uv[i]))
+        coordinates = tuple(value for values in case.uv_sets for value in values[i]) if material else case.uv[i]
+        geometry += struct.pack('<'+str(4+len(coordinates))+'f', float(F(x)*2/case.side-1),
+                                float(F(y)*2/case.side-1), -.5, 1, *map(float, coordinates))
     index_offset = len(geometry)
     if case.index_bytes:
         for triangle in case.indices:
@@ -672,7 +823,15 @@ def command_bytes(case):
         else:
             command(0x22a, draw*3); command(0x22e, 1)
     if case.late_error:
-        if case.late_error in ('filter','mixed-filter'): command(0x083, (params & ~6) | 2)
+        if case.late_error == 'unit1-filter': command(0x93, 2)
+        elif case.late_error == 'unit2-binding':
+            address = next(value for reg, value, _ in material_registers(case) if reg == 0x9d)
+            command(0x9d, address+1)
+        elif case.late_error == 'unit1-format': command(0x96, 14)
+        elif case.late_error == 'unit2-disabled-source': command(0x80, 3)
+        elif case.late_error == 'enable-undefined-unit1':
+            command(0x80, 3); command(0xc0, 0x40004)
+        elif case.late_error in ('filter','mixed-filter'): command(0x083, (params & ~6) | 2)
         elif case.late_error == 'mip-filter': command(0x083, params | (1 << 24))
         elif case.late_error == 'binding': command(0x085, (0x1a000000+8) >> 3)
         elif case.late_error == 'dot3': command(0xfa, 6)
@@ -751,6 +910,19 @@ def decode_fragment_program(row, primary, texel):
     """
     program = bytes.fromhex(row['hex'])
     textured = row.get('textured', True)
+    texture_mask = row.get('texture_mask', int(textured))
+    texture2_coord1 = row.get('texture2_coord1', False)
+    if type(textured) is not bool or type(texture_mask) is not int or not 0 <= texture_mask <= 7 or bool(texture_mask) != textured:
+        raise ValueError('Invalid fragment texture unit mask')
+    if type(texture2_coord1) is not bool:
+        raise ValueError('Invalid fragment coordinate routing')
+    coordinates = (texture_mask & ~4) | 2 if texture2_coord1 and texture_mask & 4 else texture_mask
+    if row.get('coordinate_mask', coordinates) != coordinates:
+        raise ValueError('Unexpected fragment coordinate mask')
+    multiple = texture_mask > 1
+    texels = texel if len(texel) == 3 and isinstance(texel[0], (tuple, list, bytes)) else (texel, (0,)*4, (0,)*4)
+    if len(texels) != 3 or any(len(value) != 4 or any(type(v) is not int or not 0 <= v <= 255 for v in value) for value in texels):
+        raise ValueError('Invalid per-unit fragment texels')
     buffered = 'buffer_color' in row or 'buffer_update' in row
     if buffered:
         if set(('buffer_color', 'buffer_update')) - row.keys():
@@ -759,11 +931,12 @@ def decode_fragment_program(row, primary, texel):
             raise ValueError('Invalid fragment buffer color')
         if len(row['buffer_update']) != 2 or any(type(v) is not int or not 0 <= v <= 15 for v in row['buffer_update']):
             raise ValueError('Invalid fragment buffer update mask')
-    gprs, uniform_count = (11, 36) if buffered else (9, 32)
+    gprs, uniform_count = (15 if multiple else 11 if buffered else 9), (36 if buffered else 32)
     if not 256 <= len(program) <= 8192 or len(program) % 256 or row['gprs'] != gprs:
         raise ValueError('Unexpected fragment storage/register allocation')
-    count = 2 if textured else 1
-    if row['interpolators'] != count or row['spi_ps_in_control_0'] != 0x14000000 | count or row['inputs'] != [0x100,0x101][:count]:
+    count = 1+coordinates.bit_count()
+    expected_inputs = [0x100]+[0x101+coordinate for coordinate in range(3) if coordinates & (1 << coordinate)]
+    if row['interpolators'] != count or row['spi_ps_in_control_0'] != 0x14000000 | count or row['inputs'] != expected_inputs:
         raise ValueError('Unexpected fragment color/UV interpolation semantics')
     uniforms = row.get('uniforms', [])
     if len(uniforms) != uniform_count: raise ValueError('Missing fragment constants')
@@ -787,20 +960,26 @@ def decode_fragment_program(row, primary, texel):
         word0, word1 = words(at, 2);at += 8
         opcode = word1 >> 23 & 127
         if opcode == 1:
-            if word1 != 0x80800000 or word0 >> 22: raise ValueError('Unsupported fragment TEX control flow')
-            a,b,c,padding = words(word0*8, 4);samples += 1
-            if (a & 31) != 0x13 or a >> 8 & 255 or c >> 15 & 31:
-                raise ValueError('Expected SAMPLE_LZ at resource/sampler zero')
-            src,dest = a >> 16 & 127,b & 127
-            source_selectors = [(c >> bit) & 7 for bit in (20,23,26,29)]
-            destinations = [(b >> bit) & 7 for bit in (9,12,15,18)]
-            if src != 1 or dest != 2 or source_selectors != [0,1,4,5]:
-                raise ValueError('Expected original UV source R1.xy01 and sample R2')
-            if destinations != [0,1,2,3] or b >> 28 != 15:
-                raise ValueError('Expected normalized RGBA texture fetch')
-            if a & 0xff80ffe0 or b & 0x0fe00180 or c & 0x00007fff or padding:
-                raise ValueError('Unsupported texture offsets/relative/LOD mode')
-            for lane,value in enumerate(texel):registers[(2,lane)] = binary32(value/255)
+            units = [unit for unit in range(3) if texture_mask & (1 << unit)]
+            if not units or samples or word1 != 0x80800000 | ((len(units)-1) << 10) or word0 >> 22:
+                raise ValueError('Unsupported fragment TEX control flow')
+            for index, unit in enumerate(units):
+                a,b,c,padding = words(word0*8+index*16, 4);samples += 1
+                if (a & 31) != 0x13 or a >> 8 & 255 != unit or c >> 15 & 31 != unit:
+                    raise ValueError('Expected SAMPLE_LZ at matching enabled resource/sampler unit')
+                src,dest = a >> 16 & 127,b & 127
+                coordinate = 1 if unit == 2 and texture2_coord1 else unit
+                expected_source = 1+(coordinates & ((1 << coordinate)-1)).bit_count()
+                expected_destination = 11+unit if multiple else 2
+                source_selectors = [(c >> bit) & 7 for bit in (20,23,26,29)]
+                destinations = [(b >> bit) & 7 for bit in (9,12,15,18)]
+                if src != expected_source or dest != expected_destination or source_selectors != [0,1,4,5]:
+                    raise ValueError('Expected original UV source xy01 and independent unit sample register')
+                if destinations != [0,1,2,3] or b >> 28 != 15:
+                    raise ValueError('Expected normalized RGBA texture fetch')
+                if a & 0xff8000e0 or b & 0x0fe00180 or c & 0x00007fff or padding:
+                    raise ValueError('Unsupported texture offsets/relative/LOD mode')
+                for lane,value in enumerate(texels[unit]): registers[(dest,lane)] = binary32(value/255)
         elif word1 >> 26 & 15 == 8:
             length = (word1 >> 18 & 127)+1
             if not word1 >> 31 or word1 & 0x4203ffff or word0 >> 22:
@@ -821,9 +1000,9 @@ def decode_fragment_program(row, primary, texel):
                 registers[(dest,channel)] = binary32(value);instructions += 1
         elif opcode == 0x28:
             dest = word0 >> 15 & 127
-            if word0 & 0xffc07fff or dest not in (3,7) or word1 != 0x94200688:
+            if word0 & 0xffc07fff or dest not in ((7,14) if multiple else (3,7)) or word1 != 0x94200688:
                 raise ValueError('Expected complete PIX0 export and end')
-            if samples != int(textured):raise ValueError('Wrong number of base-level texture samples')
+            if samples != texture_mask.bit_count():raise ValueError('Wrong number of base-level texture samples')
             if any(value for index,value in enumerate(program) if index not in used):
                 raise ValueError('Nonzero unused fragment program bytes')
             values = tuple(source(dest,lane,False) for lane in range(4))
@@ -845,9 +1024,10 @@ def validate_fragment_programs(path):
     for row in rows:
         for mask in range(8):
             primary = tuple((mask >> channel) & 1 for channel in range(3))+(1,)
-            for texel in texels:
-                result = decode_fragment_program(row,primary,texel)
-                expected = tev_reference(row['stages'],tuple(255*v for v in primary),texel,
+            for index, texel in enumerate(texels):
+                samples = tuple(texels[(index+unit*3) % len(texels)] for unit in range(3)) if 'texture_mask' in row else texel
+                result = decode_fragment_program(row,primary,samples)
+                expected = tev_reference(row['stages'],tuple(255*v for v in primary),samples,
                                          row.get('buffer_color',(0,0,0,0)),row.get('buffer_update',(0,0)))
                 if result['color'] != tuple(F(v,255) for v in expected):
                     raise ValueError(f"{row['mode']}: decoded fragment bytes differ: {result['color']} != {expected}")
@@ -867,7 +1047,7 @@ def validate_fragment_programs(path):
 
 def execute_case(binary, output, case):
     commands, geometry = command_bytes(case)
-    texture = original_texture(case.format, *case.dimensions)
+    texture = material_blob(case)[0] if case.texture_units else original_texture(case.format, *case.dimensions)
     paths = [output/(case.name+suffix) for suffix in ('.commands', '.resources', '.texture', '.rgba')]
     for path, data in zip(paths, (commands, geometry, texture)):
         path.write_bytes(data)
@@ -881,7 +1061,7 @@ def execute_case(binary, output, case):
             raise ValueError(case.name+': missing staged prefix or pixel rollback')
     else:
         counters = {'result':'ok', 'draws':len(case.indices), 'triangles':len(case.indices),
-                    'shader_instructions':len(case.indices)*3*4, 'fragments':fragments}
+                    'shader_instructions':len(case.indices)*3*(6 if case.texture_units else 4), 'fragments':fragments}
         if any(result.get(name) != value for name, value in counters.items()):
             raise ValueError(case.name+': scene execution differs: '+str(result)+', expected fragments='+str(fragments))
         if actual != expected:
@@ -892,6 +1072,10 @@ def execute_case(binary, output, case):
             'tev_stages':case_stages(case), 'textured':case.textured,
             'buffer_color':case.buffer_color, 'buffer_update':case.buffer_update,
             'buffer_register_setup':case.buffer_setup,
+            'texture_units': [dict(format=spec.format, dimensions=spec.dimensions, wrap=spec.wrap,
+                                   linear=spec.linear, variant=spec.variant) for spec in case.texture_units],
+            'texture_mask':case.texture_mask if case.texture_units else int(case.textured),
+            'texture2_coord1':case.texture2_coord1,
             'output_register_writes':case.output, 'draw_output_register_writes':case.draw_output,
             'late_error':case.late_error or None, **result,
             'expected_rgba_sha256':hashlib.sha256(BACKGROUND*case.side*case.side if case.late_error else expected).hexdigest(),

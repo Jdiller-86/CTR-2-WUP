@@ -13,6 +13,12 @@
 enum { CTR_SCENE_DEPTH_D16=0u, CTR_SCENE_DEPTH_D24S8=3u };
 #define CTR_SCENE_MAX_TEXTURE_SPANS 32u
 #define CTR_SCENE_MAX_TEXTURE_SOURCE_BYTES (4u*1024u*1024u)
+#define CTR_SCENE_TEXTURE_UNITS 3u
+enum {
+    CTR_SCENE_TEXTURE_DIMENSIONS, CTR_SCENE_TEXTURE_PARAMETERS, CTR_SCENE_TEXTURE_LOD,
+    CTR_SCENE_TEXTURE_ADDRESS, CTR_SCENE_TEXTURE_FORMAT
+};
+extern const unsigned ctr_scene_texture_registers[CTR_SCENE_TEXTURE_UNITS][5];
 typedef enum {
     CTR_SCENE_OK, CTR_SCENE_ARGUMENT, CTR_SCENE_OVERFLOW, CTR_SCENE_ALIAS,
     CTR_SCENE_LIMIT, CTR_SCENE_NO_MEMORY, CTR_SCENE_WIRE, CTR_SCENE_UNSUPPORTED,
@@ -91,6 +97,14 @@ typedef struct ctr_scene_backend {
                         const ctr_scene_depth_surface *depth);
     bool (*end_depth)(void *context,const ctr_scene_surface *readback,
                       const ctr_scene_depth_surface *depth);
+    /* Optional multiunit extension. Enabled mask bits0..2 index exactly three
+     * borrowed decoded descriptors; disabled entries are zero. Legacy draw
+     * handles masks0/1. Unsupported multiunit use rejects in software preflight
+     * before begin, including when a later suffix disables the units. */
+    bool (*draw_textures)(void *context,const ctr_scene_state *state,
+                          const ctr_vertex *vertices,unsigned count,
+                          const ctr_scene_texture textures[CTR_SCENE_TEXTURE_UNITS],
+                          unsigned texture_mask);
 } ctr_scene_backend;
 typedef struct {
     ctr_scene_result result;
@@ -107,16 +121,17 @@ void ctr_scene_init(ctr_scene_state *state);
  * registers, complete packed fixed/uniform uploads and full-mask draw triggers.
  * Draw complete triangle lists (<=256 vertices each), W=1, inside clip volume,
  * exact 1/16-pixel positions and constant opaque binary primary color per
- * triangle. Optional texture0 supports all 14 base formats, matching min/mag
+ * triangle. Optional Texture0/1/2 support all 14 base formats, matching min/mag
  * nearest or bilinear filtering (exact affine weights, round half up),
- * clamp/repeat/mirror and signed exact Q16 UVs in [-16,16]. Six TEV stages use
- * primary, Texture0, constants and Previous with separate RGB/alpha operations,
+ * clamp/repeat/mirror and signed exact Q16 UVs in [-16,16]. Complete coordinate
+ * pairs use semantics12/13,14/15,22/23; Texture2 may select coordinate1. Six TEV
+ * stages use primary, Texture0/1/2, constants, Previous and PreviousBuffer with separate RGB/alpha operations,
  * operands and scale; see ctr_tev.h for byte-domain quantization. V=0 samples
  * the last raw texture row. Alpha comparisons, RGBA masks, explicit color gates
  * and all sixteen bytewise logic operations or checked RGB/alpha blending run
  * after TEV. Blend equations use one byte-domain division before saturation;
  * native admission is narrower and remains guarded by full parity. The paired
- * target entry admits bounded D16/D24S8 depth and stencil; DOT3/buffers, other textures,
+ * target entry admits bounded D16/D24S8 depth and stencil; DOT3, Texture3/procedural,
  * unsupported arithmetic and geometry fail.
  * Every list stages state and the complete target before any commit, so late
  * errors preserve previous state/pixels. Inputs must be owned/aligned/stable.

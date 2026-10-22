@@ -46,6 +46,10 @@ typedef struct {
  * inputs: the CPU reference never supplies transformed positions, colors or UV.
  * Texture callbacks borrow checked decoded RGBA storage only for the call; the
  * backend owns its pitched GPU upload until all references have retired.
+ * The draw_textures extension binds units 0..2 independently, including unit 2's
+ * optional UV1 routing. Each pitched image is bounded by 8 MiB and their combined
+ * storage by 24 MiB. Disabled units cannot occur in the current pixel program;
+ * every enabled unit's texture and sampler bind on every draw.
  * Paired callbacks additionally own a D16 or packed D24S8 target and pitched
  * staging image. Depth/stencil bytes stay little-endian; HiZ is disabled and
  * canonical depth=-Z/W uses endpoint incoming depths under shared preflight.

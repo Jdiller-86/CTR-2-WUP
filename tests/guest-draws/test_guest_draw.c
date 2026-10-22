@@ -290,7 +290,7 @@ static bool backend_end(void *context,const ctr_scene_surface *readback) {
 }
 static void backend_abort(void *context) { backend_mock *m=context;++m->aborts;m->active=false; }
 static ctr_scene_backend mock_backend(backend_mock *m) {
-    ctr_scene_backend backend={m,backend_begin,backend_draw,backend_end,backend_abort,NULL,NULL};return backend;
+    ctr_scene_backend backend={m,backend_begin,backend_draw,backend_end,backend_abort,NULL,NULL,NULL};return backend;
 }
 static void native_backend_success(void) {
     for(unsigned kind=0;kind<4;++kind) {
@@ -400,6 +400,44 @@ static void textured_open(ctr_guest *g,list *l,bool shorts) {
     size_t at=find(l,0x232,0);
     for(unsigned i=0;i<sizeof(regs)/sizeof(*regs);++i,at+=8u)insert_at(l,at,regs[i],values[i]);
     trim(l);finish(l);
+}
+static void material_setup(ctr_guest *g,list *l) {
+    /* Independent producer facts: UV1 semantics14/15, UV2 semantics22/23.
+     * All three coordinates use the same original varying input here; the
+     * three asymmetric source images distinguish resource/unit selection. */
+    texture_source(g->allocations[1].storage+2048u,71u);
+    texture_source(g->allocations[1].storage+3072u,113u);
+    set(l,0x080,7);set(l,0x2bd,31);set(l,0x04f,5);set(l,0x06f,0x703);
+    put32(l->bytes+find(l,0x2cc,3),UINT32_C(0x4c602000)); /* o3 = v2 */
+    size_t at=find(l,0x2bf,0);
+    insert_at(l,at,0x2cc,UINT32_C(0x4c802000)); /* o4 = v2 */
+    insert_at(l,at+8u,0x2cc,UINT32_C(0x88000000));
+    const unsigned regs[]={0x053,0x054,0x092,0x093,0x094,0x095,0x096,
+                          0x09a,0x09b,0x09c,0x09d,0x09e};
+    const uint32_t values[]={UINT32_C(0x1f1f0f0e),UINT32_C(0x1f1f1716),
+        UINT32_C(0x00100008),0,0,(TEXTURE_PA+1024u)/8u,0,
+        UINT32_C(0x00100008),0,0,(TEXTURE_PA+2048u)/8u,0};
+    at=find(l,0x232,0);
+    for(unsigned i=0;i<sizeof(regs)/sizeof(*regs);++i,at+=8u)insert_at(l,at,regs[i],values[i]);
+    set(l,0xc8,UINT32_C(0x0005004f)); /* RGB = Previous * Texture1; A = Texture2. */
+    set(l,0xca,1u);
+    trim(l);finish(l);
+}
+static void material_pixel(unsigned seed1,unsigned x,unsigned y,uint8_t rgba[4]) {
+    uint8_t first[4],second[4],third[4];
+    texture_pixel(0,x,y,first);texture_pixel(seed1,x,y,second);texture_pixel(71,x,y,third);
+    for(unsigned lane=0;lane<3u;++lane)rgba[lane]=(uint8_t)((unsigned)first[lane]*second[lane]/255u);
+    rgba[3]=third[3];
+}
+static void material_golden(ctr_guest *g,unsigned first_seed1,unsigned second_seed1) {
+    uint8_t pixels[BYTES];
+    CHECK(ctr_texture_decode(backing(g)+0x2000u,BYTES,0,64,64,pixels,sizeof(pixels))==CTR_TEXTURE_OK);
+    for(unsigned y=0;y<64;++y)for(unsigned x=0;x<64;++x) {
+        uint8_t expected[]={16,32,48,255};
+        if(x>=8u && x<56u && y>=8u && y<56u)
+            material_pixel(x+y<63u?first_seed1:second_seed1,(2u*x-15u)/6u,7u-(2u*y-15u)/12u,expected);
+        CHECK(!memcmp(pixels+(y*64u+x)*4u,expected,4));
+    }
 }
 static void texture_expected(uint8_t pixels[BYTES],bool second,bool overlap,bool complete) {
     for(unsigned y=0;y<64;++y)for(unsigned x=0;x<64;++x) {
@@ -524,7 +562,7 @@ static void guest_texture_snapshots(void) {
     ctr_guest g;list l;ctr_gx_completion c;textured_open(&g,&l,false);
     insert_at(&l,find(&l,0x22f,1),0x085,(TEXTURE_PA+1024u)/8u);trim(&l);finish(&l);
     guest_texture_backend m={0};m.guest=&g;
-    ctr_scene_backend backend={&m,guest_texture_begin,guest_texture_draw,guest_texture_end,guest_texture_abort,NULL,NULL};
+    ctr_scene_backend backend={&m,guest_texture_begin,guest_texture_draw,guest_texture_end,guest_texture_abort,NULL,NULL,NULL};
     ctr_guest_set_scene_backend(&g,&backend);
     CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK && c.signal && c.irq==5);
     CHECK(m.begins==1 && m.draws==2 && m.ends==1 && !m.aborts);texture_golden(&g,true,false,true);
@@ -590,6 +628,234 @@ static void guest_texture_queues(void) {
     CHECK(g.gsp.pica_draws==2 && g.gsp.pica_shader_instructions==24 && g.gsp.pica_scene->registers[0x085]==TEXTURE_PA/8u);
     CHECK(g.shared[g.gsp.relay_shared].storage[1]==1 && g.shared[g.gsp.relay_shared].storage[12]==5 && g.events[g.gsp.relay_event].signaled);
     texture_golden(&g,false,false,true);ctr_guest_close(&g);
+}
+static void guest_material_success(void) {
+    for(unsigned shorts=0;shorts<2u;++shorts)for(unsigned binding=0;binding<4u;++binding) {
+        ctr_guest g;list l;ctr_gx_completion c;textured_open(&g,&l,shorts!=0);material_setup(&g,&l);
+        if(binding==1u)insert_at(&l,find(&l,0x22f,1),0x095,(TEXTURE_PA+3072u)/8u);
+        if(binding==2u) {
+            texture_source(backing(&g)+0x1400u,29u);set(&l,0x095,(PHYSICAL+0x1400u)/8u);
+        }
+        if(binding==3u)set(&l,0x095,TEXTURE_PA/8u); /* Shared image must use one stable span. */
+        trim(&l);finish(&l);
+        CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK && c.signal && c.irq==5);
+        CHECK(g.gsp.pica_draws==2u && g.gsp.pica_triangles==2u &&
+              g.gsp.pica_fragments==2304u && g.gsp.pica_shader_instructions==36u);
+        material_golden(&g,binding==3u?0u:29u,binding==1u?113u:binding==3u?0u:29u);
+        ctr_guest_close(&g);
+    }
+    /* Every active mask is resolved independently. Unowned inactive bindings
+     * are not snapshotted; coordinate1 routing does not require unit1 enabled. */
+    for(unsigned mask=1;mask<8u;++mask)for(unsigned route=0;route<((mask&4u)?2u:1u);++route) {
+        ctr_guest g;list l;ctr_gx_completion c;textured_open(&g,&l,false);material_setup(&g,&l);
+        set(&l,0x080,mask|(route?0x2000u:0u));
+        unsigned selected=mask&4u?2u:mask&2u?1u:0u;
+        set(&l,0xc0,(3u+selected)|((3u+selected)<<16));set(&l,0xc8,0xf000fu);set(&l,0xca,0u);
+        const unsigned addresses[]={0x085,0x095,0x09d};
+        for(unsigned unit=0;unit<3u;++unit)if(!(mask&(1u<<unit)))set(&l,addresses[unit],UINT32_C(0x08000000));
+        CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK && c.signal);
+        uint8_t pixels[BYTES];
+        CHECK(ctr_texture_decode(backing(&g)+0x2000u,BYTES,0,64,64,pixels,sizeof(pixels))==CTR_TEXTURE_OK);
+        for(unsigned y=0;y<64;++y)for(unsigned x=0;x<64;++x) {
+            uint8_t expected[]={16,32,48,255};
+            if(x>=8u && x<56u && y>=8u && y<56u)
+                texture_pixel(selected==2u?71u:selected==1u?29u:0u,(2u*x-15u)/6u,7u-(2u*y-15u)/12u,expected);
+            CHECK(!memcmp(pixels+(y*64u+x)*4u,expected,4));
+        }
+        ctr_guest_close(&g);
+    }
+    /* A configuration-only list retains all three groups and UV maps. A later
+     * guest write changes one image without rebuilding the other two bindings. */
+    ctr_guest g;list all,setup,replay;ctr_gx_completion c;textured_open(&g,&all,true);material_setup(&g,&all);
+    setup=all;setup.size=find(&setup,0x22f,0);finish(&setup);
+    put32(setup.bytes+find(&setup,0x080,0)+4u,UINT32_C(0x10000)|0x080u);
+    put32(setup.bytes+find(&setup,0x095,0)+4u,UINT32_C(0x10000)|0x095u);
+    put32(setup.bytes+find(&setup,0x09e,0)+4u,UINT32_C(0x50000)|0x09eu);
+    CHECK(execute(&g,&setup,BASE,&c)==CTR_GX_OK && !g.gsp.pica_draws);
+    CHECK(g.gsp.pica_scene->register_defined[0x080]==1u &&
+          g.gsp.pica_scene->register_defined[0x095]==1u && g.gsp.pica_scene->register_defined[0x09e]==5u);
+    memset(&replay,0,sizeof(replay));add(&replay,0x080,7u);add(&replay,0x095,(TEXTURE_PA+1024u)/8u);add(&replay,0x09e,0u);
+    put32(replay.bytes+find(&replay,0x080,0)+4u,UINT32_C(0xe0000)|0x080u);
+    put32(replay.bytes+find(&replay,0x095,0)+4u,UINT32_C(0xe0000)|0x095u);
+    put32(replay.bytes+find(&replay,0x09e,0)+4u,UINT32_C(0xa0000)|0x09eu);
+    add(&replay,0x227,UINT32_C(0x80000060));add(&replay,0x22f,1);
+    add(&replay,0x227,UINT32_C(0x80000066));add(&replay,0x22f,1);finish(&replay);
+    CHECK(execute(&g,&replay,BASE,&c)==CTR_GX_OK && g.gsp.pica_draws==2u);material_golden(&g,29u,29u);
+    uint8_t changed[TEXTURE_BYTES];texture_source(changed,53u);
+    CHECK(ctr_memory_write_bytes(&g.memory,TEXTURE_VA+1024u,changed,sizeof(changed))==CTR_MEM_OK);
+    CHECK(ctr_memory_change_range(&g.memory,TEXTURE_VA,4096u,CTR_MEM_READ,false)==CTR_MEM_OK);
+    CHECK(ctr_memory_write_bytes(&g.memory,BASE,replay.bytes,(uint32_t)replay.size)==CTR_MEM_OK);
+    uint64_t generation=g.memory.generation;
+    CHECK(submit(&g,&replay,&c)==CTR_GX_OK && c.signal && g.memory.generation==generation+1u);
+    CHECK(g.gsp.pica.committed_lists==3u && g.gsp.pica_draws==4u && g.gsp.pica_shader_instructions==72u);
+    CHECK(g.gsp.pica_scene->registers[0x095]==(TEXTURE_PA+1024u)/8u &&
+          g.gsp.pica_scene->registers[0x09d]==(TEXTURE_PA+2048u)/8u);
+    material_golden(&g,53u,53u);ctr_guest_close(&g);
+}
+static bool guest_material_draw(void *context,const ctr_scene_state *s,const ctr_vertex *v,unsigned count,
+                                const ctr_scene_texture textures[CTR_SCENE_TEXTURE_UNITS],unsigned mask) {
+    guest_texture_backend *m=context;unsigned draw=m->draws++;CHECK(draw<2u && count==3u && mask==7u);
+    CHECK(s->shader.code[4]==UINT32_C(0x4c802000) && s->shader.code[5]==UINT32_C(0x88000000));
+    CHECK(v[0].enabled==7u);
+    for(unsigned unit=0;unit<3u;++unit) {
+        const ctr_scene_texture *texture=&textures[unit];unsigned offset=unit*1024u;
+        if(unit==1u && draw)offset=3072u;
+        CHECK(texture->address==TEXTURE_PA+offset && texture->width==16u && texture->height==8u &&
+              texture->format==0u && texture->params==0u);
+        CHECK(texture->rgba!=m->guest->allocations[1].storage+offset);
+        unsigned seed=unit==0u?0u:unit==1u?(draw?113u:29u):71u;
+        for(unsigned y=0;y<8u;++y)for(unsigned x=0;x<16u;++x) {
+            uint8_t expected[4];texture_pixel(seed,x,y,expected);
+            CHECK(!memcmp(texture->rgba+(y*16u+x)*4u,expected,4));
+        }
+    }
+    for(unsigned y=8;y<56;++y)for(unsigned x=8;x<56;++x)if((x+y>=63u)==(draw!=0u))
+        material_pixel(draw?113u:29u,(2u*x-15u)/6u,7u-(2u*y-15u)/12u,m->pixels+(y*64u+x)*4u);
+    return true;
+}
+static void guest_material_snapshots(void) {
+    ctr_guest g;list l;ctr_gx_completion c;textured_open(&g,&l,false);material_setup(&g,&l);
+    insert_at(&l,find(&l,0x22f,1),0x095,(TEXTURE_PA+3072u)/8u);trim(&l);finish(&l);
+    guest_texture_backend m={0};m.guest=&g;
+    ctr_scene_backend backend={&m,guest_texture_begin,NULL,guest_texture_end,guest_texture_abort,NULL,NULL,guest_material_draw};
+    ctr_guest_set_scene_backend(&g,&backend);
+    CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK && c.signal && c.irq==5);
+    CHECK(m.begins==1u && m.draws==2u && m.ends==1u && !m.aborts);
+    for(unsigned i=0;i<4096u;++i)CHECK(g.allocations[1].storage[i]==0u);
+    material_golden(&g,29u,113u);ctr_guest_close(&g);
+}
+static bool unexpected_material_draw(void *context,const ctr_scene_state *s,const ctr_vertex *v,unsigned count,
+                                     const ctr_scene_texture textures[CTR_SCENE_TEXTURE_UNITS],unsigned mask) {
+    (void)s;(void)v;(void)count;(void)textures;(void)mask;
+    ++((backend_mock *)context)->draws;return false;
+}
+static void guest_material_rollback(void) {
+    const unsigned dimensions[]={0x092,0x09a},parameters[]={0x093,0x09b};
+    const unsigned addresses[]={0x095,0x09d},formats[]={0x096,0x09e};
+    for(unsigned unit=1;unit<3u;++unit)for(unsigned retained=0;retained<2u;++retained)
+        for(unsigned kind=0;kind<14u;++kind) {
+            ctr_guest g;list l;ctr_gx_completion c;textured_open(&g,&l,(kind&1u)!=0);
+            /* Retained failures start from the accepted Texture0 list; the new
+             * units still need complete initial definitions in the attempted list. */
+            if(retained)CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK);
+            material_setup(&g,&l);unsigned slot=unit-1u;uint32_t second=TEXTURE_PA+unit*1024u;
+            ctr_gx_result expected=CTR_GX_UNSUPPORTED;
+            if(kind==0u) { second=TEXTURE_PA+0x20000u;expected=CTR_GX_MEMORY; }
+            if(kind==1u) {
+                CHECK(ctr_memory_change_range(&g.memory,TEXTURE_VA+unit*1024u+8u,8u,0,false)==CTR_MEM_OK);
+                expected=CTR_GX_MEMORY;
+            }
+            if(kind==2u) { second=PHYSICAL+0x2000u;expected=CTR_GX_MEMORY; }
+            if(kind==3u)second=PHYSICAL+0x1f00u;
+            if(kind==4u) { second=TEXTURE_PA+0xf00u;expected=CTR_GX_MEMORY; }
+            if(kind==5u) {
+                uint32_t split=TEXTURE_VA+unit*1024u;
+                CHECK(ctr_memory_change_range(&g.memory,split,TEXTURE_BYTES,CTR_MEM_READ,false)==CTR_MEM_OK);
+                bool found=false;
+                for(size_t i=0;i<g.memory.count;++i)if(g.memory.maps[i].base==split) {
+                    g.memory.maps[i].storage=backing(&g)+0x2000u;found=true;
+                }
+                CHECK(found);expected=CTR_GX_MEMORY;
+            }
+            if(kind==6u)insert_at(&l,find(&l,0x22f,1),formats[slot],14u);
+            if(kind==7u)insert_at(&l,find(&l,0x22f,1),dimensions[slot],UINT32_C(0x000f0008));
+            if(kind==8u) { trim(&l);add(&l,parameters[slot],2u); }
+            if(kind==9u)second=UINT32_C(0x80000000);
+            if(kind==10u)put32(l.bytes+find(&l,formats[slot],0)+4u,UINT32_C(0xe0000)|formats[slot]);
+            if(kind==11u)insert_at(&l,find(&l,0x22f,1),0x080,0x1007u);
+            if(kind==12u) { set(&l,0x11d,PHYSICAL/8u);expected=CTR_GX_MEMORY; }
+            if(kind==13u) {
+                second=TEXTURE_PA+0x20000u;expected=CTR_GX_MEMORY;
+                CHECK(ctr_memory_map(&g.memory,TEXTURE_VA+0x20000u,TEXTURE_BYTES,CTR_MEM_READ,
+                      g.allocations[1].storage+unit*1024u,TEXTURE_BYTES)==CTR_MEM_OK);
+            }
+            insert_at(&l,find(&l,0x22f,1),addresses[slot],second/8u);trim(&l);finish(&l);
+            unsigned owner=relay(&g);(void)owner;ctr_guest_shared *shared=&g.shared[g.gsp.relay_shared];
+            uint8_t relay_before[CTR_GUEST_PAGE];CHECK(shared->size==sizeof(relay_before));
+            memcpy(relay_before,shared->storage,shared->size);
+            ctr_scene_state before={0};if(retained)before=*g.gsp.pica_scene;
+            ctr_pica_state pica=g.gsp.pica;uint8_t pixels[BYTES];memcpy(pixels,backing(&g)+0x2000u,BYTES);
+            backend_mock m={0};ctr_scene_backend backend=mock_backend(&m);backend.draw_textures=unexpected_material_draw;
+            ctr_guest_set_scene_backend(&g,&backend);
+            CHECK(ctr_memory_write_bytes(&g.memory,BASE,l.bytes,(uint32_t)l.size)==CTR_MEM_OK);
+            uint64_t generation=g.memory.generation,code=g.memory.code_generation;g.cpu.exclusive_valid=true;
+            CHECK(submit(&g,&l,&c)==expected && !c.signal);
+            CHECK(!m.begins && !m.draws && !m.ends && !m.aborts);
+            CHECK(!memcmp(pixels,backing(&g)+0x2000u,BYTES) && !memcmp(&pica,&g.gsp.pica,sizeof(pica)));
+            CHECK(retained?!memcmp(&before,g.gsp.pica_scene,sizeof(before)):!g.gsp.pica_scene);
+            CHECK(g.memory.generation==generation && g.memory.code_generation==code && g.cpu.exclusive_valid);
+            CHECK(!memcmp(relay_before,shared->storage,shared->size) && !g.events[g.gsp.relay_event].signaled);
+            CHECK(!g.gsp.gx_commands && !g.gsp.gx_pica);ctr_guest_close(&g);
+        }
+}
+static void guest_material_queues(void) {
+    ctr_guest g;list good,bad;textured_open(&g,&good,true);material_setup(&g,&good);bad=good;
+    insert_at(&bad,find(&bad,0x22f,1),0x09d,(TEXTURE_PA+0x20000u)/8u);trim(&bad);finish(&bad);
+    CHECK(good.size<0x800u && bad.size<0x800u);unsigned owner=relay(&g);
+    CHECK(ctr_memory_write_bytes(&g.memory,BASE,good.bytes,(uint32_t)good.size)==CTR_MEM_OK);
+    CHECK(ctr_memory_write_bytes(&g.memory,BASE+0x800u,bad.bytes,(uint32_t)bad.size)==CTR_MEM_OK);
+    write_word(&g,0x10002800,14u|(2u<<8));
+    for(unsigned entry=0;entry<2u;++entry) {
+        uint32_t w[]={0x01000101,BASE+(entry?0x800u:0u),(uint32_t)(entry?bad.size:good.size),0,0,0,0,1};
+        for(unsigned i=0;i<8u;++i)write_word(&g,0x10002820u+(entry?0u:14u)*32u+i*4u,w[i]);
+    }
+    uint32_t trigger[]={0xc0000},out[8];unsigned count;
+    CHECK(!ctr_gsp_request(&g,owner,trigger,out,&count) && g.state==CTR_GUEST_FAULTED);
+    CHECK(read_word(&g,0x10002800)==0x100u && g.gsp.gx_commands==1u && g.gsp.gx_pica==1u);
+    CHECK(g.gsp.pica_draws==2u && g.gsp.pica_shader_instructions==36u &&
+          g.gsp.pica_scene->registers[0x09d]==(TEXTURE_PA+2048u)/8u);
+    CHECK(g.shared[g.gsp.relay_shared].storage[1]==1u && g.shared[g.gsp.relay_shared].storage[12]==5u &&
+          g.events[g.gsp.relay_event].signaled);
+    material_golden(&g,29u,29u);ctr_guest_close(&g);
+}
+static void material_allocation(ctr_guest *g,uint32_t bytes) {
+    g->cpu.r[0]=1u;g->cpu.r[1]=TEXTURE_VA;g->cpu.r[2]=0;g->cpu.r[3]=4096u;g->cpu.r[4]=0;
+    ctr_heap_control(g);CHECK(!g->cpu.r[0] && !g->allocations[1].storage);
+    g->cpu.r[0]=0x10003u;g->cpu.r[1]=TEXTURE_VA;g->cpu.r[2]=0;g->cpu.r[3]=bytes;g->cpu.r[4]=3u;
+    ctr_heap_control(g);CHECK(!g->cpu.r[0] && g->allocations[1].base==TEXTURE_VA && g->allocations[1].size==bytes);
+}
+static void material_limit_failure(ctr_guest *g,const list *bad) {
+    ctr_gx_completion c;ctr_scene_state before=*g->gsp.pica_scene;ctr_pica_state pica=g->gsp.pica;
+    uint8_t pixels[BYTES];memcpy(pixels,backing(g)+0x2000u,BYTES);
+    backend_mock m={0};ctr_scene_backend backend=mock_backend(&m);backend.draw_textures=unexpected_material_draw;
+    ctr_guest_set_scene_backend(g,&backend);
+    CHECK(ctr_memory_write_bytes(&g->memory,BASE,bad->bytes,(uint32_t)bad->size)==CTR_MEM_OK);
+    uint64_t generation=g->memory.generation,code=g->memory.code_generation;g->cpu.exclusive_valid=true;
+    CHECK(submit(g,bad,&c)==CTR_GX_UNSUPPORTED && !c.signal && g->gsp.last_scene_result==CTR_SCENE_LIMIT);
+    CHECK(!m.begins && !m.draws && !m.ends && !m.aborts);
+    CHECK(!memcmp(&before,g->gsp.pica_scene,sizeof(before)) && !memcmp(&pica,&g->gsp.pica,sizeof(pica)));
+    CHECK(!memcmp(pixels,backing(g)+0x2000u,BYTES) && generation==g->memory.generation &&
+          code==g->memory.code_generation && g->cpu.exclusive_valid);
+    ctr_guest_set_scene_backend(g,NULL);
+}
+static void guest_material_limits(void) {
+    /* A small unit1 range contained in unit0's 4MiB image reuses that owned
+     * snapshot. Enabling an additional independent 256-byte image exceeds the
+     * aggregate limit, even though every range is valid guest-owned memory. */
+    ctr_guest g;list l,bad;ctr_gx_completion c;textured_open(&g,&l,false);material_setup(&g,&l);
+    material_allocation(&g,CTR_SCENE_MAX_TEXTURE_SOURCE_BYTES+4096u);
+    set(&l,0x080,3u);set(&l,0x082,UINT32_C(0x04000400));set(&l,0xc8,UINT32_C(0x000f004f));
+    CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK && c.signal && g.gsp.pica_draws==2u);
+    bad=l;set(&bad,0x080,7u);set(&bad,0x09a,UINT32_C(0x00080008));
+    set(&bad,0x09d,(TEXTURE_PA+CTR_SCENE_MAX_TEXTURE_SOURCE_BYTES)/8u);
+    material_limit_failure(&g,&bad);ctr_guest_close(&g);
+
+    /* Eleven draws can gather 33 independent unit bindings. Reusing the last
+     * image fits exactly32 snapshots; changing only that binding must fail. */
+    textured_open(&g,&l,false);material_setup(&g,&l);material_allocation(&g,0x9000u);
+    l.size=find(&l,0x22f,0);
+    for(unsigned draw=0;draw<11u;++draw) {
+        const unsigned addresses[]={0x085,0x095,0x09d};
+        for(unsigned unit=0;unit<3u;++unit) {
+            unsigned image=draw*3u+unit;if(image==32u)image=31u;
+            add(&l,addresses[unit],(TEXTURE_PA+image*1024u)/8u);
+        }
+        add(&l,0x22f,1u);
+    }
+    finish(&l);CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK && c.signal && g.gsp.pica_draws==11u);
+    CHECK(g.gsp.pica_shader_instructions==198u);
+    bad=l;put32(bad.bytes+find(&bad,0x09d,11u),(TEXTURE_PA+32u*1024u)/8u);
+    material_limit_failure(&g,&bad);ctr_guest_close(&g);
 }
 static void guest_fragment_output(void) {
     /* Byte-domain constant passes alpha EQUAL127, then XOR updates only R/B.
@@ -1024,6 +1290,7 @@ static void guest_stencil_queues(void) {
 int main(void) {
     successful();rollback();shader_capacity();arithmetic_draws();queues();native_backend_success();native_backend_rollback();
     guest_texture_success();guest_linear_texture();guest_texture_snapshots();guest_texture_rollback();guest_texture_queues();
+    guest_material_success();guest_material_snapshots();guest_material_rollback();guest_material_queues();guest_material_limits();
     guest_fragment_output();guest_blending();guest_depth_success();guest_depth_rollback();guest_depth_queues();
     guest_stencil_success();guest_stencil_rollback();guest_stencil_queues();
     printf("guest PICA draw tests: %u assertions passed\n",assertions);return 0;

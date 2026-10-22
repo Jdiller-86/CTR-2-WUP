@@ -53,6 +53,7 @@ int main(void) {
             for(unsigned i=0;i<96;++i)printf("%s%u",i?",":"",compiled.uniform_used[i]);
             printf("]");
             printf(",\"texcoord0\":%s",compiled.texcoord0?"true":"false");
+            printf(",\"texcoord_mask\":%u",compiled.texcoord_mask);
         }
         if(cpu==CTR_SHADER_OK) {
             printf(",\"written\":[");

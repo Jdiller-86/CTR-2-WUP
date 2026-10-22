@@ -27,6 +27,7 @@
 
 #define MAX_IMAGE_BYTES (2u*1024u*1024u)
 #define MAX_TEXTURE_BYTES (8u*1024u*1024u)
+#define MAX_TEXTURE_TOTAL_BYTES (3u*MAX_TEXTURE_BYTES)
 #define VERTEX_STRIDE (16u*4u*sizeof(float))
 #define MAX_FETCH_BYTES 4096u
 #define PIXEL_BYTES 8192u
@@ -42,8 +43,8 @@ typedef struct {
     GX2FetchShader fetch;
     GX2VertexShader vertex;
     GX2PixelShader pixel;
-    GX2Texture texture;
-    GX2Sampler sampler;
+    GX2Texture texture[3];
+    GX2Sampler sampler[3];
     ctr_gx2_shader *compiled;
     void *vertex_program,*pixel_program,*fetch_program,*vertices;
     unsigned width,height,stride;
@@ -142,7 +143,7 @@ static bool retire(ctr_wiiu_gx2_scene *s,scene_private *p) {
     p->pending=false;s->quarantined=false;return true;
 }
 static void release(ctr_wiiu_gx2_scene *s,scene_private *p) {
-    dispose(s,p->texture.surface.image);
+    for(unsigned unit=0;unit<3u;++unit)dispose(s,p->texture[unit].surface.image);
     dispose(s,p->vertices);dispose(s,p->fetch_program);
     dispose(s,p->pixel_program);dispose(s,p->vertex_program);
     dispose(s,p->compiled);dispose(s,p->linear.image);
@@ -212,7 +213,10 @@ static void put32(uint8_t *p,uint32_t value) {
  * any output lane changes. R8 is scratch; buffered programs additionally use
  * R9 visible/R10 pending combiner bytes. Independent LAST groups avoid a VLIW
  * bank scheduler. Constants 0..5 contain stage bytes; 6/7 are numeric helpers
- * and buffered programs use constant 8 for the initial combiner bytes. */
+ * and buffered programs use constant 8 for the initial combiner bytes.
+ * Additional-unit programs retain color in R0 and compact imported UVs in
+ * R1..R3, snapshot in R4..R6, alternate Previous in R7/R14, keep buffers in
+ * R9/R10 and sample units 0/1/2 into R11/R12/R13. */
 static uint32_t bits(float value);
 static void pixel_op(scene_private *p,unsigned *count,unsigned opcode,unsigned a,unsigned ac,
                       unsigned b,unsigned bc,bool negate,unsigned dest,unsigned lane) {
@@ -254,17 +258,30 @@ static void pixel_constants(scene_private *p,const ctr_tev_program *tev) {
     if(p->buffered)for(unsigned lane=0;lane<4;++lane)
         p->pixel_constants[8][lane]=bits((float)tev->buffer_color[lane]);
 }
-static bool pixel_shader(scene_private *p,const ctr_tev_program *tev,bool textured) {
+static unsigned population(unsigned mask) {
+    unsigned count=0;for(;mask;mask>>=1)count+=mask&1u;return count;
+}
+static unsigned coordinate_mask(unsigned mask,bool texture2_coord1) {
+    return texture2_coord1 && (mask&4u)?(mask&~4u)|2u:mask;
+}
+static unsigned coordinate_gpr(unsigned coordinate,unsigned coordinates) {
+    return 1u+population(coordinates&((1u<<coordinate)-1u));
+}
+static unsigned texture_gpr(unsigned unit,bool multiple) { return multiple?11u+unit:2u; }
+static bool pixel_shader(scene_private *p,const ctr_tev_program *tev,unsigned mask,
+                          bool texture2_coord1) {
     uint8_t *program=p->pixel_program;memset(program,0,PIXEL_BYTES);
-    unsigned count=0,previous=3,destination=7;
+    bool multiple=mask>1u;unsigned coordinates=coordinate_mask(mask,texture2_coord1);
+    unsigned count=0,previous=multiple?14u:3u,destination=7;
     for(unsigned lane=0;lane<4;++lane) {
         pixel_op(p,&count,2,0,lane,262,0,false,0,lane);
         pixel_op(p,&count,0,0,lane,262,3,false,0,lane);
         pixel_op(p,&count,20,0,lane,0,0,false,0,lane);
-        if(textured) {
-            pixel_op(p,&count,2,2,lane,262,0,false,2,lane);
-            pixel_op(p,&count,0,2,lane,262,3,false,2,lane);
-            pixel_op(p,&count,20,2,lane,0,0,false,2,lane);
+        for(unsigned unit=0;unit<3u;++unit)if(mask&(1u<<unit)) {
+            unsigned sample=texture_gpr(unit,multiple);
+            pixel_op(p,&count,2,sample,lane,262,0,false,sample,lane);
+            pixel_op(p,&count,0,sample,lane,262,3,false,sample,lane);
+            pixel_op(p,&count,20,sample,lane,0,0,false,sample,lane);
         }
     }
     if(p->buffered)for(unsigned lane=0;lane<4;++lane) {
@@ -279,7 +296,7 @@ static bool pixel_shader(scene_private *p,const ctr_tev_program *tev,bool textur
                 unsigned side=lane==3u;
                 for(unsigned arg=0;arg<ctr_tev_arguments(v->operation[side]);++arg) {
                     unsigned source=v->source[side][arg],operand=v->operand[side][arg];
-                    unsigned reg=source==0u?0u:source==3u?2u:source==13u?9u:
+                    unsigned reg=source==0u?0u:source>=3u && source<=5u?texture_gpr(source-3u,multiple):source==13u?9u:
                         source==14u?256u+stage:previous;
                     const unsigned alpha_channels[4]={3,0,1,2};
                     unsigned channel=side?alpha_channels[operand/2u]:
@@ -314,11 +331,17 @@ static bool pixel_shader(scene_private *p,const ctr_tev_program *tev,bool textur
     for(unsigned lane=0;lane<4;++lane)pixel_op(p,&count,2,previous,lane,262,2,false,previous,lane);
     if(count>PIXEL_MAX_ALUS)return false;
     unsigned cf=0;
-    if(textured) {
-        put32(program,128u/8u);put32(program+4u,UINT32_C(0x80800000));cf=8;
-        put32(program+128u,UINT32_C(0x00010013));
-        put32(program+132u,UINT32_C(0xf00d1002));
-        put32(program+136u,UINT32_C(0xb0800000));
+    if(mask) {
+        put32(program,128u/8u);
+        put32(program+4u,UINT32_C(0x80800000)|((population(mask)-1u)<<10));cf=8;
+        unsigned fetch=128u;
+        for(unsigned unit=0;unit<3u;++unit)if(mask&(1u<<unit)) {
+            unsigned coordinate=unit==2u && texture2_coord1?1u:unit;
+            unsigned input=coordinate_gpr(coordinate,coordinates);
+            put32(program+fetch,UINT32_C(0x13)|(unit<<8)|(input<<16));
+            put32(program+fetch+4u,UINT32_C(0xf00d1000)|texture_gpr(unit,multiple));
+            put32(program+fetch+8u,UINT32_C(0xb0800000)|(unit<<15));fetch+=16u;
+        }
     }
     for(unsigned first=0;first<count;first+=128u) {
         unsigned length=count-first;if(length>128u)length=128u;
@@ -330,11 +353,14 @@ static bool pixel_shader(scene_private *p,const ctr_tev_program *tev,bool textur
     memset(&p->pixel,0,sizeof(p->pixel));
     p->pixel.size=(PIXEL_ALU_OFFSET+count*8u+255u)&~255u;
     p->pixel.program=program;p->pixel.mode=GX2_SHADER_MODE_UNIFORM_REGISTER;
-    p->pixel.regs.sq_pgm_resources_ps=p->buffered?11u:9u;p->pixel.regs.sq_pgm_exports_ps=2;
-    p->pixel.regs.spi_ps_in_control_0=UINT32_C(0x14000000)|(textured?2u:1u);
-    p->pixel.regs.num_spi_ps_input_cntl=textured?2u:1u;
+    unsigned interpolators=1u+population(coordinates);
+    p->pixel.regs.sq_pgm_resources_ps=multiple?15u:p->buffered?11u:9u;p->pixel.regs.sq_pgm_exports_ps=2;
+    p->pixel.regs.spi_ps_in_control_0=UINT32_C(0x14000000)|interpolators;
+    p->pixel.regs.num_spi_ps_input_cntl=interpolators;
     p->pixel.regs.spi_ps_input_cntls[0]=UINT32_C(0x100);
-    if(textured)p->pixel.regs.spi_ps_input_cntls[1]=UINT32_C(0x101);
+    unsigned slot=1u;
+    for(unsigned coordinate=0;coordinate<3u;++coordinate)if(coordinates&(1u<<coordinate))
+        p->pixel.regs.spi_ps_input_cntls[slot++]=UINT32_C(0x101)+coordinate;
     p->pixel.regs.cb_shader_mask=15;p->pixel.regs.cb_shader_control=1;
     /* DB_Z_ORDER bits4..5:0 is LATE_Z, 1 EARLY_Z_THEN_LATE_Z. Alpha test
      * precedes PICA depth updates; HiZ and early depth writes stay disabled.
@@ -343,7 +369,7 @@ static bool pixel_shader(scene_private *p,const ctr_tev_program *tev,bool textur
     GX2Invalidate(GX2_INVALIDATE_MODE_CPU_SHADER,program,p->pixel.size);return true;
 }
 static bool vertex_program(ctr_wiiu_gx2_scene *s,scene_private *p,
-                            const ctr_scene_state *state,bool textured) {
+                            const ctr_scene_state *state,unsigned coordinates) {
     uint8_t key[CTR_GX2_CACHE_VERTEX_KEY_MAX];size_t key_size=0,record_size=0;
     bool enabled=!s->cache_disabled && s->program_cache;
     bool keyed=enabled && ctr_gx2_cache_vertex_key(&state->shader,
@@ -369,7 +395,9 @@ static bool vertex_program(ctr_wiiu_gx2_scene *s,scene_private *p,
     }
     if(s->shader_result!=CTR_GX2_SHADER_OK)return false;
     if(!p->compiled->size || p->compiled->size>sizeof(p->compiled->program) ||
-       p->compiled->gprs>64u || (textured && !p->compiled->texcoord0)) {
+       p->compiled->gprs>64u || p->compiled->texcoord_mask>7u ||
+       p->compiled->texcoord0!=((p->compiled->texcoord_mask&1u)!=0) ||
+       (coordinates&p->compiled->texcoord_mask)!=coordinates) {
         if(!hit)cache_add(s,&s->vertex_translation_failures,1u);
         return false;
     }
@@ -378,14 +406,14 @@ static bool vertex_program(ctr_wiiu_gx2_scene *s,scene_private *p,
     return true;
 }
 static bool pixel_program(ctr_wiiu_gx2_scene *s,scene_private *p,
-                           const ctr_tev_program *tev,bool textured) {
+                           const ctr_tev_program *tev,unsigned mask,bool texture2_coord1) {
     uint8_t key[CTR_GX2_CACHE_PIXEL_KEY_MAX];size_t key_size=0,record_size=0;
     pixel_cache_record record;
     /* Constants and buffered selection always come from the current decoded
      * registers, even when their immutable instruction topology is cached. */
     pixel_constants(p,tev);
     bool enabled=!s->cache_disabled && s->program_cache;
-    bool keyed=enabled && ctr_gx2_cache_pixel_key(tev,textured,p->depth_enabled,key,&key_size);
+    bool keyed=enabled && ctr_gx2_cache_pixel_key(tev,mask,texture2_coord1,p->depth_enabled,key,&key_size);
     bool hit=keyed && cache_lookup(s,CTR_GX2_CACHE_PIXEL,key,key_size,
         &record,sizeof(record),&record_size);
     if(!keyed)cache_add(s,&s->cache_stats.bypasses[CTR_GX2_CACHE_PIXEL],1u);
@@ -398,7 +426,7 @@ static bool pixel_program(ctr_wiiu_gx2_scene *s,scene_private *p,
         return true;
     }
     cache_add(s,&s->pixel_translations,1u);
-    if(!pixel_shader(p,tev,textured)) {
+    if(!pixel_shader(p,tev,mask,texture2_coord1)) {
         cache_add(s,&s->pixel_translation_failures,1u);return false;
     }
     if(keyed) {
@@ -412,8 +440,9 @@ static bool pixel_program(ctr_wiiu_gx2_scene *s,scene_private *p,
     return true;
 }
 static bool upload_texture(ctr_wiiu_gx2_scene *s,scene_private *p,
-                           const ctr_scene_texture *source) {
+                           const ctr_scene_texture *source,unsigned unit) {
     if(!source)return true;
+    GX2Texture *texture=&p->texture[unit];GX2Sampler *sampler=&p->sampler[unit];
     unsigned wrap_t=(source->params>>8)&7u,wrap_s=(source->params>>12)&7u;
     unsigned filter=source->params&6u;
     uint32_t expected_params=(wrap_t<<8)|(wrap_s<<12)|(source->format>=12u?0x20u:0u)|filter;
@@ -429,7 +458,7 @@ static bool upload_texture(ctr_wiiu_gx2_scene *s,scene_private *p,
     /* Every previous submission and context-state reference must retire before
      * an image or its CPU cache lines can be overwritten or released. */
     if(!retire(s,p))return false;
-    if(p->texture.surface.width!=source->width || p->texture.surface.height!=source->height) {
+    if(texture->surface.width!=source->width || texture->surface.height!=source->height) {
         GX2Texture next;memset(&next,0,sizeof(next));
         next.surface.dim=GX2_SURFACE_DIM_TEXTURE_2D;
         next.surface.width=source->width;next.surface.height=source->height;
@@ -444,27 +473,30 @@ static bool upload_texture(ctr_wiiu_gx2_scene *s,scene_private *p,
            !next.surface.alignment || (next.surface.alignment&(next.surface.alignment-1u)) ||
            next.surface.alignment>65536u || next.surface.mipmapSize)
             return fail(s,CTR_WIIU_GX2_SCENE_LAYOUT);
+        size_t total=next.surface.imageSize;
+        for(unsigned other=0;other<3u;++other)if(other!=unit)total+=p->texture[other].surface.imageSize;
+        if(total>MAX_TEXTURE_TOTAL_BYTES)return fail(s,CTR_WIIU_GX2_SCENE_LAYOUT);
         next.surface.image=allocate(s,next.surface.alignment,next.surface.imageSize);
         if(!next.surface.image)return fail(s,CTR_WIIU_GX2_SCENE_ALLOCATION);
         next.viewNumMips=1;next.viewNumSlices=1;
         next.compMap=GX2_COMP_MAP(GX2_SQ_SEL_X,GX2_SQ_SEL_Y,GX2_SQ_SEL_Z,GX2_SQ_SEL_W);
         GX2InitTextureRegs(&next);
-        dispose(s,p->texture.surface.image);p->texture=next;
+        dispose(s,texture->surface.image);*texture=next;
     }
     /* PICA normalized V=0 addresses the last raw Morton-storage row. Reverse
      * the decoded upload rows while preserving the actual guest UV exports. */
     for(unsigned y=0;y<source->height;++y)
-        memcpy((uint8_t *)p->texture.surface.image+(size_t)y*p->texture.surface.pitch*4u,
+        memcpy((uint8_t *)texture->surface.image+(size_t)y*texture->surface.pitch*4u,
                source->rgba+(size_t)(source->height-1u-y)*source->width*4u,source->width*4u);
-    DCFlushRange(p->texture.surface.image,p->texture.surface.imageSize);
-    GX2Invalidate(GX2_INVALIDATE_MODE_CPU_TEXTURE,p->texture.surface.image,p->texture.surface.imageSize);
+    DCFlushRange(texture->surface.image,texture->surface.imageSize);
+    GX2Invalidate(GX2_INVALIDATE_MODE_CPU_TEXTURE,texture->surface.image,texture->surface.imageSize);
     GX2TexClampMode clamps[4]={GX2_TEX_CLAMP_MODE_CLAMP,GX2_TEX_CLAMP_MODE_CLAMP,
                              GX2_TEX_CLAMP_MODE_WRAP,GX2_TEX_CLAMP_MODE_MIRROR};
-    GX2InitSampler(&p->sampler,GX2_TEX_CLAMP_MODE_CLAMP,
+    GX2InitSampler(sampler,GX2_TEX_CLAMP_MODE_CLAMP,
         filter?GX2_TEX_XY_FILTER_MODE_LINEAR:GX2_TEX_XY_FILTER_MODE_POINT);
-    GX2InitSamplerClamping(&p->sampler,clamps[wrap_s],clamps[wrap_t],GX2_TEX_CLAMP_MODE_CLAMP);
-    GX2InitSamplerLOD(&p->sampler,0.0f,0.0f,0.0f);
-    GX2InitSamplerZMFilter(&p->sampler,GX2_TEX_Z_FILTER_MODE_NONE,GX2_TEX_MIP_FILTER_MODE_NONE);
+    GX2InitSamplerClamping(sampler,clamps[wrap_s],clamps[wrap_t],GX2_TEX_CLAMP_MODE_CLAMP);
+    GX2InitSamplerLOD(sampler,0.0f,0.0f,0.0f);
+    GX2InitSamplerZMFilter(sampler,GX2_TEX_Z_FILTER_MODE_NONE,GX2_TEX_MIP_FILTER_MODE_NONE);
     ++s->texture_uploads;s->texture_bytes+=(uint64_t)source->width*source->height*4u;
     return true;
 }
@@ -732,10 +764,11 @@ static void fragment_state(const ctr_fragment_state *fragment) {
     GX2SetTargetChannelMasks((GX2ChannelMask)fragment->write_mask,0,0,0,0,0,0,0);
     GX2SetAlphaTest(fragment->alpha_enabled,function,reference);
 }
-static bool draw(void *context,const ctr_scene_state *state,const ctr_vertex *vertices,unsigned count,
-                 const ctr_scene_texture *texture) {
+static bool draw_textures(void *context,const ctr_scene_state *state,const ctr_vertex *vertices,unsigned count,
+                           const ctr_scene_texture textures[3],unsigned mask) {
     ctr_wiiu_gx2_scene *s=context;scene_private *p=s?s->private_state:NULL;
-    if(!p || !state || !vertices || !count || count>CTR_SCENE_MAX_VERTICES || count%3u)
+    if(!p || !state || !vertices || !count || count>CTR_SCENE_MAX_VERTICES || count%3u ||
+       mask>7u || (mask && !textures))
         return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
     if(s->quarantined)return fail(s,CTR_WIIU_GX2_SCENE_WAIT);
     ctr_fragment_state fragment;ctr_stencil_state stencil;
@@ -746,12 +779,14 @@ static bool draw(void *context,const ctr_scene_state *state,const ctr_vertex *ve
      * prior draw/context switch still references the transaction's buffers. */
     if(!retire(s,p))return false;
     cache_prepare(s);
-    if(!vertex_program(s,p,state,texture!=NULL))return fail(s,CTR_WIIU_GX2_SCENE_SHADER);
+    bool texture2_coord1=(mask&4u) && (state->registers[0x080u]&(1u<<13));
+    if(!vertex_program(s,p,state,coordinate_mask(mask,texture2_coord1)))return fail(s,CTR_WIIU_GX2_SCENE_SHADER);
     ctr_tev_program tev;
-    if(!ctr_tev_decode(state->registers,state->register_defined,texture!=NULL,&tev) ||
-       !pixel_program(s,p,&tev,texture!=NULL))
+    if(!ctr_tev_decode(state->registers,state->register_defined,mask,&tev) ||
+       !pixel_program(s,p,&tev,mask,texture2_coord1))
         return fail(s,CTR_WIIU_GX2_SCENE_SHADER);
-    if(!upload_texture(s,p,texture))return false;
+    for(unsigned unit=0;unit<3u;++unit)if(mask&(1u<<unit))
+        if(!upload_texture(s,p,&textures[unit],unit))return false;
     for(unsigned vertex=0;vertex<count;++vertex) {
         if((vertices[vertex].enabled&p->compiled->input_mask)!=p->compiled->input_mask)
             return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
@@ -764,9 +799,15 @@ static bool draw(void *context,const ctr_scene_state *state,const ctr_vertex *ve
     memset(&p->vertex,0,sizeof(p->vertex));p->vertex.size=p->compiled->size;
     p->vertex.program=p->vertex_program;p->vertex.mode=GX2_SHADER_MODE_UNIFORM_REGISTER;
     p->vertex.regs.sq_pgm_resources_vs=p->compiled->gprs|UINT32_C(0x100);
-    p->vertex.regs.spi_vs_out_config=p->compiled->texcoord0?2u:0u;
+    p->vertex.regs.spi_vs_out_config=population(p->compiled->texcoord_mask)<<1;
     p->vertex.regs.num_spi_vs_out_id=1;
-    p->vertex.regs.spi_vs_out_id[0]=p->compiled->texcoord0?UINT32_C(0xffff0100):UINT32_C(0xffffff00);
+    p->vertex.regs.spi_vs_out_id[0]=UINT32_C(0xffffff00);
+    unsigned output=1u;
+    for(unsigned unit=0;unit<3u;++unit)if(p->compiled->texcoord_mask&(1u<<unit)) {
+        unsigned shift=output++*8u;
+        p->vertex.regs.spi_vs_out_id[0]=(p->vertex.regs.spi_vs_out_id[0]&~(UINT32_C(255)<<shift))|
+            ((unit+1u)<<shift);
+    }
     for(unsigned index=1;index<10;++index)p->vertex.regs.spi_vs_out_id[index]=UINT32_MAX;
     p->vertex.regs.sq_vtx_semantic_clear=UINT32_C(0xffff0000);
     p->vertex.regs.num_sq_vtx_semantic=16;
@@ -778,7 +819,12 @@ static bool draw(void *context,const ctr_scene_state *state,const ctr_vertex *ve
     if(p->depth_enabled)GX2SetDepthBuffer(&p->depth_target);
     GX2SetShaderModeEx(GX2_SHADER_MODE_UNIFORM_REGISTER,64,64,0,0,184,192);
     GX2SetFetchShader(&p->fetch);GX2SetVertexShader(&p->vertex);GX2SetPixelShader(&p->pixel);
-    if(texture) { GX2SetPixelTexture(&p->texture,0);GX2SetPixelSampler(&p->sampler,0); }
+    /* Inactive descriptors may remain in shadow state, but only the explicit
+     * mask's unit IDs can occur in this fully rebound program. No inactive
+     * texture image is sampled or freed before the common retirement gate. */
+    for(unsigned unit=0;unit<3u;++unit)if(mask&(1u<<unit)) {
+        GX2SetPixelTexture(&p->texture[unit],unit);GX2SetPixelSampler(&p->sampler[unit],unit);
+    }
     GX2SetPixelUniformReg(0,p->buffered?36u:32u,p->pixel_constants);
     GX2SetAttribBuffer(0,count*VERTEX_STRIDE,VERTEX_STRIDE,p->vertices);
     for(unsigned uniform=0;uniform<CTR_SHADER_UNIFORMS;++uniform)if(p->compiled->uniform_used[uniform])
@@ -812,6 +858,12 @@ static bool draw(void *context,const ctr_scene_state *state,const ctr_vertex *ve
     if(!restore(s))return false;
     ++s->draws;s->shader_instructions+=p->compiled->pica_instructions;
     s->result=CTR_WIIU_GX2_SCENE_OK;return true;
+}
+static bool draw(void *context,const ctr_scene_state *state,const ctr_vertex *vertices,unsigned count,
+                 const ctr_scene_texture *texture) {
+    ctr_scene_texture textures[3]={{0}};
+    if(texture)textures[0]=*texture;
+    return draw_textures(context,state,vertices,count,textures,texture?1u:0u);
 }
 static bool end_targets(void *context,const ctr_scene_surface *readback,
                         const ctr_scene_depth_surface *depth) {
@@ -857,7 +909,7 @@ void ctr_wiiu_gx2_scene_init(ctr_wiiu_gx2_scene *s,GX2ContextState *restore_cont
 }
 static void abort_callback(void *context) { ctr_wiiu_gx2_scene_abort(context); }
 ctr_scene_backend ctr_wiiu_gx2_scene_backend(ctr_wiiu_gx2_scene *s) {
-    return (ctr_scene_backend){s,begin,draw,end,abort_callback,begin_depth,end_depth};
+    return (ctr_scene_backend){s,begin,draw,end,abort_callback,begin_depth,end_depth,draw_textures};
 }
 const char *ctr_wiiu_gx2_scene_result_name(ctr_wiiu_gx2_scene_result result) {
     static const char *const names[]={"ok","argument","allocation","layout","shader","wait","busy"};

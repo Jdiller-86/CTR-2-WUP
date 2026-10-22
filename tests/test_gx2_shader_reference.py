@@ -61,7 +61,8 @@ class ShaderReferenceTests(unittest.TestCase):
         self.assertLess(len(json.dumps(report)), 6000)
 
     def test_existing_untextured_shader_corpus_keeps_identical_program_bytes(self):
-        corpus = [case for case in VALIDATOR.cases() if 'texcoord0' not in case.name]
+        corpus = [case for case in VALIDATOR.cases()
+                  if 'texcoord0' not in case.name and not case.name.startswith('multicoord-')]
         payload = ''.join(case.payload() for case in corpus).encode()
         rows = [json.loads(line) for line in subprocess.check_output([str(self.binary)], input=payload).splitlines()]
         digest = hashlib.sha256()
@@ -74,6 +75,22 @@ class ShaderReferenceTests(unittest.TestCase):
             digest.update(program)
         self.assertEqual(len(rows), 1663)
         self.assertEqual(digest.hexdigest(), '62b5b88f76240f77075128409d77004a0b6ce3ca274f591c924088eaceb5b1da')
+
+    def test_independent_uv_sets_use_dense_exports_with_distinct_semantics(self):
+        corpus = [case for case in VALIDATOR.multicoordinate_cases() if case.expected_compile == 'ok']
+        report = VALIDATOR.validate(self.binary, corpus)
+        self.assertEqual(report['accepted'], 12)
+        case = next(case for case in corpus if case.name == 'multicoord-mask-6')
+        result = json.loads(subprocess.check_output([str(self.binary)], input=case.payload().encode()))
+        self.assertFalse(result['texcoord0'])
+        self.assertEqual(result['texcoord_mask'], 6)
+        self.assertEqual(result['gprs'], 56)
+        registers = {(register+1, lane): raw for register, values in enumerate(case.inputs)
+                     for lane, raw in enumerate(values)}
+        decoded = VALIDATOR.decode(bytes.fromhex(result['bytes']), registers, gprs=result['gprs'])
+        self.assertEqual([row['base'] for row in decoded['exports'][2:]], [1, 2])
+        self.assertEqual([row['gpr'] for row in decoded['exports'][2:]], [54, 55])
+        self.assertNotEqual(decoded['exports'][2]['values'], decoded['exports'][3]['values'])
 
     def test_uv_export_uses_second_parameter_and_defined_xy01_components(self):
         self.assertTrue(self.texture_result['texcoord0'])

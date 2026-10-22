@@ -42,10 +42,13 @@ void ctr_gx2_cache_statistics_get(const ctr_gx2_cache *cache,
  * are excluded. A vertex hit still requires current used-uniform validation.
  * Pixel input must be successfully decoded TEV; stage/initial buffer colors
  * are uniforms, except the computed buffered-program choice is part of its key.
+ * Pixel keys include the complete unit mask (0..7), Texture2's UV1 routing and
+ * depth profile; sampler values remain dynamic bindings, outside compiled code.
  * Failures, including output/input aliasing, leave key and out_size unchanged. */
 bool ctr_gx2_cache_vertex_key(const ctr_shader_program *program,uint16_t output_mask,
                               const uint32_t *output_maps,unsigned output_count,
                               uint8_t key[CTR_GX2_CACHE_VERTEX_KEY_MAX],size_t *out_size);
-bool ctr_gx2_cache_pixel_key(const ctr_tev_program *program,bool textured,bool depth,
+bool ctr_gx2_cache_pixel_key(const ctr_tev_program *program,unsigned texture_mask,
+                             bool texture2_coord1,bool depth,
                              uint8_t key[CTR_GX2_CACHE_PIXEL_KEY_MAX],size_t *out_size);
 #endif

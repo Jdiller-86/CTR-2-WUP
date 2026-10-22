@@ -129,17 +129,30 @@ ctr_gx_result ctr_guest_pica_execute(ctr_guest *g,const void *commands,size_t si
     const unsigned ids[]={0x200,0x11d,0x11e,0x117,0x116,0x11c};
     uint32_t values[6],bound[6]={0};uint8_t defined[6];
     for(unsigned i=0;i<6;++i) { values[i]=trial->registers[ids[i]];defined[i]=trial->register_defined[ids[i]]; }
-    const unsigned texture_ids[]={0x080,0x082,0x085,0x08e};uint32_t texture_values[4];uint8_t texture_defined[4];
-    for(unsigned i=0;i<4;++i) { texture_values[i]=trial->registers[texture_ids[i]];texture_defined[i]=trial->register_defined[texture_ids[i]]; }
+    uint32_t texture_config=trial->registers[0x080u];
+    uint8_t texture_config_defined=trial->register_defined[0x080u];
+    uint32_t texture_values[CTR_SCENE_TEXTURE_UNITS][5];
+    uint8_t texture_defined[CTR_SCENE_TEXTURE_UNITS][5];
+    for(unsigned unit=0;unit<CTR_SCENE_TEXTURE_UNITS;++unit)for(unsigned field=0;field<5u;++field) {
+        unsigned reg=ctr_scene_texture_registers[unit][field];
+        texture_values[unit][field]=trial->registers[reg];
+        texture_defined[unit][field]=trial->register_defined[reg];
+    }
     bool draws=false;size_t markers=0,first_draw=0;unsigned draw_register=0;
     for(size_t i=0;i<wire.writes;++i) {
         const ctr_pica_write *w=&writes[i];report.byte_offset=w->byte_offset;report.reg=w->reg;
         for(unsigned k=0;k<6;++k)if(w->reg==ids[k]) {
             values[k]=ctr_pica_merge(values[k],w->value,w->byte_mask);defined[k]|=w->byte_mask;
         }
-        for(unsigned k=0;k<4;++k)if(w->reg==texture_ids[k]) {
-            texture_values[k]=ctr_pica_merge(texture_values[k],w->value,w->byte_mask);texture_defined[k]|=w->byte_mask;
+        if(w->reg==0x080u) {
+            texture_config=ctr_pica_merge(texture_config,w->value,w->byte_mask);
+            texture_config_defined|=w->byte_mask;
         }
+        for(unsigned unit=0;unit<CTR_SCENE_TEXTURE_UNITS;++unit)for(unsigned field=0;field<5u;++field)
+            if(w->reg==ctr_scene_texture_registers[unit][field]) {
+                texture_values[unit][field]=ctr_pica_merge(texture_values[unit][field],w->value,w->byte_mask);
+                texture_defined[unit][field]|=w->byte_mask;
+            }
         if(w->reg==CTR_PICA_FINALIZE)++markers;
         if(w->reg==0x22eu || w->reg==0x22fu) {
             if(w->byte_mask!=15u || w->value!=1u) { report.result=CTR_SCENE_UNSUPPORTED;goto done; }
@@ -147,16 +160,27 @@ ctr_gx_result ctr_guest_pica_execute(ctr_guest *g,const void *commands,size_t si
             if(draws && memcmp(values,bound,sizeof(bound))) { report.result=CTR_SCENE_LAYOUT;goto done; }
             if(!draws) { first_draw=w->byte_offset;draw_register=w->reg; }
             memcpy(bound,values,sizeof(bound));draws=true;
-            if(texture_values[0]&1u) {
-                for(unsigned k=0;k<4;++k)if(texture_defined[k]!=15u) { report.result=CTR_SCENE_LAYOUT;goto done; }
-                if(texture_values[0]!=1u || (texture_values[1]&~UINT32_C(0x07ff07ff)) ||
-                   (texture_values[2]&UINT32_C(0xf0000000)) || (texture_values[3]&~15u)) {
+            if(texture_config&~UINT32_C(0x2007)) { report.result=CTR_SCENE_UNSUPPORTED;goto done; }
+            if(texture_config && texture_config_defined!=15u) { report.result=CTR_SCENE_LAYOUT;goto done; }
+            for(unsigned unit=0;unit<CTR_SCENE_TEXTURE_UNITS;++unit)if(texture_config&(1u<<unit)) {
+                for(unsigned field=0;field<5u;++field)
+                    if(texture_defined[unit][field]!=15u) { report.result=CTR_SCENE_LAYOUT;goto done; }
+                const uint32_t *binding=texture_values[unit];
+                uint32_t dimensions=binding[CTR_SCENE_TEXTURE_DIMENSIONS];
+                uint32_t parameters=binding[CTR_SCENE_TEXTURE_PARAMETERS];
+                uint32_t address=binding[CTR_SCENE_TEXTURE_ADDRESS],format=binding[CTR_SCENE_TEXTURE_FORMAT];
+                if((dimensions&~UINT32_C(0x07ff07ff)) || (address&UINT32_C(0xf0000000)) || format>=14u ||
+                   binding[CTR_SCENE_TEXTURE_LOD] || (parameters&~UINT32_C(0x3326)) ||
+                   ((parameters&6u)!=0u && (parameters&6u)!=6u) ||
+                   ((parameters>>8)&3u)==1u || ((parameters>>12)&3u)==1u ||
+                   (parameters&32u)!=(format>=12u?32u:0u)) {
                     report.result=CTR_SCENE_UNSUPPORTED;goto done;
                 }
                 size_t texture_bytes;
-                if(ctr_texture_size(texture_values[3],(texture_values[1]>>16)&2047u,
-                    texture_values[1]&2047u,&texture_bytes)!=CTR_TEXTURE_OK) { report.result=CTR_SCENE_LAYOUT;goto done; }
-                if(!texture_range(textures,&texture_count,texture_values[2]*8u,texture_bytes)) {
+                if(ctr_texture_size(format,(dimensions>>16)&2047u,dimensions&2047u,&texture_bytes)!=CTR_TEXTURE_OK) {
+                    report.result=CTR_SCENE_LAYOUT;goto done;
+                }
+                if(!texture_range(textures,&texture_count,address*8u,texture_bytes)) {
                     report.result=CTR_SCENE_LIMIT;goto done;
                 }
             }

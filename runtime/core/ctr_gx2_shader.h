@@ -18,7 +18,8 @@ typedef struct {
     uint8_t program[CTR_GX2_SHADER_MAX_BYTES];
     uint32_t size,gprs,pica_instructions,alu_instructions; /* size is padded to 256. */
     uint16_t input_mask;
-    bool texcoord0; /* Complete optional PICA semantics 12 and 13. */
+    bool texcoord0; /* Legacy mirror of texcoord_mask bit 0. */
+    uint8_t texcoord_mask; /* Complete UV0=12/13, UV1=14/15, UV2=22/23 pairs. */
     uint8_t uniform_used[CTR_SHADER_UNIFORMS]; /* Read lane masks. */
     uint16_t uniform_order[CTR_SHADER_UNIFORMS*4]; /* Unique lanes, first-read order. */
     uint16_t uniform_count;
@@ -28,13 +29,14 @@ typedef struct {
  * negation and temporary dependencies. Geometry/relative addressing fail.
  * output_maps is the packed PICA semantic register table (up to seven words):
  * output_mask selects output registers; output_count must match its popcount.
- * Position xyzw and primary-color rgba must be defined and mapped. Texcoord0
- * semantics 12/13 are optional, but both must be defined when either is mapped.
+ * Position xyzw and primary-color rgba must be defined and mapped. UV pairs
+ * 12/13, 14/15 and 22/23 are optional; both lanes must be defined when either is mapped.
  * Inputs v0..15 are fetched into GPR1..16; temporary/output storage is private.
  * Uniforms use constant-file vectors 0..95 in UniformRegister mode. Upload each
  * uniform_used vector with GX2SetVertexUniformReg(index*4,4,bits).
- * The result needs a VS GPR budget of at least gprs (53, or 54 with texcoord0),
- * not the default 48. PARAM0 is color; optional PARAM1 exports texcoord0.xy01.
+ * The result needs a VS GPR budget of at least gprs (53..56), not the default 48.
+ * UV unit n uses GPR53+n. PARAM0 is color; complete UV sets export densely into
+ * PARAM1..3 in unit order. Native VS_OUT_ID maps those slots to UV semantics1..3.
  * Every actual vertex must also pass ctr_shader_execute before GPU submission:
  * the encoder does not expand the existing exact float24 numeric contract.
  * On any failure output remains unchanged; objects must be stable for the call. */

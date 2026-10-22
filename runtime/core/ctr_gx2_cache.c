@@ -128,10 +128,10 @@ static void prefix(key_writer *writer,ctr_gx2_cache_kind kind) {
     static const uint8_t tag[]={'C','T','R','2','W','U','P','G','X','2'};
     static const char namespace[]=CTR_SOURCE_COMMIT;
     for(size_t i=0;i<sizeof(tag);++i)byte(writer,tag[i]);
-    word(writer,1u); /* Key schema. */
-    word(writer,1u); /* Original Latte encoder profile. */
+    word(writer,2u); /* Key schema, including explicit texture unit/routing identity. */
+    word(writer,2u); /* Original Latte encoder profile with three UV exports. */
     word(writer,1u); /* Exact finite float24/byte-domain numeric profile. */
-    word(writer,1u); /* Position/color/Texture0, bounded TEV/depth renderer ABI. */
+    word(writer,2u); /* Position/color/Texture0..2, bounded TEV/depth renderer ABI. */
     word(writer,CTR_SOURCE_DIRTY?1u:0u);
     byte(writer,(uint8_t)kind);word(writer,(uint32_t)(sizeof(namespace)-1u));
     for(size_t i=0;i<sizeof(namespace)-1u;++i)byte(writer,(uint8_t)namespace[i]);
@@ -161,11 +161,13 @@ bool ctr_gx2_cache_vertex_key(const ctr_shader_program *program,uint16_t mask,
     if(!writer.valid)return false;
     memcpy(key,next,writer.used);*out_size=writer.used;return true;
 }
-bool ctr_gx2_cache_pixel_key(const ctr_tev_program *program,bool textured,bool depth,
+bool ctr_gx2_cache_pixel_key(const ctr_tev_program *program,unsigned texture_mask,
+                             bool texture2_coord1,bool depth,
                              uint8_t key[CTR_GX2_CACHE_PIXEL_KEY_MAX],size_t *out_size) {
-    if(!key_outputs(program,sizeof(*program),NULL,0,key,CTR_GX2_CACHE_PIXEL_KEY_MAX,out_size))return false;
+    if(texture_mask>7u || !key_outputs(program,sizeof(*program),NULL,0,key,CTR_GX2_CACHE_PIXEL_KEY_MAX,out_size))return false;
     uint8_t next[CTR_GX2_CACHE_PIXEL_KEY_MAX];key_writer writer={next,0,sizeof(next),true};
-    prefix(&writer,CTR_GX2_CACHE_PIXEL);byte(&writer,textured);byte(&writer,depth);byte(&writer,ctr_tev_buffered(program));
+    prefix(&writer,CTR_GX2_CACHE_PIXEL);byte(&writer,(uint8_t)texture_mask);byte(&writer,texture2_coord1);
+    byte(&writer,depth);byte(&writer,ctr_tev_buffered(program));
     byte(&writer,program->buffer_update[0]);byte(&writer,program->buffer_update[1]);
     for(unsigned stage=0;stage<CTR_TEV_STAGES;++stage)for(unsigned side=0;side<2;++side) {
         const ctr_tev_stage *p=&program->stages[stage];

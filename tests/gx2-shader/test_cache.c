@@ -90,7 +90,7 @@ static void cold_warm_and_uniforms(void) {
 }
 static void key_changes(void) {
     initialize(false);size_t size=0,next_size=0;CHECK(vertex_key(&size));memcpy(saved_key,key,sizeof(key));
-    CHECK(key[10]==1 && !key[11] && !key[12] && !key[13]); /* Schema LE32. */
+    CHECK(key[10]==2 && !key[11] && !key[12] && !key[13]); /* Schema LE32. */
     CHECK(key[size-8u]==0 && key[size-7u]==1 && key[size-6u]==2 && key[size-5u]==3);
     CHECK(key[size-4u]==8 && key[size-3u]==9 && key[size-2u]==10 && key[size-1u]==11);
 #define DIFFERENT() do { CHECK(vertex_key(&next_size));CHECK(next_size!=size || memcmp(key,saved_key,size)); } while(0)
@@ -121,15 +121,15 @@ static void pixel_keys(void) {
     for(unsigned i=0;i<CTR_TEV_STAGES;++i)for(unsigned field=0;field<5;++field)defined[ctr_tev_registers[i]+field]=15;
     defined[0xe0]=defined[0xfd]=15;
     CHECK(ctr_tev_decode(registers,defined,false,&tev));size_t size=0,next_size=0;
-    CHECK(ctr_gx2_cache_pixel_key(&tev,false,false,key,&size));memcpy(saved_key,key,size);
+    CHECK(ctr_gx2_cache_pixel_key(&tev,false,false,false,key,&size));memcpy(saved_key,key,size);
     other_tev=tev;for(unsigned i=0;i<CTR_TEV_STAGES;++i)for(unsigned c=0;c<4;++c)other_tev.stages[i].constant[c]=(uint8_t)(i+c+1u);
-    CHECK(ctr_gx2_cache_pixel_key(&other_tev,false,false,key,&next_size) && next_size==size && !memcmp(key,saved_key,size));
-    CHECK(ctr_gx2_cache_pixel_key(&tev,true,false,key,&next_size) && memcmp(key,saved_key,size));
-    CHECK(ctr_gx2_cache_pixel_key(&tev,false,true,key,&next_size) && memcmp(key,saved_key,size));
-    tev.buffer_color[0]=1;CHECK(ctr_gx2_cache_pixel_key(&tev,false,false,key,&next_size) && memcmp(key,saved_key,size));
+    CHECK(ctr_gx2_cache_pixel_key(&other_tev,false,false,false,key,&next_size) && next_size==size && !memcmp(key,saved_key,size));
+    CHECK(ctr_gx2_cache_pixel_key(&tev,true,false,false,key,&next_size) && memcmp(key,saved_key,size));
+    CHECK(ctr_gx2_cache_pixel_key(&tev,false,false,true,key,&next_size) && memcmp(key,saved_key,size));
+    tev.buffer_color[0]=1;CHECK(ctr_gx2_cache_pixel_key(&tev,false,false,false,key,&next_size) && memcmp(key,saved_key,size));
     memcpy(saved_key,key,size);tev.buffer_color[0]=2;
-    CHECK(ctr_gx2_cache_pixel_key(&tev,false,false,key,&next_size) && !memcmp(key,saved_key,size));
-#define PIXEL_DIFFERENT() do { CHECK(ctr_gx2_cache_pixel_key(&other_tev,false,false,key,&next_size));CHECK(next_size!=size || memcmp(key,saved_key,size)); } while(0)
+    CHECK(ctr_gx2_cache_pixel_key(&tev,false,false,false,key,&next_size) && !memcmp(key,saved_key,size));
+#define PIXEL_DIFFERENT() do { CHECK(ctr_gx2_cache_pixel_key(&other_tev,false,false,false,key,&next_size));CHECK(next_size!=size || memcmp(key,saved_key,size)); } while(0)
     other_tev=tev;other_tev.buffer_update[0]=1;PIXEL_DIFFERENT();
     other_tev=tev;other_tev.buffer_update[1]=1;PIXEL_DIFFERENT();
     for(unsigned stage=0;stage<CTR_TEV_STAGES;++stage)for(unsigned side=0;side<2;++side) {
@@ -143,10 +143,71 @@ static void pixel_keys(void) {
 #undef PIXEL_DIFFERENT
     ctr_gx2_cache *cache=create();memset(pixel_payload,0x36,sizeof(pixel_payload));
     CHECK(ctr_gx2_cache_store(cache,CTR_GX2_CACHE_PIXEL,saved_key,size,pixel_payload,sizeof(pixel_payload)));
-    CHECK(ctr_gx2_cache_pixel_key(&tev,false,false,key,&next_size));size_t returned=0;
+    CHECK(ctr_gx2_cache_pixel_key(&tev,false,false,false,key,&next_size));size_t returned=0;
     CHECK(ctr_gx2_cache_lookup(cache,CTR_GX2_CACHE_PIXEL,key,next_size,&cached,sizeof(cached),&returned));
     CHECK(returned==sizeof(pixel_payload) && !memcmp(&cached,pixel_payload,sizeof(pixel_payload)));
     ctr_gx2_cache_destroy(cache);
+}
+static void multi_texture_keys_and_tev(void) {
+    memset(registers,0,sizeof(registers));memset(defined,0,sizeof(defined));
+    for(unsigned stage=0;stage<CTR_TEV_STAGES;++stage) {
+        unsigned base=ctr_tev_registers[stage];
+        for(unsigned field=0;field<5u;++field)defined[base+field]=15u;
+        registers[base]=stage?UINT32_C(0x000f000f):0u;
+    }
+    defined[0xe0]=defined[0xfd]=15u;
+    const uint8_t primary[4]={13,29,47,61};
+    const uint8_t textures[3][4]={{17,83,149,211},{101,37,233,59},{241,167,71,19}};
+    uint8_t output[4],legacy[4];
+    for(unsigned mask=0;mask<8u;++mask)for(unsigned unit=0;unit<3u;++unit) {
+        registers[0xc0]=(3u+unit)|((3u+unit)<<16);
+        other_tev=tev;
+        CHECK(ctr_tev_decode(registers,defined,mask,&tev)==((mask&(1u<<unit))!=0));
+        if(mask&(1u<<unit)) {
+            ctr_tev_evaluate_textures(&tev,primary,textures,output);
+            CHECK(!memcmp(output,textures[unit],4));
+            if(!unit) {
+                ctr_tev_evaluate(&tev,primary,textures[0],legacy);
+                CHECK(!memcmp(legacy,output,4));
+            }
+        } else CHECK(!memcmp(&tev,&other_tev,sizeof(tev)));
+    }
+    /* Three independent sampled values contribute to a material: replace T0,
+     * truncate Previous*T1/255, then saturating add T2. */
+    registers[0xc0]=UINT32_C(0x00030003);
+    registers[0xc8]=UINT32_C(0x004f004f);registers[0xca]=UINT32_C(0x00010001);
+    registers[0xd0]=UINT32_C(0x005f005f);registers[0xd2]=UINT32_C(0x00020002);
+    CHECK(ctr_tev_decode(registers,defined,7,&tev));
+    ctr_tev_evaluate_textures(&tev,primary,textures,output);
+    const uint8_t combined[4]={247,179,207,67};CHECK(!memcmp(output,combined,4));
+    other_tev=tev;
+    CHECK(!ctr_tev_decode(registers,defined,8,&tev) && !memcmp(&tev,&other_tev,sizeof(tev)));
+    CHECK(!ctr_tev_decode(registers,defined,3,&tev) && !memcmp(&tev,&other_tev,sizeof(tev)));
+    /* Inactive arguments may mention an ordinary disabled unit, while a
+     * reserved Texture3 source remains rejected even in an inactive slot. */
+    registers[0xc0]=UINT32_C(0x00530053);registers[0xc8]=registers[0xd0]=UINT32_C(0x000f000f);
+    registers[0xca]=registers[0xd2]=0;
+    CHECK(ctr_tev_decode(registers,defined,1,&tev));
+    ctr_tev_evaluate_textures(&tev,primary,textures,output);CHECK(!memcmp(output,textures[0],4));
+    registers[0xc0]=UINT32_C(0x00630063);other_tev=tev;
+    CHECK(!ctr_tev_decode(registers,defined,7,&tev) && !memcmp(&tev,&other_tev,sizeof(tev)));
+
+    /* Every enable/routing/depth combination has a distinct complete key;
+     * sharing source addresses or constants cannot disguise a topology change. */
+    registers[0xc0]=0;CHECK(ctr_tev_decode(registers,defined,0,&tev));
+    ctr_tev_evaluate(&tev,primary,NULL,legacy);CHECK(!memcmp(legacy,primary,4));
+    uint8_t keys[32][CTR_GX2_CACHE_PIXEL_KEY_MAX];size_t sizes[32];unsigned index=0;
+    for(unsigned mask=0;mask<8u;++mask)for(unsigned route=0;route<2u;++route)
+        for(unsigned depth=0;depth<2u;++depth) {
+            CHECK(ctr_gx2_cache_pixel_key(&tev,mask,route!=0u,depth!=0u,keys[index],&sizes[index]));
+            for(unsigned prior=0;prior<index;++prior)
+                CHECK(sizes[index]!=sizes[prior] || memcmp(keys[index],keys[prior],sizes[index]));
+            ++index;
+        }
+    CHECK(index==32u);
+    memset(key,0xa5,sizeof(key));memcpy(saved_key,key,sizeof(key));size_t returned=93;
+    CHECK(!ctr_gx2_cache_pixel_key(&tev,8,false,false,key,&returned));
+    CHECK(returned==93 && !memcmp(key,saved_key,sizeof(key)));
 }
 static void fifo_and_bounds(void) {
     initialize(false);CHECK(ctr_gx2_shader_compile(&program,3,maps,2,&compiled)==CTR_GX2_SHADER_OK);
@@ -222,17 +283,18 @@ static void immutable_failures(void) {
     CHECK(!ctr_gx2_cache_vertex_key(&program,3,maps,2,(uint8_t *)&program,&returned));
     CHECK(!ctr_gx2_cache_vertex_key(&program,3,maps,2,key,(size_t *)&program));
     CHECK(!memcmp(&program,&original_program,sizeof(program)) && !memcmp(key,saved_key,sizeof(key)) && returned==123);
-    CHECK(!ctr_gx2_cache_pixel_key(NULL,false,false,key,&returned));
-    CHECK(!ctr_gx2_cache_pixel_key((void *)(UINTPTR_MAX-1u),false,false,key,&returned));
+    CHECK(!ctr_gx2_cache_pixel_key(NULL,false,false,false,key,&returned));
+    CHECK(!ctr_gx2_cache_pixel_key((void *)(UINTPTR_MAX-1u),false,false,false,key,&returned));
     union { ctr_tev_program program;uint8_t bytes[CTR_GX2_CACHE_PIXEL_KEY_MAX]; } aliased;
     memset(&aliased,0,sizeof(aliased));aliased.program=tev;
-    CHECK(!ctr_gx2_cache_pixel_key(&aliased.program,false,false,aliased.bytes,&returned));
+    CHECK(!ctr_gx2_cache_pixel_key(&aliased.program,false,false,false,aliased.bytes,&returned));
     CHECK(!memcmp(&aliased.program,&tev,sizeof(tev)) && !memcmp(key,saved_key,sizeof(key)) && returned==123);
     ctr_gx2_cache_destroy(cache);
 }
 int main(void) {
     allocation_failure=true;CHECK(!ctr_gx2_cache_create());allocation_failure=false;
-    cold_warm_and_uniforms();key_changes();pixel_keys();fifo_and_bounds();immutable_failures();
+    cold_warm_and_uniforms();key_changes();pixel_keys();multi_texture_keys_and_tev();
+    fifo_and_bounds();immutable_failures();
     ctr_gx2_cache_destroy(NULL);CHECK(deallocations+1u==allocations);
     printf("gx2 cache: %u assertions; bounded owner %zu bytes\n",assertions,allocation_size);return 0;
 }

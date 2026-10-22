@@ -178,20 +178,21 @@ static void slice_tests(void) {
     CHECK(!ctr_draw_observation_ready(true,2,4,4,97200,35));
     CHECK(ctr_draw_observation_ready(true,2,4,4,97200,36));
     /* Presentation readiness belongs to the complete original profile. The
-     * texture/TEV/depth/stencil guest includes the buffer prepass and rejects. */
-    CHECK(!ctr_textured_draw_observation_ready(true,1,10,10,237540,120));
-    CHECK(!ctr_textured_draw_observation_ready(false,2,10,10,237540,120));
-    CHECK(!ctr_textured_draw_observation_ready(true,2,9,10,237540,120));
-    CHECK(!ctr_textured_draw_observation_ready(true,2,10,9,237540,120));
-    CHECK(!ctr_textured_draw_observation_ready(true,2,10,10,237539,120));
-    CHECK(!ctr_textured_draw_observation_ready(true,2,10,10,237540,119));
+     * material/TEV/depth/stencil guest includes both material routes. */
+    CHECK(!ctr_textured_draw_observation_ready(true,1,12,12,291480,156));
+    CHECK(!ctr_textured_draw_observation_ready(false,2,12,12,291480,156));
+    CHECK(!ctr_textured_draw_observation_ready(true,2,11,12,291480,156));
+    CHECK(!ctr_textured_draw_observation_ready(true,2,12,11,291480,156));
+    CHECK(!ctr_textured_draw_observation_ready(true,2,12,12,291479,156));
+    CHECK(!ctr_textured_draw_observation_ready(true,2,12,12,291480,155));
+    CHECK(!ctr_textured_draw_observation_ready(true,2,10,10,237540,120));
     CHECK(!ctr_textured_draw_observation_ready(true,2,9,9,210570,108));
     CHECK(!ctr_textured_draw_observation_ready(true,2,6,6,145770,72));
     CHECK(!ctr_textured_draw_observation_ready(true,2,4,4,97200,48));
     CHECK(!ctr_textured_draw_observation_ready(true,2,4,4,97200,36));
-    CHECK(!ctr_draw_observation_ready(true,2,10,10,237540,120));
-    CHECK(ctr_textured_draw_observation_ready(true,2,10,10,237540,120));
-    CHECK(ctr_textured_draw_observation_ready(true,3,10,10,237540,120));
+    CHECK(!ctr_draw_observation_ready(true,2,12,12,291480,156));
+    CHECK(ctr_textured_draw_observation_ready(true,2,12,12,291480,156));
+    CHECK(ctr_textured_draw_observation_ready(true,3,12,12,291480,156));
 }
 static void capture(void *context,const char *message) {
     (void)context;
