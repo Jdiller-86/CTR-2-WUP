@@ -33,7 +33,7 @@ The bounded path supports:
   depth and D24S8 stencil comparisons/actions.
 - Optional Texture0 UV outputs (semantics 12/13), exact Q16 in −16..16 with W=1;
   affine nearest/bilinear sampling of all 14 base formats with independent clamp/repeat/
-  mirror S/T. Six TEV stages combine Texture0, primary, constants and Previous
+  mirror S/T. Six TEV stages combine Texture0, primary, constants, Previous and PreviousBuffer
   with independent RGB/alpha operations, component operands and 1/2/4 scale.
   See [texture and combiner rules](textures.md).
 - All eight final-alpha comparisons, all 16 bytewise logic operations and RGBA
@@ -49,7 +49,7 @@ a 512 KiB D16 or 1 MiB D24S8 target, with matching dimensions no larger than
 512×512. Separate texture spans cannot overlap geometry or each
 other. No primitive is carried across lists. Unknown state, inexact shader
 arithmetic, other opcodes, relative addressing, geometry, clipping, perspective,
-varying primary color, mixed min/mag filters, mipmaps, DOT3/combiner buffers,
+varying primary color, mixed min/mag filters, mipmaps, DOT3,
 broader depth
 fail visibly. This is not a general PICA renderer.
 
@@ -161,7 +161,8 @@ Both readbacks must match, including padding and trailing bytes. The
 `runtime/wiiu/gx2_scene.c` implements GX2 surfaces, shaders, uniforms,
 viewport/cull/scissor and readback. Textured draws bind an owned RGBA8 texture
 and point/linear sampler; an original Latte pixel program samples base level zero
-and evaluates the six-stage byte-domain TEV chain. Reversed rows preserve PICA V origin
+and evaluates the six-stage byte-domain TEV chain with delayed RGB/alpha buffer
+publication. Reversed rows preserve PICA V origin
 without changing guest UV. CPU flush/texture invalidation precede drawing.
 The adapter restores the presentation context after each callback and retires
 GPU references before reuse/free; failed retirement quarantines allocations

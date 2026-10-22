@@ -15,7 +15,7 @@ if [[ ! -x "$CARGO_HOME/bin/rustup" ]]; then
     ctr_rustup_dir="$ctr_tools_root/rust-download"
     mkdir -p "$ctr_rustup_dir"
     curl --fail --show-error --location --proto '=https' --tlsv1.2 \
-        https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init \
+        https://static.rust-lang.org/rustup/archive/1.29.1/x86_64-unknown-linux-gnu/rustup-init \
         --output "$ctr_rustup_dir/rustup-init"
     printf '%s  %s\n' 'dda7234360b7f578ca8b0ddcb80145646fa61a67c1720a5abc7051b35c9fcb71' "$ctr_rustup_dir/rustup-init" | sha256sum --check
     chmod +x "$ctr_rustup_dir/rustup-init"

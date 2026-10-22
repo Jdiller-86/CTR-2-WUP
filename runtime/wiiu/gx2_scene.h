@@ -41,6 +41,8 @@ typedef struct {
  * canonical depth=-Z/W uses endpoint incoming depths under shared preflight.
  * D24S8 stencil controls, masks and reference bind explicitly for both faces
  * on every draw; disabled stencil state resets to inert masks and actions.
+ * TEV combiner-buffer programs initialize separate visible/pending byte state
+ * per fragment and publish the delayed RGB/alpha updates after every stage.
  * Both target copies retire before readback; full pair parity remains the
  * scene executor's publication gate. */
 void ctr_wiiu_gx2_scene_init(ctr_wiiu_gx2_scene *scene,GX2ContextState *restore_context);

@@ -15,7 +15,7 @@ The [scene renderer](software-scenes.md) and optional native GX2 backend accept:
 | Texture | Texture0, one base level, all 14 decoded formats, 8..1024 per dimension |
 | Coordinates | Vertex semantics 12/13, exact Q16 UV in −16..16, affine interpolation with W=1 |
 | Sampler | Matching nearest or bilinear min/mag, LOD/bias zero; clamp-to-edge, repeat or mirrored repeat independently on S/T |
-| Combiner | Six stages; Texture0, binary primary color, per-stage RGBA8 constants and Previous; independent RGB/alpha operands, operations and 1/2/4 scale |
+| Combiner | Six stages; Texture0, binary primary color, per-stage RGBA8 constants, Previous and PreviousBuffer; independent RGB/alpha operands, operations and 1/2/4 scale |
 | Fragment policy | Binary opaque primary color; final-alpha tests, logic/blend operations, RGBA masks and bounded D16/D24S8 depth/stencil; no lighting |
 
 PICA wrap IDs are 0/2/3 for clamp/repeat/mirror; parameters store T at bits 8–10,
@@ -39,7 +39,7 @@ explicit software numeric contract; physical PICA/GX2 rounding is not establishe
 
 All six TEV stages accept separate RGB/alpha replace, modulate, add, signed add,
 interpolate, subtract, multiply-add and add-multiply. Sources are primary color,
-Texture0, each stage's RGBA8 constant and the preceding stage. RGB operands select
+Texture0, each stage's RGBA8 constant, the preceding stage and PreviousBuffer. RGB operands select
 color, alpha or replicated R/G/B, optionally complemented; alpha operands select
 A/R/G/B with optional complement. Each stage snapshots its inputs before writing
 any output channel, including cross-channel Previous operands.
@@ -51,9 +51,28 @@ also clamps its sum before multiplication. These explicit software rules do not
 establish physical PICA rounding. Register/operand facts follow pinned
 [libctru enums](https://github.com/devkitPro/libctru/blob/9b55eda44cf80b971503991e0c78f9bc8fe50425/libctru/include/3ds/gpu/enums.h#L313)
 and [PICA register fields](https://github.com/azahar-emu/azahar/blob/987f18405073960622e1043bb44005989135c6e1/src/video_core/pica/regs_texturing.h#L288).
-DOT3, combiner-buffer reads/writes, lighting sources, Texture1–3 and stage-zero
+DOT3, lighting sources, Texture1–3 and stage-zero
 Previous reject explicitly. Active constant sources require a completely defined
 constant register; reserved operand/function/scale fields reject even after a draw.
+
+### Combiner buffer
+
+Source `0xD` reads PreviousBuffer. Each fragment starts with a zero visible buffer
+and a pending buffer initialized from `0xFD`, with R/G/B/A in successive
+low-to-high bytes. After every stage, the pending value becomes visible, then
+selected output channels replace pending RGB or alpha. Thus stage 0 reads zero,
+stage 1 reads the initial color and stage 2 sees selected stage-0 output.
+Passthrough stages also advance publication. Register `0xE0` bits 8–11 select
+stage-0–3 RGB updates; bits 12–15 independently select alpha updates.
+
+Active buffer state requires completely defined initial and update registers;
+partial byte writes may complete retained state. Entirely undefined zero buffer
+state remains the inactive legacy default. Fog and reserved `0xE0` bits reject.
+Ordering is corroborated by the pinned
+[software stage path](https://github.com/azahar-emu/azahar/blob/987f18405073960622e1043bb44005989135c6e1/src/video_core/renderer_software/sw_rasterizer.cpp#L699)
+and separate [shader generator](https://github.com/azahar-emu/azahar/blob/987f18405073960622e1043bb44005989135c6e1/src/video_core/shader/generator/glsl_fs_shader_gen.cpp#L439);
+the [producer controls](https://github.com/devkitPro/citro3d/blob/9f21cf7b380ce6f9e01a0420f19f0763e5443ca7/source/texenv.c#L46)
+confirm the selector masks. These facts do not establish physical GPU parity.
 
 Textures resolve entirely inside the stable geometry snapshot or one of at most
 32 separate owned snapshots, with 4 MiB total additional source bytes. External
@@ -165,8 +184,9 @@ These interface facts do not establish physical Wii U parity.
 The native adapter uploads decoded RGBA to an owned pitched GX2 texture, reversing
 rows so the original guest UV needs no CPU rewrite. Its Latte pixel program uses
 base-level normalized sampling and the selected point/linear sampler. An original
-scalar Latte encoder implements the admitted combiner chain using nine GPRs and
-bounded shader storage. Pixel uniforms carry stage constants; explicit byte
+scalar Latte encoder implements the admitted combiner chain using nine GPRs,
+or eleven with separate visible/pending buffers, and bounded shader storage.
+Pixel uniforms carry stage constants and initial buffer bytes; explicit byte
 quantization and floor division preserve the software stage boundaries.
 CPU cache flushes and texture invalidation precede drawing; retirement precedes
 reuse/free. Failed waits quarantine GPU allocations until graphics shutdown.
@@ -180,7 +200,7 @@ source-alpha-saturate in the destination selector rejects. Logic draws disable
 blending, and every draw rebinds complete fixed state. Fixed-function fractional
 rounding remains unverified: a one-byte difference still rejects the entire list.
 The original compiled guest uses integral ONE/ONE RGB addition and ONE/ZERO alpha,
-checks D16 writes after alpha rejection and D24S8 stencil preparation, masked
+checks a buffer material before display, D16 writes after alpha rejection and D24S8 stencil preparation, masked
 rendering and rejected overdraw while retaining the same displayed images.
 
 Native D16/D24S8 targets and their linear staging surfaces both carry depth usage.
@@ -194,7 +214,7 @@ Surface/copy facts follow the
 pinned [GX2 implementation reference](https://github.com/decaf-emu/decaf-emu/blob/e6c528a20a41c34e0f9eb91dd3da40f119db2dee/src/libdecaf/src/cafe/libraries/gx2/gx2_surface.cpp#L430).
 
 Mipmaps, mixed min/mag filters, projective/perspective coordinates, DOT3,
-combiner buffers, resource caching and broader depth remain unsupported. Physical sampling/blending/depth/stencil parity
+resource caching and broader depth remain unsupported. Physical sampling/blending/depth/stencil parity
 and useful GPU performance remain unverified. The full-target byte comparison
 stays exact, including for bilinear draws; differing hardware rounding rejects
 the list without guest publication or software fallback.

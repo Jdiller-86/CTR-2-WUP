@@ -103,8 +103,10 @@ class TexturedSceneReferenceTests(unittest.TestCase):
         path = self.output/'fragment-programs.json'
         path.write_text(json.dumps(self.capture))
         report = ORACLE.validate_fragment_programs(path)
-        self.assertEqual(report['programs'], 35)
-        self.assertEqual(report['arithmetic_cases'], 2240)
+        self.assertGreater(report['programs'], 35)
+        self.assertEqual(report['programs'], len(self.capture['programs']))
+        self.assertEqual(report['arithmetic_cases'], len(self.capture['programs'])*64)
+        self.assertTrue(any('buffer_color' in row for row in self.capture['programs'][35:]))
         self.assertGreaterEqual(report['max_alu_instructions'], 384)
         self.assertEqual(report['integer_division_cases'], 65026)
         self.assertFalse(report['gpu_execution'])
@@ -161,6 +163,55 @@ class TexturedSceneReferenceTests(unittest.TestCase):
         self.assertEqual(len(cases), 24)
         for case in cases:
             with self.subTest(case=case.name):ORACLE.execute_case(self.binary,self.output,case)
+
+    def test_buffer_visibility_has_manual_stage_anchors(self):
+        constants = ((31,73,127,181), (211,47,89,13), (59,239,7,109),
+                     (163,23,193,251), (83,149,227,61))
+        initial = (17,199,43,157)
+        stages = tuple(ORACLE.tev_stage(rgb=(14,0,0),constant=value) for value in constants)
+        consume = ORACLE.tev_stage(rgb=(13,0,0))
+        answers = ((0,0,0,0), initial, *constants[:4])
+        for stage, expected in enumerate(answers):
+            with self.subTest(stage=stage):
+                self.assertEqual(ORACLE.tev_reference(stages[:stage]+(consume,), (0,255,0,255),
+                                 (19,89,233,53), initial, (15,15)), expected)
+        # Stage1 is an arithmetic passthrough but still publishes stage0's
+        # pending result. RGB and alpha can retain different historical stages.
+        passthrough = ORACLE.tev_stage(rgb=(15,0,0))
+        self.assertEqual(ORACLE.tev_reference((stages[0],passthrough,consume), (0,)*4,
+                         (0,)*4,initial,(1,1)), constants[0])
+        self.assertEqual(ORACLE.tev_reference((stages[0],stages[1],passthrough,consume),
+                         (0,)*4,(0,)*4,initial,(1,2)), (*constants[0][:3],constants[1][3]))
+
+    def test_buffer_all_selector_pairs_and_late_state_rollback(self):
+        cases = ORACLE.buffer_cases()
+        masks = [case for case in cases if case.name.startswith('buffer-masks-')]
+        self.assertEqual(len(masks),256)
+        constants = ((31,73,127,181), (211,47,89,13), (59,239,7,109), (163,23,193,251))
+        for case in cases:
+            with self.subTest(case=case.name):
+                if case in masks:
+                    latest = [max((stage for stage in range(4) if mask & (1 << stage)), default=-1)
+                              for mask in case.buffer_update]
+                    expected = tuple((constants[latest[int(lane == 3)]][lane]
+                                      if latest[int(lane == 3)] >= 0 else case.buffer_color[lane])
+                                     for lane in range(4))
+                    self.assertEqual(ORACLE.tev_reference(case.tev,(0,)*4,(0,)*4,
+                                     case.buffer_color,case.buffer_update), expected)
+                ORACLE.execute_case(self.binary,self.output,case)
+
+    def test_buffer_native_storage_metadata_and_initial_color_are_checked(self):
+        row = next(row for row in self.capture['programs'] if 'buffer_color' in row)
+        self.assertEqual(row['gprs'],11)
+        self.assertEqual(len(row['uniforms']),36)
+        for change in ({'gprs':9}, {'uniforms':row['uniforms'][:-1]},
+                       {'buffer_color':(0,0,0,256)}, {'buffer_update':(16,0)}):
+            with self.subTest(change=change):
+                with self.assertRaises(ValueError):
+                    ORACLE.decode_fragment_program(dict(row,**change),(0,1,0,1),(17,89,233,53))
+        incomplete = dict(row);del incomplete['buffer_update']
+        with self.assertRaises(ValueError):
+            ORACLE.decode_fragment_program(incomplete,(0,1,0,1),(17,89,233,53))
 
     def test_alpha_comparisons_have_manual_edges_and_extrema(self):
         answers = ((False,False,False), (True,True,True), (False,True,False),

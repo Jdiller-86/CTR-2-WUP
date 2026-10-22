@@ -1,6 +1,6 @@
 /* Original normal-CRT/libctru texture/TEV/depth/stencil program. No external assets.
  * Owned top D16 and bottom D24S8 targets retain the same displayed images.
- * Every prepared/final packed sample and RGB565 display pixel is checked. */
+ * Every buffer-prepass, prepared/final packed sample and display pixel is checked. */
 #include <3ds.h>
 #include <stdlib.h>
 #include <string.h>
@@ -81,6 +81,7 @@ static void combiner(bool chain) {
         {0x03ef03ef,0,0x00040009,0x77b52f53,0},
         {0x03ef03ef,0,0x00020008,0x113bc771,0}
     };
+    GPUCMD_AddWrite(0x0e0,0);GPUCMD_AddWrite(0x0fd,0);
     for(unsigned stage=0;stage<6;++stage)for(unsigned field=0;field<5;++field)
         GPUCMD_AddWrite(bases[stage]+field,chain?stages[stage][field]:field?0:stage?0xf000f:0x30003);
     if(!chain)GPUCMD_AddWrite(bases[0]+1,2u<<12); /* Alpha = Texture0 red. */
@@ -104,6 +105,41 @@ static void submit(u32 *commands) {
     u32 *submitted,words;GPUCMD_Split(&submitted,&words);
     if(submitted!=commands || words>1024 || (words&3))fail();
     request(GX_ProcessCommandList(submitted,words*4,2));gspWaitForP3D();
+}
+static void probe_buffer(u32 *commands,u32 *target,u8 *depth,unsigned width,unsigned height) {
+    static const u16 bases[]={0xc0,0xc8,0xd0,0xd8,0xf0,0xf8};
+    static const u32 stages[6][5]={
+        {0x00ed00ed,0,0x00020002,0x130d0703,0},
+        {0x00ed00ed,0,0x00020002,0x17110b05,0},
+        {0x000f000f,0,0,0,0},
+        {0x00df00fd,0,0x00050002,0,0},
+        {0x00ed00fd,0,0x00020002,0x1f000000,0},
+        {0x00fd00fd,0,0x00020002,0,0}
+    };
+    /* Visible starts zero, pending starts (17,29,43,71). Stage 0 reads zero,
+     * stage 1 reads that initial color, and stage 2 is a real passthrough.
+     * RGB updates at 0/2 and alpha at 1/3 reach readers two stages later. Outputs:
+     * (3,7,13,19), (22,40,60,94), (22,40,60,94), (25,47,73,0),
+     * (47,87,133,125), (69,127,193,125). */
+    GPUCMD_AddWrite(0x0fd,0x472b1d11);GPUCMD_AddWrite(0x0e0,0xa500);
+    for(unsigned stage=0;stage<6;++stage)for(unsigned field=0;field<5;++field)
+        GPUCMD_AddWrite(bases[stage]+field,stages[stage][field]);
+    color(false);GPUCMD_AddWrite(GPUREG_DEPTH_COLOR_MASK,0xf00);
+    GPUCMD_AddWrite(GPUREG_FRAGOP_ALPHA_TEST,0);GPUCMD_AddWrite(GPUREG_COLOR_OPERATION,0);
+    GPUCMD_AddWrite(GPUREG_LOGIC_OP,GPU_LOGICOP_COPY);GPUCMD_AddWrite(GPUREG_COLORBUFFER_READ,0);
+    index_buffer(0,0);GPUCMD_AddWrite(GPUREG_DRAWELEMENTS,1);submit(commands);
+    for(unsigned y=0;y<height;++y)for(unsigned x=0;x<width;++x) {
+        bool covered=x>=width/8 && x<width*7/8 && y>=height/8 && y<height*7/8 &&
+            (2*x+1)*height+(2*y+1)*width<2*width*height;
+        unsigned at=tile(x,y,width);
+        if(target[at]!=(covered?0x457fc17d:0x102030ff) ||
+           depth[at*2]!=255 || depth[at*2+1]!=255)fail();
+    }
+    static const char passed[]="CTR2WUP compiled TEV buffer PASS";
+    svcOutputDebugString(passed,sizeof(passed)-1);
+    request(GX_MemoryFill(target,0x102030ff,target+width*height,GX_FILL_32BIT_DEPTH|GX_FILL_TRIGGER,
+        (u32*)depth,65535,(u32*)(depth+width*height*2),GX_FILL_16BIT_DEPTH|GX_FILL_TRIGGER));
+    gspWaitForPSC0();GPUCMD_SetBuffer(commands,1024,0);
 }
 static void prepare_stencil(u32 *commands,u32 *target,const u8 *depth,unsigned width,unsigned height) {
     color(false);combiner(false);GPUCMD_AddWrite(GPUREG_TEXUNIT0_PARAM,0);
@@ -170,6 +206,7 @@ int main(void) {
         GPUCMD_AddWrite(GPUREG_FRAMEBUFFER_DIM,width|((height-1)<<12)|(1<<24));
         GPUCMD_AddWrite(GPUREG_VIEWPORT_WIDTH,0x45e000);
         GPUCMD_AddWrite(GPUREG_VIEWPORT_HEIGHT,screen?0x464000:0x469000);
+        if(!screen)probe_buffer(commands,targets[screen],depths[screen],width,height);
         if(screen)prepare_stencil(commands,targets[screen],depths[screen],width,height);
         for(unsigned triangle=0;triangle<3;++triangle) {
             /* The third draw repeats the first triangle at far Z with alpha

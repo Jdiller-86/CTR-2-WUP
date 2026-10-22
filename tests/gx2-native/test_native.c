@@ -27,7 +27,8 @@ static const ctr_shader_program *expected_shader;
 static const ctr_vertex *expected_vertices;
 static const ctr_scene_texture *expected_texture;
 static const ctr_scene_state *expected_state;
-static uint32_t bound_pixel_uniforms[32];
+static uint32_t bound_pixel_uniforms[36];
+static unsigned bound_pixel_uniform_count;
 static const GX2Texture *bound_texture;
 static const GX2Sampler *bound_sampler;
 static const uint8_t *bound_pixel_program;
@@ -237,10 +238,26 @@ void GX2SetVertexShader(const GX2VertexShader *shader) {
 static uint32_t little32(const uint8_t *p) {
     return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;
 }
+/* Independent active-source inspection also checks that disabled buffer state
+ * returns to the original nine-GPR / eight-constant shader contract. */
+static unsigned original_tev_arguments(unsigned operation) {
+    return operation==0u?1u:operation==4u || operation==8u || operation==9u?3u:2u;
+}
+static bool expected_buffered(void) {
+    if(expected_state->registers[0xe0] || expected_state->registers[0xfd])return true;
+    for(unsigned stage=0;stage<6;++stage)for(unsigned side=0;side<2;++side) {
+        unsigned base=ctr_tev_registers[stage];
+        unsigned op=(expected_state->registers[base+2u]>>(side*16u))&15u;
+        for(unsigned arg=0;arg<original_tev_arguments(op);++arg)
+            if(((expected_state->registers[base]>>(side*16u+arg*4u))&15u)==13u)return true;
+    }
+    return false;
+}
 /* Independently decode the emitted instruction fields. This is an API model,
  * not a GPU emulator: it checks the exact sampler/TEV program bound to GX2. */
 static void check_pixel_program(const uint8_t *program,unsigned size) {
     bool used[8192]={false};unsigned at=0,samples=0;
+    unsigned gprs=expected_buffered()?11u:9u,constants=expected_buffered()?9u:8u;
     for(;at<128u;at+=8u) {
         for(unsigned i=at;i<at+8u;++i) { assert(!used[i]);used[i]=true; }
         uint32_t a=little32(program+at),b=little32(program+at+4u);
@@ -257,9 +274,9 @@ static void check_pixel_program(const uint8_t *program,unsigned size) {
                 uint32_t x=little32(program+start+i*8u),y=little32(program+start+i*8u+4u);
                 unsigned op=(y>>7)&2047u,src=x&511u,other=(x>>13)&511u;
                 assert(op==0u || op==2u || op==3u || op==4u || op==20u || op==25u);
-                assert((x>>31)==1u && (y&16u) && ((y>>21)&127u)<9u);
-                assert(src<9u || (src>=256u && src<264u));
-                if(op!=20u && op!=25u)assert(other<9u || (other>=256u && other<264u));
+                assert((x>>31)==1u && (y&16u) && ((y>>21)&127u)<gprs);
+                assert(src<gprs || (src>=256u && src<256u+constants));
+                if(op!=20u && op!=25u)assert(other<gprs || (other>=256u && other<256u+constants));
             }
             for(unsigned i=start;i<start+count*8u;++i) { assert(!used[i]);used[i]=true; }
         } else {
@@ -273,7 +290,7 @@ static void check_pixel_program(const uint8_t *program,unsigned size) {
 }
 void GX2SetPixelShader(const GX2PixelShader *shader) {
     assert(shader->size>=256 && shader->size<=8192 && !(shader->size&255u) && ((uintptr_t)shader->program&255u)==0);
-    assert(shader->regs.sq_pgm_resources_ps==9u);
+    assert(shader->regs.sq_pgm_resources_ps==(expected_buffered()?11u:9u));
     assert(shader->regs.sq_pgm_exports_ps==2u && shader->regs.spi_ps_input_cntls[0]==0x100u);
     assert(shader->regs.spi_ps_in_control_0==(expected_texture?0x14000002u:0x14000001u));
     assert(shader->regs.num_spi_ps_input_cntl==(expected_texture?2u:1u));
@@ -333,12 +350,17 @@ void GX2SetVertexUniformReg(unsigned offset,unsigned count,const void *bytes) {
     assert(offset==8 && count==4 && !memcmp(bytes,expected_shader->uniforms[2],16));++uniform_uploads;
 }
 void GX2SetPixelUniformReg(unsigned offset,unsigned count,const void *bytes) {
-    assert(!offset && count==32u && bytes && bound_pixel_program);
-    memcpy(bound_pixel_uniforms,bytes,sizeof(bound_pixel_uniforms));
+    assert(!offset && count==(expected_buffered()?36u:32u) && bytes && bound_pixel_program);
+    memset(bound_pixel_uniforms,0,sizeof(bound_pixel_uniforms));
+    memcpy(bound_pixel_uniforms,bytes,count*sizeof(*bound_pixel_uniforms));bound_pixel_uniform_count=count;
     assert(bound_pixel_uniforms[26]==0x3b808081u);
     for(unsigned stage=0;stage<6;++stage)for(unsigned lane=0;lane<4;++lane) {
         float value=(float)((expected_state->registers[ctr_tev_registers[stage]+3u]>>(lane*8u))&255u);
         uint32_t raw;memcpy(&raw,&value,4);assert(bound_pixel_uniforms[stage*4u+lane]==raw);
+    }
+    if(count==36u)for(unsigned lane=0;lane<4;++lane) {
+        float value=(float)((expected_state->registers[0xfd]>>(lane*8u))&255u);
+        uint32_t raw;memcpy(&raw,&value,4);assert(bound_pixel_uniforms[32u+lane]==raw);
     }
 }
 void GX2SetCullOnlyControl(unsigned front,bool a,bool b) { assert(front==GX2_FRONT_FACE_CCW);cull_front=a;cull_back=b; }
@@ -420,6 +442,7 @@ static void reset(void) {
     wait_calls=0;fail_wait_call=0;
     gpu_pending=false;gpu_stopped=false;expected_uv=false;expected_texture=NULL;
     bound_texture=NULL;bound_sampler=NULL;bound_pixel_program=NULL;texture_image=NULL;
+    bound_pixel_uniform_count=0;
     texture_inits=0;texture_binds=0;sampler_binds=0;texture_flushes=0;texture_invalidates=0;
     color_control_sets=channel_mask_sets=alpha_test_sets=0;
     blend_control_sets=blend_constant_sets=compile_attempts=0;
@@ -1225,16 +1248,21 @@ static void dump_pixel(const char *mode,const ctr_scene_state *state,bool comma)
         bound_pixel_metadata.regs.spi_ps_in_control_0,bound_pixel_metadata.regs.spi_ps_input_cntls[0]);
     if(expected_texture)printf(",%u",bound_pixel_metadata.regs.spi_ps_input_cntls[1]);
     fputs("],\"uniforms\":[",stdout);
-    for(unsigned i=0;i<32;++i)printf("%s%u",i?",":"",bound_pixel_uniforms[i]);
+    for(unsigned i=0;i<bound_pixel_uniform_count;++i)printf("%s%u",i?",":"",bound_pixel_uniforms[i]);
     fputs("],\"stages\":[",stdout);
     for(unsigned stage=0;stage<6;++stage) {
         printf("%s[",stage?",":"");
         for(unsigned offset=0;offset<5;++offset)printf("%s%u",offset?",":"",state->registers[ctr_tev_registers[stage]+offset]);
         fputc(']',stdout);
     }
-    fputs("]}",stdout);
+    if(expected_buffered()) {
+        fputs("],\"buffer_color\":[",stdout);
+        for(unsigned lane=0;lane<4;++lane)printf("%s%u",lane?",":"",(state->registers[0xfd]>>(lane*8u))&255u);
+        printf("],\"buffer_update\":[%u,%u]}",(state->registers[0xe0]>>8)&15u,(state->registers[0xe0]>>12)&15u);
+    } else fputs("]}",stdout);
 }
 static void combiner_programs(bool dump);
+static void buffer_programs(bool dump);
 static void textured_bindings(bool dump_programs) {
     uint8_t pixels[16u*16u*4u],bytes[1024]={0};texture_pixels(pixels,16,16);
     ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
@@ -1259,7 +1287,7 @@ static void textured_bindings(bool dump_programs) {
                 if(dump_programs)dump_pixel(tev?"modulate":"replace",&state,tev!=0u);
                 assert(backend.end(backend.context,&surface));clean(&scene);
             }
-    if(dump_programs) { combiner_programs(true);fputs("]}\n",stdout); }
+    if(dump_programs) { combiner_programs(true);buffer_programs(true);fputs("]}\n",stdout); }
 }
 static void tev_row(ctr_scene_state *state,unsigned stage,uint32_t sources,uint32_t operands,
                     uint32_t operations,uint32_t constant,uint32_t scale) {
@@ -1323,6 +1351,253 @@ static void combiner_programs(bool dump) {
         assert(backend.draw(backend.context,&state,vertices,3,expected_texture));
         if(dump) { char mode[32];snprintf(mode,sizeof(mode),"combiner-%02u",sample);dump_pixel(mode,&state,true); }
         assert(backend.end(backend.context,&surface));clean(&scene);
+    }
+}
+/* These byte references use the history of prior stage outputs, rather than
+ * the implementation's visible/pending registers. At stage N, each buffer
+ * channel is the newest selected output from stages <=N-2, or the initial
+ * color; stage zero instead sees zero. */
+static unsigned original_tev_result(unsigned op,const unsigned a[3]) {
+    int v;
+    switch(op) {
+    case 0:v=(int)a[0];break;
+    case 1:v=(int)(a[0]*a[1]/255u);break;
+    case 2:v=(int)(a[0]+a[1]);break;
+    case 3:v=(int)(a[0]+a[1])-128;break;
+    case 4:v=(int)((a[0]*a[2]+a[1]*(255u-a[2]))/255u);break;
+    case 5:v=(int)a[0]-(int)a[1];break;
+    case 8:v=(int)(a[0]*a[1]/255u+a[2]);break;
+    case 9:v=(int)(((a[0]+a[1]>255u?255u:a[0]+a[1])*a[2])/255u);break;
+    default:assert(!"Unsupported original TEV operation");v=0;break;
+    }
+    return v<0?0u:v>255?255u:(unsigned)v;
+}
+static void original_buffer_reference(const ctr_scene_state *state,const uint8_t primary[4],
+                                       const uint8_t texture[4],uint8_t output[4]) {
+    uint8_t history[6][4]={{0}};
+    for(unsigned stage=0;stage<6;++stage) {
+        unsigned base=ctr_tev_registers[stage];
+        uint8_t buffered[4],constant[4];
+        for(unsigned lane=0;lane<4;++lane) {
+            constant[lane]=(uint8_t)(state->registers[base+3u]>>(lane*8u));
+            buffered[lane]=stage?(uint8_t)(state->registers[0xfd]>>(lane*8u)):0u;
+            unsigned updates=(state->registers[0xe0]>>(lane==3u?12u:8u))&15u;
+            for(unsigned earlier=0;earlier+2u<=stage && earlier<4u;++earlier)
+                if(updates&(1u<<earlier))buffered[lane]=history[earlier][lane];
+        }
+        for(unsigned lane=0;lane<4;++lane) {
+            unsigned side=lane==3u,op=(state->registers[base+2u]>>(side*16u))&15u;
+            unsigned values[3]={0};
+            for(unsigned arg=0;arg<original_tev_arguments(op);++arg) {
+                unsigned source=(state->registers[base]>>(side*16u+arg*4u))&15u;
+                unsigned operand=(state->registers[base+1u]>>((side?12u:0u)+arg*4u))&(side?7u:15u);
+                const uint8_t *bytes;
+                switch(source) {
+                case 0:bytes=primary;break;
+                case 3:bytes=texture;break;
+                case 13:bytes=buffered;break;
+                case 14:bytes=constant;break;
+                case 15:assert(stage);bytes=history[stage-1u];break;
+                default:assert(!"Unsupported original TEV source");bytes=primary;break;
+                }
+                unsigned channel=lane;
+                if(side) { const unsigned channels[4]={3,0,1,2};channel=channels[operand/2u]; }
+                else switch(operand&14u) {
+                case 0:break;
+                case 2:channel=3;break;
+                case 4:channel=0;break;
+                case 8:channel=1;break;
+                case 12:channel=2;break;
+                default:assert(!"Unsupported original TEV operand");break;
+                }
+                values[arg]=(operand&1u)?255u-bytes[channel]:bytes[channel];
+            }
+            unsigned value=original_tev_result(op,values);
+            unsigned scale=(state->registers[base+4u]>>(side*16u))&3u;
+            value*=1u<<scale;history[stage][lane]=(uint8_t)(value>255u?255u:value);
+        }
+    }
+    memcpy(output,history[5],4);
+}
+static float pixel_model_source(float regs[11][4],bool valid[11][4],unsigned selector,unsigned lane) {
+    float value;
+    if(selector>=256u) {
+        unsigned at=(selector-256u)*4u+lane;assert(at<bound_pixel_uniform_count);
+        memcpy(&value,&bound_pixel_uniforms[at],4);
+    } else { assert(selector<11u && valid[selector][lane]);value=regs[selector][lane]; }
+    return value;
+}
+/* Execute only the independently decoded scalar instructions actually passed
+ * to GX2. This is a program/API model, not a GPU rasterizer or hardware proof. */
+static unsigned execute_pixel_model(const uint8_t primary[4],const uint8_t texture[4],uint8_t output[4]) {
+    float regs[11][4]={{0}};bool valid[11][4]={{false}};unsigned instructions=0,samples=0;
+    for(unsigned lane=0;lane<4;++lane) { regs[0][lane]=(float)primary[lane]/255.0f;valid[0][lane]=true; }
+    for(unsigned cf=0;cf<128u;cf+=8u) {
+        uint32_t a=little32(bound_pixel_program+cf),b=little32(bound_pixel_program+cf+4u);
+        if(b==UINT32_C(0x80800000)) {
+            assert(expected_texture && !samples++);
+            for(unsigned lane=0;lane<4;++lane) { regs[2][lane]=(float)texture[lane]/255.0f;valid[2][lane]=true; }
+        } else if((b&UINT32_C(0xfe03ffff))==UINT32_C(0xa0000000)) {
+            unsigned length=((b>>18)&127u)+1u;
+            for(unsigned index=0;index<length;++index) {
+                unsigned at=a*8u+index*8u;assert(at+8u<=bound_pixel_metadata.size);
+                uint32_t x=little32(bound_pixel_program+at),y=little32(bound_pixel_program+at+4u);
+                unsigned op=(y>>7)&2047u,dest=(y>>21)&127u,lane=(y>>29)&3u;
+                float left=pixel_model_source(regs,valid,x&511u,(x>>10)&3u),value;
+                if(x&(1u<<12))left=-left;
+                if(op==20u) { int integer=(int)left;value=(float)(integer-(left<(float)integer)); }
+                else if(op==25u)value=left;
+                else {
+                    float right=pixel_model_source(regs,valid,(x>>13)&511u,(x>>23)&3u);
+                    if(x&(1u<<25))right=-right;
+                    switch(op) {
+                    case 0:value=left+right;break;
+                    case 2:value=left*right;break;
+                    case 3:value=left>right?left:right;break;
+                    case 4:value=left<right?left:right;break;
+                    default:assert(!"Unsupported captured scalar instruction");value=0;break;
+                    }
+                }
+                assert(dest<bound_pixel_metadata.regs.sq_pgm_resources_ps);
+                regs[dest][lane]=value;valid[dest][lane]=true;++instructions;
+            }
+        } else {
+            assert(b==UINT32_C(0x94200688) && samples==(expected_texture?1u:0u));
+            unsigned source=(a>>15)&127u;
+            for(unsigned lane=0;lane<4;++lane) {
+                float value=pixel_model_source(regs,valid,source,lane)*255.0f+0.5f;
+                output[lane]=(uint8_t)(value<0.0f?0u:value>255.0f?255u:(unsigned)value);
+            }
+            return instructions;
+        }
+    }
+    assert(!"Missing captured pixel export");return 0;
+}
+static unsigned buffer_pixel_vectors,buffer_max_instructions;
+static void check_buffer_pixels(const ctr_scene_state *state) {
+    static const uint8_t primary[6][4]={{0,0,0,255},{255,255,255,255},{17,83,199,47},
+        {1,254,127,128},{255,0,255,0},{128,129,130,131}};
+    static const uint8_t texels[6][4]={{0,255,127,0},{255,0,1,255},{197,53,17,233},
+        {254,1,128,127},{0,0,0,0},{127,128,129,254}};
+    for(unsigned sample=0;sample<6;++sample) {
+        uint8_t expected[4],actual[4];original_buffer_reference(state,primary[sample],texels[sample],expected);
+        unsigned n=execute_pixel_model(primary[sample],texels[sample],actual);
+        if(n>buffer_max_instructions)buffer_max_instructions=n;
+        assert(!memcmp(actual,expected,4));++buffer_pixel_vectors;
+    }
+}
+static void buffer_base(ctr_scene_state *state,unsigned mask,unsigned consume) {
+    state->register_defined[0xe0]=state->register_defined[0xfd]=15u;
+    state->registers[0xe0]=mask<<8;state->registers[0xfd]=0x2fab5313u;
+    for(unsigned stage=0;stage<6;++stage)
+        tev_row(state,stage,stage>consume?0x000f000fu:stage==consume?0x000d000du:0x000e000eu,
+            0,0,0x953dc571u^(stage*0x172b394du),0);
+}
+static void buffer_programs(bool dump) {
+    uint8_t pixels[16u*16u*4u],bytes[1024]={0};texture_pixels(pixels,16,16);
+    ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
+    reset();ctr_scene_state state;ctr_vertex vertices[3];textured_setup(&state,vertices);
+    ctr_scene_texture texture={pixels,16,16,0x18010000u,0,0};expected_texture=&texture;
+    ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+    ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+    assert(backend.begin(backend.context,&surface));
+    /* Every RGB/alpha update combination, observed at each stage, distinguishes
+     * the zero, initial-color and two-stage delayed histories. */
+    for(unsigned consume=0;consume<6;++consume)for(unsigned mask=0;mask<256;++mask) {
+        buffer_base(&state,mask,consume);rectangle_count=0;
+        assert(backend.draw(backend.context,&state,vertices,3,&texture));check_buffer_pixels(&state);
+        if(dump && ((consume<2u && !mask) || (consume>=2u && !(mask%64u)))) {
+            char mode[40];snprintf(mode,sizeof(mode),"buffer-stage-%u-mask-%02x",consume,mask);dump_pixel(mode,&state,true);
+        }
+    }
+    const unsigned ops[8]={0,1,2,3,4,5,8,9},rgb_operands[10]={0,1,2,3,4,5,8,9,12,13};
+    for(unsigned rgb=0;rgb<8;++rgb)for(unsigned alpha=0;alpha<8;++alpha) {
+        buffer_base(&state,0xa5u,5);
+        tev_row(&state,5,0x0e3d0e3du,0,ops[rgb]|(ops[alpha]<<16),0x9d53c725u,(rgb%3u)|((alpha%3u)<<16));
+        rectangle_count=0;assert(backend.draw(backend.context,&state,vertices,3,&texture));check_buffer_pixels(&state);
+        if(dump && rgb==alpha) { char mode[32];snprintf(mode,sizeof(mode),"buffer-operation-%u",ops[rgb]);dump_pixel(mode,&state,true); }
+    }
+    /* Put buffer in every interpolation argument with every admitted RGB/A
+     * operand, including cross-channel/one-minus and independent scale. */
+    for(unsigned slot=0;slot<3;++slot)for(unsigned rgb=0;rgb<10;++rgb)for(unsigned alpha=0;alpha<8;++alpha) {
+        buffer_base(&state,0x5au,5);
+        unsigned selectors[3]={14,3,14};selectors[slot]=13u;
+        unsigned src=selectors[0]|selectors[1]<<4|selectors[2]<<8;
+        unsigned mods=rgb_operands[rgb]|rgb_operands[(rgb+3u)%10u]<<4|rgb_operands[(rgb+6u)%10u]<<8|
+            alpha<<12|((alpha+3u)%8u)<<16|((alpha+5u)%8u)<<20;
+        tev_row(&state,5,src|(src<<16),mods,0x00040004u,0x953dc571u,rgb%3u|((alpha%3u)<<16));
+        rectangle_count=0;assert(backend.draw(backend.context,&state,vertices,3,&texture));check_buffer_pixels(&state);
+        if(dump && !slot && !alpha) { char mode[32];snprintf(mode,sizeof(mode),"buffer-operand-%u",rgb_operands[rgb]);dump_pixel(mode,&state,true); }
+    }
+    /* A passthrough stage still publishes pending history and may update it.
+     * The active-zero case must initialize buffer registers despite zero masks
+     * and zero initial color; every pixel invocation starts a fresh history. */
+    for(unsigned sample=0;sample<10;++sample) {
+        buffer_base(&state,0xffu,5);
+        if(sample==0u || sample==1u)for(unsigned stage=1;stage<=3;++stage)
+            tev_row(&state,stage,0x000f000fu,0,0,0,0);
+        if(sample==1u)state.registers[0xe0]=0x9600u;
+        if(sample==2u)state.registers[0xe0]=state.registers[0xfd]=0u;
+        if(sample==3u) {
+            for(unsigned stage=0;stage<6;++stage)
+                tev_row(&state,stage,0x03ed03edu,0x0035759du,0x00040004u,
+                    0x953dc571u^(stage*0x11111111u),0x00020002u);
+        }
+        if(sample==4u)expected_texture=NULL;
+        if(sample>=5u && sample<9u) {
+            unsigned bit=1u<<(sample-5u),consume=sample-3u;
+            buffer_base(&state,bit|(bit<<4),consume);
+            /* Immediately following the passthrough, the consumer must see
+             * the newly published earlier output rather than initial color.
+             * This also covers stage4, which cannot select an update itself. */
+            tev_row(&state,consume-1u,0x000f000fu,0,0,0,0);
+        }
+        if(sample==9u) {
+            buffer_base(&state,0x22u,3);
+            /* Stage1's passthrough must write its selected result to pending;
+             * the different stage2 constant cannot substitute for that write. */
+            tev_row(&state,1,0x000f000fu,0,0,0,0);
+        }
+        rectangle_count=0;assert(backend.draw(backend.context,&state,vertices,3,expected_texture));check_buffer_pixels(&state);
+        if(dump) { char mode[32];snprintf(mode,sizeof(mode),"buffer-special-%u",sample);dump_pixel(mode,&state,true); }
+        expected_texture=&texture;
+    }
+    /* Returning to completely disabled state rebinds the old GPR and uniform
+     * limits; stale buffer constants or allocation cannot affect the result. */
+    setup(&state,vertices);rectangle_count=0;expected_texture=NULL;expected_uv=false;
+    assert(backend.draw(backend.context,&state,vertices,3,NULL));check_buffer_pixels(&state);
+    assert(bound_pixel_uniform_count==32u && bound_pixel_metadata.regs.sq_pgm_resources_ps==9u);
+    assert(backend.end(backend.context,&surface));clean(&scene);
+}
+static void buffer_failures(void) {
+    uint8_t bytes[1024]={0};ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
+    for(unsigned retained=0;retained<2;++retained)for(unsigned failure=0;failure<32;++failure) {
+        reset();ctr_scene_state state;ctr_vertex vertices[3];setup(&state,vertices);buffer_base(&state,0xa5u,5);
+        ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+        ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+        assert(backend.begin(backend.context,&surface));
+        uint8_t saved[8192];unsigned saved_size=0;
+        if(retained) {
+            assert(backend.draw(backend.context,&state,vertices,3,NULL));
+            saved_size=bound_pixel_metadata.size;memcpy(saved,bound_pixel_program,saved_size);
+        }
+        unsigned allocations=alloc_attempts;
+        if(failure<4u)state.register_defined[failure%2u?0xfd:0xe0]=failure<2u?0u:14u;
+        else if(failure<28u) {
+            unsigned bit=failure-4u;if(bit>=8u)bit+=8u;
+            state.registers[0xe0]|=1u<<bit;
+        } else if(failure<30u) {
+            state.registers[0xe0]=state.registers[0xfd]=0u;
+            tev_row(&state,5,0x000f000fu,0,0,0,0);
+            state.register_defined[failure%2u?0xfd:0xe0]=14u;
+        } else {
+            tev_row(&state,5,failure==30u?0x000c000du:0x000d000cu,0,0,0,0);
+        }
+        assert(!backend.draw(backend.context,&state,vertices,3,NULL));
+        assert(scene.result==CTR_WIIU_GX2_SCENE_SHADER && scene.draws==retained && gpu_draws==retained &&
+            uniform_uploads==retained && alloc_attempts==allocations && compile_attempts==retained+1u);
+        if(retained)assert(saved_size==bound_pixel_metadata.size && !memcmp(saved,bound_pixel_program,saved_size));
+        backend.abort(backend.context);clean(&scene);
     }
 }
 static void texture_reuse(void) {
@@ -1448,7 +1723,9 @@ int main(int argc,char **argv) {
         depth_failures_format(format?3u:0u);depth_readback_observer_format(format?3u:0u);
     }
     stencil_bindings();stencil_failures();
-    textured_bindings(false);combiner_programs(false);texture_reuse();texture_dimensions();texture_failures();
+    textured_bindings(false);combiner_programs(false);buffer_programs(false);buffer_failures();
+    texture_reuse();texture_dimensions();texture_failures();
+    printf("PreviousBuffer native program model: %u independent pixel vectors, maximum %u scalar ALUs, all stage/mask histories and retained rejection passed\n",buffer_pixel_vectors,buffer_max_instructions);
     puts("GX2 native API model: lifetime, texture/depth retirement/quarantine, original inputs, sampler/TEV bytecode, fragment/blend/depth mappings, 1048576 alpha, 1048576 D16 and 524288 stencil comparisons, 1572864 stencil action/mask vectors, pitched paired upload, scissor and readback passed");
     return 0;
 }

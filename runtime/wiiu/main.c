@@ -1807,7 +1807,7 @@ int main(int argc, char **argv) {
 #if defined(CTR_GX2_GUEST)
     result=gsp_ready && gsp_pass_seen && drawn_frame_submitted &&
 #ifdef CTR_TEXTURED_HOMEBREW
-        gx2_scene.draws>=9u &&
+        gx2_scene.draws>=10u &&
 #else
         gx2_scene.draws>=4u &&
 #endif

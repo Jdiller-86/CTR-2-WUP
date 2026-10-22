@@ -52,8 +52,8 @@ typedef struct {
     size_t depth_size;
     uint32_t depth_address;
     unsigned depth_format,depth_bytes;
-    bool pending,depth_enabled;
-    uint32_t pixel_constants[8][4];
+    bool pending,depth_enabled,buffered;
+    uint32_t pixel_constants[9][4];
 } scene_private;
 
 static bool retire(ctr_wiiu_gx2_scene *s,scene_private *p);
@@ -156,8 +156,10 @@ static void put32(uint8_t *p,uint32_t value) {
 }
 /* Original scalar Latte encoder. R0 is primary, R1 original guest UV, R2
  * Texture0. R3/R7 alternate Previous/output; R4..R6 snapshot all operands before
- * any output lane changes. R8 is scratch. Independent LAST groups avoid a VLIW
- * bank scheduler. Constants 0..5 contain stage bytes; 6/7 are numeric helpers. */
+ * any output lane changes. R8 is scratch; buffered programs additionally use
+ * R9 visible/R10 pending combiner bytes. Independent LAST groups avoid a VLIW
+ * bank scheduler. Constants 0..5 contain stage bytes; 6/7 are numeric helpers
+ * and buffered programs use constant 8 for the initial combiner bytes. */
 static uint32_t bits(float value);
 static void pixel_op(scene_private *p,unsigned *count,unsigned opcode,unsigned a,unsigned ac,
                       unsigned b,unsigned bc,bool negate,unsigned dest,unsigned lane) {
@@ -189,6 +191,7 @@ static void pixel_combine(scene_private *p,unsigned *count,unsigned op,unsigned 
 static bool pixel_shader(scene_private *p,const ctr_scene_state *state,bool textured) {
     ctr_tev_program tev;
     if(!ctr_tev_decode(state->registers,state->register_defined,textured,&tev))return false;
+    p->buffered=ctr_tev_buffered(&tev);
     uint8_t *program=p->pixel_program;memset(program,0,PIXEL_BYTES);
     unsigned count=0,previous=3,destination=7;
     for(unsigned stage=0;stage<CTR_TEV_STAGES;++stage)
@@ -198,6 +201,8 @@ static bool pixel_shader(scene_private *p,const ctr_scene_state *state,bool text
      * Integer products/sums stay exactly representable; no fused operation. */
     p->pixel_constants[6][2]=UINT32_C(0x3b808081);p->pixel_constants[6][3]=bits(0.5f);
     for(unsigned lane=0;lane<4;++lane)p->pixel_constants[7][lane]=bits(lane<3u?(float)(1u<<lane):0.0f);
+    if(p->buffered)for(unsigned lane=0;lane<4;++lane)
+        p->pixel_constants[8][lane]=bits((float)tev.buffer_color[lane]);
     for(unsigned lane=0;lane<4;++lane) {
         pixel_op(p,&count,2,0,lane,262,0,false,0,lane);
         pixel_op(p,&count,0,0,lane,262,3,false,0,lane);
@@ -208,32 +213,49 @@ static bool pixel_shader(scene_private *p,const ctr_scene_state *state,bool text
             pixel_op(p,&count,20,2,lane,0,0,false,2,lane);
         }
     }
+    if(p->buffered)for(unsigned lane=0;lane<4;++lane) {
+        pixel_op(p,&count,25,263,3,0,0,false,9,lane);
+        pixel_op(p,&count,25,264,lane,0,0,false,10,lane);
+    }
     for(unsigned stage=0;stage<CTR_TEV_STAGES;++stage) {
         const ctr_tev_stage *v=&tev.stages[stage];
-        if(ctr_tev_passthrough(v))continue;
-        for(unsigned lane=0;lane<4;++lane) {
-            unsigned side=lane==3u;
-            for(unsigned arg=0;arg<ctr_tev_arguments(v->operation[side]);++arg) {
-                unsigned source=v->source[side][arg],operand=v->operand[side][arg];
-                unsigned reg=source==0u?0u:source==3u?2u:source==14u?256u+stage:previous;
-                const unsigned alpha_channels[4]={3,0,1,2};
-                unsigned channel=side?alpha_channels[operand/2u]:
-                    operand<2u?lane:operand<4u?3u:operand<6u?0u:operand<10u?1u:2u;
-                pixel_op(p,&count,25,reg,channel,0,0,false,4u+arg,lane);
-                if(operand&1u)pixel_op(p,&count,0,262,0,4u+arg,lane,true,4u+arg,lane);
+        bool passthrough=ctr_tev_passthrough(v);
+        if(!passthrough) {
+            for(unsigned lane=0;lane<4;++lane) {
+                unsigned side=lane==3u;
+                for(unsigned arg=0;arg<ctr_tev_arguments(v->operation[side]);++arg) {
+                    unsigned source=v->source[side][arg],operand=v->operand[side][arg];
+                    unsigned reg=source==0u?0u:source==3u?2u:source==13u?9u:
+                        source==14u?256u+stage:previous;
+                    const unsigned alpha_channels[4]={3,0,1,2};
+                    unsigned channel=side?alpha_channels[operand/2u]:
+                        operand<2u?lane:operand<4u?3u:operand<6u?0u:operand<10u?1u:2u;
+                    pixel_op(p,&count,25,reg,channel,0,0,false,4u+arg,lane);
+                    if(operand&1u)pixel_op(p,&count,0,262,0,4u+arg,lane,true,4u+arg,lane);
+                }
             }
-        }
-        for(unsigned lane=0;lane<4;++lane) {
-            unsigned side=lane==3u;
-            pixel_combine(p,&count,v->operation[side],destination,lane);
-            pixel_op(p,&count,3,destination,lane,263,3,false,destination,lane);
-            pixel_op(p,&count,4,destination,lane,262,0,false,destination,lane);
-            if(v->scale[side]) {
-                pixel_op(p,&count,2,destination,lane,263,v->scale[side],false,destination,lane);
+            for(unsigned lane=0;lane<4;++lane) {
+                unsigned side=lane==3u;
+                pixel_combine(p,&count,v->operation[side],destination,lane);
+                pixel_op(p,&count,3,destination,lane,263,3,false,destination,lane);
                 pixel_op(p,&count,4,destination,lane,262,0,false,destination,lane);
+                if(v->scale[side]) {
+                    pixel_op(p,&count,2,destination,lane,263,v->scale[side],false,destination,lane);
+                    pixel_op(p,&count,4,destination,lane,262,0,false,destination,lane);
+                }
             }
+            unsigned swap=previous;previous=destination;destination=swap;
         }
-        unsigned swap=previous;previous=destination;destination=swap;
+        if(p->buffered) {
+            /* PICA publishes the pending bytes before applying this stage's
+             * selected output to pending. This one-stage delay also advances
+             * across passthrough stages and stages 4/5 with no update bits. */
+            for(unsigned lane=0;lane<4;++lane)
+                pixel_op(p,&count,25,10,lane,0,0,false,9,lane);
+            if(stage<4u)for(unsigned lane=0;lane<4;++lane)
+                if(tev.buffer_update[lane==3u]&(1u<<stage))
+                    pixel_op(p,&count,25,previous,lane,0,0,false,10,lane);
+        }
     }
     for(unsigned lane=0;lane<4;++lane)pixel_op(p,&count,2,previous,lane,262,2,false,previous,lane);
     if(count>PIXEL_MAX_ALUS)return false;
@@ -254,7 +276,7 @@ static bool pixel_shader(scene_private *p,const ctr_scene_state *state,bool text
     memset(&p->pixel,0,sizeof(p->pixel));
     p->pixel.size=(PIXEL_ALU_OFFSET+count*8u+255u)&~255u;
     p->pixel.program=program;p->pixel.mode=GX2_SHADER_MODE_UNIFORM_REGISTER;
-    p->pixel.regs.sq_pgm_resources_ps=9u;p->pixel.regs.sq_pgm_exports_ps=2;
+    p->pixel.regs.sq_pgm_resources_ps=p->buffered?11u:9u;p->pixel.regs.sq_pgm_exports_ps=2;
     p->pixel.regs.spi_ps_in_control_0=UINT32_C(0x14000000)|(textured?2u:1u);
     p->pixel.regs.num_spi_ps_input_cntl=textured?2u:1u;
     p->pixel.regs.spi_ps_input_cntls[0]=UINT32_C(0x100);
@@ -632,7 +654,7 @@ static bool draw(void *context,const ctr_scene_state *state,const ctr_vertex *ve
     GX2SetShaderModeEx(GX2_SHADER_MODE_UNIFORM_REGISTER,64,64,0,0,184,192);
     GX2SetFetchShader(&p->fetch);GX2SetVertexShader(&p->vertex);GX2SetPixelShader(&p->pixel);
     if(texture) { GX2SetPixelTexture(&p->texture,0);GX2SetPixelSampler(&p->sampler,0); }
-    GX2SetPixelUniformReg(0,32,p->pixel_constants);
+    GX2SetPixelUniformReg(0,p->buffered?36u:32u,p->pixel_constants);
     GX2SetAttribBuffer(0,count*VERTEX_STRIDE,VERTEX_STRIDE,p->vertices);
     for(unsigned uniform=0;uniform<CTR_SHADER_UNIFORMS;++uniform)if(p->compiled->uniform_used[uniform])
         GX2SetVertexUniformReg(uniform*4u,4,state->shader.uniforms[uniform]);

@@ -552,7 +552,7 @@ static void guest_texture_rollback(void) {
         }
         if(kind==9) { trim(&l);add(&l,0xfa,6); }
         if(kind==10) { trim(&l);add(&l,0xf9,6); }
-        if(kind==11) { trim(&l);add(&l,0xe0,1u<<8); }
+        if(kind==11) { trim(&l);add(&l,0xe0,1u); } /* Unsupported fog, not admitted buffer updates. */
         if(kind==12)insert_at(&l,find(&l,0x22f,1),0xf8,UINT32_C(0xe000e)); /* Undefined constant. */
         if(kind==13)insert_at(&l,find(&l,0x22f,1),0xf8,UINT32_C(0x40004));
         if(kind==14) { trim(&l);add(&l,0xc0,UINT32_C(0xf000f)); }

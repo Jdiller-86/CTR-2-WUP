@@ -45,6 +45,9 @@ class Case:
     textured: bool = True
     output: tuple = ()
     draw_output: tuple = ()
+    buffer_color: tuple = (0, 0, 0, 0)
+    buffer_update: tuple = (0, 0)
+    buffer_setup: tuple | None = None
 
 
 def original_cases():
@@ -92,7 +95,7 @@ def original_cases():
         dimensions=(1024,8),points=((0,0),(512,0),(0,512),(512,512)),
         uv=((F(-16),F(16)),(F(16),F(-16)),(F(1,2),F(1,2)),(F(15),F(-15))),
         wrap=(2,3),scissor=(3,253,253,255,255)))
-    return cases+tev_cases()+fragment_cases()+blend_cases()
+    return cases+tev_cases()+fragment_cases()+blend_cases()+buffer_cases()
 
 
 TEV_OPERATIONS = (0, 1, 2, 3, 4, 5, 8, 9)
@@ -142,9 +145,89 @@ def tev_cases():
                         tev=(tev_stage(rgb=(14, 0, 0), constant=(19, 83, 171, 47)),)),
                    Case('tev-previous-alpha-swizzle', tev=(tev_stage(), tev_stage(rgb=(15, 15, 15),
                         operation=(4, 5), operands=((2, 5, 12), (0, 7, 0)))))))
-    for error in ('dot3', 'texture1', 'operand', 'scale', 'buffer', 'previous', 'constant'):
+    for error in ('dot3', 'texture1', 'operand', 'scale', 'fog', 'previous', 'constant'):
         result.append(Case('late-tev-'+error, tev=tev_chain()[:5] if error == 'constant' else tev_chain(), late_error=error))
     return result
+
+
+def buffer_cases():
+    """Small exact images distinguish delayed RGB/alpha buffer publication.
+
+    The full selector domain is only 16 RGB masks × 16 alpha masks. Independent
+    colors at each stage make the latest selected result observable per side.
+    """
+    initial = (17, 199, 43, 157)
+    constants = ((31, 73, 127, 181), (211, 47, 89, 13),
+                 (59, 239, 7, 109), (163, 23, 193, 251), (83, 149, 227, 61))
+    constant_stages = tuple(tev_stage(rgb=(14, 0, 0), constant=value) for value in constants)
+    buffered = tev_stage(rgb=(13, 0, 0))
+    passthrough = tev_stage(rgb=(15, 0, 0))
+    def case(name, **kwargs):
+        return Case(name, side=8, points=((0, 0), (8, 0), (0, 8), (8, 8)),
+                    scissor=(0, 0, 0, 7, 7), **kwargs)
+
+    cases = [case(f'buffer-masks-{rgb:01x}-{alpha:01x}', textured=False,
+                  tev=constant_stages+(buffered,), buffer_color=initial,
+                  buffer_update=(rgb, alpha)) for rgb in range(16) for alpha in range(16)]
+    for stage in range(6):
+        cases.append(case(f'buffer-visible-stage-{stage}', textured=False,
+                          tev=constant_stages[:stage]+(buffered,),
+                          buffer_color=initial, buffer_update=(15, 15)))
+    cases.extend((
+        case('buffer-zero-initial-active-source', textured=False, tev=(buffered,)),
+        case('buffer-passthrough-publication', tev=(tev_stage(), passthrough, buffered),
+             buffer_color=initial, buffer_update=(1, 1)),
+        case('buffer-passthrough-updates', tev=(tev_stage(), passthrough, passthrough, buffered),
+             buffer_color=initial, buffer_update=(2, 2)),
+        case('buffer-rgb-alpha-from-different-stages',
+             tev=(tev_stage(), constant_stages[1], passthrough, buffered),
+             buffer_color=initial, buffer_update=(1, 2)),
+    ))
+    for index, operation in enumerate(TEV_OPERATIONS):
+        stage = tev_stage(rgb=(13, 14, 15), alpha=(13, 15, 14),
+                          operation=(operation, TEV_OPERATIONS[-1-index]),
+                          constant=(37, 199, 83, 157))
+        cases.append(case(f'buffer-operation-{operation}',
+                          tev=(tev_stage(), constant_stages[1], stage),
+                          buffer_color=initial, buffer_update=(1, 1)))
+    for index, operand in enumerate(RGB_OPERANDS):
+        stage = tev_stage(rgb=(13, 13, 13), operation=(4, 4),
+                          operands=((operand, RGB_OPERANDS[(index+3) % 10], RGB_OPERANDS[(index+6) % 10]),
+                                    (index % 8, (index+3) % 8, (index+5) % 8)))
+        cases.append(case(f'buffer-operand-{operand}',
+                          tev=(tev_stage(), passthrough, stage),
+                          buffer_color=initial, buffer_update=(1, 1)))
+    for rgb in range(3):
+        for alpha in range(3):
+            cases.append(case(f'buffer-scale-{rgb}-{alpha}',
+                              tev=(tev_stage(), passthrough,
+                                   tev_stage(rgb=(13, 14, 13), operation=(1, 3),
+                                             constant=(71, 181, 139, 149), scale=(rgb, alpha))),
+                              buffer_color=initial, buffer_update=(1, 1)))
+
+    packed = sum(value << (8*lane) for lane, value in enumerate(initial))
+    split = tuple((reg, value, 1 << byte) for reg, value in ((0xe0, 0xa500), (0xfd, packed))
+                  for byte in range(4))
+    cases.append(case('buffer-split-register-definition', textured=False,
+                      tev=constant_stages+(buffered,), buffer_color=initial,
+                      buffer_update=(5, 10), buffer_setup=split))
+    cases.append(case('buffer-retained-byte-updates', textured=False,
+                      tev=constant_stages+(buffered,), buffer_color=initial,
+                      buffer_update=(5, 10), indices=((0, 1, 2), (0, 1, 2), (1, 3, 2)),
+                      draw_output=((), ((0xe0, 0x5a00, 2), (0xfd, 0x6b00002d, 9)),
+                                   ((0xe0, 0x9300, 2), (0xfd, 0x00d76500, 6)))))
+    omissions = {
+        'reserved': ((0xe0, 0, 15), (0xfd, 0, 15)),
+        'partial-mask': ((0xfd, 0, 15),),
+        'partial-color': ((0xe0, 0, 15),),
+        'missing-color': ((0xe0, 0, 15),),
+        'missing-mask': ((0xfd, 0, 15),),
+        'source-needs-color': ((0xe0, 0, 15),),
+    }
+    for error, setup in omissions.items():
+        cases.append(case('late-buffer-'+error, tev=tev_chain(),
+                          late_error='buffer-'+error, buffer_setup=setup))
+    return cases
 
 
 def output_state(*, function=1, reference=0, alpha=False, logic=3,
@@ -335,18 +418,22 @@ def case_stages(case):
     return stages+[tev_stage(rgb=(15, 0, 0))]*(6-len(stages))
 
 
-def tev_reference(stages, primary, texture):
-    """Independent rational byte-domain TEV; all inputs snapshot the prior stage."""
+def tev_reference(stages, primary, texture, buffer_color=(0, 0, 0, 0), buffer_update=(0, 0)):
+    """Rational byte-domain TEV with separate stage-visible and pending buffers.
+
+    Publication happens after every stage, independently of output arithmetic.
+    Selected stage0 channels become visible at stage2, not stage1.
+    """
     previous = (0, 0, 0, 0)
+    visible, pending = (0, 0, 0, 0), tuple(buffer_color)
     formulas = {0:lambda a,b,c:a, 1:lambda a,b,c:a*b/255,
                 2:lambda a,b,c:a+b, 3:lambda a,b,c:a+b-128,
                 4:lambda a,b,c:(a*c+b*(255-c))/255, 5:lambda a,b,c:a-b,
                 8:lambda a,b,c:a*b/255+c, 9:lambda a,b,c:min(F(255),a+b)*c/255}
     for stage, row in enumerate(stages):
         sources, operands, functions, constant, scales = row
-        if sources & 0x000f000f == 0x000f000f and not operands and not functions and not scales:
-            continue
-        colors = {0:primary, 3:texture, 14:tuple((constant >> (8*i)) & 255 for i in range(4)), 15:previous}
+        colors = {0:primary, 3:texture, 13:visible,
+                  14:tuple((constant >> (8*i)) & 255 for i in range(4)), 15:previous}
         next_color = []
         for lane in range(4):
             side = int(lane == 3)
@@ -363,6 +450,9 @@ def tev_reference(stages, primary, texture):
             integer = max(0, min(255, value.numerator//value.denominator))
             next_color.append(min(255, integer*(1 << (scales >> (16*side) & 3))))
         previous = tuple(next_color)
+        visible = pending
+        pending = tuple(previous[lane] if stage < 4 and buffer_update[int(lane == 3)] & (1 << stage)
+                        else pending[lane] for lane in range(4))
     return previous
 
 
@@ -473,7 +563,9 @@ def golden(case, texture):
     pixels = bytearray(BACKGROUND*case.side*case.side)
     fragments = 0
     shade_cache = {}
-    output = output_registers(case.output)
+    initial = ((0xe0, case.buffer_update[0] << 8 | case.buffer_update[1] << 12, 15),
+               (0xfd, sum(value << (8*lane) for lane,value in enumerate(case.buffer_color)), 15))
+    output = output_registers(initial+case.output)
     for draw, indices in enumerate(case.indices):
         if draw < len(case.draw_output): output = output_registers(case.draw_output[draw], output)
         points = tuple(tuple(map(F, case.points[i])) for i in indices)
@@ -506,9 +598,13 @@ def golden(case, texture):
                 u, v = (sum(weight*value[axis] for weight, value in zip(weights, uv)) for axis in range(2))
                 color = sampled_color(rgba,width,height,u,v,case.wrap,case.linear)
                 if case.tev:
-                    if color not in shade_cache:
-                        shade_cache[color] = bytes(tev_reference(case_stages(case), tuple(255*v for v in case.color), color))
-                    color = shade_cache[color]
+                    key = color, output[0xe0], output[0xfd]
+                    if key not in shade_cache:
+                        initial = tuple(output[0xfd] >> (8*lane) & 255 for lane in range(4))
+                        masks = tuple(output[0xe0] >> shift & 15 for shift in (8, 12))
+                        shade_cache[key] = bytes(tev_reference(case_stages(case), tuple(255*v for v in case.color),
+                                                               color, initial, masks))
+                    color = shade_cache[key]
                 elif case.modulate:
                     color = bytes(component*mask for component, mask in zip(color, case.color))
                 fragments += 1
@@ -546,7 +642,12 @@ def command_bytes(case):
     command(0x080, int(case.textured)); command(0x082, width << 16 | height)
     params = case.wrap[0] << 12 | case.wrap[1] << 8 | (32 if case.format >= 12 else 0) | (6 if case.linear else 0)
     command(0x083, params); command(0x084, 0); command(0x085, 0x1a000000 >> 3)
-    command(0x08e, case.format); command(0x08f, 0); command(0x0e0, 0); command(0x0fd, 0)
+    command(0x08e, case.format); command(0x08f, 0)
+    if case.buffer_setup is None:
+        command(0x0e0, case.buffer_update[0] << 8 | case.buffer_update[1] << 12)
+        command(0x0fd, sum(value << (8*lane) for lane,value in enumerate(case.buffer_color)))
+    else:
+        for write in case.buffer_setup: command(*write)
     for index, (base, row) in enumerate(zip((0xc0, 0xc8, 0xd0, 0xd8, 0xf0, 0xf8), case_stages(case))):
         for offset, value in enumerate(row):
             if not (case.late_error == 'constant' and index == 5 and offset == 3):
@@ -578,7 +679,16 @@ def command_bytes(case):
         elif case.late_error == 'texture1': command(0xf8, 0x40004)
         elif case.late_error == 'operand': command(0xf9, 6)
         elif case.late_error == 'scale': command(0xfc, 3)
-        elif case.late_error == 'buffer': command(0xe0, 1 << 8)
+        elif case.late_error == 'fog': command(0xe0, 1)
+        elif case.late_error.startswith('buffer-'):
+            error = case.late_error.removeprefix('buffer-')
+            if error == 'reserved': command(0xe0, 1 << 16)
+            elif error == 'partial-mask': command(0xe0, 0, 1)
+            elif error == 'partial-color': command(0xfd, 0, 1)
+            elif error == 'missing-color': command(0xe0, 1 << 8)
+            elif error == 'missing-mask': command(0xfd, 0x5b25c711)
+            elif error == 'source-needs-color': command(0xc0, 0xd000d)
+            else: raise ValueError('Unknown buffer rejection')
         elif case.late_error == 'previous': command(0xc0, 0xf000f)
         elif case.late_error == 'constant': command(0xf8, 0xe000e)
         elif case.late_error.startswith('output-'):
@@ -641,13 +751,22 @@ def decode_fragment_program(row, primary, texel):
     """
     program = bytes.fromhex(row['hex'])
     textured = row.get('textured', True)
-    if not 256 <= len(program) <= 8192 or len(program) % 256 or row['gprs'] != 9:
+    buffered = 'buffer_color' in row or 'buffer_update' in row
+    if buffered:
+        if set(('buffer_color', 'buffer_update')) - row.keys():
+            raise ValueError('Incomplete fragment buffer state')
+        if len(row['buffer_color']) != 4 or any(type(v) is not int or not 0 <= v <= 255 for v in row['buffer_color']):
+            raise ValueError('Invalid fragment buffer color')
+        if len(row['buffer_update']) != 2 or any(type(v) is not int or not 0 <= v <= 15 for v in row['buffer_update']):
+            raise ValueError('Invalid fragment buffer update mask')
+    gprs, uniform_count = (11, 36) if buffered else (9, 32)
+    if not 256 <= len(program) <= 8192 or len(program) % 256 or row['gprs'] != gprs:
         raise ValueError('Unexpected fragment storage/register allocation')
     count = 2 if textured else 1
     if row['interpolators'] != count or row['spi_ps_in_control_0'] != 0x14000000 | count or row['inputs'] != [0x100,0x101][:count]:
         raise ValueError('Unexpected fragment color/UV interpolation semantics')
     uniforms = row.get('uniforms', [])
-    if len(uniforms) != 32: raise ValueError('Missing fragment constants')
+    if len(uniforms) != uniform_count: raise ValueError('Missing fragment constants')
     constants = [struct.unpack('<f', struct.pack('<I', value))[0] for value in uniforms]
     if not all(math.isfinite(value) for value in constants): raise ValueError('Nonfinite fragment constants')
     registers = {(0, lane):binary32(value) for lane, value in enumerate(primary)}
@@ -659,7 +778,7 @@ def decode_fragment_program(row, primary, texel):
         used.update(byte_range)
         return struct.unpack_from('<'+'I'*count, program, at)
     def source(selector, channel, negative):
-        if 256 <= selector < 264: value = constants[(selector-256)*4+channel]
+        if 256 <= selector < 256+uniform_count//4: value = constants[(selector-256)*4+channel]
         elif (selector, channel) in registers: value = registers[(selector, channel)]
         else: raise ValueError('Undefined fragment source lane')
         return -value if negative else value
@@ -728,7 +847,8 @@ def validate_fragment_programs(path):
             primary = tuple((mask >> channel) & 1 for channel in range(3))+(1,)
             for texel in texels:
                 result = decode_fragment_program(row,primary,texel)
-                expected = tev_reference(row['stages'],tuple(255*v for v in primary),texel)
+                expected = tev_reference(row['stages'],tuple(255*v for v in primary),texel,
+                                         row.get('buffer_color',(0,0,0,0)),row.get('buffer_update',(0,0)))
                 if result['color'] != tuple(F(v,255) for v in expected):
                     raise ValueError(f"{row['mode']}: decoded fragment bytes differ: {result['color']} != {expected}")
                 max_instructions = max(max_instructions,result['alu_instructions']);cases += 1
@@ -770,6 +890,8 @@ def execute_case(binary, output, case):
     return {'name':case.name, 'format':case.format, 'dimensions':case.dimensions,
             'index_bytes':case.index_bytes, 'wrap':case.wrap, 'modulate':case.modulate,'linear':case.linear,'side':case.side,
             'tev_stages':case_stages(case), 'textured':case.textured,
+            'buffer_color':case.buffer_color, 'buffer_update':case.buffer_update,
+            'buffer_register_setup':case.buffer_setup,
             'output_register_writes':case.output, 'draw_output_register_writes':case.draw_output,
             'late_error':case.late_error or None, **result,
             'expected_rgba_sha256':hashlib.sha256(BACKGROUND*case.side*case.side if case.late_error else expected).hexdigest(),

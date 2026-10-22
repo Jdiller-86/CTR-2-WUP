@@ -103,5 +103,5 @@ report. These observations are distinct from picture/launcher confirmations.
 The [compiled guest draw adapter](guest-pica-draws.md) executes its separately
 bounded software subset or the optional guarded GX2 backend, including
 [nearest/bilinear Texture0 sampling, six-stage TEV and fragment output controls](textures.md).
-General shaders, mipmaps, DOT3/combiner buffers, geometry and full renderer compatibility
+General shaders, mipmaps, DOT3, geometry and full renderer compatibility
 remain unsupported.

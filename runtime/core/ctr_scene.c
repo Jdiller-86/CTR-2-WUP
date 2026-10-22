@@ -47,7 +47,6 @@ static ctr_scene_result target_pipeline(const ctr_scene_state *s,const ctr_scene
     static const unsigned disabled[]={0x08f,0x117,0x11b};
     for(unsigned i=0;i<sizeof(disabled)/sizeof(*disabled);++i)
         if(!configured(s,disabled[i],0u))return CTR_SCENE_UNSUPPORTED;
-    if(s->registers[0x0e0u])return CTR_SCENE_UNSUPPORTED;
     bool stencil=depth && depth->format==CTR_SCENE_DEPTH_D24S8;
     if(!stencil && (!configured(s,0x105u,0u) || !configured(s,0x106u,0u)))
         return CTR_SCENE_UNSUPPORTED;
@@ -77,7 +76,7 @@ static ctr_scene_result fragment(const ctr_scene_state *s,const ctr_scene_resour
     if((s->register_defined[0x064u] && !configured(s,0x064u,textured?1u:0u)) ||
        (s->register_defined[0x06fu] && !configured(s,0x06fu,textured?UINT32_C(0x103):3u)))
         return CTR_SCENE_UNSUPPORTED;
-    bool configured_tev=false;
+    bool configured_tev=s->register_defined[0x0e0u] || s->register_defined[0x0fdu];
     for(unsigned i=0;i<CTR_TEV_STAGES;++i)
         if(s->register_defined[ctr_tev_registers[i]])configured_tev=true;
     if(!textured && !bound && !configured_tev) {
@@ -86,8 +85,7 @@ static ctr_scene_result fragment(const ctr_scene_state *s,const ctr_scene_resour
             combiner->stages[i].source[0][0]=combiner->stages[i].source[1][0]=15u;
         return CTR_SCENE_OK;
     }
-    if(!configured(s,0x080u,textured?1u:0u) || s->registers[0x08fu] ||
-       s->registers[0x0e0u] || s->registers[0x0fdu])return CTR_SCENE_UNSUPPORTED;
+    if(!configured(s,0x080u,textured?1u:0u) || s->registers[0x08fu])return CTR_SCENE_UNSUPPORTED;
     if(!ctr_tev_decode(s->registers,s->register_defined,textured,combiner))return CTR_SCENE_UNSUPPORTED;
     if(!textured)return CTR_SCENE_OK;
     for(unsigned reg=0x082u;reg<=0x085u;++reg)
@@ -140,8 +138,7 @@ static bool fragment_value(unsigned reg,uint32_t value) {
     if(reg==0x083u)return !(value&~UINT32_C(0x3326)) &&
         ((value&6u)==0u || (value&6u)==6u) &&
         ((value>>8)&3u)!=1u && ((value>>12)&3u)!=1u;
-    if(reg==0x084u || (reg>=0x086u && reg<=0x08bu) ||
-       reg==0x08fu || reg==0x0e0u || reg==0x0fdu)return !value;
+    if(reg==0x084u || (reg>=0x086u && reg<=0x08bu) || reg==0x08fu)return !value;
     if(reg==0x085u)return value<=UINT32_MAX/8u;
     if(reg==0x08eu)return value<14u;
     return ctr_tev_register_value(reg,value);
