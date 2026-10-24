@@ -564,7 +564,7 @@ static void backend_full_target(void) {
     for(unsigned kind=0;kind<3;++kind) {
         state=initial;memcpy(pixels,old,sizeof(pixels));surface.bytes=pixels;
         padded_backend context={reference,sizeof(reference),kind==1u?256u:kind==2u?sizeof(reference)-1u:0u,0,0,0,0};
-        ctr_scene_backend backend={&context,padded_begin,padded_draw,padded_end,padded_abort,NULL,NULL};
+        ctr_scene_backend backend={&context,padded_begin,padded_draw,padded_end,padded_abort,NULL,NULL,NULL};
         CHECK(ctr_scene_execute_target_backend(&state,f.commands,f.command_bytes,&resources,&surface,
               UINT32_C(0x18010000),&backend,&report)==(kind?CTR_SCENE_BACKEND:CTR_SCENE_OK));
         CHECK(context.begins==1 && context.draws==2 && context.ends==1 && context.aborts==(kind?1u:0u));
@@ -576,7 +576,7 @@ static void backend_full_target(void) {
      * incomplete callback sets fail before any native invocation. */
     padded_backend context={reference,sizeof(reference),0,0,0,0,0};
     union { ctr_scene_backend backend;ctr_scene_report report; } alias;
-    alias.backend=(ctr_scene_backend){&context,padded_begin,padded_draw,padded_end,padded_abort,NULL,NULL};
+    alias.backend=(ctr_scene_backend){&context,padded_begin,padded_draw,padded_end,padded_abort,NULL,NULL,NULL};
     ctr_scene_backend previous=alias.backend;
     CHECK(ctr_scene_execute_target_backend(&state,f.commands,f.command_bytes,&resources,&surface,
           UINT32_C(0x18010000),&alias.backend,&alias.report)==CTR_SCENE_ALIAS);
@@ -767,7 +767,7 @@ static void textured_rollback(void) {
             textured_fixture(&f,false,0,filter?6u:0u,0,1,0,1);resources.size=f.resource_bytes;
             target_state(&state);previous=state;memcpy(pixels,before,sizeof(pixels));
             texture_backend context={reference,0,0,0,0,corrupt!=0};
-            ctr_scene_backend backend={&context,texture_begin,texture_draw,texture_end,texture_abort,NULL,NULL};
+            ctr_scene_backend backend={&context,texture_begin,texture_draw,texture_end,texture_abort,NULL,NULL,NULL};
             CHECK(ctr_scene_execute_target_backend(&state,f.commands,f.command_bytes,&resources,&surface,
                   UINT32_C(0x18010000),&backend,&report)==(corrupt?CTR_SCENE_BACKEND:CTR_SCENE_OK));
             CHECK(context.begins==1 && context.draws==2 && context.ends==1 && context.aborts==corrupt);
@@ -785,7 +785,7 @@ static void textured_rollback(void) {
         if(kind==4)append(&f,0xc1,6);
         if(kind==5)append(&f,0xc4,3);
         if(kind==6)append(&f,0x08e,14);
-        if(kind==7)append(&f,0x080,3);
+        if(kind==7)append(&f,0x080,8); /* Reserved texture configuration bit. */
         if(kind==8)set(&f,0x082,UINT32_C(0x000f0008));
         if(kind==9)set(&f,0x085,(span.base_address+(uint32_t)span.size-8u)/8u);
         if(kind==10)put32(f.resources+16u,bits(17.0f));
@@ -805,7 +805,7 @@ static void textured_rollback(void) {
             memset(raw,0,sizeof(raw));put32(raw+4,UINT32_C(0x702)); /* Invalid ETC differential block. */
         }
         texture_backend context={reference,0,0,0,0,false};
-        ctr_scene_backend backend={&context,texture_begin,texture_draw,texture_end,texture_abort,NULL,NULL};
+        ctr_scene_backend backend={&context,texture_begin,texture_draw,texture_end,texture_abort,NULL,NULL,NULL};
         CHECK(ctr_scene_execute_target_backend(&state,f.commands,f.command_bytes,&resources,&surface,
               UINT32_C(0x18010000),&backend,&report)!=CTR_SCENE_OK);
         CHECK(!context.begins && !context.draws && !context.ends && !context.aborts);
@@ -1442,7 +1442,7 @@ static void depth_backend_parity(void) {
         depth_backend context={reference_color,reference_depth,0,0,0,0,kind>=4u && kind<=6u?kind-3u:0u,
             kind==1u?256u:0u,kind==2u?128u:kind==3u?sizeof(depth)-1u:0u};
         ctr_scene_backend backend={&context,depth_backend_legacy_begin,depth_backend_draw,depth_backend_legacy_end,
-            depth_backend_abort,depth_backend_begin,depth_backend_end};
+            depth_backend_abort,depth_backend_begin,depth_backend_end,NULL};
         if(kind==7u)backend.begin_depth=NULL;
         if(kind==8u)backend.end_depth=NULL;
         ctr_scene_result result=ctr_scene_execute_targets_backend(&state,fixture.commands,fixture.command_bytes,
@@ -1464,7 +1464,7 @@ static void depth_backend_parity(void) {
         state=initial;memcpy(color,old_color,sizeof(color));memcpy(depth,old_depth,sizeof(depth));
         depth_backend context={reference_color,reference_depth,0,0,0,0,0,0,0};
         ctr_scene_backend backend={&context,depth_backend_legacy_begin,depth_backend_draw,depth_backend_legacy_end,
-            depth_backend_abort,depth_backend_begin,depth_backend_end};
+            depth_backend_abort,depth_backend_begin,depth_backend_end,NULL};
         CHECK(ctr_scene_execute_targets_backend(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
               UINT32_C(0x18010000),&z,&backend,&report)==CTR_SCENE_UNSUPPORTED);
         CHECK(report.draws==(kind==1u?2u:kind==2u?1u:0u));
@@ -1784,7 +1784,7 @@ static void stencil_backend_parity(void) {
             kind>=6u && kind<=8u?kind-5u:0u,kind==1u?256u:0u,
             kind==2u?sample:kind==3u?sample+3u:kind==4u?256u:kind==5u?sizeof(packed)-1u:0u};
         ctr_scene_backend backend={&context,depth_backend_legacy_begin,stencil_backend_draw,depth_backend_legacy_end,
-            stencil_backend_abort,stencil_backend_begin,stencil_backend_end};
+            stencil_backend_abort,stencil_backend_begin,stencil_backend_end,NULL};
         if(kind==9u)backend.begin_depth=NULL;
         if(kind==10u)backend.end_depth=NULL;
         ctr_scene_resources resources={UINT32_C(0x18000000),fixture.resources,fixture.resource_bytes,NULL,0};
@@ -1994,7 +1994,7 @@ static void buffer_rollback(void) {
         state.register_defined[which?0x0fd:0x0e0]=0;previous=state;
         ctr_scene_fixture_background(pixels,sizeof(pixels));memcpy(before,pixels,sizeof(before));resources.size=fixture.resource_bytes;
         buffer_backend context={before,sizeof(before),0,0,0,0,0};
-        ctr_scene_backend backend={&context,buffer_backend_begin,buffer_backend_draw,buffer_backend_end,buffer_backend_abort,NULL,NULL};
+        ctr_scene_backend backend={&context,buffer_backend_begin,buffer_backend_draw,buffer_backend_end,buffer_backend_abort,NULL,NULL,NULL};
         CHECK(ctr_scene_execute_target_backend(&state,fixture.commands,fixture.command_bytes,&resources,
               &surface,UINT32_C(0x18010000),&backend,&report)==CTR_SCENE_UNSUPPORTED && !report.draws);
         CHECK(!context.begins && !context.draws && !context.ends && !context.aborts);
@@ -2019,7 +2019,7 @@ static void buffer_rollback(void) {
         ctr_scene_fixture_make(&fixture,false);insert(&fixture,0,0x0fd,UINT32_C(0x936b4527));
         append(&fixture,0x0e0,UINT32_C(0x1100)|(UINT32_C(1)<<bit));resources.size=fixture.resource_bytes;
         buffer_backend context={before,sizeof(before),0,0,0,0,0};
-        ctr_scene_backend backend={&context,buffer_backend_begin,buffer_backend_draw,buffer_backend_end,buffer_backend_abort,NULL,NULL};
+        ctr_scene_backend backend={&context,buffer_backend_begin,buffer_backend_draw,buffer_backend_end,buffer_backend_abort,NULL,NULL,NULL};
         CHECK(ctr_scene_execute_target_backend(&state,fixture.commands,fixture.command_bytes,&resources,
               &surface,UINT32_C(0x18010000),&backend,&report)==CTR_SCENE_UNSUPPORTED);
         CHECK(report.draws==2 && report.fragments==2304 && report.reg==0x0e0);
@@ -2042,12 +2042,216 @@ static void buffer_backend_parity(void) {
     for(unsigned kind=0;kind<4;++kind) {
         size_t corrupt=kind==1u?(16u*STRIDE+16u*4u):kind==2u?256u:kind==3u?SIZE-1u:0u;
         state=initial;memcpy(pixels,before,sizeof(pixels));buffer_backend context={reference,sizeof(reference),corrupt,0,0,0,0};
-        ctr_scene_backend backend={&context,buffer_backend_begin,buffer_backend_draw,buffer_backend_end,buffer_backend_abort,NULL,NULL};
+        ctr_scene_backend backend={&context,buffer_backend_begin,buffer_backend_draw,buffer_backend_end,buffer_backend_abort,NULL,NULL,NULL};
         CHECK(ctr_scene_execute_target_backend(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
               UINT32_C(0x18010000),&backend,&report)==(kind?CTR_SCENE_BACKEND:CTR_SCENE_OK));
         CHECK(context.begins==1 && context.draws==2 && context.ends==1 && context.aborts==(kind?1u:0u));
         CHECK(!memcmp(pixels,kind?before:reference,sizeof(pixels)) && !memcmp(&state,kind?&initial:&expected,sizeof(state)));
         CHECK(report.backend_stage==(kind?CTR_SCENE_BACKEND_PARITY:CTR_SCENE_BACKEND_NONE));
+    }
+}
+
+/* Original multiunit images: independently selected UV pairs and distinct
+ * source patterns make a swapped binding or coordinate set observable. */
+static const uint32_t material_addresses[3]={UINT32_C(0x18008000),UINT32_C(0x18009000),UINT32_C(0x1800a000)};
+static uint8_t material_texel(unsigned unit,unsigned x,unsigned y,unsigned lane) {
+    const unsigned base[4]={31u,73u,101u,137u},dx[4]={7u,5u,3u,2u},dy[4]={11u,3u,9u,4u};
+    return (uint8_t)(base[lane]+unit*13u+x*dx[lane]+y*dy[lane]);
+}
+static void material_sources(uint8_t raw[3][256],ctr_scene_resource_span spans[3]) {
+    for(unsigned unit=0;unit<3u;++unit) {
+        for(unsigned y=0;y<8u;++y)for(unsigned x=0;x<8u;++x)for(unsigned lane=0;lane<4u;++lane)
+            raw[unit][texture_tile(x,y,8u)*4u+3u-lane]=material_texel(unit,x,y,lane);
+        spans[unit]=(ctr_scene_resource_span){material_addresses[unit],raw[unit],256u};
+    }
+}
+static void material_fixture(ctr_scene_fixture *fixture,unsigned mask,unsigned coordinates,bool alternate,unsigned filters) {
+    textured_fixture(fixture,false,0,(filters&1u)?6u:0u,0.25f,0.25f,0.75f,0.75f);
+    set(fixture,0x082,UINT32_C(0x00080008));set(fixture,0x080,mask|(alternate?1u<<13:0u));
+    set(fixture,0x2bd,31u);set(fixture,0x04f,5u);
+    set(fixture,0x052,(coordinates&1u)?UINT32_C(0x1f1f0d0c):UINT32_C(0x1f1f1f1f));
+    set(fixture,0x064,coordinates?1u:0u);set(fixture,0x06f,3u|(coordinates<<8));
+    size_t at=find(fixture,0x2cc,3);
+    insert(fixture,at,0x2cc,mov(32,3,0));insert(fixture,at+8u,0x2cc,mov(33,4,0));
+    at=find(fixture,0x232,0);
+    insert(fixture,at,0x053,(coordinates&2u)?UINT32_C(0x1f1f0f0e):UINT32_C(0x1f1f1f1f));at+=8u;
+    insert(fixture,at,0x054,(coordinates&4u)?UINT32_C(0x1f1f1716):UINT32_C(0x1f1f1f1f));at+=8u;
+    for(unsigned unit=1;unit<3u;++unit) {
+        const unsigned *registers=ctr_scene_texture_registers[unit];
+        const uint32_t values[5]={UINT32_C(0x00080008),(filters&(1u<<unit))?6u:0u,0u,
+            material_addresses[unit]/8u,0u};
+        for(unsigned field=0;field<5u;++field,at+=8u)insert(fixture,at,registers[field],values[field]);
+    }
+    unsigned stage=0;
+    for(unsigned unit=0;unit<3u;++unit)if(mask&(1u<<unit)) {
+        unsigned source=stage?15u|((unit+3u)<<4):unit+3u;
+        set(fixture,ctr_tev_registers[stage],source|(source<<16));
+        set(fixture,ctr_tev_registers[stage]+2u,stage?UINT32_C(0x00010001):0u);++stage;
+    }
+    for(;stage<6u;++stage) {
+        set(fixture,ctr_tev_registers[stage],stage?UINT32_C(0x000f000f):0u);
+        set(fixture,ctr_tev_registers[stage]+2u,0u);
+    }
+    finish(fixture);
+}
+static void material_state(ctr_scene_state *state) {
+    target_state(state);
+    const float uv[2][2]={{0.375f,0.625f},{0.875f,0.125f}};
+    for(unsigned uniform=0;uniform<2u;++uniform) {
+        state->shader.uniform_defined[uniform]=15u;
+        for(unsigned lane=0;lane<4u;++lane)
+            state->shader.uniforms[uniform][lane]=bits(lane<2u?uv[uniform][lane]:0.0f);
+    }
+}
+static void material_expected(unsigned mask,bool alternate,unsigned filters,uint8_t rgba[4]) {
+    /* At 8x8, each chosen UV lies on integer texel boundaries. Nearest reads
+     * (2,6)/(3,5)/(7,1); bilinear averages the four neighboring centers once.
+     * Raw V rows are inverted independently of the byte-pattern producer. */
+    const unsigned points[3][2]={{2u,6u},{3u,5u},{7u,1u}};
+    bool first=true;
+    for(unsigned unit=0;unit<3u;++unit)if(mask&(1u<<unit)) {
+        unsigned coordinate=unit==2u && alternate?1u:unit;
+        unsigned x=points[coordinate][0],v=points[coordinate][1];
+        for(unsigned lane=0;lane<4u;++lane) {
+            unsigned sample;
+            if(filters&(1u<<unit)) {
+                unsigned sum=material_texel(unit,x-1u,8u-v,lane)+material_texel(unit,x,8u-v,lane)+
+                    material_texel(unit,x-1u,7u-v,lane)+material_texel(unit,x,7u-v,lane);
+                sample=(sum+2u)/4u;
+            } else sample=material_texel(unit,x,7u-v,lane);
+            rgba[lane]=(uint8_t)(first?sample:(unsigned)rgba[lane]*sample/255u);
+        }
+        first=false;
+    }
+}
+static void material_pixels(const uint8_t *pixels,const uint8_t expected[4]) {
+    const uint8_t background[4]={16,32,48,255};
+    for(unsigned y=0;y<64u;++y)for(unsigned x=0;x<64u;++x)
+        CHECK(!memcmp(pixels+(y*64u+x)*4u,x>=8u && x<56u && y>=8u && y<56u?expected:background,4u));
+}
+static void multiunit_images(void) {
+    uint8_t raw[3][256],pixels[CTR_SCENE_FIXTURE_BYTES];ctr_scene_resource_span spans[3];
+    material_sources(raw,spans);ctr_scene_fixture fixture;
+    ctr_scene_resources resources={UINT32_C(0x18000000),fixture.resources,0,spans,3};
+    ctr_scene_surface surface={pixels,sizeof(pixels),64,64,256};ctr_scene_report report;
+    for(unsigned mask=1;mask<8u;++mask)for(unsigned alternate=0;alternate<2u;++alternate)
+        for(unsigned filters=0;filters<8u;++filters) {
+            unsigned coordinates=(mask&3u)|((mask&4u)?alternate?2u:4u:0u);
+            material_fixture(&fixture,mask,coordinates,alternate!=0u,filters);resources.size=fixture.resource_bytes;
+            ctr_scene_state state;material_state(&state);ctr_scene_fixture_background(pixels,sizeof(pixels));
+            CHECK(ctr_scene_execute_target(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
+                  UINT32_C(0x18010000),&report)==CTR_SCENE_OK);
+            CHECK(report.draws==2 && report.triangles==2 && report.fragments==2304);
+            uint8_t expected[4];material_expected(mask,alternate!=0u,filters,expected);material_pixels(pixels,expected);
+        }
+    /* Every nonzero unit uses the same supported decoder formats, including
+     * compressed formats and their format bit, rather than a unit0 shortcut. */
+    const unsigned bpp[14]={32,24,16,16,16,16,16,8,8,8,4,4,4,8};
+    const unsigned alpha[14]={0,255,0,255,0,0,255,255,0,0,255,0,255,0};
+    uint8_t blank[256]={0};
+    for(unsigned unit=1;unit<3u;++unit)for(unsigned format=0;format<14u;++format) {
+        material_fixture(&fixture,1u<<unit,1u<<unit,false,0);resources.size=fixture.resource_bytes;
+        set(&fixture,ctr_scene_texture_registers[unit][CTR_SCENE_TEXTURE_FORMAT],format);
+        set(&fixture,ctr_scene_texture_registers[unit][CTR_SCENE_TEXTURE_PARAMETERS],format>=12u?32u:0u);
+        ctr_scene_resource_span span={material_addresses[unit],blank,8u*8u*bpp[format]/8u};
+        resources.textures=&span;resources.texture_count=1;
+        ctr_scene_state state;material_state(&state);ctr_scene_fixture_background(pixels,sizeof(pixels));
+        CHECK(ctr_scene_execute_target(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
+              UINT32_C(0x18010000),&report)==CTR_SCENE_OK);
+        const uint8_t expected[4]={(uint8_t)(format>=12u?2u:0u),(uint8_t)(format>=12u?2u:0u),
+            (uint8_t)(format>=12u?2u:0u),(uint8_t)alpha[format]};
+        material_pixels(pixels,expected);
+    }
+}
+typedef struct {
+    const uint8_t *expected;
+    unsigned mask,begins,draws,ends,aborts,failure;
+} material_backend;
+static bool material_begin(void *context,const ctr_scene_surface *initial) {
+    material_backend *b=context;++b->begins;CHECK(initial->width==64u && initial->height==64u);
+    return b->failure!=1u;
+}
+static bool material_draw(void *context,const ctr_scene_state *state,const ctr_vertex *vertices,unsigned count,
+                          const ctr_scene_texture textures[3],unsigned mask) {
+    material_backend *b=context;++b->draws;
+    CHECK(mask==b->mask && count==3u && vertices[0].enabled==7u && (state->registers[0x080]&7u)==mask);
+    for(unsigned unit=0;unit<3u;++unit) {
+        const ctr_scene_texture *t=&textures[unit];
+        if(mask&(1u<<unit)) {
+            CHECK(t->rgba && t->width==8u && t->height==8u && t->address==material_addresses[unit] && !t->format);
+            for(unsigned lane=0;lane<4u;++lane)CHECK(t->rgba[lane]==material_texel(unit,0,0,lane));
+        } else CHECK(!t->rgba && !t->width && !t->height && !t->address && !t->format && !t->params);
+    }
+    return b->failure!=2u;
+}
+static bool material_end(void *context,const ctr_scene_surface *readback) {
+    material_backend *b=context;++b->ends;memcpy(readback->bytes,b->expected,readback->size);
+    if(b->failure==4u)((uint8_t *)readback->bytes)[readback->size-1u]^=1u;
+    return b->failure!=3u;
+}
+static void material_abort(void *context) { material_backend *b=context;++b->aborts; }
+static void multiunit_rollback_and_backend(void) {
+    ctr_scene_fixture fixture;uint8_t raw[3][256],pixels[CTR_SCENE_FIXTURE_BYTES],before[CTR_SCENE_FIXTURE_BYTES],reference[CTR_SCENE_FIXTURE_BYTES];
+    ctr_scene_resource_span spans[3];material_sources(raw,spans);
+    ctr_scene_resources resources={UINT32_C(0x18000000),fixture.resources,0,spans,3};
+    ctr_scene_surface surface={pixels,sizeof(pixels),64,64,256};ctr_scene_report report;
+    ctr_scene_fixture_background(before,sizeof(before));
+    material_fixture(&fixture,7u,7u,false,2u);resources.size=fixture.resource_bytes;
+    ctr_scene_state state,previous,expected;material_state(&state);memcpy(pixels,before,sizeof(pixels));
+    CHECK(ctr_scene_execute_target(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
+          UINT32_C(0x18010000),&report)==CTR_SCENE_OK);memcpy(reference,pixels,sizeof(reference));expected=state;
+    for(unsigned failure=0;failure<5u;++failure) {
+        material_state(&state);previous=state;memcpy(pixels,before,sizeof(pixels));
+        material_backend context={reference,7u,0,0,0,0,failure};
+        ctr_scene_backend backend={&context,material_begin,NULL,material_end,material_abort,NULL,NULL,material_draw};
+        CHECK(ctr_scene_execute_target_backend(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
+              UINT32_C(0x18010000),&backend,&report)==(failure?CTR_SCENE_BACKEND:CTR_SCENE_OK));
+        CHECK(context.begins==1u && context.draws==(failure==1u?0u:failure==2u?1u:2u) &&
+            context.ends==(failure==1u || failure==2u?0u:1u) && context.aborts==(failure?1u:0u));
+        CHECK(!memcmp(&state,failure?&previous:&expected,sizeof(state)) &&
+              !memcmp(pixels,failure?before:reference,sizeof(pixels)));
+    }
+    /* Only-multi owners can render the legacy0/1 routes; disabled entries have
+     * no borrowed image. Legacy-only owners reject actual multi draws before
+     * begin even when the final register state disables the extra units. */
+    material_fixture(&fixture,1u,1u,false,0);resources.size=fixture.resource_bytes;
+    material_state(&state);memcpy(pixels,before,sizeof(pixels));
+    CHECK(ctr_scene_execute_target(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
+          UINT32_C(0x18010000),&report)==CTR_SCENE_OK);memcpy(reference,pixels,sizeof(reference));
+    material_state(&state);memcpy(pixels,before,sizeof(pixels));
+    material_backend context={reference,1u,0,0,0,0,0};
+    ctr_scene_backend backend={&context,material_begin,NULL,material_end,material_abort,NULL,NULL,material_draw};
+    CHECK(ctr_scene_execute_target_backend(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
+          UINT32_C(0x18010000),&backend,&report)==CTR_SCENE_OK);
+    CHECK(context.begins==1u && context.draws==2u && context.ends==1u && !context.aborts);
+    material_fixture(&fixture,7u,7u,false,0);append(&fixture,0x080,1u);resources.size=fixture.resource_bytes;
+    material_state(&state);previous=state;memcpy(pixels,before,sizeof(pixels));
+    texture_backend legacy={reference,0,0,0,0,false};
+    ctr_scene_backend old={&legacy,texture_begin,texture_draw,texture_end,texture_abort,NULL,NULL,NULL};
+    CHECK(ctr_scene_execute_target_backend(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
+          UINT32_C(0x18010000),&old,&report)==CTR_SCENE_UNSUPPORTED);
+    CHECK(!legacy.begins && !legacy.draws && !legacy.ends && !legacy.aborts && !report.draws);
+    CHECK(!memcmp(&state,&previous,sizeof(state)) && !memcmp(pixels,before,sizeof(pixels)));
+    for(unsigned failure=0;failure<11u;++failure) {
+        material_fixture(&fixture,7u,7u,false,0);resources.size=fixture.resource_bytes;
+        material_state(&state);previous=state;memcpy(pixels,before,sizeof(pixels));
+        if(failure==0u)append(&fixture,0x093,2u);
+        if(failure==1u)append(&fixture,0x09c,1u);
+        if(failure==2u)append(&fixture,0x096,14u);
+        if(failure==3u)append(&fixture,0x080,8u);
+        if(failure==4u)set(&fixture,0x095,(material_addresses[1]+248u)/8u);
+        if(failure==5u)set(&fixture,0x053,UINT32_C(0x1f1f1f0e));
+        if(failure==6u) { set(&fixture,0x053,UINT32_C(0x1f1f1f1f));set(&fixture,0x06f,0x503u); }
+        if(failure==7u) { size_t at=find(&fixture,0x09a,0)+4u;put32(fixture.commands+at,(get32(fixture.commands+at)&~UINT32_C(0xf0000))|UINT32_C(0xe0000)); }
+        if(failure==8u)set(&fixture,0x09d,UINT32_C(0x10000000));
+        if(failure==9u) { set(&fixture,0x080,3u); /* Active TEV Texture2 is disabled. */ }
+        if(failure==10u) { set(&fixture,0x06f,0x303u); /* UV2 export clock is absent. */ }
+        context=(material_backend){reference,7u,0,0,0,0,0};backend.context=&context;
+        CHECK(ctr_scene_execute_target_backend(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
+              UINT32_C(0x18010000),&backend,&report)!=CTR_SCENE_OK);
+        CHECK(!context.begins && !context.draws && !context.ends && !context.aborts);
+        CHECK(!memcmp(&state,&previous,sizeof(state)) && !memcmp(pixels,before,sizeof(pixels)));
+        if(failure<4u)CHECK(report.draws==2u);
     }
 }
 
@@ -2058,5 +2262,6 @@ int main(void) {
     depth_comparisons();depth_overdraw();depth_quantization();depth_rollback();depth_backend_parity();
     stencil_contract();stencil_images();stencil_depth_comparisons();stencil_order_and_retention();stencil_quantization();stencil_rollback();stencil_backend_parity();stencil_capacity();
     buffer_images();buffer_retention();buffer_rollback();buffer_backend_parity();
+    multiunit_images();multiunit_rollback_and_backend();
     printf("original shader/scene tests: %u assertions passed\n",assertions);return 0;
 }

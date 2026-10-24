@@ -65,16 +65,24 @@ static ctr_gx2_shader_result exports(ctr_gx2_shader *out,uint16_t mask,
         for(unsigned lane=0;lane<4;++lane) {
             unsigned semantic=(mapping>>(lane*8u))&31u;
             if(semantic==31u)continue;
-            if(semantic>13u || (semantic>=4u && semantic<8u))return CTR_GX2_SHADER_UNSUPPORTED;
+            if((semantic>15u && semantic!=22u && semantic!=23u) ||
+               (semantic>=4u && semantic<8u))return CTR_GX2_SHADER_UNSUPPORTED;
             if((seen&(1u<<semantic)) || !(written[reg]&(1u<<lane)))return CTR_GX2_SHADER_UNDEFINED;
             seen|=1u<<semantic;
-            unsigned target=semantic<4u?51u:semantic<12u?52u:53u;
-            unsigned channel=semantic<4u?semantic:semantic<12u?semantic-8u:semantic-12u;
+            unsigned unit=semantic<12u?0u:semantic<16u?(semantic-12u)/2u:2u;
+            unsigned target=semantic<4u?51u:semantic<12u?52u:53u+unit;
+            unsigned channel=semantic<4u?semantic:semantic<12u?semantic-8u:semantic&1u;
             if(!alu(out,LATTE_MOV,33u+reg,lane,false,0,0,target,channel))return CTR_GX2_SHADER_LIMIT;
         }
     }
-    if(seen!=UINT32_C(0x0f0f) && seen!=UINT32_C(0x3f0f))return CTR_GX2_SHADER_UNDEFINED;
-    out->texcoord0=(seen&UINT32_C(0x3000))!=0;
+    if((seen&UINT32_C(0x0f0f))!=UINT32_C(0x0f0f))return CTR_GX2_SHADER_UNDEFINED;
+    static const unsigned uv_semantics[3]={12u,14u,22u};
+    for(unsigned unit=0;unit<3u;++unit) {
+        unsigned pair=3u<<uv_semantics[unit],present=seen&pair;
+        if(present && present!=pair)return CTR_GX2_SHADER_UNDEFINED;
+        if(present)out->texcoord_mask|=(uint8_t)(1u<<unit);
+    }
+    out->texcoord0=(out->texcoord_mask&1u)!=0;
     return CTR_GX2_SHADER_OK;
 }
 static ctr_gx2_shader_result compile(const ctr_shader_program *p,uint16_t mask,
@@ -118,8 +126,9 @@ static ctr_gx2_shader_result compile(const ctr_shader_program *p,uint16_t mask,
     ctr_gx2_shader_result result=exports(out,mask,maps,total,written);
     if(result!=CTR_GX2_SHADER_OK)return result;
     unsigned clauses=(out->alu_instructions+LATTE_ALU_CLAUSE_WORDS-1u)/LATTE_ALU_CLAUSE_WORDS;
-    if((clauses+3u+(out->texcoord0?1u:0u))*8u>CTR_GX2_SHADER_ALU_OFFSET)return CTR_GX2_SHADER_LIMIT;
-    /* CALL_FS NO_BARRIER; ALU clauses; POS0, color PARAM0 and optional UV PARAM1.
+    unsigned uv_count=bit_count(out->texcoord_mask);
+    if((clauses+3u+uv_count)*8u>CTR_GX2_SHADER_ALU_OFFSET)return CTR_GX2_SHADER_LIMIT;
+    /* CALL_FS NO_BARRIER; ALU clauses; POS0, color PARAM0 and dense UV PARAM1..3.
      * Only the last export ends the program. Addresses/counts use 8-byte words. */
     put32(out->program+4u,UINT32_C(0x09800000));
     for(unsigned i=0;i<clauses;++i) {
@@ -133,15 +142,20 @@ static ctr_gx2_shader_result compile(const ctr_shader_program *p,uint16_t mask,
     put32(out->program+pos,60u|(1u<<13)|(51u<<15));
     put32(out->program+pos+4u,UINT32_C(0x94000688));
     put32(out->program+param,(2u<<13)|(52u<<15));
-    put32(out->program+param+4u,out->texcoord0?UINT32_C(0x13800688):UINT32_C(0x14200688));
-    if(out->texcoord0) {
-        put32(out->program+param+8u,1u|(2u<<13)|(53u<<15));
-        put32(out->program+param+12u,UINT32_C(0x14200b08));
+    put32(out->program+param+4u,uv_count?UINT32_C(0x13800688):UINT32_C(0x14200688));
+    unsigned slot=0;
+    for(unsigned unit=0;unit<3u;++unit)if(out->texcoord_mask&(1u<<unit)) {
+        ++slot;
+        put32(out->program+param+slot*8u,slot|(2u<<13)|((53u+unit)<<15));
+        put32(out->program+param+slot*8u+4u,
+            slot==uv_count?UINT32_C(0x14200b08):UINT32_C(0x13800b08));
     }
     /* GX2 shader storage is padded to its 256-byte program alignment, as in
      * the independent WUT GFD fixture. Keep the final fetch inside storage. */
     out->size=(CTR_GX2_SHADER_ALU_OFFSET+out->alu_instructions*8u+255u)&~255u;
-    out->gprs=out->texcoord0?CTR_GX2_SHADER_TEXTURED_GPRS:CTR_GX2_SHADER_GPRS;
+    out->gprs=CTR_GX2_SHADER_GPRS;
+    for(unsigned unit=0;unit<3u;++unit)
+        if(out->texcoord_mask&(1u<<unit))out->gprs=CTR_GX2_SHADER_TEXTURED_GPRS+unit;
     return CTR_GX2_SHADER_OK;
 }
 ctr_gx2_shader_result ctr_gx2_shader_compile(const ctr_shader_program *p,uint16_t mask,

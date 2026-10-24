@@ -102,6 +102,34 @@ class TexturedSceneReferenceTests(unittest.TestCase):
                 else:
                     self.assertEqual(result['result'], 'ok')
 
+    def test_independent_material_units_coordinates_and_routing_have_manual_anchors(self):
+        units = tuple(ORACLE.TextureSpec(variant=unit) for unit in range(3))
+        uv_sets = (((F(0), F(0)),)*4, ((F(1,4), F(3,4)),)*4,
+                   ((F(3,4), F(1,4)),)*4)
+        # RGBA8 source equations are explicit in original_texture. PICA V=0
+        # addresses raw row7, while UV1/2 select different rows and variants.
+        answers = ((1, False, (122,92,170,214)), (2, False, (149,223,91,145)),
+                   (4, False, (108,226,128,88)), (4, True, (196,50,200,176)))
+        for mask, route, expected in answers:
+            with self.subTest(mask=mask, route=route):
+                unit = mask.bit_length()-1
+                case = ORACLE.Case(f'material-manual-{mask}-{int(route)}', texture_units=units,
+                    texture_mask=mask, texture2_coord1=route, uv_sets=uv_sets,
+                    tev=(ORACLE.tev_stage(rgb=(3+unit,0,0)),), side=16,
+                    points=((0,0),(16,0),(0,16),(16,16)), scissor=(0,0,0,15,15))
+                image, fragments = ORACLE.golden(case, ORACLE.material_blob(case)[0])
+                self.assertEqual(fragments, 256)
+                self.assertEqual(image, bytes(expected)*256)
+                ORACLE.execute_case(self.binary, self.output, case)
+
+    def test_multitexture_material_images_retained_bindings_and_late_rollback(self):
+        cases = ORACLE.material_cases()
+        self.assertEqual({case.texture_mask for case in cases}, set(range(1,8)))
+        self.assertTrue(any(case.texture2_coord1 for case in cases))
+        self.assertTrue(any(case.buffer_update != (0,0) for case in cases))
+        for case in cases:
+            with self.subTest(case=case.name): ORACLE.execute_case(self.binary,self.output,case)
+
     def test_actual_native_fragment_programs_match_independent_tev_arithmetic(self):
         path = self.output/'fragment-programs.json'
         path.write_text(json.dumps(self.capture))
@@ -114,6 +142,43 @@ class TexturedSceneReferenceTests(unittest.TestCase):
         self.assertEqual(report['integer_division_cases'], 65026)
         self.assertFalse(report['gpu_execution'])
         self.assertFalse(report['console_verified'])
+
+    def test_material_native_capture_preserves_all_legacy_program_rows(self):
+        legacy = {'programs':self.capture['programs'][:81]}
+        serialized = json.dumps(legacy, separators=(',', ':'))+'\n'
+        # The JSON key order is supplied by the unchanged native capture; this
+        # binds full bytes, metadata and constants, not just program lengths.
+        import hashlib
+        self.assertEqual(hashlib.sha256(serialized.encode()).hexdigest(),
+                         'b878b359c38a4c74a3e0a184ed3acbd3d6ee5e87f24d8aebcd34e3cc259fac1e')
+        materials = self.capture['programs'][81:]
+        self.assertEqual({row['texture_mask'] for row in materials}, set(range(8)))
+        self.assertTrue(any(row['texture2_coord1'] for row in materials))
+        self.assertTrue(any('buffer_color' in row and row['texture_mask'] > 1 for row in materials))
+
+    def test_material_sample_units_coordinates_and_normalization_cannot_alias(self):
+        row = next(row for row in self.capture['programs'] if row.get('texture_mask') == 7 and
+                   not row['texture2_coord1'] and 'buffer_color' in row)
+        texels = ((17,89,233,53), (211,47,109,181), (59,193,7,127))
+        result = ORACLE.decode_fragment_program(row,(0,1,0,1),texels)
+        self.assertEqual(result['samples'],3)
+        self.assertEqual(row['inputs'],[0x100,0x101,0x102,0x103])
+        # Distinguish resource IDs, sampler IDs, coordinate GPRs and sample
+        # destinations for each unit, independently of supplied texel values.
+        changes = ((144,1 << 8,'SAMPLE_LZ'), (152,1 << 15,'SAMPLE_LZ'),
+                   (160,1 << 16,'original UV'), (164,1,'independent unit'),
+                   (164,1 << 28,'normalized'), (4,1 << 10,'TEX control'),
+                   (176,1,'unused'))
+        for offset, mask, message in changes:
+            with self.subTest(offset=offset,mask=mask):
+                program = bytearray.fromhex(row['hex'])
+                struct.pack_into('<I',program,offset,struct.unpack_from('<I',program,offset)[0] ^ mask)
+                with self.assertRaisesRegex(ValueError,message):
+                    ORACLE.decode_fragment_program(dict(row,hex=program.hex()),(0,1,0,1),texels)
+        routed = dict(row,texture2_coord1=True,coordinate_mask=3,interpolators=3,
+                      spi_ps_in_control_0=0x14000003,inputs=[0x100,0x101,0x102])
+        with self.assertRaisesRegex(ValueError,'original UV'):
+            ORACLE.decode_fragment_program(routed,(0,1,0,1),texels)
 
     def test_linear_half_up_and_texel_centers_match_analytic_bytes(self):
         texture=ORACLE.original_texture(0,8,8)

@@ -177,8 +177,11 @@ class Case:
                 'written': written, 'input_mask': input_mask, 'uniform_used': uniforms,
                 'position': [semantics[lane] for lane in range(4)],
                 'color': [semantics[lane] for lane in range(8, 12)], 'instructions': executed}
-        if 12 in semantics or 13 in semantics:
-            result['texcoord0'] = [semantics[12], semantics[13], 0, 0x3f800000]
+        result['texcoord_mask'] = 0
+        for unit, (u, v) in enumerate(((12, 13), (14, 15), (22, 23))):
+            if u in semantics or v in semantics:
+                result['texcoord'+str(unit)] = [semantics[u], semantics[v], 0, 0x3f800000]
+                result['texcoord_mask'] |= 1 << unit
         return result
 
 
@@ -253,6 +256,7 @@ def cases():
     numeric = default_inputs(); numeric[2][0] = 0x3f800001
     yield Case('numeric-preflight-retained', bad, inputs=numeric, expected_cpu='unsupported-numeric-value')
     yield from texture_cases()
+    yield from multicoordinate_cases()
 
 
 def texture_cases():
@@ -299,7 +303,7 @@ def texture_cases():
     for mapping, status in ((0x1f1f1f0c, 'undefined-source-or-semantic'),
                             (0x1f1f1f0d, 'undefined-source-or-semantic'),
                             (0x1f1f0c0c, 'undefined-source-or-semantic'),
-                            (0x1f0e0d0c, 'unsupported-instruction-or-state')):
+                            (0x1f0e0d0c, 'undefined-source-or-semantic')):
         yield Case(f'reject-texcoord0-map-{mapping:08x}', base + [end], output_mask=7,
                    maps=maps[:2] + (mapping,), expected_compile=status)
     yield Case('reject-texcoord0-unwritten-output', base[:2] + [end], output_mask=7,
@@ -308,6 +312,39 @@ def texture_cases():
                output_mask=7, maps=maps, expected_compile='undefined-source-or-semantic')
     yield Case('reject-texcoord0-missing-color', base + [end], output_mask=7,
                maps=(maps[0], 0x1f0a0908, maps[2]), expected_compile='undefined-source-or-semantic')
+
+
+def multicoordinate_cases():
+    """Separate exact UV inputs make semantic and dense-export mixups visible."""
+    end = Instruction('END')
+    coordinates = (0x1f1f0d0c, 0x1f1f0f0e, 0x1f1f1716)
+    for mask in range(2, 8):
+        inputs = default_inputs()
+        for unit in range(3):
+            inputs[2+unit] = [binary32(Fraction(2*unit-3, 4)),
+                              binary32(Fraction(7-unit, 8)), 0, 0x3f800000]
+        units = [unit for unit in range(3) if mask & (1 << unit)]
+        instructions = [Instruction('MOV', 0, 0), Instruction('MOV', 1, 1)]
+        instructions += [Instruction('MOV', 2+rank, 2+unit) for rank, unit in enumerate(units)]
+        maps = (0x03020100, 0x0b0a0908)+tuple(coordinates[unit] for unit in units)
+        yield Case(f'multicoord-mask-{mask}', instructions+[end], inputs=inputs,
+                   output_mask=(1 << len(maps))-1, maps=maps)
+        # Reverse physical output order while retaining semantic UV ordering.
+        yield Case(f'multicoord-mask-{mask}-reverse-output',
+                   instructions[:2]+[Instruction('MOV', 2+rank, 2+unit)
+                                     for rank, unit in enumerate(reversed(units))]+[end],
+                   inputs=inputs, output_mask=(1 << len(maps))-1,
+                   maps=maps[:2]+tuple(coordinates[unit] for unit in reversed(units)))
+    base = [Instruction('MOV', 0, 0), Instruction('MOV', 1, 1), Instruction('MOV', 2, 2), end]
+    for unit, pair in enumerate(((12, 13), (14, 15), (22, 23))):
+        for lane in pair:
+            yield Case(f'multicoord-reject-unit-{unit}-unpaired-{lane}', base,
+                       output_mask=7, maps=(0x03020100, 0x0b0a0908, 0x1f1f1f00 | lane),
+                       expected_compile='undefined-source-or-semantic')
+    for semantic in (16, 17, 18, 21, 24, 30):
+        yield Case(f'multicoord-reject-semantic-{semantic}', base,
+                   output_mask=7, maps=(0x03020100, 0x0b0a0908, 0x1f1f1f00 | semantic),
+                   expected_compile='unsupported-instruction-or-state')
 
 
 def decode(program, inputs, uniforms=None, gprs=128):
@@ -390,12 +427,17 @@ def decode(program, inputs, uniforms=None, gprs=128):
                 raise ValueError('Unsupported control-flow instruction')
     if not ended or fetches != 1: raise ValueError('Missing program termination/fetch')
     destinations = [(item['type'], item['base']) for item in exports]
-    if destinations not in ([(1, 60), (2, 0)], [(1, 60), (2, 0), (2, 1)]):
-        raise ValueError('Expected POS0, PARAM0 and optional PARAM1 exports')
-    expected_opcodes = [40, 40] if len(exports) == 2 else [40, 39, 40]
+    if not 2 <= len(exports) <= 5 or destinations != [(1, 60)]+[(2, index) for index in range(len(exports)-1)]:
+        raise ValueError('Expected POS0, PARAM0 and dense PARAM1..3 exports')
+    expected_opcodes = [40]+[39]*(len(exports)-2)+[40]
     if export_opcodes != expected_opcodes: raise ValueError('Incorrect export completion sequence')
-    if len(exports) == 3 and exports[2]['selectors'] != [0, 1, 4, 5]:
-        raise ValueError('Expected texcoord0 xy01 export')
+    coordinate_registers = []
+    for export in exports[2:]:
+        if export['selectors'] != [0, 1, 4, 5]:
+            raise ValueError('Expected texture coordinate xy01 export')
+        coordinate_registers.append(export['gpr'])
+    if any(not 53 <= register <= 55 for register in coordinate_registers) or coordinate_registers != sorted(set(coordinate_registers)):
+        raise ValueError('Expected unique UV0/1/2 export registers')
     if any(item['barrier'] for item in exports[1:]): raise ValueError('Unexpected parameter export barrier')
     if not exports[0]['barrier']: raise ValueError('Position export lacks completion barrier')
     if any(begin < at for begin, _ in clauses): raise ValueError('ALU overlaps control flow')
@@ -435,8 +477,10 @@ def validate(binary, corpus=None):
         accepted += 1
         if result['cpu'] != 'ok': preflight_rejected += 1; continue
         expected = case.oracle()
-        textured = 'texcoord0' in expected
-        if result['texcoord0'] != textured or result['gprs'] != (54 if textured else 53):
+        coordinate_mask = expected['texcoord_mask']
+        textured = bool(coordinate_mask & 1)
+        if (result['texcoord0'] != textured or result['texcoord_mask'] != coordinate_mask or
+                result['gprs'] != 53+coordinate_mask.bit_length()):
             raise ValueError(f'{case.name}: texture export metadata/allocation differs')
         registers = {(register + 1, lane): raw for register, values in enumerate(case.inputs)
                      if case.enabled & (1 << register) for lane, raw in enumerate(values)}
@@ -447,10 +491,12 @@ def validate(binary, corpus=None):
             raise ValueError(f'{case.name}: original PICA CPU output differs from rational oracle')
         if decoded['exports'][0]['values'] != expected['position'] or decoded['exports'][1]['values'] != expected['color']:
             raise ValueError(f'{case.name}: independently decoded Latte exports differ from rational oracle')
-        if len(decoded['exports']) != (3 if textured else 2):
+        if len(decoded['exports']) != 2+coordinate_mask.bit_count():
             raise ValueError(f'{case.name}: independently decoded texture export count differs')
-        if textured and decoded['exports'][2]['values'] != expected['texcoord0']:
-            raise ValueError(f'{case.name}: independently decoded texcoord0 differs from rational oracle')
+        units = [unit for unit in range(3) if coordinate_mask & (1 << unit)]
+        for export, unit in zip(decoded['exports'][2:], units):
+            if export['gpr'] != 53+unit or export['values'] != expected['texcoord'+str(unit)]:
+                raise ValueError(f'{case.name}: independently decoded texcoord{unit} differs from rational oracle')
         for key in ('input_mask', 'uniform_used'):
             if result[key] != expected[key] or decoded[key] != expected[key]:
                 raise ValueError(f'{case.name}: decoded {key} differs from original source use')

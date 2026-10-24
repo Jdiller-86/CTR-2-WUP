@@ -31,9 +31,10 @@ The bounded path supports:
   alpha 1. Final TEV alpha can reject fragments; logic/blend operations and
   channel masks control color writes; the paired-target API adds bounded D16
   depth and D24S8 stencil comparisons/actions.
-- Optional Texture0 UV outputs (semantics 12/13), exact Q16 in −16..16 with W=1;
+- Optional UV0/1/2 outputs (semantics 12/13, 14/15 and 22/23), exact Q16 in −16..16 with W=1;
   affine nearest/bilinear sampling of all 14 base formats with independent clamp/repeat/
-  mirror S/T. Six TEV stages combine Texture0, primary, constants, Previous and PreviousBuffer
+  mirror S/T per independently enabled Texture0/1/2. Texture2 can select UV1.
+  Six TEV stages combine the three textures, primary, constants, Previous and PreviousBuffer
   with independent RGB/alpha operations, component operands and 1/2/4 scale.
   See [texture and combiner rules](textures.md).
 - All eight final-alpha comparisons, all 16 bytewise logic operations and RGBA
@@ -134,7 +135,8 @@ PICA shader into a Latte shader.
 program as explicit little-endian Latte instruction bytes, preserving operand
 and output-map semantics. Source lanes are captured before writes. Storage is
 padded to 256 bytes; the native adapter uses aligned shader memory and reserves
-a vertex budget above the encoder's **53 GPRs**, or **54** when UV is exported.
+a vertex budget above the encoder's **53 GPRs**, rising to **54/55/56** when
+UV0/1/2 is the highest exported coordinate set.
 
 | Vertex ABI | Registers or upload |
 | --- | --- |
@@ -143,13 +145,13 @@ a vertex budget above the encoder's **53 GPRs**, or **54** when UV is exported.
 | PICA outputs `o0`–`o15` | GPR 33–48 |
 | Captured source vectors | GPR 49–50 |
 | Position and primary-color exports | GPR 51 and 52 |
-| Optional Texture0 UV | GPR 53.xy; PARAM1 exports xy01 |
+| Optional UV0/1/2 | GPR 53/54/55.xy; dense PARAM exports after color carry xy01, with native semantic IDs 1/2/3 |
 | Float uniforms `c0`–`c95` | Constant-file vectors 0–95 in UniformRegister mode; `GX2SetVertexUniformReg(index * 4, 4, bits)` |
 
 `ctr_scene_execute_target_backend` preflights every actual vertex with the exact
 float24 evaluator, then passes original inputs and state to synchronous
 `begin`/`draw`/`end` callbacks. Compilation does not expand the numeric domain.
-PARAM0 exports primary color; PARAM1 is present only with complete UV semantics.
+PARAM0 exports primary color; complete UV pairs export in coordinate order.
 Readback must match the entire staged target, including padding and trailing
 bytes, before commit. Callback failures and mismatches report
 `CTR_SCENE_BACKEND` and abort without fallback. The paired
@@ -159,8 +161,8 @@ Both readbacks must match, including padding and trailing bytes. The
 [depth/stencil profiles](textures.md#d16-depth) define quantization and native admission.
 
 `runtime/wiiu/gx2_scene.c` implements GX2 surfaces, shaders, uniforms,
-viewport/cull/scissor and readback. Textured draws bind an owned RGBA8 texture
-and point/linear sampler; an original Latte pixel program samples base level zero
+viewport/cull/scissor and readback. Textured draws bind each unit's owned RGBA8
+texture and point/linear sampler; an original Latte pixel program samples base level zero
 and evaluates the six-stage byte-domain TEV chain with delayed RGB/alpha buffer
 publication. Reversed rows preserve PICA V origin
 without changing guest UV. CPU flush/texture invalidation precede drawing.
@@ -176,8 +178,8 @@ CPU allocation bounded by 384 KiB. Full canonical byte keys use explicit
 little-endian fields, source/build identity and versioned encoder, numeric and
 renderer profiles. Vertex identity includes all code/descriptors and defined
 masks, entry and active output mapping. Pixel identity includes decoded TEV
-topology, buffer update masks, buffered-program selection, texture presence and
-depth profile. FIFO eviction is deterministic; duplicate stores retain their
+topology, buffer update masks, buffered-program selection, enabled-unit mask,
+Texture2 coordinate routing and depth profile. FIFO eviction is deterministic; duplicate stores retain their
 original position.
 
 Uniform values and stage/buffer colors remain dynamic. A vertex hit checks
@@ -194,6 +196,12 @@ release, while graphics shutdown or explicit cache clear frees the owner. Cleari
 retains cumulative counters. Complete preflight, ownership checks and exact paired
 readback still precede guest publication. Texture/target caching, source-resource
 generation invalidation and physical performance remain outside this cache.
+
+The optional backend `draw_textures` callback receives three unit-indexed borrowed
+descriptors and an enable mask. Legacy `draw` callbacks retain their Texture0
+contract; unsupported multi-unit draws reject during complete software preflight
+before any native callback. All active resources remain inside the existing
+32-snapshot/4-MiB source budget.
 
 The independent validator decodes emitted GPU bytes and compares original
 programs against arbitrary-precision rational expectations and the CPU evaluator:

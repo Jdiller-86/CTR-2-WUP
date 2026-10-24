@@ -6,12 +6,13 @@ Commercial games and the GUI are not supported yet.
 
 ## Current work
 
-1. **Extend GX2 materials and resource coherency** ([#30](https://github.com/Jdiller-86/CTR-2-WUP/issues/30)).
-   Bounded vertex translation, nearest/bilinear Texture0 sampling and
+1. **Version renderer resources** ([#79](https://github.com/Jdiller-86/CTR-2-WUP/issues/79)).
+   Bounded vertex translation, independent Texture0/1/2 sampling and coordinates,
    six-stage RGB/alpha TEV with a combiner buffer, alpha/logic/blend operations,
    write masks, bounded D16/D24S8 depth/stencil and CPU program caching are
-   implemented. Extend Texture1/2 material inputs, native depth interpolation and
-   source-resource coherency toward observed first-game requirements. Retain
+   implemented. Add source-resource versions, render-to-texture reuse and precise
+   alias invalidation; establish native depth interpolation toward observed
+   first-game requirements. Retain
    current-state validation, exact software preflight, GPU retirement and full
    readback. Physical parity and costs remain unverified.
 2. **Connect guest audio** ([#25](https://github.com/Jdiller-86/CTR-2-WUP/issues/25)).
@@ -37,7 +38,7 @@ Detailed scope, dependencies and evidence are tracked in the linked issues and
 | [M1: Platform](https://github.com/Jdiller-86/CTR-2-WUP/issues/1) | Reviewed screens, input, tone, stability, scoped exit/save, original installation and installed boot | Installed-title exit/relaunch and automatic SD recovery |
 | [M2: CPU](https://github.com/Jdiller-86/CTR-2-WUP/issues/2) | ARM/Thumb/VFP AOT, checked ABI/memory and original fixtures | Exercised instruction coverage, fallback/traces and useful Espresso performance |
 | [M3: Runtime](https://github.com/Jdiller-86/CTR-2-WUP/issues/3) | Compiled original guests, kernel/services, filesystem and mixer | Required services/modules, guest DSP and runtime acceptance |
-| [M4: Graphics](https://github.com/Jdiller-86/CTR-2-WUP/issues/4) | GSP/PICA, software reference, cached GX2 programs, nearest/bilinear textures, six-stage TEV with a combiner buffer, alpha/logic/blend/write controls and D16/D24S8 depth/stencil | Physical GPU parity, broader filtering/fragment state, resource coherency and measured costs |
+| [M4: Graphics](https://github.com/Jdiller-86/CTR-2-WUP/issues/4) | GSP/PICA, software reference, cached GX2 programs, independent Texture0/1/2 materials, six-stage TEV with a combiner buffer, alpha/logic/blend/write controls and D16/D24S8 depth/stencil | Physical GPU parity, broader filtering/fragment state, resource coherency and measured costs |
 | [M5: First game](https://github.com/Jdiller-86/CTR-2-WUP/issues/5) | Verified private Mario 3D Land revision and selected asset analysis | Implement observed gaps and prove boot, gameplay, audio and saves |
 | [M6: Conversion](https://github.com/Jdiller-86/CTR-2-WUP/issues/6) | Intake/decryption, AOT builds, original WUP packing and integrity checks | Complete supported-game pipeline, Windows execution and installed rebuild/save continuity |
 | [M7: GUI](https://github.com/Jdiller-86/CTR-2-WUP/issues/7) | Windows toolchain and workflow design | Responsive Select → Configure → Inject → WUP over the proven engine |

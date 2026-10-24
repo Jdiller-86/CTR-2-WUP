@@ -12,10 +12,10 @@ The [scene renderer](software-scenes.md) and optional native GX2 backend accept:
 
 | State | Supported boundary |
 | --- | --- |
-| Texture | Texture0, one base level, all 14 decoded formats, 8..1024 per dimension |
-| Coordinates | Vertex semantics 12/13, exact Q16 UV in −16..16, affine interpolation with W=1 |
-| Sampler | Matching nearest or bilinear min/mag, LOD/bias zero; clamp-to-edge, repeat or mirrored repeat independently on S/T |
-| Combiner | Six stages; Texture0, binary primary color, per-stage RGBA8 constants, Previous and PreviousBuffer; independent RGB/alpha operands, operations and 1/2/4 scale |
+| Texture | Independently enabled Texture0/1/2, one base level, all 14 decoded formats, 8..1024 per dimension |
+| Coordinates | UV0 semantics 12/13, UV1 14/15, UV2 22/23; exact Q16 in −16..16, affine interpolation with W=1 |
+| Sampler | Per-unit matching nearest or bilinear min/mag, LOD/bias zero; independent clamp-to-edge, repeat or mirrored repeat on S/T |
+| Combiner | Six stages; Texture0/1/2, binary primary color, per-stage RGBA8 constants, Previous and PreviousBuffer; independent RGB/alpha operands, operations and 1/2/4 scale |
 | Fragment policy | Binary opaque primary color; final-alpha tests, logic/blend operations, RGBA masks and bounded D16/D24S8 depth/stencil; no lighting |
 
 PICA wrap IDs are 0/2/3 for clamp/repeat/mirror; parameters store T at bits 8–10,
@@ -29,6 +29,22 @@ follows pinned [tex3ds image/UV packing](https://github.com/devkitPro/tex3ds/blo
 and [atlas coordinates](https://github.com/devkitPro/tex3ds/blob/6d5e8681027d59a13fba95b8ee223e324125704e/source/atlas.cpp#L74).
 The decoder preserves raw row order; sampling performs the origin conversion.
 
+Register `0x80` bits 0/1/2 enable the units. Texture2 uses UV2, or UV1 when bit 13
+is set; each required coordinate pair must be exported completely. Extra UV
+exports must also be complete and valid. Semantic 16 is Texture0 W and remains
+unsupported. `0x64` selects UV output mode; `0x6F` is
+`3 | (exported_uv_mask << 8)` for the bounded position/color shader ABI.
+These fields follow the pinned [libctru shader producer](https://github.com/devkitPro/libctru/blob/9b55eda44cf80b971503991e0c78f9bc8fe50425/libctru/source/gpu/shbin.c#L124).
+
+| Unit | Dimensions | Parameters | LOD | Address | Format |
+| --- | --- | --- | --- | --- | --- |
+| 0 | `0x82` | `0x83` | `0x84` | `0x85` | `0x8E` |
+| 1 | `0x92` | `0x93` | `0x94` | `0x95` | `0x96` |
+| 2 | `0x9A` | `0x9B` | `0x9C` | `0x9D` | `0x9E` |
+
+Active descriptors require complete byte masks. Addresses use eight-byte units;
+LOD stays zero. Sources 3/4/5 require the corresponding enabled texture.
+
 Bilinear sampling uses `coordinate × extent − ½`, wraps or clamps each of four
 taps independently, and interpolates RGBA with the exact affine rational weights.
 One final round-half-up produces each byte; intermediate rows are not rounded.
@@ -39,7 +55,7 @@ explicit software numeric contract; physical PICA/GX2 rounding is not establishe
 
 All six TEV stages accept separate RGB/alpha replace, modulate, add, signed add,
 interpolate, subtract, multiply-add and add-multiply. Sources are primary color,
-Texture0, each stage's RGBA8 constant, the preceding stage and PreviousBuffer. RGB operands select
+Texture0/1/2, each stage's RGBA8 constant, the preceding stage and PreviousBuffer. RGB operands select
 color, alpha or replicated R/G/B, optionally complemented; alpha operands select
 A/R/G/B with optional complement. Each stage snapshots its inputs before writing
 any output channel, including cross-channel Previous operands.
@@ -51,7 +67,7 @@ also clamps its sum before multiplication. These explicit software rules do not
 establish physical PICA rounding. Register/operand facts follow pinned
 [libctru enums](https://github.com/devkitPro/libctru/blob/9b55eda44cf80b971503991e0c78f9bc8fe50425/libctru/include/3ds/gpu/enums.h#L313)
 and [PICA register fields](https://github.com/azahar-emu/azahar/blob/987f18405073960622e1043bb44005989135c6e1/src/video_core/pica/regs_texturing.h#L288).
-DOT3, lighting sources, Texture1–3 and stage-zero
+DOT3, lighting sources, Texture3 and stage-zero
 Previous reject explicitly. Active constant sources require a completely defined
 constant register; reserved operand/function/scale fields reject even after a draw.
 
@@ -79,6 +95,8 @@ Textures resolve entirely inside the stable geometry snapshot or one of at most
 spans cannot overlap geometry or each other; partial geometry aliases and target
 feedback fail. The [guest adapter](guest-pica-draws.md#resource-and-transaction-contract)
 checks allocation identity and permissions before snapshotting.
+Three decoded RGBA images use at most 12 MiB; native pitched uploads are bounded
+to 8 MiB per unit and 24 MiB combined.
 
 ## Fragment output
 
@@ -181,11 +199,15 @@ These interface facts do not establish physical Wii U parity.
 
 ## Native GX2 path
 
-The native adapter uploads decoded RGBA to an owned pitched GX2 texture, reversing
-rows so the original guest UV needs no CPU rewrite. Its Latte pixel program uses
+The native adapter uploads each unit's decoded RGBA to an owned pitched GX2 texture,
+reversing rows so guest UV needs no CPU rewrite. Its Latte pixel program uses
 base-level normalized sampling and the selected point/linear sampler. An original
 scalar Latte encoder implements the admitted combiner chain using nine GPRs,
-or eleven with separate visible/pending buffers, and bounded shader storage.
+or eleven with separate visible/pending buffers for the legacy Texture0 route.
+Materials using Texture1/2 use fifteen GPRs with separate sampled values and
+compact coordinate inputs. Resource and sampler selectors retain the unit IDs;
+Texture2's coordinate route is independent of its sampler binding. Shader storage
+remains bounded.
 Pixel uniforms carry stage constants and initial buffer bytes; explicit byte
 quantization and floor division preserve the software stage boundaries.
 The [native program cache](software-scenes.md#native-program-cache) reuses compiled

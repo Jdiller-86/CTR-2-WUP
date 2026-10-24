@@ -11,7 +11,7 @@ unsigned ctr_tev_arguments(unsigned operation) {
 }
 static bool operation_valid(unsigned value) { return value<=5u || value==8u || value==9u; }
 static bool source_valid(unsigned value) {
-    return value==0u || value==3u || value==13u || value==14u || value==15u;
+    return value==0u || (value>=3u && value<=5u) || value==13u || value==14u || value==15u;
 }
 bool ctr_tev_register_value(unsigned reg,uint32_t value) {
     if(reg==0x0e0u)return !(value&~UINT32_C(0x0000ff00));
@@ -47,9 +47,9 @@ bool ctr_tev_buffered(const ctr_tev_program *program) {
                 if(program->stages[stage].source[side][arg]==13u)return true;
     return false;
 }
-bool ctr_tev_decode(const uint32_t *registers,const uint8_t *defined,bool textured,
+bool ctr_tev_decode(const uint32_t *registers,const uint8_t *defined,unsigned texture_mask,
                     ctr_tev_program *out) {
-    if(!registers || !defined || !out)return false;
+    if(!registers || !defined || !out || texture_mask>7u)return false;
     if(!ctr_tev_register_value(0x0e0u,registers[0x0e0u]) ||
        (defined[0x0e0u] && defined[0x0e0u]!=15u) ||
        (defined[0x0fdu] && defined[0x0fdu]!=15u))return false;
@@ -73,7 +73,8 @@ bool ctr_tev_decode(const uint32_t *registers,const uint8_t *defined,bool textur
                 p->source[side][arg]=(uint8_t)source;
                 p->operand[side][arg]=(uint8_t)((registers[base+1u]>>((side?12u:0u)+arg*4u))&(side?7u:15u));
                 if(arg<ctr_tev_arguments(p->operation[side]) &&
-                   ((source==3u && !textured) || (source==15u && !stage) ||
+                   (((source>=3u && source<=5u) && !(texture_mask&(1u<<(source-3u)))) ||
+                    (source==15u && !stage) ||
                     (source==14u && defined[base+3u]!=15u)))return false;
             }
         }
@@ -100,8 +101,8 @@ static unsigned combine(unsigned op,const unsigned v[3]) {
     }
     return saturated(value);
 }
-void ctr_tev_evaluate(const ctr_tev_program *program,const uint8_t primary[4],
-                      const uint8_t texture[4],uint8_t output[4]) {
+void ctr_tev_evaluate_textures(const ctr_tev_program *program,const uint8_t primary[4],
+                               const uint8_t textures[CTR_TEV_TEXTURES][4],uint8_t output[4]) {
     uint8_t previous[4]={0},buffer[4]={0},pending[4];
     memcpy(pending,program->buffer_color,4);
     for(unsigned stage=0;stage<CTR_TEV_STAGES;++stage) {
@@ -111,7 +112,7 @@ void ctr_tev_evaluate(const ctr_tev_program *program,const uint8_t primary[4],
             unsigned side=lane==3u,values[3]={0};
             for(unsigned arg=0;arg<ctr_tev_arguments(p->operation[side]);++arg) {
                 unsigned id=p->source[side][arg],operand=p->operand[side][arg];
-                const uint8_t *source=id==0u?primary:id==3u?texture:id==13u?buffer:
+                const uint8_t *source=id==0u?primary:(id>=3u && id<=5u)?textures[id-3u]:id==13u?buffer:
                     id==14u?p->constant:previous;
                 unsigned channel=side?operand<2u?3u:operand/2u-1u:
                     operand<2u?lane:operand<4u?3u:operand<6u?0u:operand<10u?1u:2u;
@@ -128,4 +129,10 @@ void ctr_tev_evaluate(const ctr_tev_program *program,const uint8_t primary[4],
             if(program->buffer_update[lane==3u]&(1u<<stage))pending[lane]=previous[lane];
     }
     memcpy(output,previous,4);
+}
+void ctr_tev_evaluate(const ctr_tev_program *program,const uint8_t primary[4],
+                      const uint8_t texture[4],uint8_t output[4]) {
+    uint8_t textures[CTR_TEV_TEXTURES][4]={{0}};
+    if(texture)memcpy(textures[0],texture,4);
+    ctr_tev_evaluate_textures(program,primary,(const uint8_t (*)[4])textures,output);
 }

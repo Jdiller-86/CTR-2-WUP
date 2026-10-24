@@ -5,7 +5,7 @@ queue. An original normal-CRT ARM application uses unmodified pinned libctru to
 submit two command lists, retain uploaded shader/state between them, render
 indexed triangles into owned linear allocations and display both screens.
 The default `draw` profile uses CPU software rendering. Optional GX2 profiles
-translate the bounded vertex shader, sample Texture0 when enabled and draw into
+translate the bounded vertex shader, sample enabled Texture0/1/2 units and draw into
 an owned GPU surface before the same guest display transfers. General PICA
 behavior remains unsupported.
 
@@ -82,8 +82,9 @@ python3 tools/validate-libctru.py --application textured --wiiu --gx2 --sanitize
 ```
 
 This distinct original application submits retained shader/texture state and
-tests nearest replacement and a bilinear four-texel average followed by a
-six-stage RGB/alpha combiner chain, a delayed-buffer material prepass, alpha cutouts, separate RGB/alpha blending
+tests three distinct textures with independent coordinates and both Texture2
+routes, nearest replacement and a bilinear four-texel average, a six-stage
+RGB/alpha combiner chain, a delayed-buffer prepass, alpha cutouts, separate RGB/alpha blending
 and D16/D24S8 depth with stencil preparation, masked rendering and occluded overdraw.
 Its striped-cutout/pale-green top/bottom
 frames receive independent exact host comparison. The native build is named
@@ -91,8 +92,9 @@ frames receive independent exact host comparison. The native build is named
 `wiiu-textured-guest-<source commit>`. Source identity, checked reference images,
 notices and one two-step `START-HERE.md` guide accompany the binaries.
 
-The [texture contract](textures.md) covers all 14 base formats, 8..1024 dimensions,
-nearest/bilinear clamp/repeat/mirror, exact Q16 UV with W=1, and six-stage
+The [texture contract](textures.md) covers three independent units, all 14 base
+formats, 8..1024 dimensions, per-unit nearest/bilinear clamp/repeat/mirror,
+exact Q16 UV with W=1, Texture2→UV1 routing and six-stage
 combiners with constants, Previous, PreviousBuffer, component operands and separate RGB/alpha. Decoded texture storage has explicit ownership; native pitched upload
 reverses rows for PICA V origin, flushes caches and retires GPU references before
 reuse/free. Physical sampling parity and performance remain unverified.
@@ -113,7 +115,7 @@ reuse/free. Physical sampling parity and performance remain unverified.
 - One resource base and one stable color/depth pair are supported per command list.
   Changing either between draws fails transactionally. State writes after the
   last draw may prepare the next list; shader/configuration-only uploads persist.
-  Texture bindings may change between draws within the checked snapshots.
+  Each unit's texture bindings may change between draws within the checked snapshots.
 - Targets are 8×8 Morton tiled RGBA8/ABGR storage, with dimensions that are multiples
   of eight and no larger than 512. The adapter converts to the renderer's linear
   RGBA view, then publishes both complete targets in one checked memory transaction.
@@ -121,7 +123,7 @@ reuse/free. Physical sampling parity and performance remain unverified.
   or four for D24S8, with stencil in byte 3. Color/depth, command, geometry and
   texture aliases reject.
 - Supported fragment state is explicitly defined: primary-color replacement or
-  bounded six-stage Texture0/constant/Previous/PreviousBuffer TEV with independent operands and
+  bounded six-stage Texture0/1/2/constant/Previous/PreviousBuffer TEV with independent operands and
   scale, all eight alpha tests, 16 logic operations, checked blending and RGBA write masks.
   Lighting remains disabled; [D16 depth](textures.md#d16-depth) and
   [D24S8 stencil](textures.md#d24s8-stencil) have explicit bounded profiles. The

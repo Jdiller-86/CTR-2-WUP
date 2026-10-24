@@ -29,6 +29,9 @@ static float depth_scale,depth_offset,depth_min,depth_max;
 static const ctr_shader_program *expected_shader;
 static const ctr_vertex *expected_vertices;
 static const ctr_scene_texture *expected_texture;
+static const ctr_scene_texture *material_textures;
+static unsigned material_mask,material_vertex_mask;
+static bool material_mode,dump_materials;
 static const ctr_scene_state *expected_state;
 static uint32_t bound_pixel_uniforms[36];
 static unsigned bound_pixel_uniform_count;
@@ -42,6 +45,10 @@ static uint32_t bound_vertex_uniforms[4];
 static const uint8_t *bound_vertices;
 static unsigned bound_vertex_bytes;
 static void *texture_image;
+static void *texture_images[4];
+static const GX2Texture *unit_textures[3];
+static const GX2Sampler *unit_samplers[3];
+static unsigned unit_binds[3],unit_sampler_binds[3];
 static unsigned texture_inits,texture_binds,sampler_binds,texture_flushes,texture_invalidates;
 static unsigned expected_count,gpu_draws,read_invalidates,uniform_uploads;
 static unsigned context_switches;
@@ -56,6 +63,26 @@ static unsigned captured_blend_enable,captured_blend_source[2],captured_blend_de
 static float captured_blend_constant[4];
 static bool captured_alpha_enabled;
 static float captured_alpha_reference;
+
+static unsigned expected_texture_mask(void) { return material_mode?material_mask:expected_texture?1u:0u; }
+static unsigned expected_vertex_mask(void) { return material_mode?material_vertex_mask:expected_uv?1u:0u; }
+static unsigned expected_coordinate_mask(void) {
+    unsigned mask=expected_texture_mask();
+    if((mask&4u) && (expected_state->registers[0x80]&(1u<<13)))mask=(mask&3u)|2u;
+    return mask;
+}
+static unsigned bit_count(unsigned mask) { unsigned count=0;for(;mask;mask>>=1)count+=mask&1u;return count; }
+static unsigned vertex_gprs(void) {
+    unsigned mask=expected_vertex_mask();return mask&4u?56u:mask&2u?55u:mask&1u?54u:53u;
+}
+static const ctr_scene_texture *expected_unit(unsigned unit) {
+    assert(unit<3u && (expected_texture_mask()&(1u<<unit)));
+    return material_mode?&material_textures[unit]:expected_texture;
+}
+static unsigned texture_slot(const void *image) {
+    for(unsigned i=0;i<4u;++i)if(texture_images[i]==image)return i;
+    return 4u;
+}
 
 /* These bytes are deliberately input dependent: a hit for a different code,
  * descriptor or export key cannot masquerade as an equivalent mock shader. */
@@ -101,6 +128,7 @@ void ctr_gx2_test_free(void *p) {
     if(p) {
         assert(!gpu_pending || gpu_stopped);
         if(p==texture_image)texture_image=NULL;
+        unsigned slot=texture_slot(p);if(slot<4u)texture_images[slot]=NULL;
         if(p==depth_target_image)depth_target_image=NULL;
         if(p==depth_linear_image)depth_linear_image=NULL;
         assert(live_allocations);--live_allocations;
@@ -160,7 +188,7 @@ void GX2CopySurface(const GX2Surface *src,unsigned a,unsigned b,GX2Surface *dst,
 }
 void DCFlushRange(void *bytes,unsigned size) {
     assert(bytes && size);
-    if(bytes==texture_image) { assert(!gpu_pending);++texture_flushes; }
+    if(texture_slot(bytes)<4u) { assert(!gpu_pending);++texture_flushes; }
 }
 void DCInvalidateRange(void *bytes,unsigned size) { assert(bytes && size);++read_invalidates; }
 void GX2Invalidate(unsigned mode,void *bytes,unsigned size) {
@@ -170,7 +198,7 @@ void GX2Invalidate(unsigned mode,void *bytes,unsigned size) {
     if(mode==GX2_INVALIDATE_MODE_DEPTH_BUFFER) {
         assert(bytes==depth_target_image);++depth_invalidates;
     }
-    if(bytes==texture_image) {
+    if(texture_slot(bytes)<4u) {
         assert(mode==GX2_INVALIDATE_MODE_CPU_TEXTURE && !gpu_pending);
         assert(texture_flushes>texture_invalidates);++texture_invalidates;
     }
@@ -209,6 +237,8 @@ void GX2DrawEx(unsigned type,unsigned count,unsigned first,unsigned instances) {
     assert(type==GX2_PRIMITIVE_MODE_TRIANGLES && count==expected_count && !first && instances==1);
     assert(bound_target && active_context!=&native_context);++gpu_draws;gpu_pending=true;
     assert(!expected_texture || (bound_texture && bound_sampler && bound_pixel_program));
+    if(material_mode)for(unsigned unit=0;unit<3u;++unit)if(material_mask&(1u<<unit))
+        assert(unit_textures[unit] && unit_samplers[unit] && bound_pixel_program);
     assert(color_control_sets==uniform_uploads && channel_mask_sets==uniform_uploads &&
         alpha_test_sets==uniform_uploads && blend_control_sets==uniform_uploads &&
         blend_constant_sets==uniform_uploads && depth_control_sets==uniform_uploads);
@@ -267,10 +297,14 @@ void GX2SetShaderModeEx(unsigned mode,unsigned vs,unsigned vsstack,unsigned gs,u
 }
 void GX2SetVertexShader(const GX2VertexShader *shader) {
     assert(shader->size==256 && ((uintptr_t)shader->program&255u)==0);
-    assert(shader->regs.sq_pgm_resources_vs==(expected_uv?0x136u:0x135u) && shader->regs.num_sq_vtx_semantic==16);
+    assert(shader->regs.sq_pgm_resources_vs==(0x100u|vertex_gprs()) && shader->regs.num_sq_vtx_semantic==16);
     assert(shader->regs.sq_vtx_semantic_clear==0xffff0000);
-    assert(shader->regs.spi_vs_out_id[0]==(expected_uv?UINT32_C(0xffff0100):UINT32_C(0xffffff00)));
-    assert(shader->regs.spi_vs_out_config==(expected_uv?2u:0u));
+    unsigned mask=expected_vertex_mask(),slot=1;uint32_t semantics=UINT32_C(0xffffff00);
+    for(unsigned unit=0;unit<3u;++unit)if(mask&(1u<<unit)) {
+        unsigned shift=8u*slot++;semantics=(semantics&~(UINT32_C(255)<<shift))|((unit+1u)<<shift);
+    }
+    assert(shader->regs.spi_vs_out_id[0]==semantics);
+    assert(shader->regs.spi_vs_out_config==bit_count(mask)*2u);
     for(unsigned i=0;i<16;++i)assert(shader->regs.sq_vtx_semantic[i]==i);
     assert(((uint8_t *)shader->program)[0]==0x12);
     uint32_t signature=mock_vertex_signature(expected_shader,(uint16_t)expected_state->registers[0x2bd],
@@ -301,16 +335,25 @@ static bool expected_buffered(void) {
  * not a GPU emulator: it checks the exact sampler/TEV program bound to GX2. */
 static void check_pixel_program(const uint8_t *program,unsigned size) {
     bool used[8192]={false};unsigned at=0,samples=0;
-    unsigned gprs=expected_buffered()?11u:9u,constants=expected_buffered()?9u:8u;
+    unsigned mask=expected_texture_mask(),coordinates=expected_coordinate_mask();
+    unsigned gprs=mask>1u?15u:expected_buffered()?11u:9u,constants=expected_buffered()?9u:8u;
     for(;at<128u;at+=8u) {
         for(unsigned i=at;i<at+8u;++i) { assert(!used[i]);used[i]=true; }
         uint32_t a=little32(program+at),b=little32(program+at+4u);
-        if(b==UINT32_C(0x80800000)) {
-            assert(expected_texture && !samples++ && a==16u);
-            assert(little32(program+128u)==0x00010013u);
-            assert(little32(program+132u)==0xf00d1002u);
-            assert(little32(program+136u)==0xb0800000u && !little32(program+140u));
-            for(unsigned i=128;i<144;++i)used[i]=true;
+        if((b&~UINT32_C(0x1c00))==UINT32_C(0x80800000)) {
+            unsigned count=((b>>10)&7u)+1u,fetch=128u;
+            assert(mask && !samples && a==16u && count==bit_count(mask));
+            for(unsigned unit=0;unit<3u;++unit)if(mask&(1u<<unit)) {
+                unsigned coord=unit==2u && (expected_state->registers[0x80]&(1u<<13))?1u:unit;
+                unsigned input=1u+bit_count(coordinates&((1u<<coord)-1u));
+                unsigned sample=mask>1u?11u+unit:2u;
+                assert(little32(program+fetch)==(0x13u|(unit<<8)|(input<<16)));
+                assert(little32(program+fetch+4u)==(UINT32_C(0xf00d1000)|sample));
+                assert(little32(program+fetch+8u)==(UINT32_C(0xb0800000)|(unit<<15)));
+                assert(!little32(program+fetch+12u));
+                for(unsigned i=fetch;i<fetch+16u;++i) { assert(!used[i]);used[i]=true; }
+                fetch+=16u;++samples;
+            }
         } else if((b&UINT32_C(0xfe03ffff))==UINT32_C(0xa0000000)) {
             unsigned count=((b>>18)&127u)+1u,start=a*8u;
             assert(start>=256u && start+count*8u<=size);
@@ -324,8 +367,8 @@ static void check_pixel_program(const uint8_t *program,unsigned size) {
             }
             for(unsigned i=start;i<start+count*8u;++i) { assert(!used[i]);used[i]=true; }
         } else {
-            assert(b==0x94200688u && (a==3u<<15 || a==7u<<15));
-            assert(samples==(expected_texture?1u:0u));
+            assert(b==0x94200688u && (a==7u<<15 || a==(mask>1u?14u:3u)<<15));
+            assert(samples==bit_count(mask));
             for(unsigned i=0;i<size;++i)if(!used[i])assert(!program[i]);
             return;
         }
@@ -334,11 +377,14 @@ static void check_pixel_program(const uint8_t *program,unsigned size) {
 }
 void GX2SetPixelShader(const GX2PixelShader *shader) {
     assert(shader->size>=256 && shader->size<=8192 && !(shader->size&255u) && ((uintptr_t)shader->program&255u)==0);
-    assert(shader->regs.sq_pgm_resources_ps==(expected_buffered()?11u:9u));
+    unsigned mask=expected_texture_mask(),coordinates=expected_coordinate_mask();
+    assert(shader->regs.sq_pgm_resources_ps==(mask>1u?15u:expected_buffered()?11u:9u));
     assert(shader->regs.sq_pgm_exports_ps==2u && shader->regs.spi_ps_input_cntls[0]==0x100u);
-    assert(shader->regs.spi_ps_in_control_0==(expected_texture?0x14000002u:0x14000001u));
-    assert(shader->regs.num_spi_ps_input_cntl==(expected_texture?2u:1u));
-    if(expected_texture)assert(shader->regs.spi_ps_input_cntls[1]==0x101u);
+    assert(shader->regs.spi_ps_in_control_0==(0x14000001u+bit_count(coordinates)));
+    assert(shader->regs.num_spi_ps_input_cntl==1u+bit_count(coordinates));
+    unsigned slot=1u;
+    for(unsigned coordinate=0;coordinate<3u;++coordinate)if(coordinates&(1u<<coordinate))
+        assert(shader->regs.spi_ps_input_cntls[slot++]==0x101u+coordinate);
     assert(shader->regs.cb_shader_mask==15u && shader->regs.cb_shader_control==1u &&
         shader->regs.db_shader_control==(expected_depth?0u:16u));
     assert(!shader->uniformBlockCount && !shader->uniformVarCount && !shader->initialValueCount &&
@@ -354,19 +400,21 @@ void GX2InitTextureRegs(GX2Texture *texture) {
     assert(texture->surface.format==GX2_SURFACE_FORMAT_UNORM_R8_G8_B8_A8);
     assert(!texture->viewFirstMip && texture->viewNumMips==1u && !texture->viewFirstSlice && texture->viewNumSlices==1u);
     assert(texture->compMap==0x00010203u && ((uintptr_t)texture->surface.image&255u)==0u);
+    unsigned slot=texture_slot(NULL);assert(slot<4u);texture_images[slot]=texture->surface.image;
     texture_image=texture->surface.image;++texture_inits;
 }
 void GX2SetPixelTexture(const GX2Texture *texture,unsigned unit) {
-    assert(expected_texture && !unit && texture->surface.image==texture_image);
+    const ctr_scene_texture *source=expected_unit(unit);
+    assert(source && texture_slot(texture->surface.image)<4u);
     assert(texture_invalidates==texture_flushes && texture_flushes>texture_binds);
-    assert(texture->surface.width==expected_texture->width && texture->surface.height==expected_texture->height);
+    assert(texture->surface.width==source->width && texture->surface.height==source->height);
     for(unsigned y=0;y<texture->surface.height;++y) {
         const uint8_t *row=(const uint8_t *)texture->surface.image+(size_t)y*texture->surface.pitch*4u;
-        const uint8_t *expected=expected_texture->rgba+(size_t)(expected_texture->height-1u-y)*expected_texture->width*4u;
+        const uint8_t *expected=source->rgba+(size_t)(source->height-1u-y)*source->width*4u;
         assert(!memcmp(row,expected,texture->surface.width*4u));
         for(unsigned at=texture->surface.width*4u;at<texture->surface.pitch*4u;++at)assert(row[at]==0u);
     }
-    bound_texture=texture;++texture_binds;
+    bound_texture=texture;unit_textures[unit]=texture;++texture_binds;++unit_binds[unit];
 }
 void GX2InitSampler(GX2Sampler *sampler,GX2TexClampMode clamp,unsigned filter) {
     assert(clamp==GX2_TEX_CLAMP_MODE_CLAMP &&
@@ -382,13 +430,13 @@ void GX2InitSamplerLOD(GX2Sampler *sampler,float min,float max,float bias) {
 void GX2InitSamplerZMFilter(GX2Sampler *sampler,unsigned z,unsigned mip) { sampler->z_filter=z;sampler->mip_filter=mip; }
 void GX2SetPixelSampler(const GX2Sampler *sampler,unsigned unit) {
     unsigned wraps[4]={GX2_TEX_CLAMP_MODE_CLAMP,99u,GX2_TEX_CLAMP_MODE_WRAP,GX2_TEX_CLAMP_MODE_MIRROR};
-    assert(expected_texture && !unit);
-    assert(sampler->clamp[0]==wraps[(expected_texture->params>>12)&7u]);
-    assert(sampler->clamp[1]==wraps[(expected_texture->params>>8)&7u] && sampler->clamp[2]==GX2_TEX_CLAMP_MODE_CLAMP);
-    assert(sampler->filter==((expected_texture->params&6u)?GX2_TEX_XY_FILTER_MODE_LINEAR:GX2_TEX_XY_FILTER_MODE_POINT));
+    const ctr_scene_texture *source=expected_unit(unit);
+    assert(sampler->clamp[0]==wraps[(source->params>>12)&7u]);
+    assert(sampler->clamp[1]==wraps[(source->params>>8)&7u] && sampler->clamp[2]==GX2_TEX_CLAMP_MODE_CLAMP);
+    assert(sampler->filter==((source->params&6u)?GX2_TEX_XY_FILTER_MODE_LINEAR:GX2_TEX_XY_FILTER_MODE_POINT));
     assert(!sampler->mip_filter && !sampler->z_filter);
     assert(sampler->lod[0]==0.0f && sampler->lod[1]==0.0f && sampler->lod[2]==0.0f);
-    bound_sampler=sampler;++sampler_binds;
+    bound_sampler=sampler;unit_samplers[unit]=sampler;++sampler_binds;++unit_sampler_binds[unit];
 }
 void GX2SetAttribBuffer(unsigned index,unsigned size,unsigned stride,const void *bytes) {
     assert(!index && stride==256 && size==expected_count*256u);
@@ -500,15 +548,18 @@ ctr_gx2_shader_result ctr_gx2_shader_validate_uniforms(const ctr_shader_program 
 ctr_gx2_shader_result ctr_gx2_shader_compile(const ctr_shader_program *program,uint16_t mask,
                                            const uint32_t *maps,unsigned total,ctr_gx2_shader *out) {
     ++compile_attempts;
-    assert(program==expected_shader && mask==(expected_uv?7u:3u) && total==(expected_uv?3u:2u));
+    unsigned uv=expected_vertex_mask(),outputs=2u+bit_count(uv);
+    assert(program==expected_shader && mask==((1u<<outputs)-1u) && total==outputs);
     assert(maps[0]==0x03020100 && maps[1]==0x0b0a0908);
-    if(expected_uv)assert(maps[2]==0x1f1f0d0c);
+    unsigned mapping=2u;
+    const uint32_t uv_maps[3]={0x1f1f0d0c,0x1f1f0f0e,0x1f1f1716};
+    for(unsigned unit=0;unit<3u;++unit)if(uv&(1u<<unit))assert(maps[mapping++]==uv_maps[unit]);
     if(!compile_ok)return CTR_GX2_SHADER_UNSUPPORTED;
     ctr_gx2_shader compiled;memset(&compiled,0,sizeof(compiled));
-    compiled.program[0]=0x12;compiled.size=256;compiled.gprs=expected_uv?54u:53u;
+    compiled.program[0]=0x12;compiled.size=256;compiled.gprs=vertex_gprs();
     uint32_t signature=mock_vertex_signature(program,mask,maps,total);
     for(unsigned byte=0;byte<4u;++byte)compiled.program[byte+1u]=(uint8_t)(signature>>(byte*8u));
-    compiled.texcoord0=expected_uv;compiled.input_mask=expected_uv?7u:3u;
+    compiled.texcoord0=(uv&1u)!=0;compiled.texcoord_mask=(uint8_t)uv;compiled.input_mask=(uint16_t)(3u|(uv<<2));
     compiled.uniform_used[2]=15;compiled.uniform_count=4;
     const uint16_t order[4]={10u,8u,11u,9u};
     memcpy(compiled.uniform_order,order,sizeof(order));compiled.pica_instructions=3;
@@ -527,6 +578,10 @@ static void reset(void) {
     gpu_draws=0;read_invalidates=0;uniform_uploads=0;rectangle_count=0;context_switches=0;
     wait_calls=0;fail_wait_call=0;
     gpu_pending=false;gpu_stopped=false;expected_uv=false;expected_texture=NULL;
+    material_mode=false;material_mask=material_vertex_mask=0;material_textures=NULL;
+    memset(texture_images,0,sizeof(texture_images));
+    memset(unit_textures,0,sizeof(unit_textures));memset(unit_samplers,0,sizeof(unit_samplers));
+    memset(unit_binds,0,sizeof(unit_binds));memset(unit_sampler_binds,0,sizeof(unit_sampler_binds));
     bound_texture=NULL;bound_sampler=NULL;bound_pixel_program=NULL;texture_image=NULL;
     bound_vertex_program=NULL;memset(&bound_vertex_metadata,0,sizeof(bound_vertex_metadata));
     memset(bound_vertex_uniforms,0,sizeof(bound_vertex_uniforms));
@@ -1333,12 +1388,13 @@ static void texture_pixels(uint8_t *bytes,unsigned width,unsigned height) {
 }
 static void dump_pixel(const char *mode,const ctr_scene_state *state,bool comma) {
     if(comma)fputc(',',stdout);
-    printf("{\"mode\":\"%s\",\"textured\":%s,\"hex\":\"",mode,expected_texture?"true":"false");
+    printf("{\"mode\":\"%s\",\"textured\":%s,\"hex\":\"",mode,expected_texture_mask()?"true":"false");
     for(unsigned i=0;i<bound_pixel_metadata.size;++i)printf("%02x",bound_pixel_program[i]);
     printf("\",\"gprs\":%u,\"interpolators\":%u,\"spi_ps_in_control_0\":%u,\"inputs\":[%u",
         bound_pixel_metadata.regs.sq_pgm_resources_ps,bound_pixel_metadata.regs.num_spi_ps_input_cntl,
         bound_pixel_metadata.regs.spi_ps_in_control_0,bound_pixel_metadata.regs.spi_ps_input_cntls[0]);
-    if(expected_texture)printf(",%u",bound_pixel_metadata.regs.spi_ps_input_cntls[1]);
+    for(unsigned i=1;i<bound_pixel_metadata.regs.num_spi_ps_input_cntl;++i)
+        printf(",%u",bound_pixel_metadata.regs.spi_ps_input_cntls[i]);
     fputs("],\"uniforms\":[",stdout);
     for(unsigned i=0;i<bound_pixel_uniform_count;++i)printf("%s%u",i?",":"",bound_pixel_uniforms[i]);
     fputs("],\"stages\":[",stdout);
@@ -1350,11 +1406,15 @@ static void dump_pixel(const char *mode,const ctr_scene_state *state,bool comma)
     if(expected_buffered()) {
         fputs("],\"buffer_color\":[",stdout);
         for(unsigned lane=0;lane<4;++lane)printf("%s%u",lane?",":"",(state->registers[0xfd]>>(lane*8u))&255u);
-        printf("],\"buffer_update\":[%u,%u]}",(state->registers[0xe0]>>8)&15u,(state->registers[0xe0]>>12)&15u);
-    } else fputs("]}",stdout);
+        printf("],\"buffer_update\":[%u,%u]",(state->registers[0xe0]>>8)&15u,(state->registers[0xe0]>>12)&15u);
+    } else fputc(']',stdout);
+    if(material_mode)printf(",\"texture_mask\":%u,\"texture2_coord1\":%s,\"coordinate_mask\":%u",
+        material_mask,expected_state->registers[0x80]&(1u<<13)?"true":"false",expected_coordinate_mask());
+    fputc('}',stdout);
 }
 static void combiner_programs(bool dump);
 static void buffer_programs(bool dump);
+static void material_programs(bool dump);
 static void textured_bindings(bool dump_programs) {
     uint8_t pixels[16u*16u*4u],bytes[1024]={0};texture_pixels(pixels,16,16);
     ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
@@ -1379,7 +1439,11 @@ static void textured_bindings(bool dump_programs) {
                 if(dump_programs)dump_pixel(tev?"modulate":"replace",&state,tev!=0u);
                 assert(backend.end(backend.context,&surface));clean(&scene);
             }
-    if(dump_programs) { combiner_programs(true);buffer_programs(true);fputs("]}\n",stdout); }
+    if(dump_programs) {
+        combiner_programs(true);buffer_programs(true);
+        if(dump_materials)material_programs(true);
+        fputs("]}\n",stdout);
+    }
 }
 static void tev_row(ctr_scene_state *state,unsigned stage,uint32_t sources,uint32_t operands,
                     uint32_t operations,uint32_t constant,uint32_t scale) {
@@ -2136,8 +2200,288 @@ static void cache_counter_saturation(void) {
     assert(scene.vertex_translations==UINT64_MAX && scene.pixel_translations==UINT64_MAX && scene.cache_allocation_failures==UINT64_MAX);
     assert(backend.end(backend.context,&surface));clean(&scene);
 }
+static void material_setup(ctr_scene_state *state,ctr_vertex vertices[3],
+                             ctr_scene_texture textures[3],uint8_t pixels[3][1024],
+                             unsigned mask,bool route,unsigned exports,bool buffered) {
+    setup(state,vertices);material_mode=true;material_mask=mask;material_vertex_mask=exports;
+    material_textures=textures;state->registers[0x80]=mask|(route?1u<<13:0u);
+    state->register_defined[0x80]=15u;
+    unsigned outputs=2u+bit_count(exports),mapping=2u;
+    state->registers[0x04f]=outputs;state->registers[0x2bd]=(1u<<outputs)-1u;
+    const uint32_t maps[3]={0x1f1f0d0c,0x1f1f0f0e,0x1f1f1716};
+    for(unsigned unit=0;unit<3u;++unit) {
+        if(exports&(1u<<unit))state->registers[0x050u+mapping++]=maps[unit];
+        texture_pixels(pixels[unit],8u<<unit,8);
+        for(unsigned i=0;i<(8u<<unit)*8u*4u;++i)pixels[unit][i]^=(uint8_t)(unit*73u);
+        textures[unit]=(ctr_scene_texture){pixels[unit],8u<<unit,8,0x18010000u+unit*0x1000u,
+            unit==1u?13u:0u,unit==1u?0x2326u:unit==2u?0x3200u:0u};
+        for(unsigned vertex=0;vertex<3u;++vertex) {
+            vertices[vertex].enabled=(uint16_t)(3u|(exports<<2));
+            vertices[vertex].input[2u+unit][0]=(float)(unit+vertex)/4.0f;
+            vertices[vertex].input[2u+unit][1]=(float)(3u-unit+vertex)/8.0f;
+        }
+    }
+    unsigned stage=0;
+    for(unsigned unit=0;unit<3u;++unit)if(mask&(1u<<unit)) {
+        unsigned source=3u+unit,sources=stage?15u|(source<<4):source;
+        tev_row(state,stage,sources|(sources<<16),0,stage?0x00010001u:0u,0,0);++stage;
+    }
+    if(buffered) {
+        state->register_defined[0xe0]=state->register_defined[0xfd]=15u;
+        state->registers[0xe0]=0x1100u;state->registers[0xfd]=0x2fab5313u;
+        tev_row(state,stage?stage:1u,0x00df00dfu,0,0x00020002u,0,0);
+    }
+}
+static void material_programs(bool dump) {
+    for(unsigned mask=0;mask<8u;++mask)for(unsigned route=0;route<((mask&4u)?2u:1u);++route)
+        for(unsigned buffered=0;buffered<2u;++buffered) {
+            reset();uint8_t bytes[1024]={0},pixels[3][1024];
+            ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
+            ctr_scene_state state;ctr_vertex vertices[3];ctr_scene_texture textures[3];
+            material_setup(&state,vertices,textures,pixels,mask,route!=0u,7u,buffered!=0u);
+            ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+            ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+            assert(backend.draw_textures && backend.begin(backend.context,&surface));
+            assert(backend.draw_textures(backend.context,&state,vertices,3,textures,mask));
+            cache_snapshot cold,warm;cache_snapshot_get(&cold);
+            assert(scene.vertex_translations==1u && scene.pixel_translations==1u && !gpu_pending);
+            assert(scene.texture_uploads==bit_count(mask));
+            if(dump) {
+                char name[48];snprintf(name,sizeof(name),"material-%u-route-%u-buffer-%u",mask,route,buffered);
+                dump_pixel(name,&state,true);
+            }
+            /* Identical topology is reused while every currently enabled
+             * image/sampler is still uploaded and bound. */
+            rectangle_count=0;assert(backend.draw_textures(backend.context,&state,vertices,3,textures,mask));
+            cache_snapshot_get(&warm);assert(!memcmp(&cold,&warm,sizeof(cold)));
+            assert(scene.vertex_translations==1u && scene.pixel_translations==1u && uniform_uploads==2u);
+            for(unsigned unit=0;unit<3u;++unit)assert(unit_binds[unit]==((mask&(1u<<unit))?2u:0u));
+            if(mask&2u) {
+                textures[1].params^=6u;pixels[1][0]^=0x79u;
+                rectangle_count=0;assert(backend.draw_textures(backend.context,&state,vertices,3,textures,mask));
+                assert(scene.vertex_translations==1u && scene.pixel_translations==1u);
+                cache_snapshot_get(&warm);assert(!memcmp(&cold,&warm,sizeof(cold)));
+            }
+            scene.cache_disabled=true;rectangle_count=0;
+            assert(backend.draw_textures(backend.context,&state,vertices,3,textures,mask));
+            cache_snapshot_get(&warm);assert(!memcmp(&cold,&warm,sizeof(cold)));
+            assert(scene.vertex_translations==2u && scene.pixel_translations==2u);
+            assert(backend.end(backend.context,&surface));clean(&scene);
+        }
+}
+static void material_sparse_exports(void) {
+    static const struct {
+        unsigned mask,exports,gprs,semantics,interpolators;bool route;
+    } cases[]={
+        {2u,2u,55u,0xffff0200u,2u,false},
+        {4u,4u,56u,0xffff0300u,2u,false},
+        {4u,2u,55u,0xffff0200u,2u,true},
+        {6u,2u,55u,0xffff0200u,2u,true},
+        {7u,3u,55u,0xff020100u,3u,true}
+    };
+    for(unsigned sample=0;sample<sizeof(cases)/sizeof(cases[0]);++sample) {
+        reset();uint8_t bytes[1024]={0},pixels[3][1024];
+        ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
+        ctr_scene_state state;ctr_vertex vertices[3];ctr_scene_texture textures[3];
+        material_setup(&state,vertices,textures,pixels,cases[sample].mask,cases[sample].route,
+            cases[sample].exports,true);
+        ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+        ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+        assert(backend.begin(backend.context,&surface));
+        assert(backend.draw_textures(backend.context,&state,vertices,3,textures,cases[sample].mask));
+        assert(bound_vertex_metadata.regs.sq_pgm_resources_vs==(0x100u|cases[sample].gprs));
+        assert(bound_vertex_metadata.regs.spi_vs_out_id[0]==cases[sample].semantics);
+        assert(bound_pixel_metadata.regs.num_spi_ps_input_cntl==cases[sample].interpolators);
+        assert(scene.texture_uploads==bit_count(cases[sample].mask));
+        assert(backend.end(backend.context,&surface));clean(&scene);
+    }
+}
+static void material_cache_transitions(void) {
+    reset();uint8_t bytes[1024]={0},pixels[3][1024];
+    ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
+    ctr_scene_state state;ctr_vertex vertices[3];ctr_scene_texture textures[3];
+    material_setup(&state,vertices,textures,pixels,0u,false,7u,false);
+    /* The TEV program is deliberately unchanged and does not consume any
+     * texture source: sampler presence and UV routing still affect PS code
+     * and metadata, so they must be independent cache dependencies. */
+    ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+    ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+    assert(backend.begin(backend.context,&surface));cache_snapshot variants[2],current;
+    const unsigned masks[5]={6u,6u,4u,6u,6u};
+    const bool routes[5]={false,true,true,true,false};
+    const ctr_scene_texture unit1=textures[1];
+    for(unsigned draw=0;draw<5u;++draw) {
+        material_mask=masks[draw];state.registers[0x80]=masks[draw]|(routes[draw]?1u<<13:0u);
+        if(draw==2u) {
+            /* Inactive unit1 still has a retired, owned GPU image, but its
+             * current caller descriptor is unusable and must not be read. */
+            textures[1]=(ctr_scene_texture){NULL,0,0,0,UINT32_MAX,UINT32_MAX};
+        } else textures[1]=unit1;
+        textures[0]=(ctr_scene_texture){NULL,0,0,0,UINT32_MAX,UINT32_MAX};
+        rectangle_count=0;assert(backend.draw_textures(backend.context,&state,vertices,3,textures,masks[draw]));
+        cache_snapshot_get(&current);
+        if(draw<2u)variants[draw]=current;
+        else if(draw==3u)assert(!memcmp(&variants[1],&current,sizeof(current)));
+        else if(draw==4u)assert(!memcmp(&variants[0],&current,sizeof(current)));
+        assert(scene.vertex_translations==1u && scene.pixel_translations==(draw<3u?draw+1u:3u));
+    }
+    assert(memcmp(variants[0].pixel_bytes,variants[1].pixel_bytes,sizeof(variants[0].pixel_bytes)));
+    assert(unit_binds[0]==0u && unit_binds[1]==4u && unit_binds[2]==5u);
+    cache_kind(&scene,CTR_GX2_CACHE_VERTEX,5,4,1,1,0,0);
+    cache_kind(&scene,CTR_GX2_CACHE_PIXEL,5,2,3,3,0,0);
+    assert(backend.end(backend.context,&surface));
+    assert(!live_allocations && live_cache_owners==1u);
+    pixels[2][0]^=0xb7u;rectangle_count=0;
+    assert(backend.begin(backend.context,&surface));
+    assert(backend.draw_textures(backend.context,&state,vertices,3,textures,6u));
+    assert(scene.vertex_translations==1u && scene.pixel_translations==3u && uniform_uploads==6u);
+    cache_kind(&scene,CTR_GX2_CACHE_PIXEL,6,3,3,3,0,0);
+    assert(backend.end(backend.context,&surface));clean(&scene);
+}
+static void material_rejections(void) {
+    for(unsigned failure=0;failure<8u;++failure) {
+        reset();uint8_t bytes[1024]={0},pixels[3][1024];
+        ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
+        ctr_scene_state state;ctr_vertex vertices[3];ctr_scene_texture textures[3];
+        unsigned mask=failure>=5u?failure==5u?2u:4u:7u;
+        bool route=failure==7u;
+        unsigned exports=failure==5u?1u:failure==6u?2u:failure==7u?4u:7u;
+        material_setup(&state,vertices,textures,pixels,mask,route,exports,false);
+        ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+        ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+        assert(backend.begin(backend.context,&surface));unsigned owned=live_allocations;
+        if(failure==0u)mask=8u;
+        if(failure==2u)textures[1].rgba=NULL;
+        if(failure==3u)textures[2].width=12u;
+        if(failure==4u)textures[2].params|=1u<<24;
+        assert(!backend.draw_textures(backend.context,&state,vertices,3,failure==1u?NULL:textures,mask));
+        assert(scene.result==(failure>=5u?CTR_WIIU_GX2_SCENE_SHADER:CTR_WIIU_GX2_SCENE_ARGUMENT));
+        assert(!gpu_draws && !uniform_uploads && !scene.draws && !scene.quarantined);
+        unsigned prefix=failure==2u?1u:failure==3u || failure==4u?2u:0u;
+        assert(scene.texture_uploads==prefix && live_allocations==owned+prefix);
+        for(unsigned i=0;i<sizeof(bytes);++i)assert(bytes[i]==0u);
+        backend.abort(backend.context);clean(&scene);
+    }
+}
+static void material_allocation_failures(void) {
+    for(unsigned retained=0;retained<2u;++retained)for(unsigned unit=1;unit<3u;++unit) {
+        reset();uint8_t bytes[1024]={0},pixels[3][1024];
+        ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
+        ctr_scene_state state;ctr_vertex vertices[3];ctr_scene_texture textures[3];
+        material_setup(&state,vertices,textures,pixels,7u,false,7u,true);
+        ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+        ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+        assert(backend.begin(backend.context,&surface));
+        if(retained)assert(backend.draw_textures(backend.context,&state,vertices,3,textures,7u));
+        unsigned owned=live_allocations;void *images[3]={NULL,NULL,NULL};
+        if(retained) {
+            for(unsigned i=0;i<3u;++i)images[i]=unit_textures[i]->surface.image;
+            textures[unit].width/=2u;
+        }
+        fail_allocation=alloc_attempts+(retained?1u:unit+1u);rectangle_count=0;
+        assert(!backend.draw_textures(backend.context,&state,vertices,3,textures,7u));
+        assert(scene.result==CTR_WIIU_GX2_SCENE_ALLOCATION && !scene.quarantined && !gpu_pending);
+        assert(scene.draws==retained && gpu_draws==retained && uniform_uploads==retained);
+        assert(scene.texture_uploads==(retained?3u+unit:unit));
+        assert(live_allocations==owned+(retained?0u:unit));
+        if(retained)for(unsigned i=0;i<3u;++i) {
+            assert(unit_textures[i]->surface.image==images[i] && texture_slot(images[i])<4u);
+        }
+        for(unsigned i=0;i<sizeof(bytes);++i)assert(bytes[i]==0u);
+        backend.abort(backend.context);clean(&scene);
+    }
+}
+static void material_replacements(void) {
+    reset();uint8_t bytes[1024]={0},pixels[3][1024];
+    ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
+    ctr_scene_state state;ctr_vertex vertices[3];ctr_scene_texture textures[3];
+    material_setup(&state,vertices,textures,pixels,7u,false,7u,true);
+    ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+    ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+    assert(backend.begin(backend.context,&surface));
+    assert(backend.draw_textures(backend.context,&state,vertices,3,textures,7u));
+    void *images[3];for(unsigned i=0;i<3u;++i)images[i]=unit_textures[i]->surface.image;
+    unsigned owned=live_allocations,allocations=alloc_attempts;uint64_t releases=scene.releases;
+    for(unsigned unit=1;unit<3u;++unit) {
+        textures[unit].width/=2u;textures[unit].params^=6u;pixels[unit][0]^=0x7bu;
+        rectangle_count=0;assert(backend.draw_textures(backend.context,&state,vertices,3,textures,7u));
+        assert(unit_textures[unit]->surface.image!=images[unit] && texture_slot(images[unit])==4u);
+        for(unsigned other=0;other<3u;++other)if(other!=unit)
+            assert(unit_textures[other]->surface.image==images[other]);
+        images[unit]=unit_textures[unit]->surface.image;
+        assert(live_allocations==owned && alloc_attempts==allocations+unit && scene.releases==releases+unit);
+        assert(scene.vertex_translations==1u && scene.pixel_translations==1u);
+    }
+    assert(scene.texture_uploads==9u && texture_flushes==9u && texture_invalidates==9u);
+    for(unsigned unit=0;unit<3u;++unit)assert(unit_binds[unit]==3u && unit_sampler_binds[unit]==3u);
+    assert(backend.end(backend.context,&surface));clean(&scene);
+}
+static void material_pending_reuse(void) {
+    reset();uint8_t bytes[1024]={0},pixels[3][1024];
+    ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
+    ctr_scene_state state;ctr_vertex vertices[3];ctr_scene_texture textures[3];
+    material_setup(&state,vertices,textures,pixels,7u,true,7u,true);
+    ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+    ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+    assert(backend.begin(backend.context,&surface));scene.restore_context=NULL;
+    assert(backend.draw_textures(backend.context,&state,vertices,3,textures,7u) && gpu_pending);
+    void *images[3];for(unsigned unit=0;unit<3u;++unit)images[unit]=unit_textures[unit]->surface.image;
+    unsigned waits=wait_calls;
+    textures[0].width=16u;texture_pixels(pixels[0],16u,8u);
+    rectangle_count=0;assert(backend.draw_textures(backend.context,&state,vertices,3,textures,7u));
+    assert(wait_calls==waits+1u && gpu_pending && !scene.quarantined);
+    assert(unit_textures[0]->surface.image!=images[0]);
+    assert(unit_textures[1]->surface.image==images[1] && unit_textures[2]->surface.image==images[2]);
+    assert(scene.texture_uploads==6u && scene.vertex_translations==1u && scene.pixel_translations==1u);
+    for(unsigned unit=0;unit<3u;++unit)assert(unit_binds[unit]==2u);
+    scene.restore_context=&native_context;backend.abort(backend.context);clean(&scene);
+}
+static void material_pending_retirement(void) {
+    for(unsigned mode=0;mode<3u;++mode) {
+        reset();uint8_t bytes[1024]={0},pixels[3][1024];
+        ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
+        ctr_scene_state state;ctr_vertex vertices[3];ctr_scene_texture textures[3];
+        material_setup(&state,vertices,textures,pixels,7u,false,7u,true);
+        ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+        ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+        assert(backend.begin(backend.context,&surface));scene.restore_context=NULL;
+        assert(backend.draw_textures(backend.context,&state,vertices,3,textures,7u) && gpu_pending);
+        uint8_t saved[3][1280],attributes[768];void *images[3];unsigned sizes[3];
+        for(unsigned unit=0;unit<3u;++unit) {
+            images[unit]=unit_textures[unit]->surface.image;sizes[unit]=unit_textures[unit]->surface.imageSize;
+            assert(sizes[unit]<=sizeof(saved[unit]));memcpy(saved[unit],images[unit],sizes[unit]);
+            pixels[unit][0]^=0xffu;
+        }
+        assert(bound_vertex_bytes==sizeof(attributes));memcpy(attributes,bound_vertices,sizeof(attributes));
+        cache_snapshot old,current;cache_snapshot_get(&old);
+        if(mode==1u)state.registers[0x80]|=1u<<13; /* A PS-cache miss is also behind the wait. */
+        textures[0].width*=2u;vertices[0].input[0][0]=0.75f;
+        unsigned allocations=alloc_attempts,owned=live_allocations,waits=wait_calls;
+        uint64_t releases=scene.releases;wait_ok=false;rectangle_count=0;
+        assert(!backend.draw_textures(backend.context,&state,vertices,3,textures,7u));
+        assert(scene.result==CTR_WIIU_GX2_SCENE_WAIT && scene.quarantined && gpu_pending);
+        assert(wait_calls==waits+1u && alloc_attempts==allocations && live_allocations==owned && scene.releases==releases);
+        assert(scene.texture_uploads==3u && uniform_uploads==1u && compile_attempts==1u);
+        cache_kind(&scene,CTR_GX2_CACHE_PIXEL,1,0,1,1,0,0);
+        cache_snapshot_get(&current);assert(!memcmp(&old,&current,sizeof(old)));
+        assert(!memcmp(attributes,bound_vertices,sizeof(attributes)));
+        for(unsigned unit=0;unit<3u;++unit)
+            assert(unit_textures[unit]->surface.image==images[unit] && !memcmp(saved[unit],images[unit],sizes[unit]));
+        ctr_wiiu_gx2_scene_cache_clear(&scene);
+        assert(!live_cache_owners && live_allocations==owned && scene.releases==releases);
+        scene.restore_context=&native_context;backend.abort(backend.context);
+        assert(scene.quarantined && live_allocations==owned);
+        for(unsigned unit=0;unit<3u;++unit)assert(texture_slot(images[unit])<4u);
+        if(mode==2u) { gpu_stopped=true;ctr_wiiu_gx2_scene_after_shutdown(&scene); }
+        else { wait_ok=true;backend.abort(backend.context); }
+        clean(&scene);
+        for(unsigned slot=0;slot<4u;++slot)assert(!texture_images[slot]);
+    }
+}
 int main(int argc,char **argv) {
-    if(argc==2 && !strcmp(argv[1],"--fragment-programs")) { textured_bindings(true);return 0; }
+    if(argc==2 && (!strcmp(argv[1],"--fragment-programs") || !strcmp(argv[1],"--legacy-fragment-programs"))) {
+        dump_materials=!strcmp(argv[1],"--fragment-programs");textured_bindings(true);return 0;
+    }
     assert(argc==1);
     baseline();allocation_failures();scissor_modes();failures();readback_observer();
     fragment_bindings();alpha_comparison_vectors();fragment_failures();
@@ -2151,6 +2495,10 @@ int main(int argc,char **argv) {
     texture_reuse();texture_dimensions();texture_failures();
     cache_reuse();cache_vertex_fifo();cache_pixel_fifo();cache_rejection();cache_parity();
     cache_profiles();cache_lifetime();cache_pending_retirement();cache_counter_saturation();
+    material_programs(false);
+    material_sparse_exports();material_cache_transitions();material_rejections();
+    material_allocation_failures();material_replacements();material_pending_reuse();material_pending_retirement();
+    puts("GX2 material API model: independent Texture0/1/2 uploads, samplers, sparse masks, UV routing, warm and uncached programs passed");
     puts("GX2 CPU program cache API model: cold/warm and cross-list reuse, dynamic constants, bounded FIFO eviction, current-state rejection, uncached/failure parity, sampler/depth profiles, CPU/GPU ownership and quarantine passed");
     printf("PreviousBuffer native program model: %u independent pixel vectors, maximum %u scalar ALUs, all stage/mask histories and retained rejection passed\n",buffer_pixel_vectors,buffer_max_instructions);
     puts("GX2 native API model: lifetime, texture/depth retirement/quarantine, original inputs, sampler/TEV bytecode, fragment/blend/depth mappings, 1048576 alpha, 1048576 D16 and 524288 stencil comparisons, 1572864 stencil action/mask vectors, pitched paired upload, scissor and readback passed");

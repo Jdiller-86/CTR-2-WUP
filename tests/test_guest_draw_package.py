@@ -96,9 +96,9 @@ class GuestDrawPackageTests(unittest.TestCase):
         app = self.report['applications'][0]
         app['application'] = 'textured'
         app['gx2_guest']['textured'] = True
-        app['guest']['messages'] = ['CTR2WUP compiled TEV buffer PASS', 'CTR2WUP compiled D16 depth PASS', 'CTR2WUP compiled stencil preparation PASS', 'CTR2WUP compiled D24S8 stencil PASS', 'CTR2WUP compiled textured PICA PASS']
-        app['guest']['pica_render'] = {'draws': 10, 'triangles': 10, 'fragments': 237540, 'shader_instructions': 120}
-        app['guest']['gx'] = {'commands': 9, 'dma': 0, 'fills': 3, 'transfers': 2, 'copies': 0, 'cache': 0, 'pica': 4}
+        app['guest']['messages'] = ['CTR2WUP compiled multi-texture PASS', 'CTR2WUP compiled TEV buffer PASS', 'CTR2WUP compiled D16 depth PASS', 'CTR2WUP compiled stencil preparation PASS', 'CTR2WUP compiled D24S8 stencil PASS', 'CTR2WUP compiled textured PICA PASS']
+        app['guest']['pica_render'] = {'draws': 12, 'triangles': 12, 'fragments': 291480, 'shader_instructions': 156}
+        app['guest']['gx'] = {'commands': 13, 'dma': 0, 'fills': 5, 'transfers': 2, 'copies': 0, 'cache': 0, 'pica': 6}
         for frame, check in zip(app['frames'], app['independent_frame_checks']):
             width = check['width']
             pixels = b''.join(bytes((x % 256, y % 256, (x + 3*y) % 256))
@@ -262,6 +262,7 @@ class GuestDrawPackageTests(unittest.TestCase):
             lambda r: r['applications'][0]['gx2_guest'].pop('textured'),
             lambda r: r['applications'][0]['gx2_guest'].update(gpu_hardware_verified=True),
             lambda r: r['applications'][0]['guest']['pica_render'].update(shader_instructions=36),
+            lambda r: r['applications'][0]['guest']['messages'].remove('CTR2WUP compiled multi-texture PASS'),
             lambda r: r['applications'][0]['guest']['messages'].remove('CTR2WUP compiled TEV buffer PASS'),
             lambda r: r['applications'][0]['guest']['messages'].remove('CTR2WUP compiled D16 depth PASS'),
             lambda r: r['applications'][0]['guest']['messages'].remove('CTR2WUP compiled stencil preparation PASS'),

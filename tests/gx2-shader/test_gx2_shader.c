@@ -150,7 +150,7 @@ static void texture_coordinate_exports(void) {
     maps[2]=UINT32_C(0x1f1f1f0c);mapped_failure(7,3,CTR_GX2_SHADER_UNDEFINED);
     maps[2]=UINT32_C(0x1f1f1f0d);mapped_failure(7,3,CTR_GX2_SHADER_UNDEFINED);
     maps[2]=UINT32_C(0x1f1f0c0c);mapped_failure(7,3,CTR_GX2_SHADER_UNDEFINED);
-    maps[2]=UINT32_C(0x1f0e0d0c);mapped_failure(7,3,CTR_GX2_SHADER_UNSUPPORTED);
+    maps[2]=UINT32_C(0x1f0e0d0c);mapped_failure(7,3,CTR_GX2_SHADER_UNDEFINED);
     maps[2]=UINT32_C(0x1f1f0d0c);
     p.code[2]=mov(2,2,1);p.descriptors[1]=8;p.descriptor_defined[1]=1;
     mapped_failure(7,3,CTR_GX2_SHADER_UNDEFINED);
@@ -159,6 +159,58 @@ static void texture_coordinate_exports(void) {
     mapped_failure(7,3,CTR_GX2_SHADER_UNDEFINED);
     /* A prior UV result cannot leave its metadata set on an untextured compile. */
     init();CHECK(run()==CTR_GX2_SHADER_OK && !out.texcoord0 && out.gprs==53);
+}
+static void texture_coordinate_sets(void) {
+    static const unsigned semantics[3]={12u,14u,22u};
+    for(unsigned uv_mask=0;uv_mask<8u;++uv_mask) {
+        init();unsigned count=2,code=2,mask=3,gprs=53;
+        for(unsigned unit=0;unit<3u;++unit)if(uv_mask&(1u<<unit)) {
+            p.code[code]=mov(2u+unit,2u+unit,0);p.code_defined[code++]=1;
+            maps[count++]=UINT32_C(0x1f1f0000)|semantics[unit]|((semantics[unit]+1u)<<8);
+            mask|=1u<<(2u+unit);gprs=54u+unit;
+        }
+        p.code[code]=UINT32_C(0x88000000);p.code_defined[code]=1;
+        CHECK(ctr_gx2_shader_compile(&p,(uint16_t)mask,maps,count,&out)==CTR_GX2_SHADER_OK);
+        CHECK(out.texcoord_mask==uv_mask && out.texcoord0==((uv_mask&1u)!=0));
+        CHECK(out.gprs==gprs && out.input_mask==mask);
+        CHECK(out.pica_instructions==count+1u && out.alu_instructions==24u+10u*bit_count(uv_mask));
+        CHECK(get32(out.program+28)==(uv_mask?UINT32_C(0x13800688):UINT32_C(0x14200688)));
+        unsigned slot=0;
+        for(unsigned unit=0;unit<3u;++unit)if(uv_mask&(1u<<unit)) {
+            ++slot;
+            CHECK(get32(out.program+24u+slot*8u)==(slot|(2u<<13)|((53u+unit)<<15)));
+            CHECK(get32(out.program+28u+slot*8u)==
+                (slot==bit_count(uv_mask)?UINT32_C(0x14200b08):UINT32_C(0x13800b08)));
+        }
+    }
+    for(unsigned unit=0;unit<3u;++unit) {
+        init();p.code[2]=mov(2,2,0);p.code[3]=UINT32_C(0x88000000);p.code_defined[3]=1;
+        for(unsigned u=0;u<4u;++u)for(unsigned v=0;v<4u;++v)if(u!=v) {
+            maps[2]=UINT32_C(0x1f1f1f1f);
+            maps[2]=(maps[2]&~(255u<<(8u*u)))|(semantics[unit]<<(8u*u));
+            maps[2]=(maps[2]&~(255u<<(8u*v)))|((semantics[unit]+1u)<<(8u*v));
+            CHECK(ctr_gx2_shader_compile(&p,7,maps,3,&out)==CTR_GX2_SHADER_OK);
+            CHECK(out.texcoord_mask==(1u<<unit) && out.gprs==54u+unit);
+            CHECK(get32(out.program+32)==(1u|(2u<<13)|((53u+unit)<<15)));
+            for(unsigned index=0;index<2u;++index) {
+                unsigned lane=index==0u?(u<v?u:v):(u<v?v:u),at=512u+(32u+index)*8u;
+                CHECK(((get32(out.program+at)>>10)&3u)==lane);
+                CHECK(((get32(out.program+at+4u)>>21)&127u)==53u+unit);
+                CHECK((get32(out.program+at+4u)>>29)==(lane==u?0u:1u));
+            }
+        }
+        maps[2]=UINT32_C(0x1f1f1f00)|semantics[unit];
+        mapped_failure(7,3,CTR_GX2_SHADER_UNDEFINED);
+        maps[2]=UINT32_C(0x1f1f1f00)|(semantics[unit]+1u);
+        mapped_failure(7,3,CTR_GX2_SHADER_UNDEFINED);
+    }
+    /* Texture0 W and view/reserved semantics do not alias the published UV2 pair. */
+    for(unsigned semantic=16u;semantic<31u;++semantic)if(semantic!=22u && semantic!=23u) {
+        init();p.code[2]=mov(2,2,0);p.code[3]=UINT32_C(0x88000000);p.code_defined[3]=1;
+        maps[2]=UINT32_C(0x1f1f1f00)|semantic;
+        mapped_failure(7,3,CTR_GX2_SHADER_UNSUPPORTED);
+    }
+    init();CHECK(run()==CTR_GX2_SHADER_OK && !out.texcoord_mask && !out.texcoord0);
 }
 static void revalidation_matches(ctr_gx2_shader_result expected) {
     CHECK(ctr_gx2_shader_validate_uniforms(&p,&previous)==expected);
@@ -315,6 +367,6 @@ static void bounds_and_failures(void) {
 }
 int main(void) {
     original_shader();inputs_uniforms_and_dependencies();swizzles_and_masks();semantic_maps();
-    texture_coordinate_exports();uniform_revalidation();bounds_and_failures();
+    texture_coordinate_exports();texture_coordinate_sets();uniform_revalidation();bounds_and_failures();
     printf("gx2 shader PASS: %u assertions\n",assertions);return 0;
 }
