@@ -19,13 +19,22 @@ def main():
     if data[:2] != b"MZ" or data[offset:offset + 4] != b"PE\0\0" or struct.unpack_from("<H", data, offset + 4)[0] != 0x8664:
         raise RuntimeError("Expected the self-contained Windows x64 PE")
     checks = json.loads((ROOT / "artifacts/reports/cia-helper-final/report.json").read_text())
-    if not checks["ok"] or checks["version"] != __version__:
+    if (not checks["ok"] or checks["version"] != __version__ or not checks.get("checks")
+            or not all(case["ok"] for case in checks["checks"])):
         raise RuntimeError("Refusing to bundle a helper without matching successful fixture checks")
+    native_verified = checks.get("native_windows_execution") == "verified"
+    if native_verified and (checks.get("helper_sha256") != hashlib.sha256(data).hexdigest()
+            or checks.get("source_sha256") != hashlib.sha256((ROOT / "tools/CiaIntake/Program.cs").read_bytes()).hexdigest()
+            or checks.get("platform") != "win32 .NET fixture execution"):
+        raise RuntimeError("Native Windows evidence must match the exact executable and current source")
     report = {"schema_version": 1, "version": __version__, "artifact": helper.name,
               "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data),
               "source_sha256": hashlib.sha256((ROOT / "tools/CiaIntake/Program.cs").read_bytes()).hexdigest(),
-              "sdk": "10.0.401", "runtime": "10.0.12", "target": "win-x64 self-contained",
-              "linux_dotnet_fixture_checks": len(checks["checks"]), "native_windows_execution": "unverified",
+              "sdk": "10.0.403", "runtime": "10.0.14", "target": "win-x64 self-contained",
+              "fixture_checks": len(checks["checks"]), "fixture_platform": checks.get("platform", "unknown"),
+              "linux_dotnet_fixture_checks": (len(checks["checks"])
+                  if checks.get("platform", "").lower().startswith("linux") else 0),
+              "native_windows_execution": "verified" if native_verified else "unverified",
               "user_game_inspected": False, "product_gui": False, "commercial_injection": False}
     folder = ROOT / "artifacts/delivery"; folder.mkdir(parents=True, exist_ok=True)
     archive = folder / f"CTR2WUP-CIA-Intake-Windows-x64-{__version__}.zip"

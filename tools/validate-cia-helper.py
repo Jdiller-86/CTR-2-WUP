@@ -20,18 +20,23 @@ from tests.host_fixtures import cia, ncch, blz_repeat
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--helper", required=True, help="Built .NET helper DLL")
+    parser.add_argument("--helper", required=True, help="Built .NET helper DLL or native Windows executable")
     parser.add_argument("--dotnet", default="dotnet")
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     output = Path(args.output).absolute(); output.mkdir(parents=True, exist_ok=False)
     helper = Path(args.helper).absolute()
+    native_executable = helper.suffix.lower() == ".exe"
+    if native_executable and sys.platform != "win32":
+        parser.error("A Windows executable requires native Windows execution")
+    launcher = [str(helper)] if native_executable else [args.dotnet, str(helper)]
     cases = []
     def execute(name, data, *, code=None, executable=None):
         with tempfile.TemporaryDirectory(prefix="ctr2wup-cia-reference-") as temporary:
             root = Path(temporary); path = root / "original game 日本語.cia"; path.write_bytes(data)
             target = root / "intake 日本語"
-            process = subprocess.run([args.dotnet, str(helper), str(path), str(target)], capture_output=True, text=True)
+            process = subprocess.run([*launcher, str(path), str(target)], capture_output=True,
+                                     text=True, encoding="utf-8")
             good = process.returncode == (2 if code else 0)
             if code:
                 good &= code in process.stderr and not target.exists()
@@ -76,8 +81,10 @@ def main():
     execute("truncated", b"original", code="invalid_bounds")
     report = {"schema_version": 1, "ok": all(x["ok"] for x in cases), "version": __version__,
               "helper_sha256": hashlib.sha256(helper.read_bytes()).hexdigest(), "checks": cases,
-              "platform": "Linux .NET execution; Windows target cross-published separately",
-              "actual_user_cia_inspected": False, "native_windows_execution": "unverified"}
+              "source_sha256": hashlib.sha256((ROOT / "tools/CiaIntake/Program.cs").read_bytes()).hexdigest(),
+              "platform": sys.platform + " .NET fixture execution",
+              "actual_user_cia_inspected": False,
+              "native_windows_execution": "verified" if native_executable and all(x["ok"] for x in cases) else "unverified"}
     (output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
     return 0 if report["ok"] else 1
 

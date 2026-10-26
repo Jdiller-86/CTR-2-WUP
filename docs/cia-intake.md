@@ -27,7 +27,9 @@ intake. The original remains unchanged and existing outputs are refused.
 
 ## Standalone Windows CIA helper
 
-Download the self-contained **CTR2WUP-CIA-Intake Windows x64** package. It includes
+The [Windows validation workflow](https://github.com/Jdiller-86/CTR-2-WUP/actions/workflows/windows-validation.yml)
+provides `cia-helper-windows-<source commit>`, containing the checked,
+self-contained **CTR2WUP-CIA-Intake Windows x64** package. It includes
 its .NET runtime/notices and requires no Python or SDK. Drag a CIA onto
 `CTR2WUP-CIA-Intake.exe`, or open it and paste the local path. The new
 `<CIA filename>.ctr2wup-intake/` directory contains the private ZIP.

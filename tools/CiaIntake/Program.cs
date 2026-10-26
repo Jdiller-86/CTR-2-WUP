@@ -206,6 +206,7 @@ static class Intake
     }
     static int Main(string[] args)
     {
+        Console.OutputEncoding = new UTF8Encoding(false);
         bool interactive = args.Length < 2;
         try
         {

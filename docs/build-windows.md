@@ -9,7 +9,7 @@ conversion and playable WUP output remain under development.
 - MSYS2 UCRT64 with native GCC and Make for host-generated C and portable tests.
 - Official devkitPro Windows tooling with devkitPPC/WUT for Wii U RPX/WUHB builds.
 - Rust 1.95.0 for the optional audited external lifter.
-- .NET SDK 10.0.401 for the separate CIA intake helper and WPF tooling probe.
+- .NET SDK 10.0.403 for the separate CIA intake helper and WPF tooling probe.
 
 The Linux Docker SDK installer does not produce native Windows dependencies.
 Use the official Windows SDK route and preserve download/signature verification.

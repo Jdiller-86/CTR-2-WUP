@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=69"]
+requires = ["setuptools>=84.2.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -10,8 +10,8 @@ requires-python = ">=3.12"
 dependencies = []
 
 [project.optional-dependencies]
-packaging = ["cryptography>=50.0.0,<51"]
-decryption = ["cryptography>=50.0.0,<51"]
+packaging = ["cryptography>=50.0.2,<51"]
+decryption = ["cryptography>=50.0.2,<51"]
 
 [project.scripts]
 ctr2wup = "host.cli:main"

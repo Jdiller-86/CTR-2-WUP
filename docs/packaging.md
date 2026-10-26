@@ -240,7 +240,7 @@ also packages the real WUT-built RPX, verifies all staged files and exercises bo
 CLI paths. Its synthetic inputs/package exist only in a temporary directory;
 the retained report records that they cannot authenticate a console title.
 
-The encryption dependency is **cryptography 50.0.0**, Apache-2.0 OR BSD-3-Clause;
+The encryption dependency is **cryptography 50.0.2**, Apache-2.0 OR BSD-3-Clause;
 CTR2WUP selects the BSD-3-Clause grant and preserves its notice in
 `docs/licenses/cryptography-LICENSE.BSD`. The library and its native dependencies
 remain external Python packages; no crypto binary is bundled here.
