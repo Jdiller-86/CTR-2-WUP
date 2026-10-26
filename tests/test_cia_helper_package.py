@@ -28,6 +28,7 @@ class CiaHelperPackageTests(unittest.TestCase):
         files = {
             "artifacts/cia-helper/windows/CTR2WUP-CIA-Intake.exe": bytes(self.executable),
             "tools/CiaIntake/Program.cs": b"Original helper source fixture",
+            "global.json": b'{"sdk":{"version":"10.0.403"}}',
             "LICENSE": b"Original project license fixture",
             "docs/licenses/dotnet-runtime-LICENSE.txt": b"Original runtime license fixture",
             "docs/licenses/dotnet-runtime-THIRD-PARTY-NOTICES.txt": b"Original runtime notice fixture",

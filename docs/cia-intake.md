@@ -58,8 +58,8 @@ Nintendo signature authenticity or commercial compatibility.
 
 ## Build and validation
 
-Use the SDK/runtime pins in `tools/CiaIntake/CiaIntake.csproj` and the helper
-packaging tool. Keep build intermediates outside the source tree:
+Use the SDK pin in `global.json` and the runtime pin in
+`tools/CiaIntake/CiaIntake.csproj`. Keep build intermediates outside the source tree:
 
 ```sh
 dotnet build tools/CiaIntake/CiaIntake.csproj -c Release -p:BaseIntermediateOutputPath=/absolute/artifacts/cia-obj/ -p:OutputPath=/absolute/artifacts/cia-linux/

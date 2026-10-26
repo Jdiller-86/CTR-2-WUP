@@ -30,7 +30,8 @@ def main():
     report = {"schema_version": 1, "version": __version__, "artifact": helper.name,
               "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data),
               "source_sha256": hashlib.sha256((ROOT / "tools/CiaIntake/Program.cs").read_bytes()).hexdigest(),
-              "sdk": "10.0.403", "runtime": "10.0.14", "target": "win-x64 self-contained",
+              "sdk": json.loads((ROOT / "global.json").read_text())["sdk"]["version"],
+              "runtime": "10.0.14", "target": "win-x64 self-contained",
               "fixture_checks": len(checks["checks"]), "fixture_platform": checks.get("platform", "unknown"),
               "linux_dotnet_fixture_checks": (len(checks["checks"])
                   if checks.get("platform", "").lower().startswith("linux") else 0),
