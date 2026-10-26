@@ -29,7 +29,7 @@ jobs:
       - name: Set up .NET SDK
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: '10.0.401'
+          global-json-file: global.json
       - name: Set up native GCC and Make
         id: msys
         uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
@@ -55,6 +55,32 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts/windows-validation
           make check-c-portable 2>&1 | tee artifacts/windows-validation/portable-c-tests.log
+      - name: Publish and validate the native Windows CIA helper
+        shell: pwsh
+        run: |
+          $ctrCiaSdk = (dotnet --version).Trim()
+          $ctrExpectedSdk = (Get-Content global.json -Raw | ConvertFrom-Json).sdk.version
+          if ($LASTEXITCODE -ne 0 -or $ctrCiaSdk -ne $ctrExpectedSdk) { throw 'Unexpected .NET SDK' }
+          dotnet --info | Tee-Object artifacts/windows-validation/dotnet-info.log
+          $ctrCiaObj = (Join-Path $env:RUNNER_TEMP 'ctr2wup-cia-obj') + '/'
+          $ctrCiaOutput = Join-Path $env:GITHUB_WORKSPACE 'artifacts/cia-helper/windows'
+          dotnet publish tools/CiaIntake/CiaIntake.csproj -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+            "-p:BaseIntermediateOutputPath=$ctrCiaObj" -o $ctrCiaOutput `
+            2>&1 | Tee-Object artifacts/windows-validation/cia-helper-publish.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/validate-cia-helper.py --helper "$ctrCiaOutput/CTR2WUP-CIA-Intake.exe" `
+            --output artifacts/reports/cia-helper-final
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/package-cia-helper.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload the checked Windows CIA helper
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: cia-helper-windows-${{ github.sha }}
+          path: artifacts/delivery/*CIA-Intake*
+          if-no-files-found: error
+          retention-days: 14
       - name: Build pinned external generation tools
         shell: pwsh
         run: |
@@ -85,7 +111,8 @@ jobs:
           ### Windows development validation
 
           This manual run checks the source CLI, original portable C fixtures, pinned
-          external ARM/Thumb/VFP generation, Unicode paths and a WPF SDK probe. A passing
+          external ARM/Thumb/VFP generation, Unicode paths, the self-contained CIA helper
+          and a WPF SDK probe. A passing
           probe confirms development tooling; it does not implement or validate the final
           injector GUI, Wii U execution, WUP installation or commercial game compatibility.
           No ROM, user key, seed database, save or commercial asset is downloaded or uploaded.
@@ -100,6 +127,8 @@ jobs:
             artifacts/windows-validation/*.log
             artifacts/windows-validation/upstream/*.log
             artifacts/windows-validation/upstream/report.json
+            artifacts/reports/cia-helper-final/report.json
+            artifacts/delivery/cia-helper-manifest-*.json
             artifacts/logs/*.log
           if-no-files-found: warn
           retention-days: 14

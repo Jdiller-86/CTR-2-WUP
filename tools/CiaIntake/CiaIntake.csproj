@@ -8,6 +8,6 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <DebugType>none</DebugType>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <RuntimeFrameworkVersion Condition="'$(SelfContained)' == 'true'">10.0.12</RuntimeFrameworkVersion>
+    <RuntimeFrameworkVersion Condition="'$(SelfContained)' == 'true'">10.0.14</RuntimeFrameworkVersion>
   </PropertyGroup>
 </Project>

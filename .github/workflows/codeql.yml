@@ -1,6 +1,6 @@
 name: Optional CodeQL analysis
 
-# The repository is private. This does not enable or buy Advanced Security.
+# The public repository is eligible for CodeQL without Advanced Security billing.
 # Run only after independently confirming existing CodeQL scanning eligibility.
 on:
   workflow_dispatch:

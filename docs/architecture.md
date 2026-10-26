@@ -46,7 +46,8 @@ independently of handles. Unsupported interfaces fail with PC/opcode or IPC cont
 [Software scenes](software-scenes.md) provide a bounded reference for
 [guest draws](guest-pica-draws.md). The optional native scene backend translates
 PICA MOV/ADD/MUL/NOP/END to Latte vertex code and submits original inputs through
-GX2. [Base textures](textures.md) support nearest/bilinear Texture0 sampling and bounded
+GX2. [Base textures](textures.md) support nearest/bilinear Texture0/1/2 sampling,
+independent coordinates and bounded
 six-stage RGB/alpha TEV with a delayed combiner buffer, alpha tests, logic/blend operations, write masks and
 bounded D16/D24S8 depth/stencil; decoded
 uploads retain guest UV and explicit ownership.
