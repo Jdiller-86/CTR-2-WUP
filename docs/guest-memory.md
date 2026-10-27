@@ -77,6 +77,22 @@ invalidating unchanged executable snapshots. Adding/removing executable mappings
 changing execute protection and writes through executable aliases still invalidate
 AOT. Dynamic heap management therefore preserves normal translated execution.
 
+Renderer resource keys bind a live memory owner, virtual range, permissions,
+mapping version and maximum backing-page write version. A fixed 1024-entry table
+tracks hashed host 4 KiB pages; aliases share dirty versions. Page sharing and
+hash collisions conservatively invalidate extra resources. Mapping changes
+invalidate all keys; failed writes and unchanged protection do not. Versions
+never wrap: an exhausted counter disables keys and forces owned snapshot misses.
+Keys cannot survive owner reset, copying or closure.
+
+Checked scalar, bulk and atomic writes update these versions. Trusted shared,
+TLS, configuration and synthetic-time publications notify the same backing
+tracker; executable aliases invalidate code snapshots. Synthetic-time updates
+retain their existing exclusive-monitor policy. Renderer cache hits also compare
+the exact current bytes, preserving correctness for caller-supplied backing
+changes outside the notification API. Permissions and allocation ownership are
+validated before reuse; no version authorizes access.
+
 `ctr_memory_write_ranges` publishes up to 32 owned output ranges atomically.
 It validates every destination, source and descriptor before copying; overlapping
 virtual destinations or backing aliases reject. A successful nonempty batch

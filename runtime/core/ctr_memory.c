@@ -2,6 +2,43 @@
 
 #include <string.h>
 
+static uint64_t resource_next(ctr_memory *memory) {
+    if(memory->resource_clock!=UINT64_MAX)++memory->resource_clock;
+    return memory->resource_clock;
+}
+static size_t resource_slot(uintptr_t page) {
+    return (size_t)((page^(page>>10u))&(CTR_MEMORY_RESOURCE_SLOTS-1u));
+}
+static void resource_mark_host(ctr_memory *memory,uintptr_t first,size_t size,uint64_t version) {
+    uintptr_t begin=first>>12u,last=(first+size-1u)>>12u;
+    /* Large writes may conservatively dirty the entire bounded table. */
+    if(last-begin+1u>=CTR_MEMORY_RESOURCE_SLOTS) {
+        for(size_t i=0;i<CTR_MEMORY_RESOURCE_SLOTS;++i)memory->resource_versions[i]=version;
+    } else for(uintptr_t page=begin;page<=last;++page)
+        memory->resource_versions[resource_slot(page)]=version;
+}
+static uint64_t resource_host_version(const ctr_memory *memory,uintptr_t first,size_t size) {
+    uintptr_t begin=first>>12u,last=(first+size-1u)>>12u;uint64_t version=0;
+    if(last-begin+1u>=CTR_MEMORY_RESOURCE_SLOTS) {
+        for(size_t i=0;i<CTR_MEMORY_RESOURCE_SLOTS;++i)
+            if(memory->resource_versions[i]>version)version=memory->resource_versions[i];
+    } else for(uintptr_t page=begin;page<=last;++page) {
+        uint64_t current=memory->resource_versions[resource_slot(page)];
+        if(current>version)version=current;
+    }
+    return version;
+}
+static void resource_mark_range(ctr_memory *memory,uint32_t address,uint32_t size,uint64_t version) {
+    uint64_t cursor=address,end=cursor+size;
+    while(cursor<end)for(size_t i=0;i<memory->count;++i) {
+        const ctr_mapping *map=&memory->maps[i];uint64_t stop=(uint64_t)map->base+map->size;
+        if(cursor<map->base || cursor>=stop)continue;
+        size_t count=(size_t)((stop<end?stop:end)-cursor);
+        resource_mark_host(memory,(uintptr_t)map->storage+(size_t)(cursor-map->base),count,version);
+        cursor+=count;break;
+    }
+}
+
 void ctr_memory_init(ctr_memory *memory) {
     memset(memory, 0, sizeof(*memory));
 }
@@ -24,6 +61,7 @@ ctr_mem_result ctr_memory_map(ctr_memory *memory, uint32_t base, uint32_t size,
     memory->maps[memory->count++] = (ctr_mapping){base, size, permissions, storage};
     ++memory->generation;
     if (permissions & CTR_MEM_EXEC) ++memory->code_generation;
+    memory->resource_mapping_version=resource_next(memory);
     return CTR_MEM_OK;
 }
 
@@ -90,6 +128,7 @@ ctr_mem_result ctr_memory_write(ctr_memory *memory, uint32_t address,
     for (unsigned i = 0; i < width; ++i) map->storage[offset + i] = (uint8_t)(value >> (i * 8u));
     ++memory->generation;
     uintptr_t changed = (uintptr_t)map->storage + offset;
+    resource_mark_host(memory,changed,width,resource_next(memory));
     for (size_t i = 0; i < memory->count; ++i) {
         const ctr_mapping *other = &memory->maps[i];
         if ((other->permissions & CTR_MEM_EXEC) != 0u && changed < (uintptr_t)other->storage + other->size &&
@@ -192,6 +231,9 @@ static ctr_mem_result write_ranges(ctr_memory *memory,const ctr_memory_write_ran
         copy_bytes(memory,ranges[i].address,(void*)ranges[i].input,ranges[i].size,true);
     ++memory->generation;
     if(code)++memory->code_generation;
+    uint64_t version=resource_next(memory);
+    for(size_t i=0;i<count;++i)if(ranges[i].size)
+        resource_mark_range(memory,ranges[i].address,ranges[i].size,version);
     return CTR_MEM_OK;
 }
 ctr_mem_result ctr_memory_write_ranges(ctr_memory *memory,const ctr_memory_write_range *ranges,size_t count) {
@@ -265,6 +307,65 @@ ctr_mem_result ctr_memory_change_range(ctr_memory *memory, uint32_t address,
         memcpy(memory->maps,next,count*sizeof(next[0]));memory->count=count;
         ++memory->generation;
         if (code_changed) ++memory->code_generation;
+        memory->resource_mapping_version=resource_next(memory);
     }
     return CTR_MEM_OK;
+}
+
+bool ctr_memory_resource_key_capture(const ctr_memory *memory,uint32_t address,
+                                      uint32_t size,unsigned permissions,
+                                      ctr_memory_resource_key *key) {
+    if(!key)return false;
+    /* This output is owned host storage, not a destination inside its owner. */
+    uintptr_t output=(uintptr_t)key;
+    if(output>UINTPTR_MAX-sizeof(*key) || output%_Alignof(ctr_memory_resource_key))return false;
+    if(memory) {
+        uintptr_t owner=(uintptr_t)memory;
+        if(output<owner+sizeof(*memory) && owner<output+sizeof(*key))return false;
+        for(size_t i=0;i<memory->count;++i) {
+            uintptr_t start=(uintptr_t)memory->maps[i].storage;
+            if(output<start+memory->maps[i].size && start<output+sizeof(*key))return false;
+        }
+    }
+    memset(key,0,sizeof(*key));
+    if(!memory || !size || memory->resource_clock==UINT64_MAX ||
+       ctr_memory_check_range(memory,address,size,permissions)!=CTR_MEM_OK)return false;
+    uint64_t version=0,cursor=address,end=cursor+size;
+    while(cursor<end)for(size_t i=0;i<memory->count;++i) {
+        const ctr_mapping *map=&memory->maps[i];uint64_t stop=(uint64_t)map->base+map->size;
+        if(cursor<map->base || cursor>=stop)continue;
+        size_t count=(size_t)((stop<end?stop:end)-cursor);
+        uint64_t current=resource_host_version(memory,
+            (uintptr_t)map->storage+(size_t)(cursor-map->base),count);
+        if(current>version)version=current;
+        cursor+=count;break;
+    }
+    *key=(ctr_memory_resource_key){memory,address,size,permissions,memory->resource_mapping_version,version};
+    return true;
+}
+bool ctr_memory_resource_key_current(const ctr_memory *memory,const ctr_memory_resource_key *key) {
+    if(!memory || !key || (uintptr_t)key>UINTPTR_MAX-sizeof(*key) ||
+       (uintptr_t)key%_Alignof(ctr_memory_resource_key) || key->owner!=memory)return false;
+    ctr_memory_resource_key current;
+    return ctr_memory_resource_key_capture(memory,key->address,key->size,key->permissions,&current) &&
+        key->mapping_version==current.mapping_version && key->write_version==current.write_version;
+}
+ctr_mem_result ctr_memory_resource_changed(ctr_memory *memory,const void *storage,size_t size) {
+    if(!memory)return CTR_MEM_OVERFLOW;
+    if(!size)return CTR_MEM_OK;
+    if(!storage || size>UINTPTR_MAX-(uintptr_t)storage)return CTR_MEM_OVERFLOW;
+    resource_mark_host(memory,(uintptr_t)storage,size,resource_next(memory));
+    uintptr_t first=(uintptr_t)storage,last=first+size;
+    for(size_t i=0;i<memory->count;++i) {
+        const ctr_mapping *map=&memory->maps[i];uintptr_t begin=(uintptr_t)map->storage;
+        if((map->permissions&CTR_MEM_EXEC) && first<begin+map->size && begin<last) {
+            ++memory->code_generation;break;
+        }
+    }
+    return CTR_MEM_OK;
+}
+ctr_mem_result ctr_memory_backing_changed(ctr_memory *memory,const void *storage,size_t size) {
+    ctr_mem_result result=ctr_memory_resource_changed(memory,storage,size);
+    if(result==CTR_MEM_OK && size)++memory->generation;
+    return result;
 }

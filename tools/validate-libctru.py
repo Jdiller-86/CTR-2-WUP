@@ -201,6 +201,16 @@ def main():
                                 or result['gx']!=({'commands':13,'dma':0,'fills':5,'transfers':2,'copies':0,'cache':0,'pica':6} if name=='textured' else {'commands':6,'dma':0,'fills':2,'transfers':2,'copies':0,'cache':0,'pica':2})):
                 raise RuntimeError('Original program did not execute and present all expected PICA draws')
             if name=='textured' and any(message not in result['messages'] for message in ('CTR2WUP compiled multi-texture PASS','CTR2WUP compiled TEV buffer PASS','CTR2WUP compiled D16 depth PASS','CTR2WUP compiled stencil preparation PASS','CTR2WUP compiled D24S8 stencil PASS')):raise RuntimeError('Original textured guest did not complete all material, buffer, depth and stencil sample checks')
+            if name in ('draw','textured'):
+                resources=result['pica_resource_cache'];textures=result['pica_texture_cache']
+                if resources['pins'] or textures['pins'] or not 0<resources['bytes']<=resources['peak_bytes']<=12*1024*1024:
+                    raise RuntimeError('Guest source snapshots leaked leases or exceeded the retained budget')
+                if len(resources['roles'])!=5 or any(r['lookups']!=r['hits']+r['misses'] for r in resources['roles']):
+                    raise RuntimeError('Guest resource cache role accounting is inconsistent')
+                if name=='textured' and (not textures['hits'] or not textures['decodes'] or
+                    textures['lookups']!=textures['hits']+textures['misses'] or
+                    not 0<textures['bytes']<=textures['peak_bytes']<=24*1024*1024):
+                    raise RuntimeError('Original textured guest did not exercise bounded decoded-image reuse')
             if name=='input' and result['input_samples']!=3:raise RuntimeError('Require all three standard HID publications')
             if name=='interactive' and result['input_samples']!=4:raise RuntimeError('Require three input-driven frames and the guest B-button exit')
             if name=='filesystem':

@@ -14,6 +14,11 @@ stages the state and entire color/depth targets before committing; late errors
 preserve previous registers, counters and both buffers. Failure reports describe an attempted
 staged prefix, not committed draws. Aliased reports are left untouched.
 
+The optional `ctr_scene_execute_targets_cached` entry accepts a separate
+[decoded-image cache](textures.md#decoded-image-cache). Its owning pointers never
+enter copied scene state. Failed execution releases every borrowed image; only
+read-only cache records and diagnostic counters may retain attempted work.
+
 The bounded path supports:
 
 - PICA byte masks and finalized command records through the existing inspector;

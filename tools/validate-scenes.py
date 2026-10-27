@@ -79,7 +79,7 @@ def main():
     try:
         binary = output/'emit-scene'
         sources = [ROOT/'tests/scenes/emit_scene.c'] + [ROOT/'runtime/core'/name
-                   for name in ('ctr_scene.c', 'ctr_fragment.c', 'ctr_tev.c', 'ctr_shader.c', 'ctr_scene_fixture.c', 'ctr_vertex.c', 'ctr_pica.c', 'ctr_texture.c')]
+                   for name in ('ctr_scene.c', 'ctr_fragment.c', 'ctr_tev.c', 'ctr_shader.c', 'ctr_scene_fixture.c', 'ctr_vertex.c', 'ctr_pica.c', 'ctr_texture.c', 'ctr_texture_cache.c')]
         flags = ['-std=c11', '-O2', '-Wall', '-Wextra', '-Wpedantic', '-Werror', '-I'+str(ROOT/'runtime/core')]
         if args.sanitize:
             flags += ['-O1', '-fno-omit-frame-pointer', '-fsanitize=address,undefined']

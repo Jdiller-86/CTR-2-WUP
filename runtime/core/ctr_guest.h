@@ -105,6 +105,10 @@ typedef struct ctr_guest {
     ctr_guest_shared shared[8];
     ctr_guest_hid hid;
     ctr_guest_gsp gsp;
+    /* Guest-owned CPU snapshots/decodes; separate from copied PICA state and
+     * native GPU lifetime. Cleared before the memory owner is closed/reused. */
+    struct ctr_resource_cache *pica_resources;
+    struct ctr_texture_cache *pica_textures;
     ctr_guest_thread threads[CTR_GUEST_MAX_THREADS];
     unsigned current_thread, quantum_left;
     uint32_t next_thread_id;

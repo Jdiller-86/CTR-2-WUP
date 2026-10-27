@@ -2,6 +2,7 @@
 #include "ctr_gx.h"
 #include "ctr_transfer.h"
 #include "ctr_guest_pica.h"
+#include "ctr_resource_cache.h"
 #include <stdlib.h>
 #include <string.h>
 #define LIMIT (4u*1024u*1024u)
@@ -93,9 +94,11 @@ static ctr_gx_result pica_list(ctr_guest *g,const uint32_t *w,ctr_gx_completion 
        w[3] || w[4] || w[5] || w[6] || w[7]>1)return CTR_GX_UNSUPPORTED;
     ctr_gx_result result=checked(g,w[1],size,CTR_MEM_READ,c);
     if(result!=CTR_GX_OK)return result;
-    uint8_t *bytes=malloc(size);if(!bytes)return CTR_GX_NO_MEMORY;
-    c->memory=ctr_memory_read_bytes(&g->memory,w[1],bytes,size);
-    if(c->memory!=CTR_MEM_OK) { free(bytes);return CTR_GX_MEMORY; }
+    if(!ctr_guest_pica_prepare_caches(g))return CTR_GX_NO_MEMORY;
+    ctr_resource_lease commands={0};
+    c->memory=ctr_resource_cache_acquire(g->pica_resources,CTR_RESOURCE_COMMAND,w[1],size,CTR_MEM_READ,&commands);
+    if(c->memory!=CTR_MEM_OK)return c->memory==CTR_MEM_CAPACITY?CTR_GX_NO_MEMORY:CTR_GX_MEMORY;
+    const uint8_t *bytes=commands.bytes;
     if(w[7])ctr_cpu_barrier();
     ctr_pica_report report={0};
     ctr_pica_result parsed=ctr_pica_execute(&g->gsp.pica,bytes,size,CTR_PICA_MAX_WRITES,&report);
@@ -104,11 +107,11 @@ static ctr_gx_result pica_list(ctr_guest *g,const uint32_t *w,ctr_gx_completion 
     g->gsp.last_pica_register=report.reg;
     if(parsed==CTR_PICA_UNSUPPORTED) {
         result=ctr_guest_pica_execute(g,bytes,size,w[1],c);
-        free(bytes);
+        ctr_resource_cache_release(&commands);
         if(result!=CTR_GX_OK)return result;
         parsed=CTR_PICA_OK;
     } else {
-        free(bytes);
+        ctr_resource_cache_release(&commands);
         if(parsed==CTR_PICA_OK) {
             g->gsp.last_scene_result=CTR_SCENE_OK;g->gsp.last_vertex_result=CTR_VERTEX_OK;
             g->gsp.last_shader_result=CTR_SHADER_OK;

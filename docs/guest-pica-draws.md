@@ -135,6 +135,21 @@ reuse/free. Physical sampling parity and performance remain unverified.
   completion. A failed list preserves both targets and scene state. Earlier successful
   queue entries remain committed; the failing entry stays pending without its IRQ.
 
+Guest-owned CPU caches retain up to 40 immutable command, vertex/index, texture,
+color and depth snapshots within 12 MiB. Every lookup validates current mappings,
+permissions, resource versions and exact backing bytes. Active leases prevent
+eviction; capacity pressure or exhausted versions use temporary owned snapshots.
+Targets copy into separate writable staging. Committed targets may become later
+lists' textures; same-list feedback remains rejected. Failed lists may warm CPU
+caches but never publish targets, state, generations or completion.
+
+The [decoded-image cache](textures.md#decoded-image-cache) separately reuses CPU
+RGBA images. Both owners close before guest memory is reset; neither owns GPU
+resources. Host reports expose per-role reuse, invalidation, retained bytes and
+outstanding leases. Native texture upload, retirement, complete software
+preflight and exact readback remain mandatory; CPU reuse establishes no physical
+GPU parity or useful performance.
+
 The [scene contract](software-scenes.md) defines the bounded loader, fixed
 attribute, uniform and MOV/ADD/MUL/NOP/END shader subset. ADD/MUL
 accept only exact normal float24/signed-zero results with integer evaluation and

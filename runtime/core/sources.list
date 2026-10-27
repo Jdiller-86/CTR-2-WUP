@@ -1,4 +1,5 @@
 ctr_memory.c
+ctr_resource_cache.c
 ctr_cpu.c
 ctr_guest.c
 ctr_ipc.c
@@ -16,6 +17,7 @@ ctr_shader.c
 ctr_gx2_shader.c
 ctr_gx2_cache.c
 ctr_texture.c
+ctr_texture_cache.c
 ctr_vertex.c
 ctr_transfer.c
 ctr_fs.c
