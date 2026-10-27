@@ -47,6 +47,18 @@ ctr_texture_result ctr_texture_size(unsigned format,unsigned width,unsigned heig
     if(!size)return CTR_TEXTURE_SOURCE;
     *size=(size_t)width*height*bits[format]/8;return CTR_TEXTURE_OK;
 }
+ctr_texture_result ctr_texture_validate(const uint8_t *source,size_t source_bytes,unsigned format,
+                                       unsigned width,unsigned height) {
+    size_t need;ctr_texture_result result=ctr_texture_size(format,width,height,&need);
+    if(result!=CTR_TEXTURE_OK)return result;
+    if(!source || source_bytes<need)return CTR_TEXTURE_SOURCE;
+    if(need>UINTPTR_MAX-(uintptr_t)source)return CTR_TEXTURE_ALIAS;
+    if(format>=12) {
+        unsigned block=format==12?8:16;
+        for(size_t i=0;i<need;i+=block)if(!valid_etc(source+i+(format==13?8:0)))return CTR_TEXTURE_COMPRESSED;
+    }
+    return CTR_TEXTURE_OK;
+}
 ctr_texture_result ctr_texture_decode(const uint8_t *source,size_t source_bytes,unsigned format,
                                      unsigned width,unsigned height,uint8_t *output,size_t output_bytes) {
     size_t need;ctr_texture_result result=ctr_texture_size(format,width,height,&need);
@@ -56,10 +68,8 @@ ctr_texture_result ctr_texture_decode(const uint8_t *source,size_t source_bytes,
     if(!output || output_bytes<out)return CTR_TEXTURE_DESTINATION;
     uintptr_t start=(uintptr_t)source,end=(uintptr_t)output;
     if(need>UINTPTR_MAX-start || out>UINTPTR_MAX-end || (start<end+out && end<start+need))return CTR_TEXTURE_ALIAS;
-    if(format>=12) {
-        unsigned block=format==12?8:16;
-        for(size_t i=0;i<need;i+=block)if(!valid_etc(source+i+(format==13?8:0)))return CTR_TEXTURE_COMPRESSED;
-    }
+    result=ctr_texture_validate(source,source_bytes,format,width,height);
+    if(result!=CTR_TEXTURE_OK)return result;
     for(unsigned y=0;y<height;++y)for(unsigned x=0;x<width;++x) {
         uint8_t *rgba=output+((size_t)y*width+x)*4;
         unsigned tile=(y/8)*(width/8)+x/8,texel=tile*64+morton(x&7,y&7);

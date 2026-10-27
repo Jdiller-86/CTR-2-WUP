@@ -67,6 +67,140 @@ static void memory_tests(void) {
         CHECK(ctr_memory_map(&memory,i*16,4,CTR_MEM_READ,data,4)==CTR_MEM_OK);
     CHECK(ctr_memory_map(&memory,0x4000,4,CTR_MEM_READ,data,4)==CTR_MEM_CAPACITY);
 }
+static ctr_memory_resource_key resource_key(uint32_t address,uint32_t size,unsigned permissions) {
+    ctr_memory_resource_key key;
+    CHECK(ctr_memory_resource_key_capture(&memory,address,size,permissions,&key));return key;
+}
+static void resource_version_tests(void) {
+    const uint32_t base=0x100000u,page=4096u,bytes=(CTR_MEMORY_RESOURCE_SLOTS*2u+1u)*4096u;
+    uint8_t *allocation=malloc((size_t)bytes+8191u);CHECK(allocation);
+    /* An even first host page makes its immediate neighbor a distinct slot. */
+    uint8_t *backing=(uint8_t *)(((uintptr_t)allocation+8191u)&~(uintptr_t)8191u);
+    memset(backing,0,bytes);ctr_memory_init(&memory);
+    CHECK(ctr_memory_map(&memory,base,bytes,CTR_MEM_READ|CTR_MEM_WRITE,backing,bytes)==CTR_MEM_OK);
+    CHECK(ctr_memory_map(&memory,0x2000000u,page*2u,CTR_MEM_READ|CTR_MEM_WRITE,backing+16u,page*2u)==CTR_MEM_OK);
+    CHECK(ctr_memory_map(&memory,0x3000000u,page,CTR_MEM_READ|CTR_MEM_EXEC,backing,page)==CTR_MEM_OK);
+    ctr_memory_resource_key first=resource_key(base,64u,CTR_MEM_READ),
+        second=resource_key(base+page,64u,CTR_MEM_READ),same=resource_key(base,64u,CTR_MEM_READ);
+    CHECK(first.owner==&memory && first.address==base && first.size==64u &&
+          first.mapping_version==same.mapping_version && first.write_version==same.write_version);
+    CHECK(ctr_memory_resource_key_current(&memory,&first));
+    CHECK(ctr_memory_write(&memory,base+page,1u,7u)==CTR_MEM_OK);
+    CHECK(ctr_memory_resource_key_current(&memory,&first) && !ctr_memory_resource_key_current(&memory,&second));
+    uint64_t code_version=memory.code_generation;
+    CHECK(ctr_memory_write(&memory,0x2000000u,4u,0x12345678u)==CTR_MEM_OK);
+    CHECK(!ctr_memory_resource_key_current(&memory,&first) && memory.code_generation==code_version+1u);
+    first=resource_key(base,64u,CTR_MEM_READ);
+    CHECK(ctr_memory_write(&memory,0x3000000u,1u,9u)==CTR_MEM_PERMISSION);
+    CHECK(ctr_memory_resource_key_current(&memory,&first));
+
+    /* A host publication invalidates all guest views and executable aliases. */
+    uint64_t generation=memory.generation;code_version=memory.code_generation;
+    backing[20u]=19u;
+    CHECK(ctr_memory_resource_changed(&memory,backing+20u,1u)==CTR_MEM_OK);
+    CHECK(!ctr_memory_resource_key_current(&memory,&first) && memory.generation==generation &&
+          memory.code_generation==code_version+1u);
+    first=resource_key(base,64u,CTR_MEM_READ);code_version=memory.code_generation;
+    backing[21u]=23u;
+    CHECK(ctr_memory_backing_changed(&memory,backing+21u,1u)==CTR_MEM_OK);
+    CHECK(!ctr_memory_resource_key_current(&memory,&first) && memory.generation==generation+1u &&
+          memory.code_generation==code_version+1u);
+    ctr_memory before=memory;
+    CHECK(ctr_memory_resource_changed(&memory,NULL,1u)==CTR_MEM_OVERFLOW);
+    CHECK(ctr_memory_backing_changed(&memory,(const void *)(UINTPTR_MAX-1u),4u)==CTR_MEM_OVERFLOW);
+    CHECK(ctr_memory_resource_changed(&memory,NULL,0u)==CTR_MEM_OK);
+    CHECK(ctr_memory_backing_changed(&memory,NULL,0u)==CTR_MEM_OK);
+    CHECK(!memcmp(&before,&memory,sizeof(memory)));
+
+    /* Unaligned stores and owned bulk output cover both backing pages. */
+    first=resource_key(base+page-2u,8u,CTR_MEM_READ);generation=memory.generation;
+    CHECK(ctr_memory_write_data(&memory,base+page-1u,4u,0x11223344u)==CTR_MEM_OK);
+    CHECK(!ctr_memory_resource_key_current(&memory,&first) && memory.generation==generation+4u);
+    uint8_t output[8]={1u,2u,3u,4u,5u,6u,7u,8u};
+    first=resource_key(base+page-2u,8u,CTR_MEM_READ);generation=memory.generation;
+    CHECK(ctr_memory_write_bytes(&memory,base+page-2u,output,sizeof(output))==CTR_MEM_OK);
+    CHECK(!ctr_memory_resource_key_current(&memory,&first) && memory.generation==generation+1u);
+    CHECK(!memcmp(backing+page-2u,output,sizeof(output)));
+
+    /* Batch preflight must preserve every version and byte on late failure. */
+    ctr_memory_write_range ranges[]={{base,output,4u},{0xf0000000u,output+4u,4u}};
+    first=resource_key(base,64u,CTR_MEM_READ);before=memory;
+    uint8_t saved[64];memcpy(saved,backing,sizeof(saved));
+    CHECK(ctr_memory_write_ranges(&memory,ranges,2u)==CTR_MEM_UNMAPPED);
+    CHECK(!memcmp(&before,&memory,sizeof(memory)) && !memcmp(saved,backing,sizeof(saved)) &&
+          ctr_memory_resource_key_current(&memory,&first));
+    ranges[1].address=base+page;generation=memory.generation;uint64_t clock=memory.resource_clock;
+    second=resource_key(base+page,64u,CTR_MEM_READ);
+    CHECK(ctr_memory_write_ranges(&memory,ranges,2u)==CTR_MEM_OK);
+    CHECK(memory.generation==generation+1u && memory.resource_clock==clock+1u &&
+          !ctr_memory_resource_key_current(&memory,&first) && !ctr_memory_resource_key_current(&memory,&second));
+    ranges[0].address=base+16u;ranges[1].address=0x2000000u;
+    first=resource_key(base,64u,CTR_MEM_READ);before=memory;
+    CHECK(ctr_memory_write_ranges(&memory,ranges,2u)==CTR_MEM_OVERLAP);
+    CHECK(!memcmp(&before,&memory,sizeof(memory)) && ctr_memory_resource_key_current(&memory,&first));
+
+    /* Mapping epochs reject permission changes, splits, free/remap and rebind. */
+    first=resource_key(base,64u,CTR_MEM_READ);before=memory;
+    CHECK(ctr_memory_change_range(&memory,base,bytes,CTR_MEM_READ|CTR_MEM_WRITE,false)==CTR_MEM_OK);
+    CHECK(!memcmp(&before,&memory,sizeof(memory)) && ctr_memory_resource_key_current(&memory,&first));
+    CHECK(ctr_memory_change_range(&memory,base+page,page,CTR_MEM_READ,false)==CTR_MEM_OK);
+    CHECK(!ctr_memory_resource_key_current(&memory,&first));
+    first=resource_key(base+page-2u,8u,CTR_MEM_READ);
+    CHECK(!ctr_memory_resource_key_capture(&memory,base+page,4u,CTR_MEM_WRITE,&same) && !same.owner);
+    CHECK(ctr_memory_change_range(&memory,base+page,page,CTR_MEM_READ|CTR_MEM_WRITE,false)==CTR_MEM_OK);
+    CHECK(!ctr_memory_resource_key_current(&memory,&first));
+    first=resource_key(base+page-2u,8u,CTR_MEM_READ);
+    CHECK(ctr_memory_change_range(&memory,base+page,page,0u,true)==CTR_MEM_OK);
+    CHECK(!ctr_memory_resource_key_current(&memory,&first));
+    CHECK(ctr_memory_map(&memory,base+page,page,CTR_MEM_READ|CTR_MEM_WRITE,backing+3u*page,page)==CTR_MEM_OK);
+    CHECK(!ctr_memory_resource_key_current(&memory,&first));
+    first=resource_key(base,64u,CTR_MEM_READ);before=memory;
+    CHECK(ctr_memory_change_range(&memory,0xf0000000u,page,0u,true)==CTR_MEM_UNMAPPED);
+    CHECK(ctr_memory_map(&memory,base,page,CTR_MEM_READ,backing,page)==CTR_MEM_OVERLAP);
+    CHECK(!memcmp(&before,&memory,sizeof(memory)) && ctr_memory_resource_key_current(&memory,&first));
+
+    /* A collision is a conservative miss with unchanged target bytes. */
+    bool collided=false;
+    for(uint32_t offset=4u*page;offset<bytes && !collided;offset+=page) {
+        first=resource_key(base,64u,CTR_MEM_READ);memcpy(saved,backing,sizeof(saved));
+        CHECK(ctr_memory_write(&memory,base+offset,1u,41u)==CTR_MEM_OK);
+        collided=!ctr_memory_resource_key_current(&memory,&first);
+        CHECK(!memcmp(saved,backing,sizeof(saved)));
+    }
+    CHECK(collided);
+    first=resource_key(base,64u,CTR_MEM_READ);
+    CHECK(ctr_memory_resource_changed(&memory,backing,(size_t)CTR_MEMORY_RESOURCE_SLOTS*page)==CTR_MEM_OK);
+    CHECK(!ctr_memory_resource_key_current(&memory,&first));
+
+    CHECK(!ctr_memory_resource_key_capture(&memory,base,0u,CTR_MEM_READ,&same) && !same.owner);
+    CHECK(!ctr_memory_resource_key_capture(&memory,UINT32_MAX,2u,CTR_MEM_READ,&same) && !same.owner);
+    CHECK(!ctr_memory_resource_key_capture(&memory,base,4u,0u,&same) && !same.owner);
+    CHECK(!ctr_memory_resource_key_current(NULL,&first) && !ctr_memory_resource_key_current(&memory,NULL));
+    before=memory;
+    CHECK(!ctr_memory_resource_key_capture(&memory,base,4u,CTR_MEM_READ,(ctr_memory_resource_key *)&memory));
+    CHECK(!memcmp(&before,&memory,sizeof(memory)));
+    memcpy(saved,backing,sizeof(saved));
+    CHECK(!ctr_memory_resource_key_capture(&memory,base,4u,CTR_MEM_READ,(ctr_memory_resource_key *)backing));
+    CHECK(!memcmp(saved,backing,sizeof(saved)));
+    uint8_t unaligned[sizeof(ctr_memory_resource_key)+_Alignof(ctr_memory_resource_key)];
+    uint8_t unaligned_before[sizeof(unaligned)];memset(unaligned,0xa5,sizeof(unaligned));
+    memcpy(unaligned_before,unaligned,sizeof(unaligned));
+    uintptr_t aligned=((uintptr_t)unaligned+_Alignof(ctr_memory_resource_key)-1u)&
+        ~(uintptr_t)(_Alignof(ctr_memory_resource_key)-1u);
+    ctr_memory_resource_key *misaligned=(ctr_memory_resource_key *)(aligned+1u);
+    CHECK(!ctr_memory_resource_key_capture(&memory,base,4u,CTR_MEM_READ,misaligned));
+    CHECK(!ctr_memory_resource_key_current(&memory,misaligned));
+    CHECK(!memcmp(unaligned,unaligned_before,sizeof(unaligned)));
+
+    /* Exhaustion never wraps into an old identity, even for unchanged bytes. */
+    first=resource_key(base,64u,CTR_MEM_READ);memory.resource_clock=UINT64_MAX-1u;
+    CHECK(ctr_memory_write(&memory,base+4u*page,1u,99u)==CTR_MEM_OK && memory.resource_clock==UINT64_MAX);
+    CHECK(!ctr_memory_resource_key_current(&memory,&first));
+    CHECK(!ctr_memory_resource_key_capture(&memory,base,64u,CTR_MEM_READ,&same) && !same.owner);
+    CHECK(ctr_memory_write(&memory,base,1u,17u)==CTR_MEM_OK && memory.resource_clock==UINT64_MAX);
+    CHECK(!ctr_memory_resource_key_capture(&memory,base,64u,CTR_MEM_READ,&same) && !same.owner);
+    ctr_memory_init(&memory);free(allocation);
+}
 static int64_t signed32(uint32_t value) { return value < 0x80000000u ? (int64_t)value : (int64_t)value-INT64_C(4294967296); }
 static void flag_tests(void) {
     setup(0);
@@ -212,7 +346,7 @@ static void extend_tests(void) {
     }
 }
 int main(void) {
-    memory_tests(); flag_tests(); instruction_tests(); viewport_tests();halfword_tests();extend_tests();
+    memory_tests();resource_version_tests();flag_tests();instruction_tests();viewport_tests();halfword_tests();extend_tests();
     clock_t start=clock();
     for (unsigned i=0;i<1000;++i) CHECK(ctr_cpu_selftest()==0);
     double seconds=(double)(clock()-start)/CLOCKS_PER_SEC;

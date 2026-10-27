@@ -51,6 +51,8 @@ independent coordinates and bounded
 six-stage RGB/alpha TEV with a delayed combiner buffer, alpha tests, logic/blend operations, write masks and
 bounded D16/D24S8 depth/stencil; decoded
 uploads retain guest UV and explicit ownership.
+Versioned immutable source snapshots and exact-content decoded-image caches
+reuse CPU resources while checking current permissions, aliases and bytes.
 Complete software preflight and byte-exact GPU readback precede atomic guest
 commit; unsupported state or backend failure cannot fall back silently.
 Physical GPU parity remains unverified. [Audio](audio.md) separates checked

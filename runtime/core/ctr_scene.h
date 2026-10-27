@@ -4,6 +4,7 @@
 #include "ctr_shader.h"
 #include "ctr_tev.h"
 #include "ctr_fragment.h"
+#include "ctr_texture_cache.h"
 
 #define CTR_SCENE_MAX_VERTICES 256u
 #define CTR_SCENE_MAX_DRAWS 32u
@@ -180,5 +181,17 @@ ctr_scene_result ctr_scene_execute_targets_backend(ctr_scene_state *state,const 
                                                    const ctr_scene_surface *surface,uint32_t color_address,
                                                    const ctr_scene_depth_surface *depth,
                                                    const ctr_scene_backend *backend,ctr_scene_report *report);
+/* Optional process-local decoded-image owner, kept outside copied scene state.
+ * Entries own exact encoded bytes and RGBA images; borrowed images are pinned
+ * through each draw. Current state/resource validation and full software/native
+ * parity remain mandatory. Cache warmth/statistics may change on a rejected
+ * list; guest-visible scene state and targets retain the normal atomic contract.
+ * Caller exclusively owns the cache during this synchronous execution. */
+ctr_scene_result ctr_scene_execute_targets_cached(ctr_scene_state *state,const void *commands,
+                                                  size_t command_bytes,const ctr_scene_resources *resources,
+                                                  const ctr_scene_surface *surface,uint32_t color_address,
+                                                  const ctr_scene_depth_surface *depth,
+                                                  const ctr_scene_backend *backend,ctr_texture_cache *cache,
+                                                  ctr_scene_report *report);
 const char *ctr_scene_result_name(ctr_scene_result result);
 #endif

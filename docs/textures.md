@@ -98,6 +98,21 @@ checks allocation identity and permissions before snapshotting.
 Three decoded RGBA images use at most 12 MiB; native pitched uploads are bounded
 to 8 MiB per unit and 24 MiB combined.
 
+## Decoded-image cache
+
+An optional guest-owned CPU cache retains eight decoded images within 24 MiB,
+including owned encoded keys and RGBA payloads. Decoder profile, format,
+dimensions and exact encoded bytes identify a record. Sampling, address and
+coordinate routing remain current draw state. All active Texture0/1/2 images
+stay pinned through each draw; unpinned entries evict in bounded round-robin
+order. Invalid input preserves cached records; allocation failure may evict
+unpinned records but cannot publish guest state. Counters saturate safely.
+
+`ctr_scene_execute_targets_cached` accepts the explicit owner; existing scene
+entry points retain one-use decoded ownership. Cache records contain no guest
+or GPU pointers. Current source validation, native uploads, GPU retirement and
+complete readback remain separate requirements.
+
 ## Fragment output
 
 After TEV, alpha testing compares the final alpha byte with an unsigned reference
@@ -212,7 +227,8 @@ Pixel uniforms carry stage constants and initial buffer bytes; explicit byte
 quantization and floor division preserve the software stage boundaries.
 The [native program cache](software-scenes.md#native-program-cache) reuses compiled
 topology while validating current TEV state and uploading current constants.
-Texture snapshots, uploads and samplers retain their existing ownership path.
+Immutable snapshots and decoded CPU images may be reused; uploads and samplers
+retain their existing ownership path.
 CPU cache flushes and texture invalidation precede drawing; retirement precedes
 reuse/free. Failed waits quarantine GPU allocations until graphics shutdown.
 Complete software preflight and exact GPU readback precede guest commit.
@@ -239,7 +255,7 @@ Surface/copy facts follow the
 pinned [GX2 implementation reference](https://github.com/decaf-emu/decaf-emu/blob/e6c528a20a41c34e0f9eb91dd3da40f119db2dee/src/libdecaf/src/cafe/libraries/gx2/gx2_surface.cpp#L430).
 
 Mipmaps, mixed min/mag filters, projective/perspective coordinates, DOT3,
-texture/target caching and broader depth remain unsupported. Physical sampling/blending/depth/stencil parity
+native texture/target caching and broader depth remain unsupported. Physical sampling/blending/depth/stencil parity
 and useful GPU performance remain unverified. The full-target byte comparison
 stays exact, including for bilinear draws; differing hardware rounding rejects
 the list without guest publication or software fallback.

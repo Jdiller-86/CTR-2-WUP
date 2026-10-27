@@ -5,6 +5,8 @@
 #include "ctr_gsp.h"
 #include "ctr_fs.h"
 #include "ctr_apt.h"
+#include "ctr_resource_cache.h"
+#include "ctr_texture_cache.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -22,6 +24,8 @@ void ctr_guest_close(ctr_guest *guest) {
     if (guest->executor_close) guest->executor_close(guest->executor_context);
     for(unsigned i=0;i<16;++i)if(guest->sessions[i].active)ctr_fs_session_closed(guest,i);
     ctr_apt_close(guest);
+    ctr_resource_cache_destroy(guest->pica_resources);
+    ctr_texture_cache_destroy(guest->pica_textures);
     free(guest->gsp.pica_scene);
     for(unsigned i=0;i<2;++i)if(guest->fs_volumes[i] && guest->fs_volumes[i]->mounts)--guest->fs_volumes[i]->mounts;
     if(guest->fs_romfs && guest->fs_romfs->mounts)--guest->fs_romfs->mounts;
@@ -50,6 +54,9 @@ static void shared_time_reference(ctr_guest *g) {
     const uint64_t values[]={UINT64_C(2208988800000)+g->now_ns/1000000u,ticks,268111856,0};
     for(unsigned i=0;i<4;++i)for(unsigned b=0;b<8;++b)bank[i*8+b]=(uint8_t)(values[i]>>(8*b));
     for(unsigned b=0;b<4;++b)page[b]=(uint8_t)(sequence>>(8*b));
+    /* Synthetic clock publication preserves the existing exclusive-monitor
+     * policy, while versioning source bytes and any executable backing alias. */
+    (void)ctr_memory_resource_changed(&g->memory,page,CTR_GUEST_PAGE);
 }
 bool ctr_guest_open(ctr_guest *g,const ctr_guest_image *image,const ctr_block *blocks,size_t block_count) {
     memset(g,0,sizeof(*g)); g->state=CTR_GUEST_FAULTED; g->fault=CTR_CPU_MEMORY_FAULT;
@@ -94,6 +101,7 @@ bool ctr_guest_open(ctr_guest *g,const ctr_guest_image *image,const ctr_block *b
     const uint32_t config[][2]={{0,CTR_GUEST_KERNEL_VERSION},{0x10,2},{0x40,CTR_GUEST_MAX_BYTES},{0x60,CTR_GUEST_KERNEL_VERSION},{0x64,2}};
     for(unsigned i=0;i<sizeof(config)/sizeof(*config);++i)
         for(unsigned b=0;b<4;++b)g->storage[5][config[i][0]+b]=(uint8_t)(config[i][1]>>(8*b));
+    (void)ctr_memory_resource_changed(&g->memory,g->storage[5],CTR_GUEST_PAGE);
     shared_time_reference(g);
     ctr_cpu_init(&g->cpu,&g->memory); g->cpu.module_hash=image->module_hash;
     g->cpu.r[13]=STACK_TOP; g->cpu.r[15]=image->text.address; g->cpu.cpsr=0x10; /* User ARM mode. */

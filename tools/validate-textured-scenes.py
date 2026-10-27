@@ -891,7 +891,7 @@ def command_bytes(case):
 
 
 def compile_probe(binary, cc='cc', sanitize=False):
-    names = ('ctr_scene.c', 'ctr_tev.c', 'ctr_fragment.c', 'ctr_shader.c', 'ctr_vertex.c', 'ctr_pica.c', 'ctr_texture.c')
+    names = ('ctr_scene.c', 'ctr_tev.c', 'ctr_fragment.c', 'ctr_shader.c', 'ctr_vertex.c', 'ctr_pica.c', 'ctr_texture.c', 'ctr_texture_cache.c')
     sources = [ROOT/'tests/textured-scenes/reference_probe.c']+[ROOT/'runtime/core'/name for name in names]
     flags = ['-std=c11', '-O2', '-Wall', '-Wextra', '-Wpedantic', '-Werror', '-I'+str(ROOT/'runtime/core')]
     if sanitize: flags += ['-O1', '-fno-omit-frame-pointer', '-fsanitize=address,undefined']

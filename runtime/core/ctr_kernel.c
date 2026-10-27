@@ -32,12 +32,8 @@ uint32_t ctr_shared_create(ctr_guest *g,uint32_t size,unsigned permissions) {
 }
 void ctr_shared_publish(ctr_guest *g,unsigned object,const uint8_t *bytes) {
     ctr_guest_shared *s=&g->shared[object];memcpy(s->storage,bytes,s->size);
-    ++g->memory.generation;g->cpu.exclusive_valid=false;
-    for(size_t i=0;i<g->memory.count;++i) {
-        const ctr_mapping *m=&g->memory.maps[i];
-        if((m->permissions&CTR_MEM_EXEC) && (uintptr_t)m->storage<(uintptr_t)s->storage+s->size &&
-            (uintptr_t)s->storage<(uintptr_t)m->storage+m->size) { ++g->memory.code_generation;break; }
-    }
+    (void)ctr_memory_backing_changed(&g->memory,s->storage,s->size);
+    g->cpu.exclusive_valid=false;
 }
 const ctr_guest_shared *ctr_shared_mapping(const ctr_guest *g,const ctr_mapping *m) {
     for (unsigned i=0;i<8;++i) {
@@ -400,7 +396,8 @@ void ctr_thread_svc(ctr_guest *g,uint32_t number) {
         handle=ctr_guest_handle_new(g,CTR_HANDLE_THREAD,slot);
         if(!handle) { memset(t,0,sizeof(*t));result=NO_MEMORY; }
         else {
-            ++g->next_thread_id;memset(g->storage[4]+slot*512u,0,512);++g->memory.generation;
+            ++g->next_thread_id;memset(g->storage[4]+slot*512u,0,512);
+            (void)ctr_memory_backing_changed(&g->memory,g->storage[4]+slot*512u,512u);
             for(unsigned i=0;i<CTR_GUEST_MAX_ALLOCATIONS;++i) {
                 ctr_guest_allocation *a=&g->allocations[i];
                 if(a->storage && stack-8>=a->base && (uint64_t)stack<=(uint64_t)a->base+a->size) {

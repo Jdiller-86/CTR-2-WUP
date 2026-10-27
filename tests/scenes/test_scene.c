@@ -2255,6 +2255,84 @@ static void multiunit_rollback_and_backend(void) {
     }
 }
 
+typedef struct {
+    material_backend material;
+    ctr_texture_cache *cache;
+} cached_material_backend;
+static bool cached_material_draw(void *context,const ctr_scene_state *state,const ctr_vertex *vertices,
+                                 unsigned count,const ctr_scene_texture textures[3],unsigned mask) {
+    cached_material_backend *b=context;ctr_texture_cache_statistics statistics={0};
+    ctr_texture_cache_statistics_get(b->cache,&statistics);CHECK(statistics.pins==3u);
+    for(unsigned unit=0;unit<3u;++unit)
+        CHECK(textures[unit].params==state->registers[ctr_scene_texture_registers[unit][CTR_SCENE_TEXTURE_PARAMETERS]]);
+    return material_draw(&b->material,state,vertices,count,textures,mask);
+}
+static void cached_material_scenes(void) {
+    ctr_texture_cache *cache=ctr_texture_cache_create();CHECK(cache);
+    ctr_texture_cache_statistics statistics={0};
+    uint8_t raw[3][256],pixels[CTR_SCENE_FIXTURE_BYTES],before[CTR_SCENE_FIXTURE_BYTES],reference[CTR_SCENE_FIXTURE_BYTES];
+    ctr_scene_resource_span spans[3];material_sources(raw,spans);ctr_scene_fixture fixture;
+    ctr_scene_resources resources={UINT32_C(0x18000000),fixture.resources,0,spans,3};
+    ctr_scene_surface surface={pixels,sizeof(pixels),64,64,256};ctr_scene_report report;
+    ctr_scene_fixture_background(before,sizeof(before));
+    /* Samplers and Texture2 routing are dynamic even when every decoded image
+     * is reused in software preflight and the subsequent native callback pass. */
+    for(unsigned alternate=0;alternate<2u;++alternate)for(unsigned filters=0;filters<8u;++filters) {
+        material_fixture(&fixture,7u,7u,alternate!=0u,filters);resources.size=fixture.resource_bytes;
+        ctr_scene_state state,expected;material_state(&state);memcpy(pixels,before,sizeof(pixels));
+        CHECK(ctr_scene_execute_target(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
+              UINT32_C(0x18010000),&report)==CTR_SCENE_OK);expected=state;memcpy(reference,pixels,sizeof(reference));
+        material_state(&state);memcpy(pixels,before,sizeof(pixels));
+        cached_material_backend context={{reference,7u,0,0,0,0,0},cache};
+        ctr_scene_backend backend={&context,material_begin,NULL,material_end,material_abort,NULL,NULL,cached_material_draw};
+        CHECK(ctr_scene_execute_targets_cached(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
+              UINT32_C(0x18010000),NULL,&backend,cache,&report)==CTR_SCENE_OK);
+        CHECK(!memcmp(&state,&expected,sizeof(state)) && !memcmp(pixels,reference,sizeof(pixels)));
+        ctr_texture_cache_statistics_get(cache,&statistics);
+        CHECK(statistics.decodes==3u && !statistics.pins && statistics.hits==12u*(alternate*8u+filters+1u)-3u);
+    }
+    /* The same address, dimensions and format cannot hide changed encoded
+     * bytes. Restore the old bytes and the earlier exact-content record reuses. */
+    material_fixture(&fixture,7u,7u,false,0);resources.size=fixture.resource_bytes;
+    for(unsigned change=0;change<2u;++change) {
+        for(size_t i=0;i<sizeof(raw[1]);++i)raw[1][i]^=17u;
+        ctr_scene_state state,expected;material_state(&state);memcpy(pixels,before,sizeof(pixels));
+        CHECK(ctr_scene_execute_target(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
+              UINT32_C(0x18010000),&report)==CTR_SCENE_OK);expected=state;memcpy(reference,pixels,sizeof(reference));
+        material_state(&state);memcpy(pixels,before,sizeof(pixels));
+        CHECK(ctr_scene_execute_targets_cached(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
+              UINT32_C(0x18010000),NULL,NULL,cache,&report)==CTR_SCENE_OK);
+        CHECK(!memcmp(&state,&expected,sizeof(state)) && !memcmp(pixels,reference,sizeof(pixels)));
+        ctr_texture_cache_statistics_get(cache,&statistics);CHECK(statistics.decodes==4u && !statistics.pins);
+    }
+    /* Each native failure releases all borrowed images and preserves the whole
+     * caller target/state even when software preflight has warmed the cache. */
+    for(unsigned failure=1;failure<=4u;++failure) {
+        ctr_scene_state state,previous;material_state(&state);previous=state;memcpy(pixels,before,sizeof(pixels));
+        cached_material_backend context={{reference,7u,0,0,0,0,failure},cache};
+        ctr_scene_backend backend={&context,material_begin,NULL,material_end,material_abort,NULL,NULL,cached_material_draw};
+        CHECK(ctr_scene_execute_targets_cached(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
+              UINT32_C(0x18010000),NULL,&backend,cache,&report)==CTR_SCENE_BACKEND);
+        CHECK(!memcmp(&state,&previous,sizeof(state)) && !memcmp(pixels,before,sizeof(pixels)));
+        ctr_texture_cache_statistics_get(cache,&statistics);CHECK(!statistics.pins);
+    }
+    /* A numeric shader rejection occurs after three successful acquisitions. */
+    ctr_scene_state state,previous;material_state(&state);previous=state;memcpy(pixels,before,sizeof(pixels));
+    size_t at=find(&fixture,0x2cc,0);put32(fixture.commands+at,UINT32_C(0xffffffff));
+    CHECK(ctr_scene_execute_targets_cached(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
+          UINT32_C(0x18010000),NULL,NULL,cache,&report)!=CTR_SCENE_OK);
+    CHECK(!memcmp(&state,&previous,sizeof(state)) && !memcmp(pixels,before,sizeof(pixels)));
+    ctr_texture_cache_statistics_get(cache,&statistics);CHECK(!statistics.pins);
+    /* Late invalid suffix rolls back pixels but can retain validated images. */
+    material_fixture(&fixture,7u,7u,false,0);append(&fixture,0x093u,2u);resources.size=fixture.resource_bytes;
+    material_state(&state);previous=state;memcpy(pixels,before,sizeof(pixels));
+    CHECK(ctr_scene_execute_targets_cached(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
+          UINT32_C(0x18010000),NULL,NULL,cache,&report)==CTR_SCENE_UNSUPPORTED && report.draws==2u);
+    CHECK(!memcmp(&state,&previous,sizeof(state)) && !memcmp(pixels,before,sizeof(pixels)));
+    ctr_texture_cache_statistics_get(cache,&statistics);CHECK(!statistics.pins);
+    CHECK(ctr_texture_cache_destroy(cache));
+}
+
 int main(void) {
     floats24();shader_patterns();shader_arithmetic();arithmetic_boundaries();shader_errors();shader_capacity();
     scenes();arithmetic_scenes();scene_capacity();scene_errors();backend_full_target();textured_scenes();textured_rollback();
@@ -2262,6 +2340,6 @@ int main(void) {
     depth_comparisons();depth_overdraw();depth_quantization();depth_rollback();depth_backend_parity();
     stencil_contract();stencil_images();stencil_depth_comparisons();stencil_order_and_retention();stencil_quantization();stencil_rollback();stencil_backend_parity();stencil_capacity();
     buffer_images();buffer_retention();buffer_rollback();buffer_backend_parity();
-    multiunit_images();multiunit_rollback_and_backend();
+    multiunit_images();multiunit_rollback_and_backend();cached_material_scenes();
     printf("original shader/scene tests: %u assertions passed\n",assertions);return 0;
 }

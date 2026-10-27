@@ -2,11 +2,27 @@
 #include "ctr_guest_pica.h"
 #include "ctr_heap.h"
 #include "ctr_texture.h"
+#include "ctr_resource_cache.h"
+#include "ctr_texture_cache.h"
 #include <stdlib.h>
 #include <string.h>
 
 #define PHYSICAL_BASE UINT32_C(0x20000000)
 #define PHYSICAL_END UINT32_C(0x28000000)
+
+bool ctr_guest_pica_prepare_caches(ctr_guest *g) {
+    if(!g)return false;
+    if(!g->pica_resources)g->pica_resources=ctr_resource_cache_create(&g->memory);
+    if(!g->pica_textures)g->pica_textures=ctr_texture_cache_create();
+    return g->pica_resources && g->pica_textures;
+}
+static ctr_gx_result snapshot(ctr_guest *g,ctr_resource_role role,uint32_t address,
+                             uint32_t size,unsigned permissions,ctr_resource_lease *lease,
+                             ctr_gx_completion *c) {
+    c->memory=ctr_resource_cache_acquire(g->pica_resources,role,address,size,permissions,lease);
+    return c->memory==CTR_MEM_OK?CTR_GX_OK:
+        c->memory==CTR_MEM_CAPACITY?CTR_GX_NO_MEMORY:CTR_GX_MEMORY;
+}
 
 static ctr_gx_result linear(ctr_guest *g,uint32_t physical,uint32_t size,unsigned permissions,
                             uint32_t *address,uint32_t *available,ctr_gx_completion *c) {
@@ -111,8 +127,13 @@ ctr_gx_result ctr_guest_pica_execute(ctr_guest *g,const void *commands,size_t si
     c->signal=false;ctr_scene_report report={0};ctr_pica_report wire={0};
     ctr_gx_result result=CTR_GX_UNSUPPORTED;
     ctr_pica_write *writes=NULL;ctr_scene_state *trial=NULL;
-    uint8_t *source=NULL,*raw=NULL,*pixels=NULL,*depth_raw=NULL,*depth_pixels=NULL;
+    uint8_t *raw=NULL,*pixels=NULL,*depth_raw=NULL,*depth_pixels=NULL;
+    ctr_resource_lease geometry={0},color_initial={0},depth_initial={0};
+    ctr_resource_lease texture_sources[CTR_SCENE_MAX_TEXTURE_SPANS]={{0}};
     ctr_scene_resource_span textures[CTR_SCENE_MAX_TEXTURE_SPANS]={0};unsigned texture_count=0;
+    if(!ctr_guest_pica_prepare_caches(g)) {
+        result=CTR_GX_NO_MEMORY;report.result=CTR_SCENE_NO_MEMORY;goto done;
+    }
     ctr_pica_result inspected=ctr_pica_inspect(commands,size,CTR_PICA_MAX_WRITES,NULL,0,&wire);
     if(inspected!=CTR_PICA_OK || !size || (size&15u)) {
         report.result=CTR_SCENE_WIRE;report.byte_offset=wire.parameter_offset;report.reg=wire.reg;goto done;
@@ -242,17 +263,24 @@ ctr_gx_result ctr_guest_pica_execute(ctr_guest *g,const void *commands,size_t si
            (depth_bytes && command_alias(g,depth_virtual,depth_bytes,resource_address,resource_bytes))) {
             result=CTR_GX_MEMORY;c->memory=CTR_MEM_OVERLAP;report.result=CTR_SCENE_ALIAS;goto done;
         }
-        source=malloc(resource_bytes);raw=malloc(target_bytes);pixels=malloc(target_bytes);
-        if(!source || !raw || !pixels) { result=CTR_GX_NO_MEMORY;report.result=CTR_SCENE_NO_MEMORY;goto done; }
-        c->memory=ctr_memory_read_bytes(&g->memory,resource_address,source,resource_bytes);
-        if(c->memory==CTR_MEM_OK)c->memory=ctr_memory_read_bytes(&g->memory,target_address,raw,target_bytes);
-        if(c->memory!=CTR_MEM_OK) { result=CTR_GX_MEMORY;report.result=CTR_SCENE_LAYOUT;goto done; }
+        raw=malloc(target_bytes);pixels=malloc(target_bytes);
+        if(!raw || !pixels) { result=CTR_GX_NO_MEMORY;report.result=CTR_SCENE_NO_MEMORY;goto done; }
+        result=snapshot(g,CTR_RESOURCE_VERTEX,resource_address,resource_bytes,CTR_MEM_READ,&geometry,c);
+        if(result!=CTR_GX_OK) { report.result=CTR_SCENE_VERTEX;goto done; }
+        result=snapshot(g,CTR_RESOURCE_COLOR,target_address,target_bytes,CTR_MEM_READ|CTR_MEM_WRITE,&color_initial,c);
+        if(result!=CTR_GX_OK) { report.result=CTR_SCENE_LAYOUT;goto done; }
+        /* Cached target bytes are immutable. Encoding/readback only touches
+         * independent writable staging, including on a rejected list. */
+        memcpy(raw,color_initial.bytes,target_bytes);
+        ctr_resource_cache_release(&color_initial);
         layout(pixels,raw,width,height,false);
         if(depth_bytes) {
             depth_raw=malloc(depth_bytes);depth_pixels=malloc(depth_bytes);
             if(!depth_raw || !depth_pixels) { result=CTR_GX_NO_MEMORY;report.result=CTR_SCENE_NO_MEMORY;goto done; }
-            c->memory=ctr_memory_read_bytes(&g->memory,depth_virtual,depth_raw,depth_bytes);
-            if(c->memory!=CTR_MEM_OK) { result=CTR_GX_MEMORY;report.result=CTR_SCENE_LAYOUT;goto done; }
+            result=snapshot(g,CTR_RESOURCE_DEPTH,depth_virtual,depth_bytes,CTR_MEM_READ|CTR_MEM_WRITE,&depth_initial,c);
+            if(result!=CTR_GX_OK) { report.result=CTR_SCENE_LAYOUT;goto done; }
+            memcpy(depth_raw,depth_initial.bytes,depth_bytes);
+            ctr_resource_cache_release(&depth_initial);
             depth_layout(depth_pixels,depth_raw,width,height,depth_element,false);
             depth=(ctr_scene_depth_surface){depth_pixels,depth_bytes,width,height,width*depth_element,depth_address,bound[4]};
         }
@@ -276,18 +304,17 @@ ctr_gx_result ctr_guest_pica_execute(ctr_guest *g,const void *commands,size_t si
                (depth_bytes && command_alias(g,depth_virtual,depth_bytes,texture_address,(uint32_t)textures[i].size))) {
                 result=CTR_GX_MEMORY;c->memory=CTR_MEM_OVERLAP;report.result=CTR_SCENE_ALIAS;goto done;
             }
-            uint8_t *snapshot=malloc(textures[i].size);
-            if(!snapshot) { result=CTR_GX_NO_MEMORY;report.result=CTR_SCENE_NO_MEMORY;goto done; }
-            textures[i].bytes=snapshot;
-            c->memory=ctr_memory_read_bytes(&g->memory,texture_address,snapshot,textures[i].size);
-            if(c->memory!=CTR_MEM_OK) { result=CTR_GX_MEMORY;report.result=CTR_SCENE_LAYOUT;goto done; }
+            result=snapshot(g,CTR_RESOURCE_TEXTURE,texture_address,(uint32_t)textures[i].size,
+                            CTR_MEM_READ,&texture_sources[i],c);
+            if(result!=CTR_GX_OK) { report.result=CTR_SCENE_LAYOUT;goto done; }
+            textures[i].bytes=texture_sources[i].bytes;
             ++i;
         }
-        resources=(ctr_scene_resources){(uint32_t)base,source,resource_bytes,textures,texture_count};
+        resources=(ctr_scene_resources){(uint32_t)base,geometry.bytes,resource_bytes,textures,texture_count};
         surface=(ctr_scene_surface){pixels,target_bytes,width,height,width*4u};
     }
-    ctr_scene_result rendered=ctr_scene_execute_targets_backend(trial,commands,size,&resources,&surface,
-                                                               color_address,depth_bytes?&depth:NULL,g->gsp.pica_backend,&report);
+    ctr_scene_result rendered=ctr_scene_execute_targets_cached(trial,commands,size,&resources,&surface,
+        color_address,depth_bytes?&depth:NULL,g->gsp.pica_backend,g->pica_textures,&report);
     if(rendered!=CTR_SCENE_OK) { result=rendered==CTR_SCENE_NO_MEMORY?CTR_GX_NO_MEMORY:CTR_GX_UNSUPPORTED;goto done; }
     if(draws) {
         layout(pixels,raw,width,height,true);
@@ -308,8 +335,10 @@ ctr_gx_result ctr_guest_pica_execute(ctr_guest *g,const void *commands,size_t si
 done:
     diagnostic(g,&report);
     if(result==CTR_GX_UNSUPPORTED)c->detail=command_address+(report.byte_offset<size?(uint32_t)report.byte_offset:0u);
-    for(unsigned i=0;i<texture_count;++i)free((void *)textures[i].bytes);
-    free(writes);free(trial);free(source);free(raw);free(pixels);free(depth_raw);free(depth_pixels);return result;
+    for(unsigned i=0;i<CTR_SCENE_MAX_TEXTURE_SPANS;++i)ctr_resource_cache_release(&texture_sources[i]);
+    ctr_resource_cache_release(&geometry);ctr_resource_cache_release(&color_initial);
+    ctr_resource_cache_release(&depth_initial);
+    free(writes);free(trial);free(raw);free(pixels);free(depth_raw);free(depth_pixels);return result;
 }
 void ctr_guest_set_scene_backend(ctr_guest *g,const ctr_scene_backend *backend) {
     if(g)g->gsp.pica_backend=backend;

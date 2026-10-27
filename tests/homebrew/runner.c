@@ -6,6 +6,8 @@
 #include "ctr_fs_snapshot.h"
 #include "ctr_romfs_file.h"
 #include "ctr_sha256.h"
+#include "ctr_resource_cache.h"
+#include "ctr_texture_cache.h"
 #include <string.h>
 #ifdef CTR_ROMFS_HOMEBREW
 #include "romfs-image.h"
@@ -154,9 +156,23 @@ int main(int argc,char **argv) {
     for(unsigned i=0;i<captures;++i)printf("%s%u",i?",":"",colors[i]);
     unsigned depth=0;uint64_t unwinds=0;ctr_recomp_depth_stats(&g,&depth,&unwinds);
     printf("],\"input_samples\":%u,\"save_commits\":%llu,\"aot_max_depth\":%u,\"aot_unwinds\":%llu,\"gx\":{\"commands\":%llu,\"dma\":%llu,\"fills\":%llu,\"transfers\":%llu,\"copies\":%llu,\"cache\":%llu,\"pica\":%llu},\"pica_state\":{\"lists\":%llu,\"writes\":%llu,\"finalizers\":%llu,\"viewport_width\":%u}",input_samples,(unsigned long long)(filesystem?save.commits:0),depth,(unsigned long long)unwinds,(unsigned long long)g.gsp.gx_commands,(unsigned long long)g.gsp.gx_dma,(unsigned long long)g.gsp.gx_fills,(unsigned long long)g.gsp.gx_transfers,(unsigned long long)g.gsp.gx_copies,(unsigned long long)g.gsp.gx_cache,(unsigned long long)g.gsp.gx_pica,(unsigned long long)g.gsp.pica.committed_lists,(unsigned long long)g.gsp.pica.register_writes,(unsigned long long)g.gsp.pica.finalizations,g.gsp.pica.registers[0x41]);
-    printf(",\"pica_render\":{\"draws\":%llu,\"triangles\":%llu,\"fragments\":%llu,\"shader_instructions\":%llu}}\n",
+    printf(",\"pica_render\":{\"draws\":%llu,\"triangles\":%llu,\"fragments\":%llu,\"shader_instructions\":%llu}",
         (unsigned long long)g.gsp.pica_draws,(unsigned long long)g.gsp.pica_triangles,
         (unsigned long long)g.gsp.pica_fragments,(unsigned long long)g.gsp.pica_shader_instructions);
+    ctr_resource_cache_statistics resources={0};ctr_texture_cache_statistics textures={0};
+    ctr_resource_cache_statistics_get(g.pica_resources,&resources);
+    ctr_texture_cache_statistics_get(g.pica_textures,&textures);
+    printf(",\"pica_resource_cache\":{\"roles\":[");
+    for(unsigned i=0;i<CTR_RESOURCE_ROLE_COUNT;++i)
+        printf("%s{\"lookups\":%llu,\"hits\":%llu,\"misses\":%llu,\"invalidations\":%llu,\"bypasses\":%llu}",
+            i?",":"",(unsigned long long)resources.lookups[i],(unsigned long long)resources.hits[i],
+            (unsigned long long)resources.misses[i],(unsigned long long)resources.invalidations[i],
+            (unsigned long long)resources.bypasses[i]);
+    printf("],\"bytes\":%u,\"peak_bytes\":%u,\"pins\":%llu},\"pica_texture_cache\":{\"lookups\":%llu,\"hits\":%llu,\"misses\":%llu,\"decodes\":%llu,\"evictions\":%llu,\"bytes\":%u,\"peak_bytes\":%u,\"pins\":%llu}}\n",
+        (unsigned)resources.bytes,(unsigned)resources.peak_bytes,(unsigned long long)resources.pins,
+        (unsigned long long)textures.lookups,(unsigned long long)textures.hits,(unsigned long long)textures.misses,
+        (unsigned long long)textures.decodes,(unsigned long long)textures.evictions,(unsigned)textures.bytes,
+        (unsigned)textures.peak_bytes,(unsigned long long)textures.pins);
     ctr_guest_close(&g);if(!ctr_fs_volume_close(&sd) || (filesystem && !ctr_fs_volume_close(&save)))return 6;
 #ifdef CTR_ROMFS_HOMEBREW
     if(external_assets?!ctr_romfs_file_close(&asset_file):!ctr_fs_romfs_close(&assets))return 10;

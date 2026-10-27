@@ -6,6 +6,8 @@
 #include "ctr_gsp.h"
 #include "ctr_kernel.h"
 #include "ctr_texture.h"
+#include "ctr_resource_cache.h"
+#include "ctr_texture_cache.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1287,11 +1289,105 @@ static void guest_stencil_queues(void) {
     CHECK(g.shared[g.gsp.relay_shared].storage[1]==1 && g.shared[g.gsp.relay_shared].storage[12]==5);
     CHECK(g.events[g.gsp.relay_event].signaled);stencil_prepass_golden(&g);ctr_guest_close(&g);
 }
+static void cache_unpinned(const ctr_guest *g) {
+    ctr_resource_cache_statistics resources={0};ctr_texture_cache_statistics textures={0};
+    ctr_resource_cache_statistics_get(g->pica_resources,&resources);
+    ctr_texture_cache_statistics_get(g->pica_textures,&textures);
+    CHECK(!resources.pins && !textures.pins);
+    CHECK(resources.bytes<=CTR_RESOURCE_CACHE_MAX_BYTES && textures.bytes<=CTR_TEXTURE_CACHE_MAX_BYTES);
+}
+static void guest_resource_reuse(void) {
+    ctr_guest g;list l,bad;ctr_gx_completion c;textured_open(&g,&l,false);
+    CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK);texture_golden(&g,false,false,true);
+    ctr_resource_cache_statistics first={0},second={0};ctr_texture_cache_statistics decoded={0};
+    ctr_resource_cache_statistics_get(g.pica_resources,&first);
+    ctr_texture_cache_statistics_get(g.pica_textures,&decoded);
+    CHECK(decoded.decodes==1u && decoded.hits==1u);cache_unpinned(&g);
+    /* Submit the same immutable command bytes, without rewriting the list. */
+    CHECK(submit(&g,&l,&c)==CTR_GX_OK);texture_golden(&g,false,false,true);
+    ctr_resource_cache_statistics_get(g.pica_resources,&second);
+    ctr_texture_cache_statistics_get(g.pica_textures,&decoded);
+    CHECK(second.hits[CTR_RESOURCE_COMMAND]==first.hits[CTR_RESOURCE_COMMAND]+1u);
+    CHECK(second.invalidations[CTR_RESOURCE_COLOR]>first.invalidations[CTR_RESOURCE_COLOR]);
+    CHECK(decoded.decodes==1u && decoded.hits==3u);cache_unpinned(&g);
+    /* A late unsupported state warms read-only caches but publishes nothing.
+     * Repeating that failed list reuses every source and the unchanged target. */
+    bad=l;trim(&bad);add(&bad,0x102,16u);finish(&bad);
+    CHECK(ctr_memory_write_bytes(&g.memory,BASE,bad.bytes,(uint32_t)bad.size)==CTR_MEM_OK);
+    ctr_scene_state state=*g.gsp.pica_scene;uint8_t pixels[BYTES];
+    memcpy(pixels,backing(&g)+0x2000u,BYTES);
+    uint64_t generation=g.memory.generation,clock=g.memory.resource_clock;
+    for(unsigned attempt=0;attempt<2u;++attempt) {
+        ctr_resource_cache_statistics_get(g.pica_resources,&first);
+        CHECK(submit(&g,&bad,&c)==CTR_GX_UNSUPPORTED && !c.signal);
+        CHECK(!memcmp(pixels,backing(&g)+0x2000u,BYTES));
+        CHECK(!memcmp(&state,g.gsp.pica_scene,sizeof(state)));
+        CHECK(g.memory.generation==generation && g.memory.resource_clock==clock);
+        ctr_resource_cache_statistics_get(g.pica_resources,&second);
+        if(attempt)for(unsigned role=0;role<CTR_RESOURCE_ROLE_COUNT;++role)
+            if(role!=CTR_RESOURCE_DEPTH)CHECK(second.hits[role]==first.hits[role]+1u);
+        cache_unpinned(&g);
+    }
+    /* Permission changes reject warmed sources before any cached output can
+     * hide them. Restoring the same backing allows a fresh valid lookup. */
+    CHECK(ctr_memory_change_range(&g.memory,TEXTURE_VA,4096u,0u,false)==CTR_MEM_OK);
+    CHECK(execute(&g,&l,BASE,&c)==CTR_GX_MEMORY && !c.signal);
+    CHECK(!memcmp(pixels,backing(&g)+0x2000u,BYTES));cache_unpinned(&g);
+    CHECK(ctr_memory_change_range(&g.memory,TEXTURE_VA,4096u,3u,false)==CTR_MEM_OK);
+    CHECK(submit(&g,&l,&c)==CTR_GX_OK);texture_golden(&g,false,false,true);
+    /* Writes through a different VA and raw externally supplied bytes both
+     * invalidate cached source content, including without a checked stamp. */
+    CHECK(ctr_memory_map(&g.memory,0x31000000u,4096u,3u,g.allocations[1].storage,4096u)==CTR_MEM_OK);
+    uint8_t changed[TEXTURE_BYTES];texture_source(changed,53u);
+    CHECK(ctr_memory_write_bytes(&g.memory,0x31000000u,changed,sizeof(changed))==CTR_MEM_OK);
+    CHECK(submit(&g,&l,&c)==CTR_GX_OK);
+    uint8_t actual[BYTES];CHECK(ctr_texture_decode(backing(&g)+0x2000u,BYTES,0,64,64,actual,BYTES)==CTR_TEXTURE_OK);
+    for(unsigned y=8;y<56;++y)for(unsigned x=8;x<56;++x) {
+        uint8_t expected[4];texture_pixel(53u,(2u*x-15u)/6u,7u-(2u*y-15u)/12u,expected);
+        CHECK(!memcmp(actual+(y*64u+x)*4u,expected,4u));
+    }
+    texture_source(g.allocations[1].storage,0u); /* exact-byte guard, no notification */
+    CHECK(submit(&g,&l,&c)==CTR_GX_OK);texture_golden(&g,false,false,true);cache_unpinned(&g);
+    /* Version exhaustion preserves rendering through explicit owned misses. */
+    g.memory.resource_clock=UINT64_MAX;
+    ctr_resource_cache_statistics_get(g.pica_resources,&first);
+    CHECK(submit(&g,&l,&c)==CTR_GX_OK && g.memory.resource_clock==UINT64_MAX);
+    ctr_resource_cache_statistics_get(g.pica_resources,&second);
+    CHECK(second.bypasses[CTR_RESOURCE_COMMAND]>first.bypasses[CTR_RESOURCE_COMMAND]);
+    texture_golden(&g,false,false,true);cache_unpinned(&g);
+    ctr_guest_close(&g);CHECK(!g.pica_resources && !g.pica_textures);
+}
+static void guest_render_to_texture(void) {
+    ctr_guest g;list l,again;ctr_gx_completion c;textured_open(&g,&l,false);
+    CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK);
+    uint8_t source[BYTES],actual[BYTES],background[BYTES];
+    CHECK(ctr_texture_decode(backing(&g)+0x2000u,BYTES,0,64,64,source,BYTES)==CTR_TEXTURE_OK);
+    /* A committed color target is a later list's RGBA8 texture. The second
+     * target is disjoint; same-list source/target feedback remains rejected. */
+    for(unsigned i=0;i<BYTES;i+=4u) {
+        background[i]=255u;background[i+1u]=48u;background[i+2u]=32u;background[i+3u]=16u;
+    }
+    CHECK(ctr_memory_write_bytes(&g.memory,BASE+0xa000u,background,BYTES)==CTR_MEM_OK);
+    again=l;set(&again,0x11d,(PHYSICAL+0xa000u)/8u);
+    set(&again,0x085,(PHYSICAL+0x2000u)/8u);set(&again,0x082,0x00400040u);
+    CHECK(execute(&g,&again,BASE,&c)==CTR_GX_OK);
+    CHECK(ctr_texture_decode(backing(&g)+0xa000u,BYTES,0,64,64,actual,BYTES)==CTR_TEXTURE_OK);
+    for(unsigned y=0;y<64;++y)for(unsigned x=0;x<64;++x) {
+        const uint8_t fallback[]={16u,32u,48u,255u};const uint8_t *expected=fallback;
+        if(x>=8u && x<56u && y>=8u && y<56u) {
+            unsigned tx=((2u*x-15u)*2u)/3u,ty=63u-((2u*y-15u)*2u)/3u;
+            expected=source+(ty*64u+tx)*4u;
+        }
+        CHECK(!memcmp(actual+(y*64u+x)*4u,expected,4u));
+    }
+    cache_unpinned(&g);ctr_guest_close(&g);
+}
 int main(void) {
     successful();rollback();shader_capacity();arithmetic_draws();queues();native_backend_success();native_backend_rollback();
     guest_texture_success();guest_linear_texture();guest_texture_snapshots();guest_texture_rollback();guest_texture_queues();
     guest_material_success();guest_material_snapshots();guest_material_rollback();guest_material_queues();guest_material_limits();
     guest_fragment_output();guest_blending();guest_depth_success();guest_depth_rollback();guest_depth_queues();
     guest_stencil_success();guest_stencil_rollback();guest_stencil_queues();
+    guest_resource_reuse();guest_render_to_texture();
     printf("guest PICA draw tests: %u assertions passed\n",assertions);return 0;
 }
