@@ -75,7 +75,12 @@ bool ctr_native_pcm_snapshot(ctr_native_pcm *s,ctr_native_pcm_report *out) {
 void ctr_native_pcm_release(void *ctx) { ctr_native_pcm *s=ctx;if(s->report.prepared){++s->report.releases;s->report.prepared=false;} }
 ctr_retained_logs ctr_retained_logs_copy(const char *a,const char *b) { CHECK(a && b);return (ctr_retained_logs){0}; }
 static int child(const char *name,const char *directory) {
-    mode=name;CHECK(snprintf(root,sizeof(root),"%s/app",directory)>0);
+    (void)directory;mode=name;
+#ifdef _WIN32
+    CHECK(ctr_test_temp_directory(root,sizeof(root),"ctr-audio"));
+#else
+    CHECK(snprintf(root,sizeof(root),"/tmp/ctr-audio-XXXXXX")>0 && mkdtemp(root)!=NULL);
+#endif
     int status=app_main();bool expected=!strcmp(mode,"happy") || !strcmp(mode,"hearing-fail");
     CHECK((status==0)==expected && proc_alive==false);
     if(expected)CHECK(core_ok && paused && resumed && held_ok && complete && native.report.releases==1);
@@ -90,9 +95,8 @@ int main(int argc,char **argv) {
     if(argc==3)return child(argv[1],argv[2]);
     const char *modes[]={"happy","hearing-fail","native-fail","pause-drift","interrupted","sd-fail"};
     for(unsigned i=0;i<6;++i) {
-        char directory[512];CHECK(ctr_test_temp_directory(directory,sizeof(directory),"ctr-audio"));ctr_test_child process;unsigned status;
-        CHECK(ctr_test_child_start(&process,modes[i],directory,child) && ctr_test_child_wait(&process,&status) && status==0);
-        CHECK(ctr_test_remove_directory(directory)==0);
+        ctr_test_child process;unsigned status;
+        CHECK(ctr_test_child_start(&process,modes[i],".",child) && ctr_test_child_wait(&process,&status) && status==0);
     }
     puts("{\"ok\":true,\"guest_audio_frontend_cases\":6,\"console_verified\":false}");return 0;
 }

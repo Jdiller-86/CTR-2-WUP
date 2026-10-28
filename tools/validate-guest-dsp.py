@@ -41,9 +41,10 @@ def validate(output,cc='gcc',sanitize=False):
         if mode=='sanitized': command+=['-fno-omit-frame-pointer','-fsanitize=address,undefined']
         subprocess.run(command+sources+['-o',str(binary)],check=True,cwd=ROOT)
         pcm=output/('pcm-'+mode+'.bin')
-        run=subprocess.run([str(binary),str(pcm)],check=True,capture_output=True,text=True)
-        row=json.loads(run.stdout)
-        if row.get('ok') is not True or pcm.read_bytes()!=expected: raise ValueError('Guest DSP reference mismatch')
+        run=subprocess.run([str(binary),'--pcm'],check=True,capture_output=True)
+        row=json.loads(run.stderr)
+        pcm.write_bytes(run.stdout)
+        if row.get('ok') is not True or run.stdout!=expected: raise ValueError('Guest DSP reference mismatch')
         results.append(row)
     with wave.open(str(output/'reference.wav'),'wb') as stream:
         stream.setparams((2,2,48000,len(expected)//4,'NONE','not compressed'));stream.writeframes(expected)

@@ -2,6 +2,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#endif
 static unsigned assertions;
 #define CHECK(x) do { ++assertions;if(!(x)){fprintf(stderr,"line %d: %s\n",__LINE__,#x);exit(1);} } while(0)
 static int16_t pcm[96000],other[96000];
@@ -131,10 +135,14 @@ int main(int argc,char **argv) {
     CHECK(ctr_dsp_pcm48k(pcm,48000,resampled,96000,&written) && written==70398);
     size_t sentinel=7;CHECK(!ctr_dsp_pcm48k(pcm,48000,pcm,96000,&sentinel) && sentinel==7);
     CHECK(!ctr_dsp_pcm48k(pcm,48000,resampled,1,&sentinel) && sentinel==7);
-    if(argc==2) {
-        FILE *f=fopen(argv[1],"wb");CHECK(f!=NULL);
+    bool binary=argc==2 && !strcmp(argv[1],"--pcm");
+    if(binary) {
+#ifdef _WIN32
+        CHECK(_setmode(_fileno(stdout),_O_BINARY)!=-1);
+#endif
+        FILE *f=stdout;
         for(size_t i=0;i<written*2;++i) { uint16_t v=(uint16_t)resampled[i];uint8_t bytes[2]={(uint8_t)v,(uint8_t)(v>>8)};CHECK(fwrite(bytes,1,2,f)==2); }
-        CHECK(fclose(f)==0);
+        CHECK(fflush(f)==0);
     } else CHECK(argc==1);
-    printf("{\"ok\":true,\"assertions\":%u,\"arm_instructions\":%llu,\"guest_dsp_blocks\":300,\"exact_pcm_frames\":48000,\"console_verified\":false}\n",assertions,(unsigned long long)ai);
+    fprintf(binary?stderr:stdout,"{\"ok\":true,\"assertions\":%u,\"arm_instructions\":%llu,\"guest_dsp_blocks\":300,\"exact_pcm_frames\":48000,\"console_verified\":false}\n",assertions,(unsigned long long)ai);
 }
