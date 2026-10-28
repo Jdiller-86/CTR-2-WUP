@@ -6,7 +6,7 @@
 #define VPAD_BUTTON_L 0x40u
 #define VPAD_BUTTON_PLUS 0x80u
 static char root[512];static const char *mode;static unsigned checks,polls;static uint64_t ticks;
-static bool display_alive,proc_alive,cleared;
+static bool display_alive,proc_alive,cleared,logging_error_visible;
 #define CHECK(c) do { ++checks;if(!(c)){fprintf(stderr,"audio frontend %s line %d: %s\n",mode?mode:"parent",__LINE__,#c);exit(1);} } while(0)
 #define DATA_ROOT root
 #define CTR_SOURCE_COMMIT "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -46,11 +46,11 @@ bool ctr_diagnostic_audio_begin(ctr_diagnostic_audio *a,bool fg) { CHECK(fg);a->
 bool ctr_diagnostic_audio_end(ctr_diagnostic_audio *a,void (*release)(void*),void *ctx) { release(ctx);a->owned=false;++a->releases;return true; }
 void ctr_diagnostic_display_labels(const char *a,const char *b) { CHECK(a && b); }
 bool ctr_diagnostic_display_init(void) { display_alive=true;return true; }
-bool ctr_diagnostic_display_row(unsigned row,const char *text) { CHECK(row<14 && text);return true; }
+bool ctr_diagnostic_display_row(unsigned row,const char *text) { CHECK(row<14 && text);if(row==6 && strstr(text,"LOGGING ERROR"))logging_error_visible=true;return true; }
 bool ctr_diagnostic_display_draw(void) { CHECK(display_alive && foreground);return true; }
 void ctr_diagnostic_display_invalidate(void) {}
 void ctr_diagnostic_display_close(bool fg) { (void)fg;CHECK(!audio.owned);display_alive=false; }
-bool ctr_report_storage_sync(void *ctx) { CHECK(failed || native.report.status!=CTR_NATIVE_PCM_PLAYING);if(!strcmp(mode,"slow-storage"))ticks+=2000;((ctr_report_storage*)ctx)->client=7;if(!strcmp(mode,"sd-fail")){errno=EIO;return false;}return true; }
+bool ctr_report_storage_sync(void *ctx) { CHECK(failed || native.report.status!=CTR_NATIVE_PCM_PLAYING);if(!strcmp(mode,"slow-storage"))ticks+=11000;((ctr_report_storage*)ctx)->client=7;if(!strcmp(mode,"sd-fail")){errno=EIO;return false;}return true; }
 void ctr_report_storage_close(ctr_report_storage *s) { s->client=-1; }
 bool ctr_report_storage_verify(void *ctx,const char *path,uint64_t size,const uint8_t digest[32]) {
     (void)ctx;uint8_t bytes[8192],actual[32];FILE *f=fopen(path,"rb");CHECK(f && size==8192);
@@ -84,6 +84,7 @@ static int child(const char *name,const char *directory) {
     int status=app_main();bool expected=!strcmp(mode,"happy") || !strcmp(mode,"hearing-fail") || !strcmp(mode,"slow-storage");
     CHECK((status==0)==expected && proc_alive==false);
     if(expected)CHECK(core_ok && paused && resumed && held_ok && complete && native.report.releases==1);
+    if(!strcmp(mode,"sd-fail"))CHECK(logging_error_visible && logging_stage!=NULL && !sd_verified);
     if(!strcmp(mode,"hearing-fail"))CHECK(!strcmp(hearing,"fail"));
     if(!strcmp(mode,"happy"))CHECK(!strcmp(hearing,"pass"));
     CHECK(ctr_test_unlink(report.path)==0 && ctr_test_unlink(result.path)==0);

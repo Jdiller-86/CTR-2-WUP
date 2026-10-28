@@ -14,6 +14,7 @@
 #include <coreinit/title.h>
 #include <vpad/input.h>
 #include <stdatomic.h>
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -36,8 +37,18 @@ static uint32_t held[2],sequence;
 static char hash[65];
 static const char *hearing="pending";
 static const char *probe_phase="not_run";
+static const char *logging_stage;
+static int logging_errno;
+static int32_t logging_fsa;
+static bool sd_verified;
 static atomic_bool exit_requested;
 static bool foreground=true,closed_io,exit_observed,failed,core_ok,paused,resumed,held_ok,complete,failure_saved;
+
+static void logging_failed(const char *stage,int error) {
+    failed=true;sd_verified=false;
+    if(!logging_stage) { logging_stage=stage;logging_errno=error?error:EIO;logging_fsa=storage.last_status; }
+    OSReport("DSP logging failed stage=%s errno=%d FSA=%ld\n",logging_stage,logging_errno,(long)logging_fsa);
+}
 
 static bool save(const char *stage) {
     char body[3072];++sequence;
@@ -49,13 +60,14 @@ static bool save(const char *stage) {
         "\"probe_phase\":\"%s\",\"guest_pc\":%u,\"guest_ipc_header\":%u,\"guest_fault\":%u,\"guest_fault_detail\":%u,"
         "\"output_frames\":%u,\"pcm_sha256\":\"%s\",\"pause\":%s,\"resume\":%s,\"pause_cursor_held\":%s,"
         "\"native_complete\":%s,\"hearing\":\"%s\",\"native_failures\":%u,\"native_releases\":%u,\"ax_owned\":%s,"
-        "\"native_status\":%u,\"native_result\":%u,\"cursor\":[%u,%u],\"finite_prerender\":true,\"installed_exit_tested\":false,\"system_logs_present\":%s,\"system_logs_complete\":%s,\"system_log_files\":%u,\"system_log_bytes\":%llu,\"system_logs_error\":%d}",
+        "\"native_status\":%u,\"native_result\":%u,\"cursor\":[%u,%u],\"logging_stage\":\"%s\",\"logging_errno\":%d,\"logging_fsa\":%ld,\"finite_prerender\":true,\"installed_exit_tested\":false,\"system_logs_present\":%s,\"system_logs_complete\":%s,\"system_log_files\":%u,\"system_log_bytes\":%llu,\"system_logs_error\":%d}",
         CTR_SOURCE_COMMIT,CTR_SOURCE_DIRTY,(unsigned long long)session,sequence,stage,core_ok?"true":"false",failed?"true":"false",
         (unsigned long long)instructions,(unsigned long long)dsp.frames,(unsigned long long)dsp.samples,
         (unsigned long long)dsp.queued,(unsigned long long)dsp.loops,probe_phase,dsp.guest_pc,dsp.guest_ipc_header,dsp.guest_fault,dsp.guest_fault_detail,(unsigned)frames,hash,
         paused?"true":"false",resumed?"true":"false",held_ok?"true":"false",complete?"true":"false",hearing,
         native.report.failures,native.report.releases,audio.owned?"true":"false",playback.status,playback.result,
-        playback.cursor[0],playback.cursor[1],retained.present?"true":"false",retained.complete?"true":"false",retained.files,(unsigned long long)retained.bytes,retained.error);
+        playback.cursor[0],playback.cursor[1],logging_stage?logging_stage:"none",logging_errno,(long)logging_fsa,
+        retained.present?"true":"false",retained.complete?"true":"false",retained.files,(unsigned long long)retained.bytes,retained.error);
     bool ok=n>0 && (size_t)n<sizeof(body) && ctr_test_report_line(&report,body) &&
         ctr_test_result_update(&result,body) && ctr_test_report_commit(&report);
     if(ok) {
@@ -64,8 +76,24 @@ static bool save(const char *stage) {
         if(file) { ok=fread(bytes,1,sizeof(bytes),file)==sizeof(bytes) && fgetc(file)==EOF && !ferror(file);if(fclose(file)!=0)ok=false; }
         if(ok) { ctr_sha256 sha;ctr_sha256_init(&sha);ok=ctr_sha256_update(&sha,bytes,sizeof(bytes)) && ctr_sha256_final(&sha,digest);ok=ok && ctr_report_storage_verify(&storage,result.path,sizeof(bytes),digest); }
     }
-    if(!ok) { failed=true;OSReport("DSP logging failed stage=%s errno=%d FSA=%ld\n",stage,report.error_code,(long)storage.last_status); }
+    if(!ok)logging_failed(report.failed?report.error_stage:result.failed?result.error_stage:
+        n<0 || (size_t)n>=sizeof(body)?"format":"physical_readback",
+        report.failed?report.error_code:result.failed?result.error_code:errno);
+    else sd_verified=true;
     return ok;
+}
+static void show_storage(void) {
+    if(logging_stage || !sd_verified) {
+        char error_line[84];snprintf(error_line,sizeof(error_line),"%s / errno %d / FSA %ld",
+            logging_stage?logging_stage:"unconfirmed",logging_errno,(long)logging_fsa);
+        ctr_diagnostic_display_row(6,"LOGGING ERROR - PHOTOGRAPH THIS SCREEN");
+        ctr_diagnostic_display_row(7,error_line);
+        ctr_diagnostic_display_row(8,"Return folder is UNCONFIRMED; keep any existing files");
+    } else {
+        ctr_diagnostic_display_row(6,"FTP return: sd:/ctr2wup/dsp-check/");
+        ctr_diagnostic_display_row(7,result.filename);
+        ctr_diagnostic_display_row(8,report.filename);
+    }
 }
 static uint32_t save_ready(void *unused) { (void)unused;OSSavesDone_ReadyToRelease();return 0; }
 static uint32_t home_exit(void *unused) { (void)unused;exit_requested=true;return 0; }
@@ -118,7 +146,9 @@ int main(void) {
         ctr_test_result_open(&result,directory,"guest-dsp",CTR_APP_VERSION,session) &&
         ctr_test_report_open(&report,directory,"guest-dsp",CTR_APP_VERSION,session);
     ctr_test_report_set_volume_sync(&report,ctr_report_storage_sync,&storage);
-    if(!logging || !save("startup"))failed=true;
+    if(!logging)logging_failed(result.failed?result.error_stage:report.failed?report.error_stage:"directory",
+        result.failed?result.error_code:report.failed?report.error_code:errno);
+    else if(!save("startup"))failed=true;
     if(!ctr_diagnostic_audio_begin(&audio,true))failed=true;
     ctr_diagnostic_display_labels("CTR2WUP GUEST AUDIO","MINUS: EXIT / PLUS: REPLAY");
     if(!ctr_diagnostic_display_init())failed=true;
@@ -142,7 +172,7 @@ int main(void) {
     started=OSGetTime();
     ctr_diagnostic_display_row(2,"Listen: LEFT low / RIGHT high / BOTH");
     ctr_diagnostic_display_row(3,"A short pause/resume happens automatically");
-    ctr_diagnostic_display_row(6,"Return by FTP: sd:/ctr2wup/dsp-check/");
+    show_storage();if(!ctr_diagnostic_display_draw())failed=true;
     while(!exit_requested) {
         ctr_proc_status state=ctr_procui_messages(NULL);
         if(state==CTR_PROC_EXITING) { exit_observed=true;break; }
@@ -164,7 +194,10 @@ int main(void) {
             held_ok=playback.cursor[0]==held[0] && playback.cursor[1]==held[1];
             if(!held_ok)failed=true;
             if(!save("resume_requested"))failed=true;
-            if(!failed && !ctr_native_pcm_resume(&native))failed=true;else if(!failed)resumed=true;
+            if(!failed && !ctr_native_pcm_resume(&native))failed=true;
+            else if(!failed) {
+                resumed=true;now=OSGetTime();started+=now-pause_started;
+            }
         }
         if(!failed && !complete && playback.status==CTR_NATIVE_PCM_COMPLETE) { complete=true;save("playback_complete"); }
         if(!complete && OSTicksToMilliseconds(now-started)>10000 && !failed) { failed=true;save("playback_timeout"); }
@@ -185,6 +218,7 @@ int main(void) {
         if(failed && !failure_saved) { failure_saved=true;save("failed"); }
         ctr_diagnostic_display_row(5,failed?"CHECK FAILED - return logs; no repeated test needed":
             complete?"R: correct on TV + GamePad / L: wrong or missing":"PLAYING - no button presses needed");
+        show_storage();
         if(!ctr_diagnostic_display_draw()) { failed=true;break; }
         OSSleepTicks(OSMillisecondsToTicks(10));
     }
