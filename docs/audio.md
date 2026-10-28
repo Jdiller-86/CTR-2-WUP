@@ -1,7 +1,8 @@
 # Audio decoding, streams and native output
 
 The portable core separates DSP ADPCM decoding, checked CSTM blocks, deterministic
-mixing and native AX ownership. A bounded guest DSP PCM service is also available. Arbitrary DSP firmware,
+mixing and native AX ownership. A bounded guest DSP PCM service is also
+available. Arbitrary DSP firmware,
 CSAR selection and synchronized real-time game playback remain unsupported.
 All fixtures are original; no commercial waveform or firmware is bundled.
 
@@ -143,8 +144,8 @@ listening or physical playback cleanup.
 
 Interface facts follow the [CSTM description](https://docs.mikage.app/BCSTM/),
 [vgmstream reader](https://github.com/vgmstream/vgmstream/blob/master/src/meta/bcstm.c)
-and libctru [DSP](https://github.com/devkitPro/libctru/blob/master/libctru/source/services/dsp.c)/
-[NDSP](https://github.com/devkitPro/libctru/blob/master/libctru/source/ndsp/ndsp.c)
+and libctru [DSP](https://github.com/devkitPro/libctru/blob/9b55eda44cf80b971503991e0c78f9bc8fe50425/libctru/source/services/dsp.c)/
+[NDSP](https://github.com/devkitPro/libctru/blob/9b55eda44cf80b971503991e0c78f9bc8fe50425/libctru/source/ndsp/ndsp.c)
 interfaces. The address-conversion formula was cross-checked against
 [Azahar](https://github.com/azahar-emu/azahar/blob/1edf59ef592a854ccc2a7405d9aade477b2a0b3d/src/core/hle/service/dsp/dsp_dsp.cpp).
 No external implementation was imported.

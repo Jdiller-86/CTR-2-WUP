@@ -101,8 +101,8 @@ touches executable backing. This supports a single color/depth publication;
 a late invalid range leaves all bytes and generations unchanged.
 
 Linear backing is contiguous for checked CPU accesses. The bounded guest-draw
-adapter maps owned Old-family linear allocations to physical resources; general
-FCRAM/VRAM/DSP mapping and asynchronous GPU coherency remain unsupported. MAP/UNMAP aliases, RESERVE, system/base regions, New-family linear
+adapter and bounded DSP PCM service resolve owned Old-family linear allocations.
+DSP HLE owns a separate checked DRAM window; general FCRAM/VRAM/DSP mapping and asynchronous GPU coherency remain unsupported. MAP/UNMAP aliases, RESERVE, system/base regions, New-family linear
 windows and unknown flags stop visibly as unsupported. Image reprotection, general physical accounting and broader kernel behavior
 remain unfinished. Thread stacks and shared objects retain their owned backing.
 

@@ -29,7 +29,7 @@ findings apply to the selected resources, not the complete container.
 | CGFX shader resource | Bounded DATA block and three embedded DVLB regions, 12 vertex entries | Resource binding; code sizes 472/428/264 fit the implemented 512-word vertex capacity |
 | System class table | LE BYML version 1, bounded header/table/root offsets | Typed-node parsing; class names do not establish service use |
 | Sound archive | CSAR version 2 STRG/INFO/FILE blocks fit the file | Archive references/banks/sequences/waves still require interpretation |
-| Two streams | CSTM version 2 INFO/SEEK/DATA; non-looping stereo DSP ADPCM at 32 kHz | Checked codec/blocks/mixing exist; actual selection and guest DSP integration remain open |
+| Two streams | CSTM version 2 INFO/SEEK/DATA; non-looping stereo DSP ADPCM at 32 kHz | Checked codec/blocks/mixing exist; selection and guest DSP ADPCM integration remain open |
 
 Raw shader words include ADD, DP3/DP4, MUL, floor/max/reciprocal, address moves,
 comparisons, conditional/loop/jump, multiply-add and geometry emit families.

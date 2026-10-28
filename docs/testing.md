@@ -51,3 +51,11 @@ picture/audio quality or installation. The compact
 [hardware ledger](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/tests/hardware-evidence.json)
 records baseline scope and provenance. Detailed acceptance criteria and results
 are tracked in [GitHub issues](https://github.com/Jdiller-86/CTR-2-WUP/issues).
+
+The focused runtime round runs an original ARM DSP PCM probe automatically,
+checks interpreter/AOT output, plays a finite stereo clip and automates native
+pause/resume. One listening response is recorded separately. Existing SD system
+logs from the official WiiUCrashLogDumper are copied into the same private return
+folder without SLC access or a repeated installed-title failure. The runtime
+reader checks source/session identity, complete stage order, exact PCM/counters,
+closed resources and all current-source failures; partial evidence cannot pass.
