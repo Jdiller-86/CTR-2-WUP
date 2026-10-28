@@ -1,7 +1,7 @@
 # Runtime check
 
-FTP the contents of **sd-card/** to the SD root in binary mode. In Aroma, run **WiiUCrashLogDumper** once to collect the already-retained system logs, then launch **CTR2WUP Guest Audio**. No installation or repeat of the installed-app hang is needed.
+FTP **sd-card/** contents to the SD root in binary mode. In Aroma, launch **WiiUCrashLogDumper**, select **Dump Logs** with **A**, then press **A** again. Wait for **Dumping done** and exit. This collects retained logs; no installation or repeat of the hang is needed.
 
-The audio check runs automatically: listen for a low tone on the left, a higher tone on the right, then both, with one automatic pause. When prompted, press **R** if correct on TV and GamePad, or **L** if wrong/missing; the app saves and exits. Use **Minus** if a failure is displayed. This checks the new guest DSP path; existing controls/save/tone tests are not repeated.
+Launch **CTR2WUP Guest Audio**. It automatically checks the new guest DSP path and plays a low left tone, a higher right tone, then both, with one automatic pause. When prompted, press **R** if correct on TV and GamePad, or **L** if wrong/missing; it saves and exits. Use **Minus** if a failure is displayed.
 
-FTP **sd:/ctr2wup/dsp-check/** back to the computer, ZIP that one folder and send it back. It contains the automatic results and any collected system logs; keep it private. No command, questionnaire or edited file is required. Build @VERSION@, source @SOURCE_COMMIT@.
+FTP **sd:/ctr2wup/dsp-check/** to the computer, ZIP that one folder and send it back privately. Results and any dumped system logs are included automatically. No command or edited file is needed. Build @VERSION@; source @SOURCE_COMMIT@.
