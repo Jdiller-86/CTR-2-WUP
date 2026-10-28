@@ -92,7 +92,7 @@ def review(path,manifest):
         automatic='pass' if not problems else 'fail_or_incomplete'
         human=last.get('hearing','pending')
         attempts.append({'source_commit':source,'session':session,'automatic':automatic,'hearing':human,
-                         'accepted_finite_audio':automatic=='pass' and human=='pass','problems':sorted(set(problems)),
+                         'accepted_finite_audio':automatic=='pass' and human=='pass','problems':sorted(set(problems)),'last_record':last,
                          'system_logs':{'present':last.get('system_logs_present'),'complete':last.get('system_logs_complete'),
                                         'files':last.get('system_log_files'),'error':last.get('system_logs_error')}})
     candidates=[]
