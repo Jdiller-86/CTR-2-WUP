@@ -89,9 +89,17 @@ def review(path,manifest):
                          'accepted_finite_audio':automatic=='pass' and human=='pass','problems':sorted(set(problems)),
                          'system_logs':{'present':last.get('system_logs_present'),'complete':last.get('system_logs_complete'),
                                         'files':last.get('system_log_files'),'error':last.get('system_logs_error')}})
+    candidates=[]
+    for name,data in sorted(files.items()):
+        if not any(part.startswith('system-logs-') for part in PurePosixPath(name).parts): continue
+        hits=[]
+        for match in re.finditer(rb'(?i)procui|gx2|osfatal|rpl|loader|sysapp|deadlock|exception|assert',data):
+            hits.append({'offset':match.start(),'term':match.group().decode('ascii').lower()})
+            if len(hits)==32:break
+        candidates.append({'path':name,'bytes':len(data),'diagnostic_terms':hits})
     receipts=[{'path':n,'bytes':len(d),'sha256':hashlib.sha256(d).hexdigest()} for n,d in sorted(files.items())]
     return {'schema':1,'kind':'ctr2wup-runtime-review','source_commit':manifest['source_commit'],
-            'attempts':attempts,'parse_errors':errors,'files':receipts,'raw_system_logs_private':True,
+            'attempts':attempts,'parse_errors':errors,'files':receipts,'system_log_candidates':candidates,'raw_system_logs_private':True,
             'installed_exit':'confirmed_failed_pending_system_log_diagnosis',
             'full_guest_audio_milestone_accepted':False,'console_return_requires_observation':True,
             'ok':any(a['source_commit']==manifest['source_commit'] for a in attempts) and not errors and all(a['accepted_finite_audio'] for a in attempts if a['source_commit']==manifest['source_commit'])}

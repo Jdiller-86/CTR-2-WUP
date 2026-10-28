@@ -12,6 +12,42 @@ static ctr_guest *opened(void) {
 static void closed(ctr_guest *g) { ctr_guest_close(g);free(g); }
 static void write_at(ctr_guest *g,uint32_t address,uint32_t value) { CHECK(ctr_memory_write(&g->memory,address,4,value)==CTR_MEM_OK); }
 static uint32_t read_at(ctr_guest *g,uint32_t address) { uint32_t v;CHECK(ctr_memory_read(&g->memory,address,4,CTR_MEM_READ,&v)==CTR_MEM_OK);return v; }
+static void exact_deadlines_and_ipc(void) {
+    ctr_guest *g=opened();ctr_dsp_statistics stats;
+    for(unsigned i=1;i<=6;++i) {
+        uint64_t deadline=((uint64_t)i*160*512*1000000000+16756990)/16756991;
+        CHECK(ctr_guest_run(g,1000000,deadline-1,false)==CTR_GUEST_WAITING);
+        CHECK(ctr_dsp_stats(g,&stats) && stats.frames==i-1);
+        CHECK(ctr_guest_run(g,1000000,deadline,false)==CTR_GUEST_WAITING);
+        CHECK(ctr_dsp_stats(g,&stats) && stats.frames==i && ctr_dsp_read(g,other,320));
+    }
+    closed(g);
+    g=opened();uint32_t service=g->cpu.r[5],base=g->cpu.tls_address+0x80;
+    // Standard word-address conversion and explicit mapped-buffer reply shape.
+    write_at(g,base,0x000c0040);write_at(g,base+4,0x10080);g->cpu.r[0]=service;ctr_guest_svc(g,0x32);
+    CHECK(read_at(g,base)==0x000c0080 && read_at(g,base+8)==CTR_DSP_RAM+0x20100);
+    // Read the pipe table through the thread's static output descriptor.
+    write_at(g,g->cpu.tls_address+0x180,0x8002);write_at(g,g->cpu.tls_address+0x184,0x08000080);
+    write_at(g,base,0x001000c0);write_at(g,base+4,2);write_at(g,base+8,0);write_at(g,base+12,2);
+    g->cpu.r[0]=service;ctr_guest_svc(g,0x32);
+    CHECK(read_at(g,base)==0x00100082 && read_at(g,base+8)==2 && (read_at(g,0x08000080)&65535)==9);
+    write_at(g,g->cpu.tls_address+0x180,(18u<<14)|2);
+    write_at(g,base,0x001000c0);write_at(g,base+4,2);write_at(g,base+8,0);write_at(g,base+12,18);
+    g->cpu.r[0]=service;ctr_guest_svc(g,0x32);CHECK(read_at(g,base+8)==18);
+    const unsigned spans[]={2,24*192,24*12,24*32,0xc4,0x1080,160*4,160*4*4,160*4*4};
+    uint32_t addresses[9];
+    for(unsigned i=0;i<9;++i) {
+        uint32_t value;CHECK(ctr_memory_read(&g->memory,0x08000080+i*2,2,CTR_MEM_READ,&value)==CTR_MEM_OK);
+        addresses[i]=value*2;CHECK(addresses[i]+spans[i]<=0x20000);
+        for(unsigned j=0;j<i;++j)CHECK(addresses[i]>=addresses[j]+spans[j] || addresses[j]>=addresses[i]+spans[i]);
+    }
+    write_at(g,g->cpu.tls_address+0x180,0x8002);
+    // The same output may not overwrite IPC through a backing alias.
+    write_at(g,g->cpu.tls_address+0x184,base);
+    write_at(g,base,0x001000c0);write_at(g,base+4,2);write_at(g,base+8,0);write_at(g,base+12,2);
+    uint32_t before=read_at(g,base);g->cpu.r[0]=service;ctr_guest_svc(g,0x32);
+    CHECK(g->state==CTR_GUEST_FAULTED && read_at(g,base)==before);closed(g);
+}
 static void controls_and_queue(void) {
     ctr_guest *g=opened();ctr_dsp_statistics s;
     CHECK(ctr_dsp_poll(g,4000000));CHECK(ctr_dsp_stats(g,&s) && s.frames==0 && s.pending);
@@ -47,7 +83,7 @@ static void atomic_failures(void) {
         if(kind==4)write_at(g,CTR_DSP_RAM+0x100+0xb4,9); // unsupported ADPCM, never silently PCM
         if(kind==5)write_at(g,CTR_DSP_RAM+0x100+0xac,0x2004); // unowned physical
         if(kind==6)CHECK(ctr_memory_change_range(&g->memory,0x14000000,4096,0,false)==CTR_MEM_OK);
-        if(kind==7)write_at(g,CTR_DSP_RAM+0x2400,0x40000000); // unsupported master state
+        if(kind==7)write_at(g,CTR_DSP_RAM+0x2600,0x40000000); // unsupported master state
         if(kind==8)write_at(g,CTR_DSP_RAM,5); // wrong bank counter
         uint8_t before[0x4000];memcpy(before,g->storage[7],sizeof(before));ctr_dsp_statistics s;
         CHECK(!ctr_dsp_poll(g,5000000) && g->state==CTR_GUEST_FAULTED);
@@ -76,7 +112,7 @@ static void ownership(void) {
     CHECK(!ctr_dsp_read(g,other,320));closed(g);
 }
 int main(int argc,char **argv) {
-    controls_and_queue();atomic_failures();ownership();
+    exact_deadlines_and_ipc();controls_and_queue();atomic_failures();ownership();
     ctr_dsp_statistics a,b;uint64_t ai,bi;
     CHECK(ctr_dsp_fixture_render(false,pcm,96000,&a,&ai));
     CHECK(ctr_dsp_fixture_render(true,other,96000,&b,&bi));

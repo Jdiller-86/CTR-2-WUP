@@ -10,8 +10,9 @@ const uint8_t ctr_dsp_component[16]={'C','T','R','2','W','U','P','-','P','C','M'
 #define BANK 0x20000u
 #define CHANNEL 0x100u
 #define STATUS 0x2000u
-#define MASTER 0x2400u
-#define CAPTURE 0x3800u
+#define MASTER 0x2600u
+#define CAPTURE 0x4000u
+#define FRAME_SPAN 0x5000u
 #define STRIDE 0xc0u
 #define MAX_SAMPLES 65536u
 #define INVALID UINT32_C(0xd8e007f7)
@@ -20,7 +21,7 @@ const uint8_t ctr_dsp_component[16]={'C','T','R','2','W','U','P','-','P','C','M'
 #define ALLOWED UINT32_C(0x7e6f0010)
 /* Counter, channel commands/status, coefficients, master, DSP state, capture,
  * auxiliary buffers and unknown state. Word addresses; independent owned banks. */
-static const uint16_t variables[]={0,CHANNEL/2,STATUS/2,0x2200/2,MASTER/2,0x2800/2,CAPTURE/2,0x4000/2,0x5000/2};
+static const uint16_t variables[]={0,CHANNEL/2,STATUS/2,0x2200/2,MASTER/2,0x2800/2,CAPTURE/2,0x5000/2,0x6000/2};
 typedef struct { uint32_t address,count,position;uint16_t sequence;bool looping;unsigned allocation; } buffer;
 typedef struct {
     buffer current,queued[4]; unsigned head,count,next_slot;
@@ -142,10 +143,10 @@ static bool frame(ctr_guest *g) {
     struct ctr_guest_dsp *d=g->dsp;
     if(d->count==CTR_DSP_OUTPUT_FRAMES)return fail(g,0x44535051u,CTR_MEM_OK);
     uint32_t offset=d->bank*BANK;
-    if(!range(g,CTR_DSP_RAM+offset,0x4000,CTR_MEM_READ|CTR_MEM_WRITE))return false;
+    if(!range(g,CTR_DSP_RAM+offset,FRAME_SPAN,CTR_MEM_READ|CTR_MEM_WRITE))return false;
     /* Memory mappings are caller-editable in the public API. Require the exact
      * original backing, including every command/status/capture byte. */
-    for(unsigned i=0;i<0x4000;i+=4096) {
+    for(unsigned i=0;i<FRAME_SPAN;i+=4096) {
         bool found=false;uint32_t address=CTR_DSP_RAM+offset+i;
         for(size_t j=0;j<g->memory.count;++j) {
             const ctr_mapping *m=&g->memory.maps[j];
@@ -230,7 +231,7 @@ static bool frame(ctr_guest *g) {
     memcpy(dst+STATUS,status,sizeof(status));memcpy(dst+CAPTURE,capture,sizeof(capture));
     for(unsigned c=0;c<CTR_DSP_CHANNELS;++c) { put(dst+CHANNEL+c*STRIDE,4,0);put(dst+CHANNEL+c*STRIDE+0x4a,2,0); }
     put(dst+MASTER,4,0);
-    (void)ctr_memory_backing_changed(&g->memory,dst,0x4000);
+    (void)ctr_memory_backing_changed(&g->memory,dst,FRAME_SPAN);
     pins(g,d->voices,false);pins(g,voices,true);
     memcpy(d->voices,voices,sizeof(voices));d->master=master;
     memcpy(d->output[(d->first+d->count)%CTR_DSP_OUTPUT_FRAMES],pcm,sizeof(pcm));++d->count;
