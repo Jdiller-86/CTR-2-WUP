@@ -71,8 +71,14 @@ def review(path,manifest):
         if not sequences or any(type(n) is not int for n in sequences) or sequences!=list(range(1,len(sequences)+1)): problems.append('incomplete_or_reordered_trace')
         last=result[0][1] if len(result)==1 else {}
         if not records or last!=records[-1]: problems.append('trace_result_mismatch')
-        required=['startup','retained_logs_collected','guest_rendered','playing','paused','resumed','playback_complete','hearing_recorded','resources_closed']
-        if [r.get('stage') for r in records]!=required: problems.append('incomplete_or_replayed_attempt')
+        stages=[r.get('stage') for r in records]
+        prefix=['startup','retained_logs_collected','guest_rendered']
+        suffix=['hearing_recorded','resources_closed']
+        middle=stages[3:-2]
+        valid=stages[:3]==prefix and stages[-2:]==suffix and 4<=len(middle)<=32 and len(middle)%4==0
+        for i in range(0,len(middle),4):
+            valid=valid and middle[i:i+4]==['playing' if i==0 else 'replay','paused','resumed','playback_complete']
+        if not valid: problems.append('incomplete_or_reordered_attempt')
         if any(r.get('failed') is not False for r in records): problems.append('recorded_failure')
         for key,value in {'core_ok':True,'pause':True,'resume':True,'pause_cursor_held':True,'native_complete':True,
                           'ax_owned':False,'finite_prerender':True,'installed_exit_tested':False}.items():

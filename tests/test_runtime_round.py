@@ -36,6 +36,13 @@ class RuntimeReviewTests(unittest.TestCase):
             with self.subTest(field=field):
                 old=copy.deepcopy(self.rows);self.rows[-1][field]=value;self.assertFalse(self.run_review()['ok']);self.rows=old
         self.rows.pop();self.assertFalse(self.run_review()['ok'])
+    def test_complete_relisten_and_partial_replay(self):
+        replay=copy.deepcopy(self.rows[3:7]);replay[0]['stage']='replay'
+        self.rows[7:7]=replay
+        for i,row in enumerate(self.rows,1):row['sequence']=i
+        self.assertTrue(self.run_review()['ok'])
+        self.rows[-4]['stage']='interrupted'
+        self.assertFalse(self.run_review()['ok'])
     def test_failed_prior_stage_retained(self):
         self.rows[3]['failed']=True;self.assertFalse(self.run_review()['ok'])
     def test_duplicate_malformed_json(self):
