@@ -77,7 +77,7 @@ def review(path,manifest):
         middle=stages[3:-2]
         valid=stages[:3]==prefix and stages[-2:]==suffix and 4<=len(middle)<=32 and len(middle)%4==0
         for i in range(0,len(middle),4):
-            valid=valid and middle[i:i+4]==['playing' if i==0 else 'replay','paused','resumed','playback_complete']
+            valid=valid and middle[i:i+4]==['play_requested' if i==0 else 'replay_requested','paused','resume_requested','playback_complete']
         if not valid: problems.append('incomplete_or_reordered_attempt')
         if any(r.get('failed') is not False for r in records): problems.append('recorded_failure')
         for key,value in {'core_ok':True,'pause':True,'resume':True,'pause_cursor_held':True,'native_complete':True,

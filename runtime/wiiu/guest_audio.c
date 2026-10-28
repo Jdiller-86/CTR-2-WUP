@@ -41,7 +41,7 @@ static bool foreground=true,closed_io,exit_observed,failed,core_ok,paused,resume
 
 static bool save(const char *stage) {
     char body[3072];++sequence;
-    if(native.report.prepared)ctr_native_pcm_snapshot(&native,&playback);
+    if(native.report.prepared && !ctr_native_pcm_snapshot(&native,&playback))failed=true;
     int n=snprintf(body,sizeof(body),
         "DSP_JSON {\"schema\":1,\"kind\":\"ctr2wup-guest-dsp\",\"source_commit\":\"%s\",\"source_dirty\":%u,"
         "\"session\":\"%016llx\",\"sequence\":%u,\"stage\":\"%s\",\"core_ok\":%s,\"failed\":%s,"
@@ -134,8 +134,12 @@ int main(void) {
         core_ok=render();if(!core_ok)failed=true;
         if(!save("guest_rendered"))failed=true;
     }
-    if(!failed && (!ctr_native_pcm_prepare(&native,pcm,frames) || !ctr_native_pcm_play(&native)))failed=true;
-    started=OSGetTime();if(!failed && !save("playing"))failed=true;
+    if(!failed && !ctr_native_pcm_prepare(&native,pcm,frames))failed=true;
+    /* Persist intent while AX is idle. SD commits may outlast a finite clip;
+     * no successful-playback logging may delay the automatic pause or polling. */
+    if(!failed && !save("play_requested"))failed=true;
+    if(!failed && !ctr_native_pcm_play(&native))failed=true;
+    started=OSGetTime();
     ctr_diagnostic_display_row(2,"Listen: LEFT low / RIGHT high / BOTH");
     ctr_diagnostic_display_row(3,"A short pause/resume happens automatically");
     ctr_diagnostic_display_row(6,"Return by FTP: sd:/ctr2wup/dsp-check/");
@@ -158,8 +162,9 @@ int main(void) {
         }
         if(!failed && paused && !resumed && OSTicksToMilliseconds(now-pause_started)>=500) {
             held_ok=playback.cursor[0]==held[0] && playback.cursor[1]==held[1];
-            if(!held_ok || !ctr_native_pcm_resume(&native))failed=true;else resumed=true;
-            save("resumed");
+            if(!held_ok)failed=true;
+            if(!save("resume_requested"))failed=true;
+            if(!failed && !ctr_native_pcm_resume(&native))failed=true;else if(!failed)resumed=true;
         }
         if(!failed && !complete && playback.status==CTR_NATIVE_PCM_COMPLETE) { complete=true;save("playback_complete"); }
         if(!complete && OSTicksToMilliseconds(now-started)>10000 && !failed) { failed=true;save("playback_timeout"); }
@@ -170,7 +175,11 @@ int main(void) {
             if((complete || failed) && (pad.trigger&VPAD_BUTTON_PLUS) && core_ok && audio.owned) {
                 /* A fresh immutable playback attempt; prior failures stay in
                  * the trace. Never auto-promote them to a successful run. */
-                if(!failed && ctr_native_pcm_play(&native)) { complete=paused=resumed=held_ok=false;hearing="pending";started=OSGetTime();save("replay"); }
+                if(!failed) {
+                    complete=paused=resumed=held_ok=false;hearing="pending";
+                    if(!save("replay_requested") || !ctr_native_pcm_play(&native))failed=true;
+                    started=OSGetTime();
+                }
             }
         } else if(error!=VPAD_READ_NO_SAMPLES) { failed=true;save("input_failed"); }
         if(failed && !failure_saved) { failure_saved=true;save("failed"); }

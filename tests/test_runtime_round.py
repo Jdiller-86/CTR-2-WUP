@@ -14,7 +14,7 @@ class RuntimeReviewTests(unittest.TestCase):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup);self.root=Path(self.temp.name)
         self.manifest={'kind':'ctr2wup-runtime-round','source_commit':'a'*40,'reference':{'arm_instructions':119801,'pcm_sha256':'c'*64}}
         self.rows=[]
-        for i,stage in enumerate(['startup','retained_logs_collected','guest_rendered','playing','paused','resumed','playback_complete','hearing_recorded','resources_closed'],1):
+        for i,stage in enumerate(['startup','retained_logs_collected','guest_rendered','play_requested','paused','resume_requested','playback_complete','hearing_recorded','resources_closed'],1):
             self.rows.append({'kind':'ctr2wup-guest-dsp','schema':1,'source_commit':'a'*40,'source_dirty':0,'session':'b'*16,'sequence':i,'stage':stage,
                 'core_ok':True,'failed':False,'pause':True,'resume':True,'pause_cursor_held':True,'native_complete':True,'ax_owned':False,
                 'finite_prerender':True,'installed_exit_tested':False,'dsp_blocks':300,'dsp_samples':48000,'queued':2,'loops':4,
@@ -37,7 +37,7 @@ class RuntimeReviewTests(unittest.TestCase):
                 old=copy.deepcopy(self.rows);self.rows[-1][field]=value;self.assertFalse(self.run_review()['ok']);self.rows=old
         self.rows.pop();self.assertFalse(self.run_review()['ok'])
     def test_complete_relisten_and_partial_replay(self):
-        replay=copy.deepcopy(self.rows[3:7]);replay[0]['stage']='replay'
+        replay=copy.deepcopy(self.rows[3:7]);replay[0]['stage']='replay_requested'
         self.rows[7:7]=replay
         for i,row in enumerate(self.rows,1):row['sequence']=i
         self.assertTrue(self.run_review()['ok'])

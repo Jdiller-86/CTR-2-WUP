@@ -50,7 +50,7 @@ bool ctr_diagnostic_display_row(unsigned row,const char *text) { CHECK(row<14 &&
 bool ctr_diagnostic_display_draw(void) { CHECK(display_alive && foreground);return true; }
 void ctr_diagnostic_display_invalidate(void) {}
 void ctr_diagnostic_display_close(bool fg) { (void)fg;CHECK(!audio.owned);display_alive=false; }
-bool ctr_report_storage_sync(void *ctx) { ((ctr_report_storage*)ctx)->client=7;if(!strcmp(mode,"sd-fail")){errno=EIO;return false;}return true; }
+bool ctr_report_storage_sync(void *ctx) { CHECK(failed || native.report.status!=CTR_NATIVE_PCM_PLAYING);if(!strcmp(mode,"slow-storage"))ticks+=2000;((ctr_report_storage*)ctx)->client=7;if(!strcmp(mode,"sd-fail")){errno=EIO;return false;}return true; }
 void ctr_report_storage_close(ctr_report_storage *s) { s->client=-1; }
 bool ctr_report_storage_verify(void *ctx,const char *path,uint64_t size,const uint8_t digest[32]) {
     (void)ctx;uint8_t bytes[8192],actual[32];FILE *f=fopen(path,"rb");CHECK(f && size==8192);
@@ -81,7 +81,7 @@ static int child(const char *name,const char *directory) {
 #else
     CHECK(snprintf(root,sizeof(root),"/tmp/ctr-audio-XXXXXX")>0 && mkdtemp(root)!=NULL);
 #endif
-    int status=app_main();bool expected=!strcmp(mode,"happy") || !strcmp(mode,"hearing-fail");
+    int status=app_main();bool expected=!strcmp(mode,"happy") || !strcmp(mode,"hearing-fail") || !strcmp(mode,"slow-storage");
     CHECK((status==0)==expected && proc_alive==false);
     if(expected)CHECK(core_ok && paused && resumed && held_ok && complete && native.report.releases==1);
     if(!strcmp(mode,"hearing-fail"))CHECK(!strcmp(hearing,"fail"));
@@ -93,10 +93,10 @@ static int child(const char *name,const char *directory) {
 }
 int main(int argc,char **argv) {
     if(argc==3)return child(argv[1],argv[2]);
-    const char *modes[]={"happy","hearing-fail","native-fail","pause-drift","interrupted","sd-fail"};
-    for(unsigned i=0;i<6;++i) {
+    const char *modes[]={"happy","hearing-fail","native-fail","pause-drift","interrupted","sd-fail","slow-storage"};
+    for(unsigned i=0;i<7;++i) {
         ctr_test_child process;unsigned status;
         CHECK(ctr_test_child_start(&process,modes[i],".",child) && ctr_test_child_wait(&process,&status) && status==0);
     }
-    puts("{\"ok\":true,\"guest_audio_frontend_cases\":6,\"console_verified\":false}");return 0;
+    puts("{\"ok\":true,\"guest_audio_frontend_cases\":7,\"console_verified\":false}");return 0;
 }
