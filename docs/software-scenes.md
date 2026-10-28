@@ -199,8 +199,9 @@ Hits copy into transaction-owned aligned GPU buffers after retirement; CPU-only
 eviction needs no GPU wait. Records survive list completion, abort and foreground
 release, while graphics shutdown or explicit cache clear frees the owner. Clearing
 retains cumulative counters. Complete preflight, ownership checks and exact paired
-readback still precede guest publication. Texture/target caching, source-resource
-generation invalidation and physical performance remain outside this cache.
+readback still precede guest publication. [Native texture uploads](textures.md#native-upload-reuse)
+and [source-resource versions](guest-memory.md) have separate owners. Native
+target pooling and physical performance remain open.
 
 The optional backend `draw_textures` callback receives three unit-indexed borrowed
 descriptors and an enable mask. Legacy `draw` callbacks retain their Texture0

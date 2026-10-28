@@ -6,6 +6,7 @@
 
 void *ctr_gx2_test_memalign(size_t alignment,size_t bytes);
 void ctr_gx2_test_free(void *bytes);
+void ctr_gx2_test_call(void);
 ctr_gx2_cache *ctr_gx2_test_cache_create(void);
 void ctr_gx2_test_cache_destroy(ctr_gx2_cache *cache);
 #include <stdbool.h>
@@ -144,9 +145,9 @@ void GX2SetBlendControl(GX2RenderTarget target,GX2BlendMode color_source,GX2Blen
                         GX2BlendCombineMode color_equation,bool separate_alpha,GX2BlendMode alpha_source,
                         GX2BlendMode alpha_destination,GX2BlendCombineMode alpha_equation);
 void GX2SetBlendConstantColor(float red,float green,float blue,float alpha);
-#define GX2SetupContextStateEx(p,flag) ((void)(p),(void)(flag))
-#define GX2InitColorBufferRegs(p) ((void)(p))
-#define GX2SetFetchShader(p) ((void)(p))
-#define GX2SetAlphaToMask(a,b) ((void)(a),(void)(b))
-#define GX2SetStreamOutEnable(a) ((void)(a))
+#define GX2SetupContextStateEx(p,flag) (ctr_gx2_test_call(),(void)(p),(void)(flag))
+#define GX2InitColorBufferRegs(p) (ctr_gx2_test_call(),(void)(p))
+#define GX2SetFetchShader(p) (ctr_gx2_test_call(),(void)(p))
+#define GX2SetAlphaToMask(a,b) (ctr_gx2_test_call(),(void)(a),(void)(b))
+#define GX2SetStreamOutEnable(a) (ctr_gx2_test_call(),(void)(a))
 #endif

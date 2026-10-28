@@ -4,6 +4,15 @@
 #include "ctr_gx2_shader.h"
 #include "ctr_gx2_cache.h"
 typedef struct GX2ContextState GX2ContextState;
+typedef struct ctr_wiiu_gx2_texture_cache ctr_wiiu_gx2_texture_cache;
+#define CTR_WIIU_GX2_TEXTURE_CACHE_SLOTS 6u
+#define CTR_WIIU_GX2_TEXTURE_CACHE_MAX_IMAGE_BYTES (8u*1024u*1024u)
+#define CTR_WIIU_GX2_TEXTURE_CACHE_MAX_BYTES (24u*1024u*1024u)
+typedef struct {
+    uint64_t lookups,hits,misses,evictions,bypasses,allocation_failures;
+    uint64_t bytes,peak_bytes,pins;
+    bool saturated;
+} ctr_wiiu_gx2_texture_cache_statistics;
 
 typedef enum {
     CTR_WIIU_GX2_SCENE_OK, CTR_WIIU_GX2_SCENE_ARGUMENT,
@@ -29,6 +38,13 @@ typedef struct {
     uint64_t vertex_translation_failures,pixel_translation_failures;
     uint64_t cache_allocation_failures;
     bool cache_disabled; /* Use the same checked compilers without lookup/store. */
+    /* Retired, GPU-read-only pitched RGBA images, separate from CPU records.
+     * Exact decoded bytes and dimensions identify an image; sampler state is
+     * rebound from the current descriptor. Pins count unit leases, including
+     * duplicate bindings. Cumulative counters survive explicit clears. */
+    ctr_wiiu_gx2_texture_cache *texture_cache;
+    ctr_wiiu_gx2_texture_cache_statistics texture_cache_stats;
+    bool texture_cache_disabled; /* Default false; use transaction-owned uploads. */
     bool quarantined;
     /* Optional borrowed CPU evidence observer. Called after a retired GPU copy
      * has populated readback, including before any later context-restore
@@ -59,15 +75,21 @@ typedef struct {
  * per fragment and publish the delayed RGB/alpha updates after every stage.
  * Both target copies retire before readback; full pair parity remains the
  * scene executor's publication gate. Initialize only a fresh owner, or one
- * whose transaction and CPU cache have both been cleared. */
+ * whose transaction and both caches have been cleared. */
 void ctr_wiiu_gx2_scene_init(ctr_wiiu_gx2_scene *scene,GX2ContextState *restore_context);
 ctr_scene_backend ctr_wiiu_gx2_scene_backend(ctr_wiiu_gx2_scene *scene);
+/* Retire an active transaction before freeing every uploaded image. An idle
+ * abort frees already-retired images without calling GX2, including after
+ * foreground release. A failed wait preserves all ownership for retry. */
 void ctr_wiiu_gx2_scene_abort(ctr_wiiu_gx2_scene *scene);
 /* CPU-only: discard immutable program records without changing any GX2 owner,
  * pending reference or context. Historical counters and peak bytes remain. */
 void ctr_wiiu_gx2_scene_cache_clear(ctr_wiiu_gx2_scene *scene);
+/* Discard already-retired uploaded images without GX2 calls. Refuse an active
+ * transaction (including quarantined storage), preserving all ownership. */
+bool ctr_wiiu_gx2_scene_texture_cache_clear(ctr_wiiu_gx2_scene *scene);
 /* Only after GX2/WHB graphics shutdown: release quarantined storage if a failed
- * retirement wait prevented reclamation, and clear the CPU program cache. */
+ * retirement wait prevented reclamation, and clear both caches without GX2. */
 void ctr_wiiu_gx2_scene_after_shutdown(ctr_wiiu_gx2_scene *scene);
 const char *ctr_wiiu_gx2_scene_result_name(ctr_wiiu_gx2_scene_result result);
 #endif

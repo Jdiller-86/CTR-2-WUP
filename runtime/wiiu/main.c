@@ -316,10 +316,12 @@ static void gx2_depth_readback_log(void *context,const ctr_scene_depth_surface *
         surface->stride,(unsigned)surface->size,hash);
     WHBLogPrintf("GX2 DEPTH GRID sequence=%llu samples=%s",(unsigned long long)(scene->readbacks+1u),grid);
 }
-static void gx2_description(char *line,size_t capacity) {
+static bool gx2_description(char *line,size_t capacity) {
     const ctr_gx2_cache_statistics *cache=&gx2_scene.cache_stats;
-    snprintf(line,capacity,"GX2 backend: result=%s shader=%s begins=%llu draws=%llu submissions=%llu readbacks=%llu shader_ops=%llu waits=%llu wait_failures=%llu allocations=%llu releases=%llu quarantine=%u backend_stage=%u texture_uploads=%llu texture_bytes=%llu; CPU preflight and full GPU readback parity\n"
-        "GX2 program cache: VS lookups/hits/misses/stores/evictions/bypasses=%llu/%llu/%llu/%llu/%llu/%llu PS=%llu/%llu/%llu/%llu/%llu/%llu translations=%llu/%llu translation_failures=%llu/%llu allocation_failures=%llu resident_bytes=%u peak_resident_bytes=%u saturated=%u disabled=%u\n",
+    const ctr_wiiu_gx2_texture_cache_statistics *textures=&gx2_scene.texture_cache_stats;
+    int n=snprintf(line,capacity,"GX2 backend: result=%s shader=%s begins=%llu draws=%llu submissions=%llu readbacks=%llu shader_ops=%llu waits=%llu wait_failures=%llu allocations=%llu releases=%llu quarantine=%u backend_stage=%u texture_uploads=%llu texture_bytes=%llu; CPU preflight and full GPU readback parity\n"
+        "GX2 program cache: VS lookups/hits/misses/stores/evictions/bypasses=%llu/%llu/%llu/%llu/%llu/%llu PS=%llu/%llu/%llu/%llu/%llu/%llu translations=%llu/%llu translation_failures=%llu/%llu allocation_failures=%llu resident_bytes=%u peak_resident_bytes=%u saturated=%u disabled=%u\n"
+        "GX2 texture upload cache: lookups=%llu hits=%llu misses=%llu evictions=%llu bypasses=%llu allocation_failures=%llu resident_bytes=%llu peak_resident_bytes=%llu pins=%llu saturated=%u disabled=%u\n",
         ctr_wiiu_gx2_scene_result_name(gx2_scene.result),ctr_gx2_shader_result_name(gx2_scene.shader_result),
         (unsigned long long)gx2_scene.begins,(unsigned long long)gx2_scene.draws,
         (unsigned long long)gx2_scene.submissions,(unsigned long long)gx2_scene.readbacks,
@@ -337,10 +339,17 @@ static void gx2_description(char *line,size_t capacity) {
         (unsigned long long)gx2_scene.vertex_translations,(unsigned long long)gx2_scene.pixel_translations,
         (unsigned long long)gx2_scene.vertex_translation_failures,(unsigned long long)gx2_scene.pixel_translation_failures,
         (unsigned long long)gx2_scene.cache_allocation_failures,(unsigned)cache->bytes,(unsigned)cache->peak_bytes,
-        cache->saturated,gx2_scene.cache_disabled);
+        cache->saturated,gx2_scene.cache_disabled,
+        (unsigned long long)textures->lookups,(unsigned long long)textures->hits,
+        (unsigned long long)textures->misses,(unsigned long long)textures->evictions,
+        (unsigned long long)textures->bypasses,(unsigned long long)textures->allocation_failures,
+        (unsigned long long)textures->bytes,(unsigned long long)textures->peak_bytes,
+        (unsigned long long)textures->pins,textures->saturated,gx2_scene.texture_cache_disabled);
+    return n>=0 && (size_t)n<capacity;
 }
 static void gx2_log(const char *stage) {
-    char line[2048];gx2_description(line,sizeof(line));
+    char line[3072];
+    if(!gx2_description(line,sizeof(line))) { WHBLogPrintf("GX2 stage=%s report format failed",stage);return; }
     WHBLogPrintf("GX2 stage=%s %s",stage,line);
 }
 #endif
@@ -409,7 +418,7 @@ static bool result_snapshot(const char *stage) {
 #ifdef CTR_STREAM_AUDIO
     return stream_result_snapshot(stage);
 #endif
-    char body[CTR_TEST_RESULT_BYTES],guide_results[1536],scene_summary[2048]="",phase_summary[1024],publication_summary[768];
+    char body[CTR_TEST_RESULT_BYTES],guide_results[1536],scene_summary[3072]="",phase_summary[1024],publication_summary[768];
     size_t used=0;
     for(unsigned i=0;i<PH_COUNT;++i) {
         int length=snprintf(phase_summary+used,sizeof(phase_summary)-used,"Phase %s: calls=%llu total_us=%llu max_us=%llu\n",
@@ -441,7 +450,9 @@ static bool result_snapshot(const char *stage) {
         scene_reports[0].shader_instructions,scene_reports[1].shader_instructions);
 #endif
 #ifdef CTR_GX2_GUEST
-    gx2_description(scene_summary,sizeof(scene_summary));
+    if(!gx2_description(scene_summary,sizeof(scene_summary))) {
+        test_result.failed=true;test_result.error_code=EMSGSIZE;test_result.error_stage="gx2_format";return false;
+    }
 #endif
     if(!ctr_test_guide_results(&test_guide,guide_results,sizeof(guide_results))) {
         test_result.failed=true;test_result.error_code=EMSGSIZE;test_result.error_stage="guide_format";return false;
