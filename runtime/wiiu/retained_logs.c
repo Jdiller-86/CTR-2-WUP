@@ -11,9 +11,10 @@
 static bool copy_file(const char *source,const char *destination,ctr_retained_logs *r) {
     /* Validate the opened object, not an earlier pathname stat. Retain both
      * descriptors through exact readback, even if a directory entry changes. */
-    int fd=open(source,O_RDONLY|O_NOFOLLOW);if(fd<0)return false;
+    errno=0;int fd=open(source,O_RDONLY|O_NOFOLLOW);if(fd<0)return false;
     struct stat info;
-    if(fstat(fd,&info)!=0 || !S_ISREG(info.st_mode) || info.st_size<0 || info.st_size>8*1024*1024 ||
+    if(fstat(fd,&info)!=0) { int error=errno;close(fd);errno=error;return false; }
+    if(!S_ISREG(info.st_mode) || info.st_size<0 || info.st_size>8*1024*1024 ||
        r->files>=256 || r->bytes+(uint64_t)info.st_size>32*1024*1024) { close(fd);errno=EOVERFLOW;return false; }
     FILE *in=fdopen(fd,"rb");if(!in) { int error=errno;close(fd);errno=error;return false; }
     fd=open(destination,O_RDWR|O_CREAT|O_EXCL|O_NOFOLLOW,0600);
@@ -31,10 +32,11 @@ static bool copy_file(const char *source,const char *destination,ctr_retained_lo
         compared+=n;
     }
     if(ferror(in) || ferror(out) || compared!=size || fgetc(out)!=EOF)ok=false;
-    int error=errno;
-    if(fclose(in)!=0)ok=false;
-    if(fclose(out)!=0)ok=false;
-    if(ok) { ++r->files;r->bytes+=size; }else errno=error?error:EIO;
+    int error=ok?0:(errno?errno:EIO);
+    if(fclose(in)!=0 && !error)error=errno?errno:EIO;
+    if(fclose(out)!=0 && !error)error=errno?errno:EIO;
+    ok=error==0;
+    if(ok) { ++r->files;r->bytes+=size; }else errno=error;
     return ok;
 }
 static bool copied(const char *source,const char *destination,ctr_retained_logs *r,unsigned depth) {
@@ -56,7 +58,7 @@ static bool copied(const char *source,const char *destination,ctr_retained_logs 
             if(!directory || mkdir(dst,0700)!=0 || !copied(src,dst,r,depth+1)) { errno=errno?errno:EINVAL;ok=false; }
         } else if(!copy_file(src,dst,r))ok=false;
     }
-    int error=errno;if(closedir(dir)!=0)ok=false;
+    int error=ok?0:(errno?errno:EIO);if(closedir(dir)!=0) { if(!error)error=errno?errno:EIO;ok=false; }
     if(!ok)errno=error?error:EIO;
     return ok;
 }
@@ -65,6 +67,7 @@ ctr_retained_logs ctr_retained_logs_copy(const char *source,const char *destinat
     if(!source || !destination) { r.error=EINVAL;return r; }
     if(lstat(source,&info)!=0) { if(errno!=ENOENT)r.error=errno;return r; }
     r.present=true;
-    if(!S_ISDIR(info.st_mode) || mkdir(destination,0700)!=0) { r.error=errno?errno:EINVAL;return r; }
+    if(!S_ISDIR(info.st_mode)) { r.error=ENOTDIR;return r; }
+    if(mkdir(destination,0700)!=0) { r.error=errno?errno:EIO;return r; }
     r.complete=copied(source,destination,&r,0);if(!r.complete)r.error=errno?errno:EIO;return r;
 }
