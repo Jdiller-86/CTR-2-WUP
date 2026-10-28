@@ -35,8 +35,9 @@ static size_t frames;
 static uint32_t held[2],sequence;
 static char hash[65];
 static const char *hearing="pending";
+static const char *probe_phase="not_run";
 static atomic_bool exit_requested;
-static bool foreground=true,closed_io,exit_observed,failed,core_ok,paused,resumed,held_ok,complete;
+static bool foreground=true,closed_io,exit_observed,failed,core_ok,paused,resumed,held_ok,complete,failure_saved;
 
 static bool save(const char *stage) {
     char body[3072];++sequence;
@@ -45,12 +46,13 @@ static bool save(const char *stage) {
         "DSP_JSON {\"schema\":1,\"kind\":\"ctr2wup-guest-dsp\",\"source_commit\":\"%s\",\"source_dirty\":%u,"
         "\"session\":\"%016llx\",\"sequence\":%u,\"stage\":\"%s\",\"core_ok\":%s,\"failed\":%s,"
         "\"arm_instructions\":%llu,\"dsp_blocks\":%llu,\"dsp_samples\":%llu,\"queued\":%llu,\"loops\":%llu,"
+        "\"probe_phase\":\"%s\",\"guest_pc\":%u,\"guest_ipc_header\":%u,\"guest_fault\":%u,\"guest_fault_detail\":%u,"
         "\"output_frames\":%u,\"pcm_sha256\":\"%s\",\"pause\":%s,\"resume\":%s,\"pause_cursor_held\":%s,"
         "\"native_complete\":%s,\"hearing\":\"%s\",\"native_failures\":%u,\"native_releases\":%u,\"ax_owned\":%s,"
         "\"native_status\":%u,\"native_result\":%u,\"cursor\":[%u,%u],\"finite_prerender\":true,\"installed_exit_tested\":false,\"system_logs_present\":%s,\"system_logs_complete\":%s,\"system_log_files\":%u,\"system_log_bytes\":%llu,\"system_logs_error\":%d}",
         CTR_SOURCE_COMMIT,CTR_SOURCE_DIRTY,(unsigned long long)session,sequence,stage,core_ok?"true":"false",failed?"true":"false",
         (unsigned long long)instructions,(unsigned long long)dsp.frames,(unsigned long long)dsp.samples,
-        (unsigned long long)dsp.queued,(unsigned long long)dsp.loops,(unsigned)frames,hash,
+        (unsigned long long)dsp.queued,(unsigned long long)dsp.loops,probe_phase,dsp.guest_pc,dsp.guest_ipc_header,dsp.guest_fault,dsp.guest_fault_detail,(unsigned)frames,hash,
         paused?"true":"false",resumed?"true":"false",held_ok?"true":"false",complete?"true":"false",hearing,
         native.report.failures,native.report.releases,audio.owned?"true":"false",playback.status,playback.result,
         playback.cursor[0],playback.cursor[1],retained.present?"true":"false",retained.complete?"true":"false",retained.files,(unsigned long long)retained.bytes,retained.error);
@@ -87,9 +89,13 @@ static void cleanup(void *unused) {
 static const ctr_exit_ops exit_ops={cleanup,clear_callbacks,ctr_procui_request_menu,ctr_procui_messages,
     ctr_procui_release,ctr_procui_wait,ctr_procui_shutdown,ctr_procui_shutdown_whb,checkpoint,finalize};
 static bool render(void) {
-    ctr_dsp_statistics other;uint64_t count;
-    if(!ctr_dsp_fixture_render(false,original,96000,&dsp,&instructions) ||
-       !ctr_dsp_fixture_render(true,translated,96000,&other,&count) || count!=instructions ||
+    ctr_dsp_statistics other={0};uint64_t count=0;
+    probe_phase="interpreter";
+    if(!ctr_dsp_fixture_render(false,original,96000,&dsp,&instructions))return false;
+    probe_phase="aot";
+    if(!ctr_dsp_fixture_render(true,translated,96000,&other,&count)) { dsp=other;instructions=count;return false; }
+    probe_phase="comparison";
+    if(count!=instructions ||
        memcmp(original,translated,sizeof(original)) || dsp.frames!=300 || dsp.samples!=48000 || dsp.queued!=2 || dsp.loops!=4)return false;
     for(unsigned i=0;i<48000;++i) {
         unsigned word=8192-(i%16384)/2;
@@ -102,7 +108,7 @@ static bool render(void) {
     for(size_t i=0;i<frames*2;++i) { uint16_t v=(uint16_t)pcm[i];uint8_t bytes[2]={(uint8_t)v,(uint8_t)(v>>8)};ctr_sha256_update(&sha,bytes,2); }
     uint8_t digest[32];ctr_sha256_final(&sha,digest);
     for(unsigned i=0;i<32;++i)snprintf(hash+i*2,3,"%02x",digest[i]);
-    return true;
+    probe_phase="complete";return true;
 }
 int main(void) {
     WHBProcInit();session=OSGetTime();lifecycle.title_id=OSGetTitleID();
@@ -124,7 +130,10 @@ int main(void) {
         if(n>0 && (size_t)n<sizeof(destination))retained=ctr_retained_logs_copy("fs:/vol/external01/wiiu/crash_logs",destination);
         if(!save("retained_logs_collected"))failed=true;
     }
-    if(!failed) { core_ok=render();if(!core_ok || !save("guest_rendered"))failed=true; }
+    if(!failed) {
+        core_ok=render();if(!core_ok)failed=true;
+        if(!save("guest_rendered"))failed=true;
+    }
     if(!failed && (!ctr_native_pcm_prepare(&native,pcm,frames) || !ctr_native_pcm_play(&native)))failed=true;
     started=OSGetTime();if(!failed && !save("playing"))failed=true;
     ctr_diagnostic_display_row(2,"Listen: LEFT low / RIGHT high / BOTH");
@@ -164,6 +173,7 @@ int main(void) {
                 if(!failed && ctr_native_pcm_play(&native)) { complete=paused=resumed=held_ok=false;hearing="pending";started=OSGetTime();save("replay"); }
             }
         } else if(error!=VPAD_READ_NO_SAMPLES) { failed=true;save("input_failed"); }
+        if(failed && !failure_saved) { failure_saved=true;save("failed"); }
         ctr_diagnostic_display_row(5,failed?"CHECK FAILED - return logs; no repeated test needed":
             complete?"R: correct on TV + GamePad / L: wrong or missing":"PLAYING - no button presses needed");
         if(!ctr_diagnostic_display_draw()) { failed=true;break; }

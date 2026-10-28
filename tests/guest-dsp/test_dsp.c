@@ -88,7 +88,8 @@ static void atomic_failures(void) {
         uint8_t before[0x4000];memcpy(before,g->storage[7],sizeof(before));ctr_dsp_statistics s;
         CHECK(!ctr_dsp_poll(g,5000000) && g->state==CTR_GUEST_FAULTED);
         CHECK(!memcmp(before,g->storage[7],sizeof(before)) && !ctr_dsp_read(g,other,320));
-        CHECK(ctr_dsp_stats(g,&s) && s.frames==0 && s.rejected==1 && s.pending);closed(g);
+        CHECK(ctr_dsp_stats(g,&s) && s.frames==0 && s.rejected==1 && s.pending);
+        CHECK(s.guest_fault==(uint32_t)g->fault && s.guest_fault_detail==g->fault_detail && s.guest_pc==g->cpu.r[15]);closed(g);
     }
 }
 static void ownership(void) {

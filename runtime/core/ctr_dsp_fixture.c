@@ -15,6 +15,7 @@ bool ctr_dsp_fixture_render(bool translated,int16_t *pcm,size_t samples,
          * its own exact 160-sample deadline and does not execute early. */
         now+=5000000;
     }
-    ok=ok && g->state==CTR_GUEST_EXITED && blocks==CTR_DSP_FIXTURE_BLOCKS && !g->ipc_failures && ctr_dsp_stats(g,statistics);
+    bool recorded=ctr_dsp_stats(g,statistics);
+    ok=ok && g->state==CTR_GUEST_EXITED && blocks==CTR_DSP_FIXTURE_BLOCKS && !g->ipc_failures && recorded;
     *instructions=g->cpu.instructions;ctr_guest_close(g);free(g);return ok;
 }

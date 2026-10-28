@@ -263,7 +263,10 @@ bool ctr_dsp_read(ctr_guest *g,int16_t *stereo,size_t capacity) {
 }
 bool ctr_dsp_stats(const ctr_guest *g,ctr_dsp_statistics *out) {
     if(!g || !out || (uintptr_t)out%_Alignof(ctr_dsp_statistics) || host_alias(g,out,sizeof(*out)))return false;
-    *out=g->dsp?g->dsp->stats:(ctr_dsp_statistics){0};return true;
+    *out=g->dsp?g->dsp->stats:(ctr_dsp_statistics){0};
+    out->guest_pc=g->cpu.r[15];out->guest_ipc_header=g->ipc_header;
+    out->guest_fault=(uint32_t)g->fault;out->guest_fault_detail=g->fault_detail;
+    return true;
 }
 bool ctr_dsp_pcm48k(const int16_t *input,size_t frames,int16_t *output,size_t capacity,size_t *written) {
     if(!input || !output || !written || !frames || frames>65536 ||

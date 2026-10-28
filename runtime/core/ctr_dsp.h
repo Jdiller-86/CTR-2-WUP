@@ -14,6 +14,7 @@ typedef struct {
     uint64_t frames, samples, queued, completed, loops, underruns;
     uint64_t rejected, output_reads;
     uint32_t detail;
+    uint32_t guest_pc, guest_ipc_header, guest_fault, guest_fault_detail;
     bool loaded, running, pending;
 } ctr_dsp_statistics;
 bool ctr_dsp_request(ctr_guest *g,unsigned session,const uint32_t *words,
