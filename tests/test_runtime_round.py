@@ -12,13 +12,13 @@ spec=importlib.util.spec_from_file_location('runtime_review',ROOT/'tools/review-
 class RuntimeReviewTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup);self.root=Path(self.temp.name)
-        self.manifest={'kind':'ctr2wup-runtime-round','source_commit':'a'*40,'reference':{'arm_instructions':114701,'pcm_sha256':'c'*64}}
+        self.manifest={'kind':'ctr2wup-runtime-round','source_commit':'a'*40,'reference':{'arm_instructions':119801,'pcm_sha256':'c'*64}}
         self.rows=[]
         for i,stage in enumerate(['startup','retained_logs_collected','guest_rendered','playing','paused','resumed','playback_complete','hearing_recorded','resources_closed'],1):
             self.rows.append({'kind':'ctr2wup-guest-dsp','schema':1,'source_commit':'a'*40,'source_dirty':0,'session':'b'*16,'sequence':i,'stage':stage,
                 'core_ok':True,'failed':False,'pause':True,'resume':True,'pause_cursor_held':True,'native_complete':True,'ax_owned':False,
                 'finite_prerender':True,'installed_exit_tested':False,'dsp_blocks':300,'dsp_samples':48000,'queued':2,'loops':4,
-                'output_frames':70398,'arm_instructions':114701,'native_failures':0,'native_releases':1,'native_result':0,
+                'output_frames':70398,'arm_instructions':119801,'native_failures':0,'native_releases':1,'native_result':0,
                 'cursor':[70398,70398],'pcm_sha256':'c'*64,'hearing':'pass'})
     def run_review(self):
         folder=self.root/'results';folder.mkdir(exist_ok=True)

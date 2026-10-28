@@ -82,7 +82,9 @@ version-1 token with masks `ff/ff`; it selects HLE and executes no DSP firmware.
 Other components, commands, descriptors and processing states fail explicitly.
 The shared DRAM mapping is `1ff40000..1ff80000`; DSP word addresses select two
 `20000`-byte banks. All wire values are explicitly little-endian, including
-NDSP's halfword-rotated physical addresses/counts/positions.
+NDSP's halfword-rotated physical addresses/counts/positions. Commands and their
+consumed counter use the current bank; status/captured PCM use the opposite bank
+read by NDSP after its frame-ID advance. The ARM probe validates this round trip.
 
 The profile supports 24 mono PCM16 voices at unity DSP rate, one current buffer
 and four circular queued buffers each, nonzero sequence IDs, pause/resume and

@@ -75,10 +75,10 @@ static void controls_and_queue(void) {
     CHECK(ctr_dsp_poll(g,5000000) && ctr_dsp_read(g,other,320));
     CHECK(ctr_dsp_stats(g,&s) && s.queued==6 && s.completed==5);
     for(unsigned i=0;i<160;++i)CHECK(other[i*2]==(i<20?(i%4<2?6000:-6000):0));
-    CHECK(read_at(g,CTR_DSP_RAM+0x2000+8)==(5u<<16));closed(g);
+    CHECK(read_at(g,CTR_DSP_RAM+0x20000+0x2000+8)==(5u<<16));closed(g);
 }
 static void atomic_failures(void) {
-    for(unsigned kind=0;kind<9;++kind) {
+    for(unsigned kind=0;kind<10;++kind) {
         ctr_guest *g=opened();
         if(kind==0)write_at(g,CTR_DSP_RAM+0x100+23*0xc0,0x80000000); // late channel unsupported
         if(kind==1)write_at(g,CTR_DSP_RAM+0x100+0x34,0x7fc00000); // NaN rate
@@ -89,7 +89,8 @@ static void atomic_failures(void) {
         if(kind==6)CHECK(ctr_memory_change_range(&g->memory,0x14000000,4096,0,false)==CTR_MEM_OK);
         if(kind==7)write_at(g,CTR_DSP_RAM+0x2600,0x40000000); // unsupported master state
         if(kind==8)write_at(g,CTR_DSP_RAM,5); // wrong bank counter
-        uint8_t before[0x4000];memcpy(before,g->storage[7],sizeof(before));ctr_dsp_statistics s;
+        if(kind==9)CHECK(ctr_memory_change_range(&g->memory,CTR_DSP_RAM+0x20000+0x2000,4096,CTR_MEM_READ,false)==CTR_MEM_OK); // reply bank must be writable
+        uint8_t before[CTR_DSP_RAM_BYTES];memcpy(before,g->storage[7],sizeof(before));ctr_dsp_statistics s;
         CHECK(!ctr_dsp_poll(g,5000000) && g->state==CTR_GUEST_FAULTED);
         CHECK(!memcmp(before,g->storage[7],sizeof(before)) && !ctr_dsp_read(g,other,320));
         CHECK(ctr_dsp_stats(g,&s) && s.frames==0 && s.rejected==1 && s.pending);

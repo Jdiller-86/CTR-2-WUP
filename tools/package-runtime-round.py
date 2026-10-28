@@ -41,7 +41,7 @@ def package(app,reference,sdk_receipt,sdk_licenses,dumper,dumper_source,output):
         or ref.get('kind')!='ctr2wup-guest-dsp-reference' or ref.get('modes')!=['normal','sanitized']
         or any(ref.get(k) is not True for k in ('independent_reference','original_inputs_only','arm_interpreter_aot_exact'))
         or ref.get('dsp_blocks')!=300 or ref.get('dsp_samples')!=48000 or ref.get('output_frames')!=70398
-        or ref.get('arm_instructions')!=114701 or ref.get('pcm_sha256')!=hashlib.sha256(expected).hexdigest()): raise ValueError('Require complete clean independent guest-DSP evidence')
+        or ref.get('arm_instructions')!=119801 or ref.get('pcm_sha256')!=hashlib.sha256(expected).hexdigest()): raise ValueError('Require complete clean independent guest-DSP evidence')
     wav=release.regular(reference.parent/'reference.wav',1024*1024).read_bytes()
     import wave
     with wave.open(io.BytesIO(wav)) as f:

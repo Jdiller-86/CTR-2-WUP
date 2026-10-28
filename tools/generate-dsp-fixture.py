@@ -64,12 +64,19 @@ def code():
     mov(0,8);p.emit(0xef000019)
     mov(0,9);p.emit(0xef000018)
     mov(0,8);p.constant(2,0xffffffff);p.constant(3,0xffffffff);p.emit(0xef000024)
+    # NDSP reads status from the next frame's bank. Validate sync+completion
+    # in genuine ARM; a same-bank HLE implementation must fail this probe.
+    p.constant(1,0x20000);p.emit(0xe02c1001)
+    p.constant(2,0x2000);p.emit(0xe0811002);p.emit(0xe5910000)
+    p.constant(2,0xffff0100);p.emit(0xe0000002)
+    p.constant(2,0x00010100);p.emit(0xe1500002);p.branch('fault',1)
     p.emit(0xe28aa001);p.emit(0xe28bb001)
     p.constant(0,0x20000);p.emit(0xe02cc000) # eor bank address,bank size
     p.emit(0xe35a0f4b) # cmp r10,#300
     p.branch('frame',1)
     request([0x000d0082,2,4,0x10402,0x08000024])
     p.emit(0xef000003)
+    p.label('fault');p.emit(0xef00003c)
     return p.finish()
 
 

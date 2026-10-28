@@ -143,17 +143,19 @@ static bool frame(ctr_guest *g) {
     struct ctr_guest_dsp *d=g->dsp;
     if(d->count==CTR_DSP_OUTPUT_FRAMES)return fail(g,0x44535051u,CTR_MEM_OK);
     uint32_t offset=d->bank*BANK;
-    if(!range(g,CTR_DSP_RAM+offset,FRAME_SPAN,CTR_MEM_READ|CTR_MEM_WRITE))return false;
     /* Memory mappings are caller-editable in the public API. Require the exact
      * original backing, including every command/status/capture byte. */
-    for(unsigned i=0;i<FRAME_SPAN;i+=4096) {
-        bool found=false;uint32_t address=CTR_DSP_RAM+offset+i;
-        for(size_t j=0;j<g->memory.count;++j) {
-            const ctr_mapping *m=&g->memory.maps[j];
-            if(address>=m->base && (uint64_t)address+4096<=(uint64_t)m->base+m->size &&
-               m->storage+(address-m->base)==g->storage[7]+offset+i)found=true;
+    for(unsigned bank=0;bank<2;++bank) {
+        if(!range(g,CTR_DSP_RAM+bank*BANK,FRAME_SPAN,CTR_MEM_READ|CTR_MEM_WRITE))return false;
+        for(unsigned i=0;i<FRAME_SPAN;i+=4096) {
+            bool found=false;uint32_t address=CTR_DSP_RAM+bank*BANK+i;
+            for(size_t j=0;j<g->memory.count;++j) {
+                const ctr_mapping *m=&g->memory.maps[j];
+                if(address>=m->base && (uint64_t)address+4096<=(uint64_t)m->base+m->size &&
+                   m->storage+(address-m->base)==g->storage[7]+bank*BANK+i)found=true;
+            }
+            if(!found)return fail(g,address,CTR_MEM_OVERLAP);
         }
-        if(!found)return fail(g,address,CTR_MEM_OVERLAP);
     }
     const uint8_t *ram=g->storage[7]+offset;
     if(le(ram,2)!=d->counter)return fail(g,CTR_DSP_RAM+offset,CTR_MEM_OK);
@@ -228,10 +230,14 @@ static bool frame(ctr_guest *g) {
     /* All command bytes, sources and output ownership validated before commit.
      * No callbacks/allocation/native AX occur within a DSP frame. */
     uint8_t *dst=g->storage[7]+offset;
-    memcpy(dst+STATUS,status,sizeof(status));memcpy(dst+CAPTURE,capture,sizeof(capture));
+    /* NDSP advances FrameId before reading vars[2]/vars[6]. DSP output belongs
+     * to the opposite bank; the consumed input counter stays in its own bank. */
+    uint8_t *response=g->storage[7]+((d->bank^1u)*BANK);
+    memcpy(response+STATUS,status,sizeof(status));memcpy(response+CAPTURE,capture,sizeof(capture));
     for(unsigned c=0;c<CTR_DSP_CHANNELS;++c) { put(dst+CHANNEL+c*STRIDE,4,0);put(dst+CHANNEL+c*STRIDE+0x4a,2,0); }
     put(dst+MASTER,4,0);
     (void)ctr_memory_backing_changed(&g->memory,dst,FRAME_SPAN);
+    (void)ctr_memory_backing_changed(&g->memory,response,FRAME_SPAN);
     pins(g,d->voices,false);pins(g,voices,true);
     memcpy(d->voices,voices,sizeof(voices));d->master=master;
     memcpy(d->output[(d->first+d->count)%CTR_DSP_OUTPUT_FRAMES],pcm,sizeof(pcm));++d->count;
