@@ -4,7 +4,7 @@
 
 #define CTR_GUEST_PAGE 4096u
 #define CTR_GUEST_MAX_BYTES (64u*1024u*1024u)
-#define CTR_GUEST_STORAGE_COUNT 7u
+#define CTR_GUEST_STORAGE_COUNT 8u
 #define CTR_GUEST_KERNEL_VERSION UINT32_C(0x023a0000)
 typedef struct { uint32_t address, pages, size; } ctr_guest_segment;
 typedef struct {
@@ -21,7 +21,7 @@ typedef enum { CTR_HANDLE_EVENT, CTR_HANDLE_SESSION, CTR_HANDLE_SHARED,
                CTR_HANDLE_MUTEX, CTR_HANDLE_SEMAPHORE, CTR_HANDLE_THREAD, CTR_HANDLE_ARBITER,
                CTR_HANDLE_RESOURCE_LIMIT } ctr_guest_handle_type;
 typedef enum { CTR_SERVICE_SRV, CTR_SERVICE_CFG, CTR_SERVICE_HID, CTR_SERVICE_GSP,
-               CTR_SERVICE_FS, CTR_SERVICE_FILE, CTR_SERVICE_APT } ctr_guest_service;
+               CTR_SERVICE_FS, CTR_SERVICE_FILE, CTR_SERVICE_APT, CTR_SERVICE_DSP } ctr_guest_service;
 typedef struct { uint32_t generation; unsigned object; bool active; ctr_guest_handle_type type; } ctr_guest_handle;
 typedef struct { bool active, registered; unsigned references; ctr_guest_service service;
                  unsigned fs_volume, fs_file, fs_flags; bool fs_closed,fs_romfs; } ctr_guest_session;
@@ -105,6 +105,7 @@ typedef struct ctr_guest {
     ctr_guest_shared shared[8];
     ctr_guest_hid hid;
     ctr_guest_gsp gsp;
+    struct ctr_guest_dsp *dsp;
     /* Guest-owned CPU snapshots/decodes; separate from copied PICA state and
      * native GPU lifetime. Cleared before the memory owner is closed/reused. */
     struct ctr_resource_cache *pica_resources;

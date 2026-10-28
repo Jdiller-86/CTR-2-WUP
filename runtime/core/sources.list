@@ -22,6 +22,7 @@ ctr_vertex.c
 ctr_transfer.c
 ctr_fs.c
 ctr_apt.c
+ctr_dsp.c
 ctr_dsp_adpcm.c
 ctr_cstm.c
 ctr_audio.c

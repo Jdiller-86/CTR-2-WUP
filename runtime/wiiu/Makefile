@@ -19,6 +19,7 @@ GX_HOMEBREW ?= 0
 PICA_HOMEBREW ?= 0
 AUDIO_ONLY ?= 0
 STREAM_AUDIO ?= 0
+GUEST_AUDIO ?= 0
 M1_ONLY ?= 0
 INSTALL_ONLY ?= 0
 SCENE_ONLY ?= 0
@@ -126,6 +127,13 @@ endif
 ifeq ($(STREAM_AUDIO),1)
 SOURCES += audio_stream_app.c audio_stream_diagnostic.c
 endif
+ifeq ($(GUEST_AUDIO),1)
+ifneq ($(filter 1,$(GUEST_DEFAULT) $(EXTERNAL_AOT) $(COMPILED_HOMEBREW) $(STREAM_AUDIO) $(AUDIO_ONLY) $(INSTALL_ONLY) $(M1_ONLY) $(SCENE_ONLY)),)
+$(error GUEST_AUDIO requires its own original DSP profile)
+endif
+APP_NAME := CTR2WUP Guest Audio $(APP_VERSION)
+SOURCES := guest_audio.c retained_logs.c diagnostic_display.c diagnostic_font.c diagnostic_audio.c audio_stream_diagnostic.c viewport.c image_scale.c test_lifecycle.c test_report.c test_result.c report_storage.c
+endif
 ifeq ($(GX2_GUEST),1)
 SOURCES += gx2_scene.c
 endif
@@ -162,8 +170,12 @@ ifeq ($(INSTALL_ONLY),1)
 CORE_SOURCES := $(CTR_RUNTIME_SOURCES) ../core/ctr_fs_snapshot.c ../core/ctr_sha256.c
 endif
 CORE_OBJECTS := $(addprefix $(BUILD)/,$(notdir $(CORE_SOURCES:.c=.o)))
+ifeq ($(GUEST_AUDIO),1)
+CORE_SOURCES += ../core/ctr_dsp_fixture.c ../../tests/fixtures/dsp/dsp.generated.c ../../tests/fixtures/dsp/dsp-image.generated.c
+CORE_OBJECTS += $(BUILD)/ctr_dsp_fixture.o $(BUILD)/dsp.generated.o $(BUILD)/dsp-image.generated.o
+endif
 OBJECTS += $(CORE_OBJECTS)
-vpath %.c ../core ../recomp ../../tests/fixtures/cpu ../../tests/fixtures/guest ../../tests/fixtures/services ../../tests/fixtures/heap ../../tests/fixtures/kernel ../../tests/fixtures/hid ../../tests/fixtures/gsp ../../tests/fixtures/relay ../../tests/fixtures/stack ../../tests/fixtures/threads $(UPSTREAM_DIR)
+vpath %.c ../../tests/fixtures/dsp ../core ../recomp ../../tests/fixtures/cpu ../../tests/fixtures/guest ../../tests/fixtures/services ../../tests/fixtures/heap ../../tests/fixtures/kernel ../../tests/fixtures/hid ../../tests/fixtures/gsp ../../tests/fixtures/relay ../../tests/fixtures/stack ../../tests/fixtures/threads $(UPSTREAM_DIR)
 .PHONY: all clean identity-force
 all: $(OUTPUT)/$(TARGET).rpx $(OUTPUT)/$(TARGET).wuhb
 $(BUILD):
