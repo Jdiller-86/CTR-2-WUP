@@ -214,8 +214,8 @@ These interface facts do not establish physical Wii U parity.
 
 ## Native GX2 path
 
-The native adapter uploads each unit's decoded RGBA to an owned pitched GX2 texture,
-reversing rows so guest UV needs no CPU rewrite. Its Latte pixel program uses
+The native adapter binds each unit's decoded RGBA through an owned pitched GX2 texture,
+reversing rows on upload so guest UV needs no CPU rewrite. Its Latte pixel program uses
 base-level normalized sampling and the selected point/linear sampler. An original
 scalar Latte encoder implements the admitted combiner chain using nine GPRs,
 or eleven with separate visible/pending buffers for the legacy Texture0 route.
@@ -227,8 +227,8 @@ Pixel uniforms carry stage constants and initial buffer bytes; explicit byte
 quantization and floor division preserve the software stage boundaries.
 The [native program cache](software-scenes.md#native-program-cache) reuses compiled
 topology while validating current TEV state and uploading current constants.
-Immutable snapshots and decoded CPU images may be reused; uploads and samplers
-retain their existing ownership path.
+Immutable snapshots, decoded CPU images and retired native uploads have separate
+cache owners. Samplers bind from current descriptors on every draw.
 CPU cache flushes and texture invalidation precede drawing; retirement precedes
 reuse/free. Failed waits quarantine GPU allocations until graphics shutdown.
 Complete software preflight and exact GPU readback precede guest commit.
@@ -255,10 +255,29 @@ Surface/copy facts follow the
 pinned [GX2 implementation reference](https://github.com/decaf-emu/decaf-emu/blob/e6c528a20a41c34e0f9eb91dd3da40f119db2dee/src/libdecaf/src/cafe/libraries/gx2/gx2_surface.cpp#L430).
 
 Mipmaps, mixed min/mag filters, projective/perspective coordinates, DOT3,
-native texture/target caching and broader depth remain unsupported. Physical sampling/blending/depth/stencil parity
+native target pooling and broader depth remain unsupported. Physical sampling/blending/depth/stencil parity
 and useful GPU performance remain unverified. The full-target byte comparison
 stays exact, including for bilinear draws; differing hardware rounding rejects
 the list without guest publication or software fallback.
+
+### Native upload reuse
+
+Six native records retain at most 24 MiB of pitched RGBA8 images, with an 8 MiB
+per-image limit. After prior draw/context references retire, exact reversed-row
+pixel comparisons and dimensions identify reusable read-only images. Source
+address, sampler and UV route remain current state. Source spans overlapping
+retained images or cache metadata reject; all active units pin their images
+before another lookup can evict them. Unpinned records evict in bounded
+round-robin order. Cache-owner allocation failure uses the checked transaction
+upload path; image allocation failures reject explicitly.
+
+Successful list completion retains only retired images. Abort drains active
+references before clearing them; idle abort clears retired images without GX2
+calls. Failed waits quarantine the transaction and all referenced cached images
+until retirement succeeds or graphics shutdown releases them. CPU program-cache
+clears do not touch GPU images. Native logs report hits, misses, uploads,
+evictions, allocation failures, bytes and pins. Complete preflight and exact paired
+readback remain mandatory; reuse establishes no physical parity or useful cost.
 
 ## Validation
 
