@@ -56,7 +56,8 @@ reuse CPU resources while checking current permissions, aliases and bytes.
 Complete software preflight and byte-exact GPU readback precede atomic guest
 commit; unsupported state or backend failure cannot fall back silently.
 Physical GPU parity remains unverified. [Audio](audio.md) separates checked
-decoding/mixing from owned finite AX buffers; guest DSP protocol remains open.
+decoding/mixing, bounded original guest DSP PCM and owned finite AX buffers.
+General firmware profiles and continuous guest/AX synchronization remain open.
 
 [Filesystem](filesystem.md) operations use platform-owned private volumes, not
 host paths derived from guest names. Save publication uses checked pending/backup

@@ -1,8 +1,9 @@
 # Audio decoding, streams and native output
 
 The portable core separates DSP ADPCM decoding, checked CSTM blocks, deterministic
-mixing and native AX ownership. These components do not implement the 3DS DSP
-firmware/IPC protocol, CSAR selection or synchronized real-time game playback.
+mixing and native AX ownership. A bounded guest DSP PCM service is also
+available. Arbitrary DSP firmware,
+CSAR selection and synchronized real-time game playback remain unsupported.
 All fixtures are original; no commercial waveform or firmware is bundled.
 
 ## DSP ADPCM numeric contract
@@ -72,6 +73,45 @@ at most 4096 frames. A dry pass validates every used sample before commit; late
 metadata/predictor/bounds/alias errors preserve engine and output. Typed host
 objects need valid lifetime/alignment; immutable sources cannot be mutated concurrently.
 
+## Guest DSP PCM service
+
+`dsp::DSP` supports the standard load/unload, address conversion, pipe handshake,
+interrupt registration, semaphore event and cache-maintenance commands used by
+an original ARM probe. Load accepts only the exact original `CTR2WUP-PCM-HLE`
+version-1 token with masks `ff/ff`; it selects HLE and executes no DSP firmware.
+Other components, commands, descriptors and processing states fail explicitly.
+The shared DRAM mapping is `1ff40000..1ff80000`; DSP word addresses select two
+`20000`-byte banks. All wire values are explicitly little-endian, including
+NDSP's halfword-rotated physical addresses/counts/positions. Commands and their
+consumed counter use the current bank; status/captured PCM use the opposite bank
+read by NDSP after its frame-ID advance. The ARM probe validates this round trip.
+
+The profile supports 24 mono PCM16 voices at unity DSP rate, one current buffer
+and four circular queued buffers each, nonzero sequence IDs, pause/resume and
+whole-buffer looping. Sources must remain readable in the same live owned linear
+allocation; each is at most 65,536 samples. Imported current/queued buffers pin
+their allocations until completion, replacement or session teardown; freeing or
+reprotecting a pinned allocation is rejected. Stereo mix gains and master volume
+are bounded binary32 values converted deterministically to signed Q15. Mixing
+rounds ties positive and hard-clips once. Effects, auxiliary routing, ADPCM,
+variable source rates and surround are unsupported. This is a deterministic PCM
+profile, not a firmware-fidelity claim.
+
+A signaled retained semaphore schedules one 160-sample frame at the exact
+`16756991/512` Hz DSP rate. Host polling never completes it early. Both banks,
+all channel updates and sources are validated before state, status, capture or
+PCM publication. An eight-frame host queue never overwrites unread output;
+pressure faults explicitly. Interrupt/semaphore objects retain normal typed
+handle ownership through duplication and closure. Closing the owning session
+cancels work and releases references. No AX calls run inside a DSP frame.
+
+`ctr_dsp_pcm48k` converts finite DSP output to 48 kHz with exact rational integer
+linear interpolation. The guided Guest Audio app checks 300 genuine ARM-produced
+blocks through interpreter and bounded AOT, validates every source sample, then
+plays the immutable converted clip through the shared AX adapter. It automates
+pause/resume and records one listening response. Finite rendering does not
+establish continuous guest/AX synchronization or commercial audio compatibility.
+
 ## Native ownership
 
 The finite Audio Streams diagnostic renders bounded pulls on the main thread.
@@ -91,6 +131,7 @@ render time, lifecycle failures and listening observations separately.
 ## Validation and references
 
 ```sh
+make -C tests/guest-dsp check sanitize
 make -C tests/dsp-adpcm check sanitize
 make -C tests/cstm check sanitize
 python3 tools/validate-dsp-adpcm.py --cc gcc --sanitize --output artifacts/adpcm
@@ -105,6 +146,8 @@ listening or physical playback cleanup.
 
 Interface facts follow the [CSTM description](https://docs.mikage.app/BCSTM/),
 [vgmstream reader](https://github.com/vgmstream/vgmstream/blob/master/src/meta/bcstm.c)
-and libctru [DSP](https://github.com/devkitPro/libctru/blob/master/libctru/source/services/dsp.c)/
-[NDSP](https://github.com/devkitPro/libctru/blob/master/libctru/source/ndsp/ndsp.c)
-interfaces. No external implementation was imported.
+and libctru [DSP](https://github.com/devkitPro/libctru/blob/9b55eda44cf80b971503991e0c78f9bc8fe50425/libctru/source/services/dsp.c)/
+[NDSP](https://github.com/devkitPro/libctru/blob/9b55eda44cf80b971503991e0c78f9bc8fe50425/libctru/source/ndsp/ndsp.c)
+interfaces. The address-conversion formula was cross-checked against
+[Azahar](https://github.com/azahar-emu/azahar/blob/1edf59ef592a854ccc2a7405d9aade477b2a0b3d/src/core/hle/service/dsp/dsp_dsp.cpp).
+No external implementation was imported.

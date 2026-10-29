@@ -5,6 +5,7 @@
 #include "ctr_gsp.h"
 #include "ctr_fs.h"
 #include "ctr_apt.h"
+#include "ctr_dsp.h"
 #include "ctr_resource_cache.h"
 #include "ctr_texture_cache.h"
 #include <stdlib.h>
@@ -24,6 +25,7 @@ void ctr_guest_close(ctr_guest *guest) {
     if (guest->executor_close) guest->executor_close(guest->executor_context);
     for(unsigned i=0;i<16;++i)if(guest->sessions[i].active)ctr_fs_session_closed(guest,i);
     ctr_apt_close(guest);
+    ctr_dsp_close(guest);
     ctr_resource_cache_destroy(guest->pica_resources);
     ctr_texture_cache_destroy(guest->pica_textures);
     free(guest->gsp.pica_scene);
@@ -182,6 +184,7 @@ void ctr_guest_object_release(ctr_guest *g,ctr_guest_handle_type type,unsigned o
         ctr_guest_session *s=&g->sessions[object];
         if (s->references && --s->references==0) {
             ctr_fs_session_closed(g,object);
+            if(s->service==CTR_SERVICE_DSP)ctr_dsp_session_closed(g,object);
             bool gsp=s->service==CTR_SERVICE_GSP;memset(s,0,sizeof(*s));
             if(gsp) {
                 ctr_gsp_session_closed(g,object);
@@ -195,7 +198,7 @@ void ctr_guest_object_release(ctr_guest *g,ctr_guest_handle_type type,unsigned o
     if (e->references && --e->references==0) memset(e,0,sizeof(*e));
 }
 uint32_t ctr_guest_session_open(ctr_guest *g,ctr_guest_service service) {
-    if ((unsigned)service>CTR_SERVICE_APT) return 0;
+    if ((unsigned)service>CTR_SERVICE_DSP) return 0;
     for (unsigned i=0;i<16;++i) if (!g->sessions[i].active) {
         g->sessions[i]=(ctr_guest_session){.active=true,.service=service,.fs_closed=true};
         uint32_t handle=ctr_guest_handle_new(g,CTR_HANDLE_SESSION,i);
@@ -235,6 +238,9 @@ bool ctr_guest_signal(ctr_guest *g,uint32_t handle) {
     int object=object_for(g,handle);
     if (object<0) return false;
     ctr_guest_event *e=&g->events[object];
+    bool handled=false;
+    bool result=ctr_dsp_signal(g,(unsigned)object,&handled);
+    if(handled)return result;
     e->signaled=true;
     ctr_threads_poll(g);
     return true;
@@ -318,6 +324,7 @@ ctr_guest_state ctr_guest_run(ctr_guest *g,uint64_t budget,uint64_t now_ns,bool 
     g->now_ns=now_ns;
     shared_time_reference(g);
     if(!ctr_gsp_poll(g,now_ns))return g->state;
+    if(!ctr_dsp_poll(g,now_ns))return g->state;
     if(g->threads_enabled) {
         if(!ctr_thread_schedule(g,false))return g->state;
     } else {

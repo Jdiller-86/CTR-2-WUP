@@ -4,6 +4,7 @@
 #include "ctr_gsp.h"
 #include "ctr_fs.h"
 #include "ctr_apt.h"
+#include "ctr_dsp.h"
 #include <string.h>
 
 #define INVALID_HANDLE UINT32_C(0xd8e007f7)
@@ -77,7 +78,7 @@ void ctr_ipc_request(ctr_guest *g) {
     ++g->ipc_requests;g->ipc_header=0;g->ipc_result=0;g->ipc_service[0]=0;g->ipc_target[0]=0;
     ctr_guest_session *session=ctr_guest_session_for(g,g->cpu.r[0]);
     if (!session) { ++g->ipc_failures;g->ipc_result=INVALID_HANDLE;g->cpu.r[0]=INVALID_HANDLE;return; }
-    static const char *const services[]={"srv:","cfg:u","hid:USER","gsp::Gpu","fs:USER","fs:FILE","APT:U"};
+    static const char *const services[]={"srv:","cfg:u","hid:USER","gsp::Gpu","fs:USER","fs:FILE","APT:U","dsp::DSP"};
     strcpy(g->ipc_service,services[session->service]);
     uint64_t address=(uint64_t)g->cpu.tls_address+CTR_IPC_OFFSET;
     if (address>UINT32_MAX) { memory_ok(g,CTR_MEM_OVERFLOW,g->cpu.tls_address);return; }
@@ -102,12 +103,12 @@ void ctr_ipc_request(ctr_guest *g) {
                 char service[9]={0};
                 if (!session->registered || words[4]>1 || !name(words,service)) { unsupported(g,words[0]);return; }
                 strcpy(g->ipc_target,service);
-                if (strcmp(service,"cfg:u") && strcmp(service,"hid:USER") && strcmp(service,"gsp::Gpu") && strcmp(service,"fs:USER") && (strcmp(service,"APT:U") || !g->apt.available)) {
+                if (strcmp(service,"dsp::DSP") && strcmp(service,"cfg:u") && strcmp(service,"hid:USER") && strcmp(service,"gsp::Gpu") && strcmp(service,"fs:USER") && (strcmp(service,"APT:U") || !g->apt.available)) {
                     out[0]=0x00050040;out[1]=SERVICE_NOT_FOUND;
                     ++g->ipc_failures;g->ipc_result=SERVICE_NOT_FOUND;
                     reply(g,base,out,2);return;
                 }
-                uint32_t handle=ctr_guest_session_open(g,!strcmp(service,"cfg:u")?CTR_SERVICE_CFG:!strcmp(service,"hid:USER")?CTR_SERVICE_HID:!strcmp(service,"fs:USER")?CTR_SERVICE_FS:!strcmp(service,"APT:U")?CTR_SERVICE_APT:CTR_SERVICE_GSP);
+                uint32_t handle=ctr_guest_session_open(g,!strcmp(service,"dsp::DSP")?CTR_SERVICE_DSP:!strcmp(service,"cfg:u")?CTR_SERVICE_CFG:!strcmp(service,"hid:USER")?CTR_SERVICE_HID:!strcmp(service,"fs:USER")?CTR_SERVICE_FS:!strcmp(service,"APT:U")?CTR_SERVICE_APT:CTR_SERVICE_GSP);
                 if (!handle) {
                     out[0]=0x00050040;out[1]=NO_MEMORY;
                     ++g->ipc_failures;g->ipc_result=NO_MEMORY;
@@ -118,6 +119,15 @@ void ctr_ipc_request(ctr_guest *g) {
             }
             default: unsupported(g,words[0]);return;
         }
+    }
+    if(session->service==CTR_SERVICE_DSP) {
+        unsigned n;
+        if(!ctr_dsp_request(g,(unsigned)(session-g->sessions),words,base,out,&n)) {
+            if(g->state==CTR_GUEST_FAULTED)++g->ipc_failures;else unsupported(g,words[0]);
+            return;
+        }
+        if(out[1]) { ++g->ipc_failures;g->ipc_result=out[1]; }
+        reply(g,base,out,n);return;
     }
     if(session->service==CTR_SERVICE_FS || session->service==CTR_SERVICE_FILE || session->service==CTR_SERVICE_APT) {
         unsigned count;

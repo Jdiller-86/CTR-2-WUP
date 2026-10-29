@@ -436,6 +436,25 @@ jobs:
           path: artifacts/ci/textured-guest/
           retention-days: 30
           if-no-files-found: error
+      - name: Build and verify the focused guest DSP runtime round
+        run: |
+          set -euo pipefail
+          python -m host build --target guest-audio --output artifacts/ci/guest-audio
+          python tools/validate-guest-dsp.py --cc gcc --sanitize --output artifacts/ci/guest-dsp-reference
+          curl --fail --location --retry 3 https://github.com/wiiu-env/WiiUCrashLogDumper/releases/download/v0.1/WiiUCrashLogDumper_v0_1_Aroma.zip -o artifacts/ci/dumper.zip
+          curl --fail --location --retry 3 https://codeload.github.com/wiiu-env/WiiUCrashLogDumper/zip/3bb31ca67a6b015cf79f6ef9397f4d039ae60192 -o artifacts/ci/dumper-source.zip
+          python tools/package-runtime-round.py --app artifacts/ci/guest-audio \
+            --reference artifacts/ci/guest-dsp-reference/report.json \
+            --sdk-receipt "$DEVKITPRO/ctr2wup-image-digest.txt" --sdk-licenses "$DEVKITPRO/licenses" \
+            --dumper artifacts/ci/dumper.zip --dumper-source artifacts/ci/dumper-source.zip \
+            --output artifacts/ci/runtime-round
+      - name: Upload the focused automatic runtime round
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wiiu-runtime-round-${{ github.sha }}
+          path: artifacts/ci/runtime-round/stage/
+          retention-days: 30
+          if-no-files-found: error
       - name: Build and independently verify the original Audio Streams diagnostic
         run: |
           set -euo pipefail

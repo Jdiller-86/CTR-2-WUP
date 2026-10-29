@@ -7,8 +7,11 @@ Commercial games and the GUI are not supported yet.
 ## Current work
 
 1. **Connect guest audio** ([#25](https://github.com/Jdiller-86/CTR-2-WUP/issues/25)).
-   The checked CSTM/ADPCM stream mixer exists. Implement the guest DSP/service
-   connection and timing; native tone playback does not cover guest audio.
+   The checked CSTM/ADPCM mixer and bounded original NDSP PCM service exist,
+   including queued voices, interrupts and exact frame deadlines. Extend guest
+   ADPCM/rates, firmware-profile selection and continuous native synchronization
+   toward observed game requirements. Finite original playback has a focused
+   hardware package; console observations remain separate from host evidence.
 2. **Extend native resource reuse** ([#30](https://github.com/Jdiller-86/CTR-2-WUP/issues/30)).
    Bounded vertex translation, independent Texture0/1/2 sampling and coordinates,
    six-stage RGB/alpha TEV with a combiner buffer, alpha/logic/blend operations,
@@ -39,7 +42,7 @@ Detailed scope, dependencies and evidence are tracked in the linked issues and
 | --- | --- | --- |
 | [M1: Platform](https://github.com/Jdiller-86/CTR-2-WUP/issues/1) | Reviewed screens, input, tone, stability, scoped exit/save, original installation and installed boot | Installed-title exit/relaunch and automatic SD recovery |
 | [M2: CPU](https://github.com/Jdiller-86/CTR-2-WUP/issues/2) | ARM/Thumb/VFP AOT, checked ABI/memory and original fixtures | Exercised instruction coverage, fallback/traces and useful Espresso performance |
-| [M3: Runtime](https://github.com/Jdiller-86/CTR-2-WUP/issues/3) | Compiled original guests, kernel/services, filesystem and mixer | Required services/modules, guest DSP and runtime acceptance |
+| [M3: Runtime](https://github.com/Jdiller-86/CTR-2-WUP/issues/3) | Compiled original guests, kernel/services, filesystem, mixer and bounded guest DSP PCM | Required services/modules, full guest audio and runtime acceptance |
 | [M4: Graphics](https://github.com/Jdiller-86/CTR-2-WUP/issues/4) | GSP/PICA, software reference, cached GX2 programs, versioned source snapshots, decoded CPU and retired native texture reuse, independent Texture0/1/2 materials, six-stage TEV, alpha/logic/blend/write controls and D16/D24S8 depth/stencil | Physical GPU parity, broader filtering/fragment state, native target pooling and measured costs |
 | [M5: First game](https://github.com/Jdiller-86/CTR-2-WUP/issues/5) | Verified private Mario 3D Land revision and selected asset analysis | Implement observed gaps and prove boot, gameplay, audio and saves |
 | [M6: Conversion](https://github.com/Jdiller-86/CTR-2-WUP/issues/6) | Intake/decryption, AOT builds, original WUP packing and integrity checks | Complete supported-game pipeline, Windows execution and installed rebuild/save continuity |

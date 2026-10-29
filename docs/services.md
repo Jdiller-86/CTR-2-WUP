@@ -56,7 +56,7 @@ must be a subset of object rights; other permissions match policy or DONTCARE
 memory and references. Mapped objects survive final-handle close; pinned source
 allocations cannot be freed/reprotected before their last reference releases.
 Aliases report QueryMemory Shared state 6. Foreign-process and general GPU/DSP
-physical backing are absent.
+shared backing are absent; the bounded audio service owns its separate DRAM map.
 
 Wait references survive handle closure. Wait-any consumes the first ready
 object in caller order. Wait-all preflights every object, rejects duplicates and

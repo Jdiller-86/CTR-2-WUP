@@ -7,16 +7,16 @@ Wii U compatibility. The selected first-title target is
 
 | Area | Implemented boundary | Remaining limit |
 |---|---|---|
-| Native Wii U platform | TV/GamePad output, VPAD/touch, owned AX audio, ProcUI lifecycle and SD reports | Installed-title and automatic SD recovery acceptance remain open |
+| Native Wii U platform | TV/GamePad output, VPAD/touch, owned AX audio, ProcUI lifecycle and SD reports | Native installed exit/relaunch and automatic SD recovery remain open |
 | CPU | Checked ARM/Thumb interpreter, original AOT and external generated-C adapter | Incomplete ARM11/VFP coverage; exact revision profiles and useful workload costs remain open |
-| Kernel/services | Single-process threads, memory/objects, TLS/SRV/CFG, HID, GSP and standalone APT/FS | Unsupported commands fail; general applets, retail saves and DSP IPC remain open |
+| Kernel/services | Single-process threads, memory/objects, TLS/SRV/CFG, HID, GSP, standalone APT/FS and bounded DSP PCM IPC | Unsupported commands fail; general applets, retail saves and DSP firmware remain open |
 | Original compiled applications | Standard libctru startup, input, frames, saves, RomFS, transfers and bounded draws | Original programs do not establish retail startup or gameplay |
 | Graphics | Five framebuffer formats, CPU-backed GX transfers, bounded GX2 vertex translation, all 14 base textures, nearest/bilinear six-stage TEV with a combiner buffer, alpha/logic/blend/write controls and D16/D24S8 depth/stencil | Physical GPU parity/rounding, broader native blends, general shaders, mixed filters/mipmaps, DOT3, depth interpolation and geometry remain open |
-| Audio | DSP ADPCM, bounded CSTM blocks/seek, two-voice 48 kHz mixer and finite native clips | Guest DSP firmware/IPC, CSAR selection, loops and synchronized streaming remain open |
+| Audio | DSP ADPCM, bounded CSTM blocks/seek, two-voice CSTM mixer, 24-voice original guest PCM HLE and finite native clips | General DSP firmware, guest ADPCM/rates, CSAR selection, CSTM loops and continuous synchronization remain open |
 | Decrypted inputs | Base-application CIA, NCCH v2 CXI and NCSD cartridge inspection | No NAND loader, update/DLC merging or arbitrary-ROM execution |
 | Encrypted inputs | Scoped local CIA/NCCH preparation with local key/seed files | Supported profiles only; no bundled keys or console extraction |
 | RomFS | Canonical IVFC/metadata verification, bounded exports and read-only guest provider | No signature authentication or general game integration |
-| WUP | Original plaintext test-signed candidate and separately configured encrypted packing | Integrity checks do not establish trusted signatures or installer/Menu acceptance |
+| WUP | Original plaintext test-signed candidate and separately configured encrypted packing | Original installation/Menu boot accepted; native exit remains failed and general-title acceptance is open |
 | Windows | Python CLI, native host checks and separate CIA helper | Final injector GUI and end-to-end commercial conversion remain unfinished |
 
 Stable program ID identifies future saves; executable/module hashes identify a

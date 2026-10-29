@@ -9,6 +9,7 @@ check-c:
 	$(MAKE) -C tests/cpu check sanitize
 	$(MAKE) -C tests/guest check sanitize
 	$(MAKE) -C tests/services check sanitize
+	$(MAKE) -C tests/guest-dsp check sanitize
 	$(MAKE) -C tests/heap check sanitize
 	$(MAKE) -C tests/kernel check sanitize
 	$(MAKE) -C tests/hid check sanitize
@@ -29,6 +30,7 @@ check-c:
 	$(MAKE) -C tests/textures check sanitize
 	$(MAKE) -C tests/apt check sanitize
 	$(MAKE) -C tests/report check sanitize
+	$(MAKE) -C tests/guest-audio-native check sanitize
 	$(MAKE) -C tests/audio check sanitize
 	$(MAKE) -C tests/dsp-adpcm check sanitize
 	$(MAKE) -C tests/cstm check sanitize
@@ -38,7 +40,7 @@ check-c:
 	$(MAKE) -C tests/install-capture check sanitize
 	$(MAKE) -C tests/recomp-progress check sanitize
 check-c-portable:
-	@set -e; for suite in cpu guest services heap kernel hid gsp gx pica gx2-shader gx2-native vertex scenes guest-draws resource-cache relay multiple threads filesystem assets textures apt report audio dsp-adpcm cstm audio-engine audio-stream-native recomp-progress; do $(MAKE) -C tests/$$suite check; done
+	@set -e; for suite in cpu guest services guest-dsp heap kernel hid gsp gx pica gx2-shader gx2-native vertex scenes guest-draws resource-cache relay multiple threads filesystem assets textures apt report audio dsp-adpcm cstm audio-engine audio-stream-native guest-audio-native recomp-progress; do $(MAKE) -C tests/$$suite check; done
 prototype:
 	$(MAKE) -C runtime/wiiu -j 3
 doctor:
@@ -51,6 +53,7 @@ regenerate:
 	$(PYTHON) translator/aot.py tests/fixtures/cpu/exit.thumb.bin tests/fixtures/cpu/exit.generated.c --base 0x1100 --symbol ctr_thumb_fixture --thumb
 	$(PYTHON) tools/generate-guest.py
 	$(PYTHON) tools/generate-service-fixture.py
+	$(PYTHON) tools/generate-dsp-fixture.py
 	$(PYTHON) tools/generate-heap-fixture.py
 	$(PYTHON) tools/generate-kernel-fixture.py
 	$(PYTHON) tools/generate-hid-fixture.py
