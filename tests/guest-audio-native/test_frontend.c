@@ -93,7 +93,9 @@ static int child(const char *name,const char *directory) {
     return 0;
 }
 int main(int argc,char **argv) {
-    if(argc==3)return child(argv[1],argv[2]);
+    if(argc==4 && !strcmp(argv[1],"--ctr-test-child"))return child(argv[2],argv[3]);
+    /* Unknown/malformed child invocations must never start another parent. */
+    if(argc!=1)return 2;
     const char *modes[]={"happy","hearing-fail","native-fail","pause-drift","interrupted","sd-fail","slow-storage"};
     for(unsigned i=0;i<7;++i) {
         ctr_test_child process;unsigned status;
