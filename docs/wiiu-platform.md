@@ -67,7 +67,10 @@ marker never proves actual Menu return. Compare the complete startup/cleanup
 path against the accepted tool's exact source before changing platform behavior;
 keep route-specific hypotheses out of the reusable protocol until established.
 When the saved application trace ends before a native stall, inspect retained
-system logs rather than requiring another identical failure.
+system logs rather than requiring another identical failure. Distinguish
+application cleanup from later Aroma plugin finalizers in the panic stack.
+Isolate an identified plugin conflict before changing the application's CRT or
+ProcUI sequence; completed cleanup markers still do not accept Menu return.
 [WiiUCrashLogDumper](https://github.com/wiiu-env/WiiUCrashLogDumper/tree/3bb31ca67a6b015cf79f6ef9397f4d039ae60192)
 reads SLC `/sys/logs` and copies logs to `sd:/wiiu/crash_logs/`; it does not require
 reinstalling or rerunning the failed title. Logs can contain unrelated console

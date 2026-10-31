@@ -10,8 +10,9 @@ Commercial games and the GUI are not supported yet.
    The checked CSTM/ADPCM mixer and bounded original NDSP PCM service exist,
    including queued voices, interrupts and exact frame deadlines. Extend guest
    ADPCM/rates, firmware-profile selection and continuous native synchronization
-   toward observed game requirements. Finite original playback has a focused
-   hardware package; console observations remain separate from host evidence.
+   toward observed game requirements. Finite original playback, automatic
+   pause/resume and resource release have console evidence; continuous
+   guest/AX synchronization remains open.
 2. **Extend native resource reuse** ([#30](https://github.com/Jdiller-86/CTR-2-WUP/issues/30)).
    Bounded vertex translation, independent Texture0/1/2 sampling and coordinates,
    six-stage RGB/alpha TEV with a combiner buffer, alpha/logic/blend operations,
@@ -23,12 +24,12 @@ Commercial games and the GUI are not supported yet.
    observed first-game requirements. Retain
    current-state validation, exact software preflight, GPU retirement and full
    readback. Physical parity and costs remain unverified.
-3. **Resume installed-title lifecycle after console evidence**
+3. **Isolate the installed-title exit conflict**
    ([#15](https://github.com/Jdiller-86/CTR-2-WUP/issues/15)). Installation, native
-   boot and SD preparation are proven; Minus/HOME return still hangs. Retrieve
-   retained system logs before another repair. The SDK correction did not fix
-   exit, and the saved SD trace ends before the handoff. Console work is deferred;
-   no reinstall, repeated failure run or baseline repeat is requested.
+   boot and SD preparation are proven; Minus/HOME return still fails. Retained
+   logs reach `main_return`, then panic in GiveMiiYouTube's socket finalizer through
+   Aroma's exit hooks. Isolate that plugin before changing application shutdown.
+   Plugin-free Menu return, relaunch and SD recovery remain unaccepted.
 
 Remaining console evidence does not block CPU, graphics or audio development.
 
