@@ -86,15 +86,21 @@ NDSP's halfword-rotated physical addresses/counts/positions. Commands and their
 consumed counter use the current bank; status/captured PCM use the opposite bank
 read by NDSP after its frame-ID advance. The ARM probe validates this round trip.
 
-The profile supports 24 mono PCM16 voices at unity DSP rate, one current buffer
+The profile supports 24 mono PCM16 voices, one current buffer
 and four circular queued buffers each, nonzero sequence IDs, pause/resume and
 whole-buffer looping. Sources must remain readable in the same live owned linear
 allocation; each is at most 65,536 samples. Imported current/queued buffers pin
 their allocations until completion, replacement or session teardown; freeing or
 reprotecting a pinned allocation is rejected. Stereo mix gains and master volume
 are bounded binary32 values converted deterministically to signed Q15. Mixing
-rounds ties positive and hard-clips once. Effects, auxiliary routing, ADPCM,
-variable source rates and surround are unsupported. This is a deterministic PCM
+rounds ties positive and hard-clips once. Source-rate ratios from 1/8 through 4
+use exact binary32-to-Q32 phase accumulation with direct sampling or linear
+interpolation. Fractional phase survives frames, pause/resume, rate changes and
+queued/looping boundaries; explicit buffer replacement or synchronization resets
+it. Linear interpolation crosses queued buffers and loop seams, holds the last
+sample for its fractional tail and rounds ties positive. Polyphase is accepted
+only at unity rate with integer phase; other filter states fail explicitly.
+Effects, auxiliary routing, ADPCM and surround are unsupported. This is a deterministic PCM
 profile, not a firmware-fidelity claim.
 
 A signaled retained semaphore schedules one 160-sample frame at the exact

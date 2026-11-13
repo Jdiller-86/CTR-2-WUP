@@ -77,8 +77,52 @@ static void controls_and_queue(void) {
     for(unsigned i=0;i<160;++i)CHECK(other[i*2]==(i<20?(i%4<2?6000:-6000):0));
     CHECK(read_at(g,CTR_DSP_RAM+0x20000+0x2000+8)==(5u<<16));closed(g);
 }
+static void variable_rates(void) {
+    static const struct { uint32_t bits,mode;unsigned count;int16_t expected[8]; } cases[]={
+        {0x3f000000,1,8,{-3,-2,-1,0,1,2,3,0}}, /* Half rate, linear; loop seam. */
+        {0x3f000000,2,8,{-3,-3,-1,-1,1,1,3,3}}, /* Half rate, direct sampling. */
+        {0x3fc00000,1,8,{-3,0,3,-2,1,0,-1,2}}, /* 1.5x, alternating fractions. */
+        {0x40000000,2,2,{-3,1}},
+        {0x40800000,1,1,{-3}}
+    };
+    for(unsigned k=0;k<sizeof(cases)/sizeof(cases[0]);++k) {
+        ctr_guest *g=opened();uint32_t base=CTR_DSP_RAM+0x100;
+        write_at(g,base+0x34,cases[k].bits);write_at(g,base+0x38,cases[k].mode);
+        write_at(g,base+0xb0,4u<<16);
+        for(unsigned i=0;i<4;++i)CHECK(ctr_memory_write(&g->memory,0x14000000+i*2,2,(uint16_t)(i*2-3))==CTR_MEM_OK);
+        CHECK(ctr_dsp_poll(g,5000000) && ctr_dsp_read(g,other,320));
+        for(unsigned i=0;i<160;++i)CHECK(other[i*2]==cases[k].expected[i%cases[k].count] && other[i*2+1]==0);
+        closed(g);
+    }
+    /* A non-dyadic ratio carries its fractional cursor into the next DSP
+     * frame. The binary32 value is just above 1/3, so these indices are exact. */
+    ctr_guest *g=opened();uint32_t base=CTR_DSP_RAM+0x100;
+    write_at(g,base+0x34,0x3eaaaaab);write_at(g,base+0x38,2);write_at(g,base+0xb0,4u<<16);
+    for(unsigned i=0;i<4;++i)CHECK(ctr_memory_write(&g->memory,0x14000000+i*2,2,(uint16_t)(i*2-3))==CTR_MEM_OK);
+    for(unsigned frame=0;frame<2;++frame) {
+        CHECK(ctr_dsp_poll(g,(frame+1)*5000000u) && ctr_dsp_read(g,other,320));
+        for(unsigned i=0;i<160;++i)CHECK(other[i*2]==(int)((((frame*160+i)/3)%4)*2)-3);
+        if(!frame)CHECK(ctr_guest_run(g,1000000,5000000,false)==CTR_GUEST_WAITING);
+    }
+    closed(g);
+    /* Interpolation crosses queued buffers, then holds the final sample only
+     * for its fractional tail. Completed sources release their allocation pins. */
+    g=opened();base=CTR_DSP_RAM+0x100;
+    write_at(g,base,read_at(g,base)|0x80000);
+    write_at(g,base+0x34,0x3f000000);write_at(g,base+0x38,1);
+    write_at(g,base+0xb0,1u<<16);write_at(g,base+0xbc,1u<<16);
+    CHECK(ctr_memory_write(&g->memory,base+0x4a,2,1)==CTR_MEM_OK);
+    write_at(g,base+0x4c,0x00022000u); // physical 0x20000002, halfword-rotated
+    write_at(g,base+0x50,1u<<16);write_at(g,base+0x5c,3);
+    CHECK(ctr_memory_write(&g->memory,0x14000000,2,65535)==CTR_MEM_OK);
+    CHECK(ctr_memory_write(&g->memory,0x14000002,2,0)==CTR_MEM_OK);
+    CHECK(ctr_dsp_poll(g,5000000) && ctr_dsp_read(g,other,320));
+    CHECK(other[0]==-1 && other[2]==0); // Negative half tie rounds positive.
+    for(unsigned i=2;i<160;++i)CHECK(other[i*2]==0);
+    CHECK(g->allocations[0].pins==1);closed(g); // Other original voice still owns its source.
+}
 static void atomic_failures(void) {
-    for(unsigned kind=0;kind<10;++kind) {
+    for(unsigned kind=0;kind<14;++kind) {
         ctr_guest *g=opened();
         if(kind==0)write_at(g,CTR_DSP_RAM+0x100+23*0xc0,0x80000000); // late channel unsupported
         if(kind==1)write_at(g,CTR_DSP_RAM+0x100+0x34,0x7fc00000); // NaN rate
@@ -90,6 +134,10 @@ static void atomic_failures(void) {
         if(kind==7)write_at(g,CTR_DSP_RAM+0x2600,0x40000000); // unsupported master state
         if(kind==8)write_at(g,CTR_DSP_RAM,5); // wrong bank counter
         if(kind==9)CHECK(ctr_memory_change_range(&g->memory,CTR_DSP_RAM+0x20000+0x2000,4096,CTR_MEM_READ,false)==CTR_MEM_OK); // reply bank must be writable
+        if(kind==10)write_at(g,CTR_DSP_RAM+0x100+0x34,0x3dffffff); // below 1/8
+        if(kind==11)write_at(g,CTR_DSP_RAM+0x100+0x34,0x40800001); // above 4
+        if(kind==12)write_at(g,CTR_DSP_RAM+0x100+0x34,0xbf800000); // negative
+        if(kind==13)write_at(g,CTR_DSP_RAM+0x100+0x34,0x3f000000); // variable polyphase unsupported
         uint8_t before[CTR_DSP_RAM_BYTES];memcpy(before,g->storage[7],sizeof(before));ctr_dsp_statistics s;
         CHECK(!ctr_dsp_poll(g,5000000) && g->state==CTR_GUEST_FAULTED);
         CHECK(!memcmp(before,g->storage[7],sizeof(before)) && !ctr_dsp_read(g,other,320));
@@ -118,7 +166,7 @@ static void ownership(void) {
     CHECK(!ctr_dsp_read(g,other,320));closed(g);
 }
 int main(int argc,char **argv) {
-    exact_deadlines_and_ipc();controls_and_queue();atomic_failures();ownership();
+    exact_deadlines_and_ipc();controls_and_queue();variable_rates();atomic_failures();ownership();
     ctr_dsp_statistics a,b;uint64_t ai,bi;
     CHECK(ctr_dsp_fixture_render(false,pcm,96000,&a,&ai));
     CHECK(ctr_dsp_fixture_render(true,other,96000,&b,&bi));
