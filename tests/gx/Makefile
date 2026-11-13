@@ -9,9 +9,9 @@ SOURCES := $(CTR_RUNTIME_SOURCES) test_gx.c $(addprefix $(ROOT)/runtime/core/,$(
 $(OUT):
 	mkdir -p "$@"
 $(OUT)/gx: $(SOURCES) $(CTR_RUNTIME_MANIFEST) $(wildcard $(ROOT)/runtime/core/*.h) | $(OUT)
-	$(CC) $(FLAGS) $(SOURCES) -o "$@"
+	$(CC) $(FLAGS) $(SOURCES) -lm -o "$@"
 check: $(OUT)/gx
 	"$(OUT)/gx"
 sanitize: | $(OUT)
-	$(CC) $(FLAGS) -O1 -fno-omit-frame-pointer -fsanitize=address,undefined $(SOURCES) -o "$(OUT)/gx-san"
+	$(CC) $(FLAGS) -O1 -fno-omit-frame-pointer -fsanitize=address,undefined $(SOURCES) -lm -o "$(OUT)/gx-san"
 	ASAN_OPTIONS=detect_leaks=1 "$(OUT)/gx-san"

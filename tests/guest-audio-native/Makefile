@@ -15,14 +15,14 @@ $(SDK):
 $(OUT):
 	mkdir -p "$@"
 $(OUT)/guest-audio-native-tests: $(SOURCES) $(HEADERS) $(SDK) $(CTR_RUNTIME_MANIFEST) $(wildcard $(ROOT)/runtime/core/*.h) | $(OUT)
-	$(CC) $(FLAGS) $(SOURCES) -o "$@"
+	$(CC) $(FLAGS) $(SOURCES) -lm -o "$@"
 check: $(OUT)/guest-audio-native-tests
 	"$(OUT)/guest-audio-native-tests"
 	"$(OUT)/guest-audio-native-tests" --ctr-test-child happy .
 	"$(OUT)/guest-audio-native-tests" --ctr-test-child slow-storage .
 	@ctr_test_status=0; "$(OUT)/guest-audio-native-tests" --ctr-test-child || ctr_test_status=$$?; test "$$ctr_test_status" -eq 2
 sanitize: | $(OUT)
-	$(CC) $(FLAGS) -O1 -fno-omit-frame-pointer -fsanitize=address,undefined $(SOURCES) -o "$(OUT)/guest-audio-native-tests-sanitized"
+	$(CC) $(FLAGS) -O1 -fno-omit-frame-pointer -fsanitize=address,undefined $(SOURCES) -lm -o "$(OUT)/guest-audio-native-tests-sanitized"
 	ASAN_OPTIONS=detect_leaks=1 "$(OUT)/guest-audio-native-tests-sanitized"
 	ASAN_OPTIONS=detect_leaks=1 "$(OUT)/guest-audio-native-tests-sanitized" --ctr-test-child happy .
 	ASAN_OPTIONS=detect_leaks=1 "$(OUT)/guest-audio-native-tests-sanitized" --ctr-test-child slow-storage .

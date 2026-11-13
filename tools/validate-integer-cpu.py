@@ -181,9 +181,9 @@ def validate(output,cc):
     generated.write_text('\n'.join(sources)+'\nconst ctr_block_fn ctr_reference_functions[]={'+','.join(names)+'};\n')
     library=output/'reference.so'
     command=shlex.split(cc)+['-std=c11','-O1','-Wall','-Wextra','-Werror','-shared','-fPIC',
-        '-I'+str(ROOT/'runtime/core'),str(ROOT/'runtime/core/ctr_cpu.c'),
+        '-I'+str(ROOT/'runtime/core'),str(ROOT/'runtime/core/ctr_cpu.c'),str(ROOT/'runtime/core/ctr_vfp.c'),
         str(ROOT/'runtime/core/ctr_memory.c'),str(ROOT/'tests/multiple/oracle_bridge.c'),
-        str(generated),'-o',str(library)]
+        str(generated),'-lm','-o',str(library)]
     subprocess.run(command,check=True)
     step=ctypes.CDLL(str(library)).ctr_multiple_reference_step
     ptr=ctypes.POINTER(ctypes.c_uint32)

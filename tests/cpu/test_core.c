@@ -2,6 +2,8 @@
 #include "ctr_fixture.h"
 #include "viewport.h"
 #include <inttypes.h>
+#include <errno.h>
+#include <fenv.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -273,7 +275,7 @@ static void instruction_tests(void) {
     CHECK(ctr_cpu_step(&cpu)==CTR_CPU_MEMORY_FAULT && cpu.memory_fault==CTR_MEM_UNMAPPED);
     setup(0xef000003); cpu.module_hash="test-module";
     CHECK(ctr_cpu_step(&cpu)==CTR_CPU_SVC && cpu.r[15]==0x1004 && logged_pc==0x1000 && logged_detail==3 && !logged_thumb && !strcmp(logged_hash,"test-module"));
-    setup(0xee300a00); CHECK(ctr_cpu_step(&cpu)==CTR_CPU_UNSUPPORTED && cpu.r[15]==0x1000 && logged_detail==0xee300a00);
+    setup(0xee300b20); CHECK(ctr_cpu_step(&cpu)==CTR_CPU_UNSUPPORTED && cpu.r[15]==0x1000 && logged_detail==0xee300b20);
     setup(0xe1910f9f); cpu.r[1]=0x2000; data[0]=7;
     CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[0]==7 && cpu.exclusive_valid && cpu.exclusive_address==0x2000);
     cpu.r[2]=9;
@@ -374,9 +376,24 @@ static void initial_integer_tests(void) {
         CHECK(((cpu.cpsr&CTR_FLAG_T)!=0)==!exchange);
     }
 }
+static void scalar_vfp_tests(void) {
+    setup(0xee300a02);cpu.vfp[0]=0x3f800000;cpu.vfp[4]=0x40000000; /* VADD s0,s0,s4 */
+    fenv_t saved;CHECK(fegetenv(&saved)==0);
+    CHECK(fesetround(FE_DOWNWARD)==0);feraiseexcept(FE_DIVBYZERO);errno=EDOM;
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.vfp[0]==0x40400000 && !cpu.fpscr);
+    CHECK(fegetround()==FE_DOWNWARD && fetestexcept(FE_DIVBYZERO) && errno==EDOM);
+    CHECK(fesetenv(&saved)==0);
+    setup(0xee300a02);cpu.vfp[0]=123;cpu.fpscr=0x100; /* Exception trap requested. */
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_UNSUPPORTED && cpu.vfp[0]==123 && cpu.r[15]==0x1000);
+    setup(0x0e300a02);cpu.vfp[0]=123;cpu.fpscr=0x100; /* Failed EQ ignores unsupported controls. */
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.vfp[0]==123 && cpu.r[15]==0x1004);
+    setup(0xecb80a02);cpu.r[8]=0x203c;data[60]=17;cpu.vfp[1]=23; /* VLDM fault after first word. */
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_MEMORY_FAULT && cpu.vfp[0]==17 && cpu.vfp[1]==23 && cpu.r[8]==0x203c && cpu.r[15]==0x1000);
+}
 int main(void) {
     memory_tests();resource_version_tests();flag_tests();instruction_tests();viewport_tests();halfword_tests();extend_tests();
     initial_integer_tests();
+    scalar_vfp_tests();
     clock_t start=clock();
     for (unsigned i=0;i<1000;++i) CHECK(ctr_cpu_selftest()==0);
     double seconds=(double)(clock()-start)/CLOCKS_PER_SEC;

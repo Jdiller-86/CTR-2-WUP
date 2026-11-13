@@ -139,12 +139,13 @@ jobs:
           mkdir -p artifacts/ci/native
           "$CC" --version > artifacts/ci/native/compiler.log
           make check-c 2>&1 | tee artifacts/ci/native/tests.log
-      - name: Compare initial integer interpreter and AOT with ARM1176
+      - name: Compare initial integer and scalar VFP execution with ARM1176
         if: matrix.cc == 'gcc'
         run: |
           python3 -m venv artifacts/ci/cpu-reference-env
           artifacts/ci/cpu-reference-env/bin/python -m pip install unicorn==2.1.4
           artifacts/ci/cpu-reference-env/bin/python tools/validate-integer-cpu.py --output artifacts/ci/integer-reference
+          artifacts/ci/cpu-reference-env/bin/python tools/validate-vfp-cpu.py --output artifacts/ci/vfp-reference
       - name: Compare original scenes with exact pixels and pinned shader encodings
         if: matrix.cc == 'gcc'
         run: |
@@ -176,6 +177,7 @@ jobs:
           path: |
             artifacts/ci/native/*.log
             artifacts/ci/integer-reference/report.json
+            artifacts/ci/vfp-reference/report.json
             artifacts/ci/native/fragment-programs.json
             artifacts/ci/gx2-shaders/report.json
             artifacts/ci/textured-scenes/report.json

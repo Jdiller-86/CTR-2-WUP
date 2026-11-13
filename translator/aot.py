@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Bounded, fail-closed ARMv6K/Thumb-to-C translator for flat test executables.
 
-This deliberately does not claim container loading, block discovery, VFP arithmetic, or
+This deliberately does not claim container loading, block discovery, or
 arbitrary game compatibility. Each instruction becomes a specialized C function;
 the generated path does not call the interpreter or decode instructions at run time.
 """
@@ -35,6 +35,61 @@ def multiple(rn, registers, increment, before, writeback, load, is_thumb, opcode
     return result+["return CTR_CPU_OK;"]
 
 
+def vfp(insn: int, pc: int) -> list[str]:
+    """Decode at translation time; helpers receive only semantic fields."""
+    wide=bool(insn&0x100);load=bool(insn&0x100000)
+    vd,rn,rm=(insn>>12)&15,(insn>>16)&15,insn&15
+    def word(reg,bank,double):return (reg+bank*16)*2 if double else reg*2+bank
+    def boolean(value):return 'true' if value else 'false'
+    def call(name,args):
+        return [f'ctr_cpu_result result = {name}(cpu, {args}, {literal(insn)});','if (result != CTR_CPU_OK) return result;']
+    d=word(vd,(insn>>22)&1,wide)
+    if insn&0x0fff0fff in (0x0ee10a10,0x0ef10a10):
+        if not load and vd==15:raise ValueError('VMSR PC operand is unsupported')
+        return [(f'cpu->r[{vd}] = cpu->fpscr;' if vd!=15 else 'cpu->cpsr = (cpu->cpsr & 0x0fffffffu) | (cpu->fpscr & 0xf0000000u);') if load else f'cpu->fpscr = cpu->r[{vd}];']
+    if insn&0x0fe00f7f==0x0e000a10:
+        first=rn*2+((insn>>7)&1)
+        if vd==15:raise ValueError('VFP ARM register transfer PC operand')
+        return [f'cpu->r[{vd}] = cpu->vfp[{first}];' if load else f'cpu->vfp[{first}] = cpu->r[{vd}];']
+    if insn&0x0fe00ed0==0x0c400a10:
+        first=word(rm,(insn>>5)&1,True) if wide else rm*2+((insn>>5)&1)
+        if 15 in (vd,rn) or (load and vd==rn) or first+2>32:raise ValueError('invalid VFP ARM pair transfer')
+        return [f'cpu->r[{vd}] = cpu->vfp[{first}];',f'cpu->r[{rn}] = cpu->vfp[{first+1}];'] if load else [f'cpu->vfp[{first}] = cpu->r[{vd}];',f'cpu->vfp[{first+1}] = cpu->r[{rn}];']
+    if insn&0x0f200e00==0x0d000a00:
+        if d+(2 if wide else 1)>32 or (rn==15 and not load):raise ValueError('VFP bank/store PC base is unsupported')
+        address=f'{register(rn,pc)} {"+" if insn&0x800000 else "-"} {literal((insn&255)*4)}'
+        return call('ctr_cpu_fp_transfer',f'{d}u, {2 if wide else 1}u, {address}, {boolean(load)}')
+    if insn&0x0e000e00==0x0c000a00 and (insn&0x01800000==0x00800000 or insn&0x01a00000==0x01200000):
+        words=insn&255
+        if rn==15 or not words or d+words>32 or (wide and words&1):raise ValueError('invalid VFP multiple transfer')
+        return call('ctr_cpu_vfp_multiple',f'{rn}u, {d}u, {words}u, {boolean(insn&0x1000000)}, {boolean(insn&0x200000)}, {boolean(load)}')
+    if insn&0x0f000e10==0x0e000a00:
+        n,m=word(rn,(insn>>7)&1,wide),word(rm,(insn>>5)&1,wide)
+        group=(insn>>20)&11;bit6=bool(insn&0x40);bit7=bool(insn&0x80)
+        if group in (0,1,2,3):op=(('MLA','MLS'),('NMLS','NMLA'),('MUL','NMUL'),('ADD','SUB'))[group][bit6]
+        elif group==8 and not bit6:op='DIV'
+        elif group==11 and bit6:
+            n=0
+            if rn in (0,1):op=(('MOV','ABS'),('NEG','SQRT'))[rn][bit7]
+            elif rn in (4,5):
+                op='CMPE' if bit7 else 'CMP'
+                if rn==4 and m>=32:raise ValueError('unsupported VFP register bank')
+                if rn==5:
+                    if insn&0x2f:raise ValueError('invalid VFP zero comparison')
+                    m=32
+            elif rn==7 and bit7:op='NARROW' if wide else 'WIDEN';d=word(vd,(insn>>22)&1,not wide)
+            elif rn==8:op='FROM_I32' if bit7 else 'FROM_U32';m=word(rm,(insn>>5)&1,False)
+            elif rn in (12,13):
+                op=('TO_' if bit7 else 'ROUND_')+('I32' if rn==13 else 'U32');d=word(vd,(insn>>22)&1,False)
+            else:raise ValueError('unsupported VFP scalar operation')
+        else:raise ValueError('unsupported VFP arithmetic encoding')
+        dest_wide=op=='WIDEN' or (wide and op not in ('NARROW','TO_I32','TO_U32','ROUND_I32','ROUND_U32'))
+        source_wide=wide and op not in ('FROM_I32','FROM_U32')
+        if d+(2 if dest_wide else 1)>32 or n+(2 if wide else 1)>32 or (m==32 and op not in ('CMP','CMPE')) or (m!=32 and m+(2 if source_wide else 1)>32):raise ValueError('unsupported VFP register bank')
+        return call('ctr_cpu_vfp',f'CTR_VFP_{op}, {d}u, {n}u, {m}u, {boolean(wide)}')
+    raise ValueError('unsupported VFP instruction')
+
+
 def arm(insn: int, pc: int) -> list[str]:
     cond = insn >> 28
     if cond == 15:
@@ -54,6 +109,8 @@ def arm(insn: int, pc: int) -> list[str]:
         body += [f"if (!ctr_cpu_condition(cpu, {cond}u)) {{ cpu->r[15] = {next_pc}; return CTR_CPU_OK; }}"]
     def done(statements):
         return body+statements+[f'cpu->r[15] = {next_pc};','return CTR_CPU_OK;']
+    if insn&0x0e000e00==0x0c000a00 or insn&0x0f000e00==0x0e000a00:
+        return done(vfp(insn,pc))
     dsp=insn&0x0ff00090;kind=None;control=0
     if dsp==0x01600080:kind=0;control=(insn>>5)&3
     elif dsp==0x01200080:kind=2 if insn&0x20 else 1;control=(insn>>6)&1
@@ -134,17 +191,6 @@ def arm(insn: int, pc: int) -> list[str]:
     if insn&0x0fff0fff in (0x0e070f9a,0x0e070fba,0x0e070f95):
         if (insn>>12)&15==15:raise ValueError('CP15 barrier PC operand is unsupported')
         return body+['ctr_cpu_barrier();',f'cpu->r[15] = {next_pc};','return CTR_CPU_OK;']
-    if insn&0x0f200f00 in (0x0d000a00,0x0d000b00):
-        rn,reg=(insn>>16)&15,(insn>>12)&15;wide=(insn&0xf00)==0xb00;load=bool(insn&0x100000)
-        first=(reg+((insn>>22)&1)*16)*2 if wide else reg*2+((insn>>22)&1)
-        if first+(2 if wide else 1)>32 or (rn==15 and not load):raise ValueError('VFP bank/store PC base is unsupported')
-        address=f'{register(rn,pc)} {"+" if insn&0x800000 else "-"} {literal((insn&255)*4)}'
-        return body+[f'ctr_cpu_result result = ctr_cpu_fp_transfer(cpu, {first}u, {2 if wide else 1}u, {address}, {"true" if load else "false"}, {literal(insn)});','if (result != CTR_CPU_OK) return result;',f'cpu->r[15] = {next_pc};','return CTR_CPU_OK;']
-    if insn&0x0fff0fff in (0x0ee10a10,0x0ef10a10):
-        rt=(insn>>12)&15;read=bool(insn&0x00100000)
-        if not read and rt==15:raise ValueError('VMSR PC operand is unsupported')
-        statement=(f'cpu->r[{rt}] = cpu->fpscr;' if rt!=15 else 'cpu->cpsr = (cpu->cpsr & 0x0fffffffu) | (cpu->fpscr & 0xf0000000u);') if read else f'cpu->fpscr = cpu->r[{rt}];'
-        return body+[statement,f'cpu->r[15] = {next_pc};','return CTR_CPU_OK;']
     if insn & 0x0fff0fff == 0x0e1d0f70 and (insn >> 12) & 15 != 15:
         return body + [f"cpu->r[{(insn >> 12) & 15}] = cpu->tls_address;",
                        f"cpu->r[15] = {next_pc};", "return CTR_CPU_OK;"]

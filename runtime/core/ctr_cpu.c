@@ -301,7 +301,7 @@ ctr_cpu_result ctr_cpu_store_data(ctr_cpu *cpu,uint32_t address,unsigned width,u
 
 void ctr_cpu_barrier(void) { atomic_thread_fence(memory_order_seq_cst); }
 ctr_cpu_result ctr_cpu_fp_transfer(ctr_cpu *cpu,unsigned first,unsigned words,uint32_t address,bool load,uint32_t opcode) {
-    if(!words || words>2 || first+words>32)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,opcode);
+    if(!words || first+words>32)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,opcode);
     for(unsigned i=0;i<words;++i) {
         ctr_cpu_result result=load?ctr_cpu_load(cpu,address+i*4u,4,&cpu->vfp[first+i]):
             ctr_cpu_store(cpu,address+i*4u,4,cpu->vfp[first+i]);
@@ -444,26 +444,10 @@ static ctr_cpu_result arm_step(ctr_cpu *cpu, uint32_t insn) {
         if(((insn>>12)&15u)==15u)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
         ctr_cpu_barrier();cpu->r[15]=next;return CTR_CPU_OK;
     }
-    uint32_t fp_transfer=insn&0x0f200f00u;
-    if(fp_transfer==0x0d000a00u || fp_transfer==0x0d000b00u) {
-        unsigned rn=(insn>>16)&15u,first=(insn>>12)&15u;bool wide=fp_transfer==0x0d000b00u,load=(insn&0x100000u)!=0;
-        first=wide?(first+((insn>>22)&1u)*16u)*2u:first*2u+((insn>>22)&1u);
-        if(rn==15 && !load)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
-        uint32_t base=read_register(cpu,rn,false),offset=(insn&255u)*4u;
-        ctr_cpu_result result=ctr_cpu_fp_transfer(cpu,first,wide?2u:1u,(insn&0x800000u)?base+offset:base-offset,load,insn);
+    if((insn&0x0e000e00u)==0x0c000a00u || (insn&0x0f000e00u)==0x0e000a00u) {
+        ctr_cpu_result result=ctr_cpu_vfp_arm(cpu,insn);
         if(result==CTR_CPU_OK)cpu->r[15]=next;
         return result;
-    }
-    if((insn&0x0fff0fffu)==0x0ee10a10u || (insn&0x0fff0fffu)==0x0ef10a10u) {
-        unsigned rt=(insn>>12)&15u;bool read=(insn&0x00100000u)!=0;
-        if(read) {
-            if(rt==15)cpu->cpsr=(cpu->cpsr&0x0fffffffu)|(cpu->fpscr&0xf0000000u);
-            else cpu->r[rt]=cpu->fpscr;
-        } else {
-            if(rt==15)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
-            cpu->fpscr=cpu->r[rt];
-        }
-        cpu->r[15]=next;return CTR_CPU_OK;
     }
     if ((insn&UINT32_C(0x0fff0fff))==UINT32_C(0x0e1d0f70) && ((insn>>12)&15u)!=15u) {
         cpu->r[(insn>>12)&15u]=cpu->tls_address;

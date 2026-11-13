@@ -8,7 +8,7 @@ Wii U compatibility. The selected first-title target is
 | Area | Implemented boundary | Remaining limit |
 |---|---|---|
 | Native Wii U platform | TV/GamePad output, VPAD/touch, owned AX audio, ProcUI lifecycle and SD reports | Native installed exit/relaunch and automatic SD recovery remain open |
-| CPU | Initial ARMv6K/Thumb integer interpreter and original AOT, media/DSP multiply, signed/writeback memory, typed exclusives, long calls and external generated-C adapter | General VFP arithmetic/controls, broader ISA validation, exact revision profiles and useful workload costs remain open |
+| CPU | Initial ARMv6K/Thumb integer and scalar VFPv2 interpreter/original AOT, media/DSP multiply, signed/writeback memory, typed exclusives, long calls and external generated-C adapter | Broader ISA/FP boundary validation, external-backend FP control parity, exact revision profiles and useful workload costs remain open |
 | Kernel/services | Single-process threads, memory/objects, TLS/SRV/CFG, HID, GSP, standalone APT/FS and bounded DSP PCM IPC | Unsupported commands fail; general applets, retail saves and DSP firmware remain open |
 | Original compiled applications | Standard libctru startup, input, frames, saves, RomFS, transfers and bounded draws | Original programs do not establish retail startup or gameplay |
 | Graphics | Five framebuffer formats, CPU-backed GX transfers, bounded GX2 vertex translation, all 14 base textures, nearest/bilinear six-stage TEV with a combiner buffer, alpha/logic/blend/write controls and D16/D24S8 depth/stencil | Physical GPU parity/rounding, broader native blends, general shaders, mixed filters/mipmaps, DOT3, depth interpolation and geometry remain open |

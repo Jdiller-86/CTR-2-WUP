@@ -18,7 +18,7 @@ typedef void (*ctr_cpu_log_fn)(void *context, const char *event, const char *mod
 typedef struct {
     uint32_t r[16];
     uint32_t cpsr;
-    /* Architectural FP words travel with a thread even when only AOT handles VFP. */
+    /* Little-endian architectural words: S0..S31, aliased by D0..D15. */
     uint32_t vfp[32], fpscr;
     ctr_memory *memory;
     uint64_t instructions;
@@ -67,6 +67,18 @@ ctr_cpu_result ctr_cpu_swap(ctr_cpu *cpu,unsigned base,unsigned result,unsigned 
 ctr_cpu_result ctr_cpu_dsp_multiply(ctr_cpu *cpu,unsigned kind,unsigned dest,unsigned accumulator,
     unsigned left,unsigned right,unsigned control,uint32_t opcode);
 ctr_cpu_result ctr_cpu_fp_transfer(ctr_cpu *cpu,unsigned first,unsigned words,uint32_t address,bool load,uint32_t opcode);
+typedef enum {
+    CTR_VFP_ADD, CTR_VFP_SUB, CTR_VFP_MUL, CTR_VFP_NMUL,
+    CTR_VFP_MLA, CTR_VFP_MLS, CTR_VFP_NMLA, CTR_VFP_NMLS, CTR_VFP_DIV,
+    CTR_VFP_MOV, CTR_VFP_ABS, CTR_VFP_NEG, CTR_VFP_SQRT, CTR_VFP_CMP, CTR_VFP_CMPE,
+    CTR_VFP_WIDEN, CTR_VFP_NARROW, CTR_VFP_FROM_I32, CTR_VFP_FROM_U32,
+    CTR_VFP_TO_I32, CTR_VFP_TO_U32, CTR_VFP_ROUND_I32, CTR_VFP_ROUND_U32
+} ctr_vfp_operation;
+/* Register arguments are architectural word indices; m=32 means compare zero. */
+ctr_cpu_result ctr_cpu_vfp(ctr_cpu *cpu,ctr_vfp_operation op,unsigned d,unsigned n,unsigned m,bool wide,uint32_t opcode);
+ctr_cpu_result ctr_cpu_vfp_multiple(ctr_cpu *cpu,unsigned base,unsigned first,unsigned words,bool before,bool writeback,bool load,uint32_t opcode);
+/* Interpreter-only ARM VFP decode. Original AOT calls decoded helpers above. */
+ctr_cpu_result ctr_cpu_vfp_arm(ctr_cpu *cpu,uint32_t opcode);
 void ctr_cpu_barrier(void);
 void ctr_cpu_logic_flags(ctr_cpu *cpu, uint32_t value, unsigned carry);
 uint32_t ctr_cpu_shift(uint32_t value, unsigned type, unsigned amount, bool immediate,

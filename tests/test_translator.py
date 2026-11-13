@@ -32,8 +32,9 @@ class TranslatorTests(unittest.TestCase):
             self.assertEqual(translate((root / source).read_bytes(), base, symbol, thumb), (root / output).read_text())
 
     def test_reject_unsupported_vfp(self):
-        with self.assertRaisesRegex(ValueError, "0x00001000 ARM instruction"):
-            translate(struct.pack("<I", 0xEE300A00), 0x1000, "test", False)
+        for instruction in (0xEE300B20,0xEEB40B60):
+            with self.assertRaisesRegex(ValueError, "0x00001000 ARM instruction"):
+                translate(struct.pack("<I", instruction), 0x1000, "test", False)
 
     def test_reject_unknown_thumb(self):
         with self.assertRaisesRegex(ValueError, "Thumb instruction"):

@@ -15,9 +15,9 @@ $(OUT)/m1-storage-test: $(SOURCES) $(HEADERS) | $(OUT)
 $(OUT)/m1-storage-test-san: $(SOURCES) $(HEADERS) | $(OUT)
 	$(CC) $(CFLAGS) -O1 -fno-omit-frame-pointer -fsanitize=address,undefined $(SOURCES) -o "$@"
 $(OUT)/m1-snapshot-test: $(SNAPSHOT_SOURCES) $(SNAPSHOT_HEADERS) $(HEADERS) | $(OUT)
-	$(CC) $(CFLAGS) $(SNAPSHOT_SOURCES) -o "$@"
+	$(CC) $(CFLAGS) $(SNAPSHOT_SOURCES) -lm -o "$@"
 $(OUT)/m1-snapshot-test-san: $(SNAPSHOT_SOURCES) $(SNAPSHOT_HEADERS) $(HEADERS) | $(OUT)
-	$(CC) $(CFLAGS) -O1 -fno-omit-frame-pointer -fsanitize=address,undefined $(SNAPSHOT_SOURCES) -o "$@"
+	$(CC) $(CFLAGS) -O1 -fno-omit-frame-pointer -fsanitize=address,undefined $(SNAPSHOT_SOURCES) -lm -o "$@"
 check: $(OUT)/m1-storage-test $(OUT)/m1-snapshot-test
 	"$(OUT)/m1-storage-test"
 	"$(OUT)/m1-snapshot-test"

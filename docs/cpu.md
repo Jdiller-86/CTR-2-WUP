@@ -7,7 +7,7 @@ access never converts them into host pointers. See [memory](guest-memory.md) and
 
 ## Interpreter and original AOT
 
-The initial integer implementation covers ARMv6K and Thumb user-mode execution
+The initial implementation covers ARMv6K, Thumb and scalar VFPv2 user-mode execution
 in both the interpreter and original AOT translator:
 
 | Family | Implemented scope |
@@ -19,6 +19,7 @@ in both the interpreter and original AOT translator:
 | Atomic operations | SWP/SWPB; byte, halfword, word and doubleword LDREX/STREX; CLREX; typed monitors tied to checked backing generations |
 | Control | ARM/Thumb branches, link/exchange including immediate BLX and Thumb long calls; user CPSR flags/GE transport; CP15 TLS; ARMv6 DMB/DSB/ISB; PLD hints; observable SVC exits |
 | Thumb | Immediate/register ALU, high registers, literals, register/immediate/SP-relative and signed loads/stores, address/SP arithmetic, extensions/reversals, stack/multiple transfers and conditional/unconditional branches |
+| Scalar VFP | Single/double add, subtract, multiply, divide, square root, non-fused multiply/accumulate and negated forms; moves, absolute/negate, comparisons, precision and signed/unsigned integer conversions; ARM/FP register transfers, VLDR/VSTR and VLDM/VSTM including VPUSH/VPOP |
 
 `translator/aot.py` specializes flat executable instructions into direct C.
 It shares decoded semantic helpers for checked transfers, atomics and media
@@ -59,8 +60,8 @@ Empty lists, PC as base, user banks/SPSR returns, ARM loads with writeback and a
 listed base, non-first listed-base stores, Thumb stores of PC and BLX PC are
 rejected before effects. Thumb long-call prefix/suffix halves are independently
 budgeted and retain LR between dispatches, including across budget exhaustion.
-Privileged modes, banked registers, exception returns, Jazelle, big-endian guest
-execution and general VFP arithmetic remain outside this initial integer scope.
+Privileged modes, banked registers, exception returns, Jazelle and big-endian guest
+execution remain outside this initial user-mode scope.
 
 ## Threads and synchronization
 
@@ -91,12 +92,26 @@ shared time page at `0x1ff81000` uses a published sequence, Unix-zero epoch and
 
 ## Media and floating-point state
 
-Startup support includes UADD8/USUB8/SEL with GE flags, SMLAxy with sticky Q,
-VMRS/VMSR FPSCR transport, checked scalar VLDR/VSTR and user ARMv6 DMB/DSB
-ordering. Barriers order checked CPU backing, not GPU completion. Interpreter
-and original AOT transport floating-point words without general VFP arithmetic;
-the external adapter rejects unsupported arithmetic/control modes before effects.
-Raw VFP memory transport preserves bits under CRT FPSCR controls.
+Interpreter and original AOT share decoded scalar VFP helpers. S0..S31 alias
+D0..D15 through raw words, independently of host byte order. Scalar arithmetic
+supports all four FPSCR rounding modes, sticky exception flags, flush-to-zero and
+default-NaN controls. NaN payloads/signaling behavior are handled before host
+arithmetic; multiply/accumulate rounds the product separately. Comparisons update
+FPSCR NZCV; VMRS can copy them into CPSR. Precision and 32-bit integer conversions
+include explicit saturation on invalid/out-of-range results.
+
+The portable implementation requires IEEE binary32/binary64 and the C floating
+environment; it restores the host rounding mode, exception flags and errno after
+each arithmetic operation. Vector length/stride, enabled exception traps and
+alternate half precision are rejected before arithmetic effects. Raw register
+and memory transfers preserve payload bits without applying arithmetic controls.
+Multiple FP transfers check their register range first, transfer ascending words
+and write back the base last; partial faults retain earlier successful words.
+This scalar baseline does not certify every floating-point boundary case or
+Espresso performance. The [external adapter](upstream-integration.md) retains its
+separate, narrower arithmetic-control profile.
+
+User ARMv6 barriers order checked CPU backing, not GPU completion.
 
 ## Validation
 
@@ -106,6 +121,7 @@ make -C tests/multiple check sanitize
 make -C tests/threads check sanitize
 python3 tools/validate-upstream.py --multiple-api --thread-api --output artifacts/cpu-check
 python3 tools/validate-integer-cpu.py --output artifacts/integer-reference
+python3 tools/validate-vfp-cpu.py --output artifacts/vfp-reference
 ```
 
 Original fixture programs compare complete CPU/mapped-memory state across
@@ -118,3 +134,6 @@ The optional integer reference command needs Unicorn 2.1.4 and checks original
 instruction encodings against ARM1176 registers, flags and memory in both the
 interpreter and generated C. It is a focused instruction-family check, not full
 ISA certification or a production dependency.
+The scalar VFP reference command uses the same optional pin and checks both
+execution paths against ARM1176, including signed zero, infinities, NaNs,
+denormals, rounding modes, conversions and raw register/memory transport.
