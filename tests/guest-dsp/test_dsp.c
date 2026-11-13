@@ -121,6 +121,52 @@ static void variable_rates(void) {
     for(unsigned i=2;i<160;++i)CHECK(other[i*2]==0);
     CHECK(g->allocations[0].pins==1);closed(g); // Other original voice still owns its source.
 }
+static uint32_t adpcm_voice(ctr_guest *g) {
+    static const uint8_t encoded[]={0,0x11,0x11,0x11,0x11,0x11,0x11,0x11,
+                                   1,0x11,0x11,0x11,0x11,0x11,0x11,0x11};
+    uint32_t base=CTR_DSP_RAM+0x100;
+    write_at(g,base,read_at(g,base)|4);write_at(g,base+0xb0,28u<<16);
+    write_at(g,base+0xb4,9);write_at(g,base+0xb8,10);write_at(g,base+0xbc,(1u<<16)|3);
+    write_at(g,CTR_DSP_RAM+0x2200,2048); // predictor = previous sample
+    CHECK(ctr_memory_write_bytes(&g->memory,0x14000000,encoded,sizeof(encoded))==CTR_MEM_OK);
+    return base;
+}
+static void guest_adpcm(void) {
+    ctr_guest *g=opened();adpcm_voice(g);
+    for(unsigned frame=0;frame<2;++frame) {
+        CHECK(ctr_dsp_poll(g,(frame+1)*5000000u) && ctr_dsp_read(g,other,320));
+        for(unsigned i=0;i<160;++i) {
+            unsigned position=(frame*160+i)%28;
+            CHECK(other[i*2]==(int)(position<14?11+position:26+(position-14)*2) && other[i*2+1]==0);
+        }
+        if(!frame)CHECK(ctr_guest_run(g,1000000,5000000,false)==CTR_GUEST_WAITING);
+    }
+    closed(g);
+    /* Each queued buffer supplies its own history; completion drops its pin. */
+    g=opened();uint32_t base=adpcm_voice(g);
+    write_at(g,base,read_at(g,base)|0x80000);write_at(g,base+0xb0,14u<<16);
+    write_at(g,base+0xbc,(1u<<16)|1);
+    CHECK(ctr_memory_write(&g->memory,base+0x4a,2,1)==CTR_MEM_OK);
+    uint32_t queued=base+0x4c;
+    write_at(g,queued,0x00082000);write_at(g,queued+4,14u<<16);
+    write_at(g,queued+8,0xfff60001); // header 1, history -10
+    write_at(g,queued+12,0x10000);write_at(g,queued+16,3);
+    CHECK(ctr_dsp_poll(g,5000000) && ctr_dsp_read(g,other,320));
+    for(unsigned i=0;i<160;++i)CHECK(other[i*2]==(i<14?(int)i+11:i<28?((int)i-14)*2-8:0));
+    CHECK(g->allocations[0].pins==1);closed(g);
+    /* A malformed later ADPCM header cannot publish a partial mixed frame. */
+    for(unsigned kind=0;kind<4;++kind) {
+        g=opened();base=adpcm_voice(g);
+        if(kind==0)CHECK(ctr_memory_write(&g->memory,0x14000008,1,0x80)==CTR_MEM_OK);
+        if(kind==1)write_at(g,base+0xbc,(1u<<16)|2); // missing explicit history
+        if(kind==2)write_at(g,base+0xb4,0x10009); // index differs from source header
+        if(kind==3) { write_at(g,base+0x34,0x3f000000);write_at(g,base+0x38,1); }
+        uint8_t before[CTR_DSP_RAM_BYTES];memcpy(before,g->storage[7],sizeof(before));
+        CHECK(!ctr_dsp_poll(g,5000000) && g->state==CTR_GUEST_FAULTED);
+        CHECK(!memcmp(before,g->storage[7],sizeof(before)) && !ctr_dsp_read(g,other,320));
+        CHECK(g->allocations[0].pins==0);closed(g);
+    }
+}
 static void atomic_failures(void) {
     for(unsigned kind=0;kind<14;++kind) {
         ctr_guest *g=opened();
@@ -128,7 +174,7 @@ static void atomic_failures(void) {
         if(kind==1)write_at(g,CTR_DSP_RAM+0x100+0x34,0x7fc00000); // NaN rate
         if(kind==2)write_at(g,CTR_DSP_RAM+0x100+4,0x7f800000); // infinite gain
         if(kind==3)write_at(g,CTR_DSP_RAM+0x100+0xb0,0); // empty buffer
-        if(kind==4)write_at(g,CTR_DSP_RAM+0x100+0xb4,9); // unsupported ADPCM, never silently PCM
+        if(kind==4)write_at(g,CTR_DSP_RAM+0x100+0xb4,10); // unsupported stereo ADPCM, never silently PCM
         if(kind==5)write_at(g,CTR_DSP_RAM+0x100+0xac,0x2004); // unowned physical
         if(kind==6)CHECK(ctr_memory_change_range(&g->memory,0x14000000,4096,0,false)==CTR_MEM_OK);
         if(kind==7)write_at(g,CTR_DSP_RAM+0x2600,0x40000000); // unsupported master state
@@ -166,7 +212,7 @@ static void ownership(void) {
     CHECK(!ctr_dsp_read(g,other,320));closed(g);
 }
 int main(int argc,char **argv) {
-    exact_deadlines_and_ipc();controls_and_queue();variable_rates();atomic_failures();ownership();
+    exact_deadlines_and_ipc();controls_and_queue();variable_rates();guest_adpcm();atomic_failures();ownership();
     ctr_dsp_statistics a,b;uint64_t ai,bi;
     CHECK(ctr_dsp_fixture_render(false,pcm,96000,&a,&ai));
     CHECK(ctr_dsp_fixture_render(true,other,96000,&b,&bi));
