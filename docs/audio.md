@@ -1,7 +1,7 @@
 # Audio decoding, streams and native output
 
 The portable core separates DSP ADPCM decoding, checked CSTM blocks, deterministic
-mixing and native AX ownership. A bounded guest DSP PCM service is also
+mixing and native AX ownership. A bounded guest DSP PCM/ADPCM service is also
 available. Arbitrary DSP firmware,
 CSAR selection and synchronized real-time game playback remain unsupported.
 All fixtures are original; no commercial waveform or firmware is bundled.
@@ -86,7 +86,7 @@ NDSP's halfword-rotated physical addresses/counts/positions. Commands and their
 consumed counter use the current bank; status/captured PCM use the opposite bank
 read by NDSP after its frame-ID advance. The ARM probe validates this round trip.
 
-The profile supports 24 mono PCM16 voices, one current buffer
+The profile supports 24 mono PCM16 or DSP ADPCM voices, one current buffer
 and four circular queued buffers each, nonzero sequence IDs, pause/resume and
 whole-buffer looping. Sources must remain readable in the same live owned linear
 allocation; each is at most 65,536 samples. Imported current/queued buffers pin
@@ -100,7 +100,14 @@ queued/looping boundaries; explicit buffer replacement or synchronization resets
 it. Linear interpolation crosses queued buffers and loop seams, holds the last
 sample for its fractional tail and rounds ties positive. Polyphase is accepted
 only at unity rate with integer phase; other filter states fail explicitly.
-Effects, auxiliary routing, ADPCM and surround are unsupported. This is a deterministic PCM
+DSP ADPCM uses the shared decoder at unity rate. Each buffer starts at an encoded
+frame header and supplies an explicit predictor/scale matching that header plus
+two signed starting histories. Queued buffers supply their own histories; whole
+buffer loops restore the starting checkpoint. Coefficients use the channel's
+little-endian 16-entry table and may change only while no ADPCM buffer is active
+or together with reset/synchronization. Partial final frames need only their
+used bytes. Variable-rate ADPCM, implicit history carry between buffers, effects,
+auxiliary routing and surround remain unsupported. This is a deterministic HLE
 profile, not a firmware-fidelity claim.
 
 A signaled retained semaphore schedules one 160-sample frame at the exact

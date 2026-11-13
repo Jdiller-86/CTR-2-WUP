@@ -1,6 +1,7 @@
-/* Original bounded NDSP PCM HLE. Interface facts: pinned libctru DSP/NDSP.
+/* Original bounded NDSP audio HLE. Interface facts: pinned libctru DSP/NDSP.
  * This is not a firmware interpreter, polyphase filter or game-audio profile. */
 #include "ctr_dsp.h"
+#include "ctr_dsp_adpcm.h"
 #include "ctr_heap.h"
 #include "ctr_kernel.h"
 #include <stdlib.h>
@@ -10,6 +11,7 @@ const uint8_t ctr_dsp_component[16]={'C','T','R','2','W','U','P','-','P','C','M'
 #define BANK 0x20000u
 #define CHANNEL 0x100u
 #define STATUS 0x2000u
+#define COEFFICIENTS 0x2200u
 #define MASTER 0x2600u
 #define CAPTURE 0x4000u
 #define FRAME_SPAN 0x5000u
@@ -18,15 +20,19 @@ const uint8_t ctr_dsp_component[16]={'C','T','R','2','W','U','P','-','P','C','M'
 #define INVALID UINT32_C(0xd8e007f7)
 #define NO_MEMORY UINT32_C(0xd86007f3)
 #define BUSY UINT32_C(0xd8a007f3)
-#define ALLOWED UINT32_C(0x7e6f0010)
+#define ALLOWED UINT32_C(0x7e6f0014)
 /* Counter, channel commands/status, coefficients, master, DSP state, capture,
  * auxiliary buffers and unknown state. Word addresses; independent owned banks. */
-static const uint16_t variables[]={0,CHANNEL/2,STATUS/2,0x2200/2,MASTER/2,0x2800/2,CAPTURE/2,0x5000/2,0x6000/2};
-typedef struct { uint32_t address,count,position;uint16_t sequence;bool looping;unsigned allocation; } buffer;
+static const uint16_t variables[]={0,CHANNEL/2,STATUS/2,COEFFICIENTS/2,MASTER/2,0x2800/2,CAPTURE/2,0x5000/2,0x6000/2};
+typedef struct {
+    uint32_t address,count,position,bytes;uint16_t sequence;bool looping;unsigned allocation;
+    CtrDspAdpcmState decoder,initial;
+} buffer;
 typedef struct {
     buffer current,queued[4]; unsigned head,count,next_slot;
     uint16_t sync,last;bool playing;
     uint64_t step;uint32_t phase;unsigned interpolation;
+    bool adpcm;int16_t coefficients[16];
     int32_t gain[2];
 } voice;
 struct ctr_guest_dsp {
@@ -119,6 +125,20 @@ static bool sample_at(ctr_guest *g,const buffer *b,uint32_t position,int32_t *ou
         return fail(g,address,CTR_MEM_UNMAPPED);
     *out=sample<=32767u?(int32_t)sample:(int32_t)sample-65536;return true;
 }
+static bool adpcm_sample(ctr_guest *g,voice *v,int32_t *out) {
+    buffer *b=&v->current;uint32_t address;
+    if(!source(g,b->address,b->bytes,&address))return false;
+    /* Unity-rate consumption decodes exactly one sample. Copy only the needed
+     * frame bytes through checked guest access; retain no guest host pointer. */
+    unsigned within=b->position%14,bytes=2+within/2;
+    uint8_t encoded[8];
+    if(ctr_memory_read_bytes(&g->memory,address+b->position/14*8,encoded,bytes)!=CTR_MEM_OK)
+        return fail(g,address,CTR_MEM_UNMAPPED);
+    CtrDspAdpcmState state=b->decoder;state.sample=within;int16_t sample;
+    if(ctr_dsp_adpcm_decode(encoded,bytes,v->coefficients,&state,&sample,1,1)!=CTR_DSP_ADPCM_OK)
+        return fail(g,address+b->position/14*8,CTR_MEM_OK);
+    b->decoder=state;*out=sample;return true;
+}
 static bool voice_sample(ctr_guest *g,const voice *v,int32_t *out) {
     const buffer *b=&v->current;
     if(!sample_at(g,b,b->position,out))return false;
@@ -136,18 +156,35 @@ static bool voice_sample(ctr_guest *g,const voice *v,int32_t *out) {
                   -((-value+INT64_C(0xffffffff))/INT64_C(0x100000000)));
     return true;
 }
-static bool decode_buffer(ctr_guest *g,const uint8_t *p,bool initial,buffer *b) {
+static bool decode_buffer(ctr_guest *g,const uint8_t *p,bool initial,bool adpcm,buffer *b) {
     uint32_t count=rotate(le(p+4,4)),address=rotate(le(p,4));
     unsigned more=initial?le(p+16,2):p[15];uint16_t sequence=(uint16_t)le(p+(initial?18:16),2);
-    if(!count || count>MAX_SAMPLES || !sequence || more> (initial?2u:1u) || (initial?(more&1u):p[14]))return fail(g,address,CTR_MEM_OK);
-    uint32_t ignored;if(!source(g,address,count*2,&ignored))return false;
+    unsigned history=initial?more&1u:p[14];
+    if(!count || count>MAX_SAMPLES || !sequence || more>(initial?3u:1u) || history!=(adpcm?1u:0u))
+        return fail(g,address,CTR_MEM_OK);
+    uint32_t bytes=adpcm?(count-1)/14*8+2+(count-1)%14/2:count*2;
+    uint32_t ignored;if(!source(g,address,bytes,&ignored))return false;
     unsigned allocation=CTR_GUEST_MAX_ALLOCATIONS;
     for(unsigned i=0;i<CTR_GUEST_MAX_ALLOCATIONS;++i) {
         const ctr_guest_allocation *a=&g->allocations[i];
-        if(a->storage && a->linear && ignored>=a->base && (uint64_t)ignored+count*2<=(uint64_t)a->base+a->size)allocation=i;
+        if(a->storage && a->linear && ignored>=a->base && (uint64_t)ignored+bytes<=(uint64_t)a->base+a->size)allocation=i;
     }
     if(allocation==CTR_GUEST_MAX_ALLOCATIONS)return fail(g,address,CTR_MEM_UNMAPPED);
-    *b=(buffer){address,count,0,sequence,initial?(more&2u)!=0:more!=0,allocation};return true;
+    *b=(buffer){.address=address,.count=count,.bytes=bytes,.sequence=sequence,
+                .looping=initial?(more&2u)!=0:more!=0,.allocation=allocation};
+    if(adpcm) {
+        const uint8_t *state=p+(initial?10:8);uint32_t header;
+        if(ctr_memory_read(&g->memory,ignored,1,CTR_MEM_READ,&header)!=CTR_MEM_OK)
+            return fail(g,address,CTR_MEM_UNMAPPED);
+        /* Bounded whole-frame buffers require an explicit starting history and
+         * matching predictor/scale. No guessed cross-buffer decoder history. */
+        if(le(state,2)!=header || (header>>4)>7)return fail(g,address,CTR_MEM_OK);
+        uint32_t h1=le(state+2,2),h2=le(state+4,2);
+        b->initial=(CtrDspAdpcmState){0,(int16_t)(h1<=32767?(int32_t)h1:(int32_t)h1-65536),
+                                      (int16_t)(h2<=32767?(int32_t)h2:(int32_t)h2-65536)};
+        b->decoder=b->initial;
+    }
+    return true;
 }
 static void pins(ctr_guest *g,const voice *voices,bool retain) {
     for(unsigned c=0;c<CTR_DSP_CHANNELS;++c) {
@@ -206,6 +243,13 @@ static bool frame(ctr_guest *g) {
         if(flags&~ALLOWED)return fail(g,c,CTR_MEM_OK);
         if(flags&0x20000000u) { memset(v,0,sizeof(*v));v->gain[0]=v->gain[1]=32768;v->step=UINT64_C(0x100000000); }
         if(flags&0x10000000u) { v->sync=(uint16_t)le(p+0xa2,2);v->current=(buffer){0};v->head=v->count=0;v->last=0;v->phase=0; }
+        if(flags&4u) {
+            if(v->current.sequence && v->adpcm)return fail(g,c,CTR_MEM_OK);
+            for(unsigned i=0;i<16;++i) {
+                uint32_t value=le(ram+COEFFICIENTS+c*32+i*2,2);
+                v->coefficients[i]=(int16_t)(value<=32767?(int32_t)value:(int32_t)value-65536);
+            }
+        }
         if((flags&0x40000u) && !rate(le(p+0x34,4),&v->step))return fail(g,c,CTR_MEM_OK);
         if(flags&0x20000u) {
             if(p[0x38]>2 || p[0x39]>2)return fail(g,c,CTR_MEM_OK);
@@ -220,8 +264,10 @@ static bool frame(ctr_guest *g) {
         }
         if(flags&0x10000u) { if(le(p+0xa0,2)>1)return fail(g,c,CTR_MEM_OK);v->playing=le(p+0xa0,2)!=0; }
         if(flags&0x40200010u) {
-            if((flags&0x40200010u)!=0x40200010u || le(p+0xb4,2)!=5)return fail(g,c,CTR_MEM_OK);
-            if(!decode_buffer(g,p+0xac,true,&v->current))return false;
+            unsigned format=le(p+0xb4,2);
+            if((flags&0x40200010u)!=0x40200010u || (format!=5 && format!=9))return fail(g,c,CTR_MEM_OK);
+            v->adpcm=format==9;
+            if(!decode_buffer(g,p+0xac,true,v->adpcm,&v->current))return false;
             v->count=v->head=v->next_slot=0;v->phase=0;add(&stats.queued,1);
         }
         if(flags&0x80000u) {
@@ -231,7 +277,7 @@ static bool frame(ctr_guest *g) {
                 if(!(mask&(1u<<i)))return fail(g,c,CTR_MEM_OK);
                 mask&=~(1u<<i);v->next_slot=(i+1)%4;
                 if(v->count==4)return fail(g,c,CTR_MEM_OK);
-                buffer b;if(!decode_buffer(g,p+0x4c+i*20,false,&b))return false;
+                buffer b;if(!decode_buffer(g,p+0x4c+i*20,false,v->adpcm,&b))return false;
                 if(b.sequence==v->current.sequence)return fail(g,c,CTR_MEM_OK);
                 for(unsigned j=0;j<v->count;++j)if(v->queued[(v->head+j)%4].sequence==b.sequence)return fail(g,c,CTR_MEM_OK);
                 v->queued[(v->head+v->count)%4]=b;++v->count;add(&stats.queued,1);
@@ -241,18 +287,21 @@ static bool frame(ctr_guest *g) {
          * polyphase states require an actual filter, never a linear substitute. */
         if(v->current.sequence && (!v->step || (!v->interpolation &&
            (v->step!=UINT64_C(0x100000000) || v->phase))))return fail(g,c,CTR_MEM_OK);
+        if(v->current.sequence && v->adpcm && (v->step!=UINT64_C(0x100000000) || v->phase))
+            return fail(g,c,CTR_MEM_OK);
     }
     int64_t mix[CTR_DSP_FRAME_SAMPLES*2]={0};uint8_t status[CTR_DSP_CHANNELS*12]={0},capture[CTR_DSP_FRAME_SAMPLES*4];
     for(unsigned c=0;c<CTR_DSP_CHANNELS;++c) {
         voice *v=&voices[c];
         for(unsigned i=0;i<CTR_DSP_FRAME_SAMPLES && v->playing && v->current.sequence;++i) {
             buffer *b=&v->current;int32_t s;
-            if(!voice_sample(g,v,&s))return false;
+            bool sampled=v->adpcm?adpcm_sample(g,v,&s):voice_sample(g,v,&s);
+            if(!sampled)return false;
             for(unsigned lane=0;lane<2;++lane)mix[i*2+lane]+=rounded((int64_t)s*v->gain[lane]);
             uint64_t phase=v->phase+v->step;v->phase=(uint32_t)phase;
             unsigned advance=(unsigned)(phase>>32);
             while(advance-- && b->sequence)if(++b->position==b->count) {
-                if(b->looping) { b->position=0;add(&stats.loops,1); }
+                if(b->looping) { b->position=0;b->decoder=b->initial;add(&stats.loops,1); }
                 else {
                     v->last=b->sequence;add(&stats.completed,1);
                     if(v->count) { *b=v->queued[v->head];v->head=(v->head+1)%4;--v->count; }

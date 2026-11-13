@@ -8,9 +8,9 @@ Commercial games and the GUI are not supported yet.
 
 1. **Connect guest audio** ([#25](https://github.com/Jdiller-86/CTR-2-WUP/issues/25)).
    The checked CSTM/ADPCM mixer and bounded original NDSP PCM service exist,
-   including queued voices, bounded linear/direct source rates, interrupts and
-   exact frame deadlines. Extend guest ADPCM/filtering, firmware-profile selection
-   and continuous native synchronization
+   including queued voices, bounded linear/direct PCM rates, unity-rate mono
+   ADPCM, interrupts and exact frame deadlines. Extend ADPCM rates/filtering,
+   firmware-profile selection and continuous native synchronization
    toward observed game requirements. Finite original playback, automatic
    pause/resume and resource release have console evidence; continuous
    guest/AX synchronization remains open.
