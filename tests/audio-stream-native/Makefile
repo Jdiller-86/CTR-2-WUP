@@ -10,9 +10,17 @@ $(OUT)/native-pcm-test: $(SOURCES) $(HEADERS) | $(OUT)
 	$(CC) $(CFLAGS) $(SOURCES) -o "$@"
 $(OUT)/native-pcm-test-san: $(SOURCES) $(HEADERS) | $(OUT)
 	$(CC) $(CFLAGS) -O1 -fno-omit-frame-pointer -fsanitize=address,undefined $(SOURCES) -o "$@"
-check: $(OUT)/native-pcm-test
+check: $(OUT)/native-pcm-test $(OUT)/native-stream-test
 	"$(OUT)/native-pcm-test"
-sanitize: $(OUT)/native-pcm-test-san
+	"$(OUT)/native-stream-test"
+sanitize: $(OUT)/native-pcm-test-san $(OUT)/native-stream-test-san
 	"$(OUT)/native-pcm-test-san"
+	"$(OUT)/native-stream-test-san"
+STREAM_SOURCES := test_native_stream.c ../../runtime/wiiu/native_audio_stream.c ../../runtime/core/ctr_dsp_stream.c
+STREAM_HEADERS := ../../runtime/wiiu/native_audio_stream.h ../../runtime/core/ctr_dsp_stream.h $(HEADERS)
+$(OUT)/native-stream-test: $(STREAM_SOURCES) $(STREAM_HEADERS) | $(OUT)
+	$(CC) $(CFLAGS) -I../../runtime/core $(STREAM_SOURCES) -o "$@"
+$(OUT)/native-stream-test-san: $(STREAM_SOURCES) $(STREAM_HEADERS) | $(OUT)
+	$(CC) $(CFLAGS) -I../../runtime/core -O1 -fno-omit-frame-pointer -fsanitize=address,undefined $(STREAM_SOURCES) -o "$@"
 clean:
-	rm -f "$(OUT)/native-pcm-test" "$(OUT)/native-pcm-test-san"
+	rm -f "$(OUT)/native-pcm-test" "$(OUT)/native-pcm-test-san" "$(OUT)/native-stream-test" "$(OUT)/native-stream-test-san"

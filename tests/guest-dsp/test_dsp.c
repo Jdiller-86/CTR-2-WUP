@@ -1,4 +1,5 @@
 #include "ctr_dsp_fixture.h"
+#include "ctr_dsp_stream.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -211,6 +212,26 @@ static void ownership(void) {
     for(unsigned i=0;i<8;++i) { CHECK(ctr_dsp_read(g,other,320)); }
     CHECK(!ctr_dsp_read(g,other,320));closed(g);
 }
+static void live_resampling(const int16_t *expected,size_t frames) {
+    ctr_guest *g=opened();ctr_dsp_stream converter;ctr_dsp_stream_init(&converter);
+    static int16_t streamed[192000];size_t written=0;unsigned blocks=0;
+    for(unsigned turns=0;turns<400 && g->state!=CTR_GUEST_EXITED;++turns) {
+        uint64_t deadline;CHECK(ctr_dsp_next_deadline(g,&deadline) && deadline>=g->now_ns);
+        CHECK(ctr_guest_run(g,1000000,deadline,true)!=CTR_GUEST_FAULTED);
+        while(ctr_dsp_read(g,other,320)) {
+            CHECK(ctr_dsp_stream_push(&converter,other,160));++blocks;
+        }
+        size_t count;
+        do {
+            CHECK(ctr_dsp_stream_pull(&converter,streamed+written*2,257,&count));written+=count;
+        } while(count);
+    }
+    CHECK(g->state==CTR_GUEST_EXITED && blocks==300 && ctr_dsp_stream_finish(&converter));
+    while(!ctr_dsp_stream_done(&converter)) {
+        size_t count;CHECK(ctr_dsp_stream_pull(&converter,streamed+written*2,257,&count) && count);written+=count;
+    }
+    CHECK(written==frames && !memcmp(streamed,expected,frames*4));closed(g);
+}
 int main(int argc,char **argv) {
     exact_deadlines_and_ipc();controls_and_queue();variable_rates();guest_adpcm();atomic_failures();ownership();
     ctr_dsp_statistics a,b;uint64_t ai,bi;
@@ -228,6 +249,7 @@ int main(int argc,char **argv) {
     }
     static int16_t resampled[192000];size_t written=0;
     CHECK(ctr_dsp_pcm48k(pcm,48000,resampled,96000,&written) && written==70398);
+    live_resampling(resampled,written);
     size_t sentinel=7;CHECK(!ctr_dsp_pcm48k(pcm,48000,pcm,96000,&sentinel) && sentinel==7);
     CHECK(!ctr_dsp_pcm48k(pcm,48000,resampled,1,&sentinel) && sentinel==7);
     bool binary=argc==2 && !strcmp(argv[1],"--pcm");

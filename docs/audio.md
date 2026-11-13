@@ -125,6 +125,42 @@ plays the immutable converted clip through the shared AX adapter. It automates
 pause/resume and records one listening response. Finite rendering does not
 establish continuous guest/AX synchronization or commercial audio compatibility.
 
+## Continuous guest playback
+
+`ctr_dsp_stream.h` incrementally converts copied DSP blocks to 48 kHz with the
+same exact rational phase and rounding as finite conversion. Its 2,048-frame
+input ring retains interpolation history across pushes and pulls. Input pressure
+is explicit; unfinished input waits for its next sample. Finishing holds only
+the last fractional tail and drains once. The converter allocates no memory.
+
+`native_audio_stream.h` owns two AX voices, eight copied 960-frame stereo blocks
+and a permanent silence block. Only published, flushed planar buffers can become
+AX loop targets. An AX frame callback retires completed blocks, switches both
+channels together and uses silence during an underrun; it never runs guest code,
+resampling, allocation, logging or storage. The main thread copies only retired
+slots. Pause/resume preserves the hardware cursor; finishing drains queued input
+and stops, including a zero-padded final partial block. Release disables and
+drains callbacks before freeing voices. The existing shared AX context remains
+responsible for initialization, foreground ownership and shutdown.
+
+Build the original live guest application with:
+
+```sh
+python3 -m host build --target guest-audio-stream --output artifacts/live-guest-audio
+```
+
+The ARM fixture runs during playback and repeats as fresh guest sessions, with
+resampling phase retained across sessions. Queue depth limits production to four
+20 ms blocks ahead; exact DSP deadlines drive guest time. X pauses/resumes, A
+finishes the current guest session and drains, Plus restarts after completion,
+and Minus exits. After draining, R/L records correct/incorrect hearing. Reports
+are under `sd:/ctr2wup/guest-stream/results/`. Storage commits occur while output
+is idle, paused or drained. Foreground loss invalidates the run and releases AX
+resources. This original profile does not establish commercial game scheduling;
+physical underrun, channel synchronization and long-run audio quality still
+require console evidence. AX loop/callback interface facts were checked against
+the pinned [SDL Wii U audio driver](https://github.com/devkitPro/SDL/blob/a8f1e43a4a9d70cbae397433e1a3dd40113679aa/src/audio/wiiu/SDL_wiiuaudio.c).
+
 ## Native ownership
 
 The finite Audio Streams diagnostic renders bounded pulls on the main thread.
