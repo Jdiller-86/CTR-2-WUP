@@ -26,6 +26,7 @@ typedef struct { uint32_t address,count,position;uint16_t sequence;bool looping;
 typedef struct {
     buffer current,queued[4]; unsigned head,count,next_slot;
     uint16_t sync,last;bool playing;
+    uint64_t step;uint32_t phase;unsigned interpolation;
     int32_t gain[2];
 } voice;
 struct ctr_guest_dsp {
@@ -105,6 +106,36 @@ static bool gain(uint32_t bits,int32_t *out) {
 }
 static int64_t rounded(int64_t v) { v+=16384;return v>=0?v/32768:-((-v+32767)/32768); }
 static int16_t clipped(int64_t v) { return (int16_t)(v>32767?32767:v<-32768?-32768:v); }
+/* Every binary32 ratio in [1/8,4] is exact in Q32; no host floating point. */
+static bool rate(uint32_t bits,uint64_t *step) {
+    if(bits<0x3e000000u || bits>0x40800000u)return false;
+    *step=(uint64_t)((bits&0x7fffffu)|0x800000u)<<((bits>>23)-118u);
+    return true;
+}
+static bool sample_at(ctr_guest *g,const buffer *b,uint32_t position,int32_t *out) {
+    uint32_t address,sample;
+    if(!source(g,b->address,b->count*2,&address))return false;
+    if(ctr_memory_read(&g->memory,address+position*2,2,CTR_MEM_READ,&sample)!=CTR_MEM_OK)
+        return fail(g,address,CTR_MEM_UNMAPPED);
+    *out=sample<=32767u?(int32_t)sample:(int32_t)sample-65536;return true;
+}
+static bool voice_sample(ctr_guest *g,const voice *v,int32_t *out) {
+    const buffer *b=&v->current;
+    if(!sample_at(g,b,b->position,out))return false;
+    if(v->interpolation!=1 || !v->phase)return true;
+    const buffer *next=b;uint32_t position=b->position+1;
+    if(position==b->count) {
+        if(b->looping)position=0;
+        else if(v->count) { next=&v->queued[v->head];position=0; }
+        else return true; /* Hold the last sample for its fractional tail. */
+    }
+    int32_t following;if(!sample_at(g,next,position,&following))return false;
+    int64_t value=(int64_t)*out*(int64_t)(UINT64_C(0x100000000)-v->phase)+
+                  (int64_t)following*v->phase+INT64_C(0x80000000);
+    *out=(int32_t)(value>=0?value/INT64_C(0x100000000):
+                  -((-value+INT64_C(0xffffffff))/INT64_C(0x100000000)));
+    return true;
+}
 static bool decode_buffer(ctr_guest *g,const uint8_t *p,bool initial,buffer *b) {
     uint32_t count=rotate(le(p+4,4)),address=rotate(le(p,4));
     unsigned more=initial?le(p+16,2):p[15];uint16_t sequence=(uint16_t)le(p+(initial?18:16),2);
@@ -173,10 +204,13 @@ static bool frame(ctr_guest *g) {
     for(unsigned c=0;c<CTR_DSP_CHANNELS;++c) {
         const uint8_t *p=ram+CHANNEL+c*STRIDE;uint32_t flags=le(p,4);voice *v=&voices[c];
         if(flags&~ALLOWED)return fail(g,c,CTR_MEM_OK);
-        if(flags&0x20000000u) { memset(v,0,sizeof(*v));v->gain[0]=v->gain[1]=32768; }
-        if(flags&0x10000000u) { v->sync=(uint16_t)le(p+0xa2,2);v->current=(buffer){0};v->head=v->count=0;v->last=0; }
-        if((flags&0x40000u) && le(p+0x34,4)!=0x3f800000u)return fail(g,c,CTR_MEM_OK);
-        if((flags&0x20000u) && (p[0x38]>2 || p[0x39]>2))return fail(g,c,CTR_MEM_OK);
+        if(flags&0x20000000u) { memset(v,0,sizeof(*v));v->gain[0]=v->gain[1]=32768;v->step=UINT64_C(0x100000000); }
+        if(flags&0x10000000u) { v->sync=(uint16_t)le(p+0xa2,2);v->current=(buffer){0};v->head=v->count=0;v->last=0;v->phase=0; }
+        if((flags&0x40000u) && !rate(le(p+0x34,4),&v->step))return fail(g,c,CTR_MEM_OK);
+        if(flags&0x20000u) {
+            if(p[0x38]>2 || p[0x39]>2)return fail(g,c,CTR_MEM_OK);
+            v->interpolation=p[0x38];
+        }
         if((flags&0x400000u) && le(p+0x3a,2))return fail(g,c,CTR_MEM_OK);
         if(flags&0xe000000u) {
             for(unsigned i=0;i<12;++i) {
@@ -188,7 +222,7 @@ static bool frame(ctr_guest *g) {
         if(flags&0x40200010u) {
             if((flags&0x40200010u)!=0x40200010u || le(p+0xb4,2)!=5)return fail(g,c,CTR_MEM_OK);
             if(!decode_buffer(g,p+0xac,true,&v->current))return false;
-            v->count=v->head=v->next_slot=0;add(&stats.queued,1);
+            v->count=v->head=v->next_slot=0;v->phase=0;add(&stats.queued,1);
         }
         if(flags&0x80000u) {
             unsigned mask=le(p+0x4a,2);if((mask && !v->current.sequence) || (mask&~15u))return fail(g,c,CTR_MEM_OK);
@@ -203,22 +237,26 @@ static bool frame(ctr_guest *g) {
                 v->queued[(v->head+v->count)%4]=b;++v->count;add(&stats.queued,1);
             }
         }
+        /* Unity polyphase retains the existing integer-sample path. Other
+         * polyphase states require an actual filter, never a linear substitute. */
+        if(v->current.sequence && (!v->step || (!v->interpolation &&
+           (v->step!=UINT64_C(0x100000000) || v->phase))))return fail(g,c,CTR_MEM_OK);
     }
     int64_t mix[CTR_DSP_FRAME_SAMPLES*2]={0};uint8_t status[CTR_DSP_CHANNELS*12]={0},capture[CTR_DSP_FRAME_SAMPLES*4];
     for(unsigned c=0;c<CTR_DSP_CHANNELS;++c) {
         voice *v=&voices[c];
         for(unsigned i=0;i<CTR_DSP_FRAME_SAMPLES && v->playing && v->current.sequence;++i) {
-            buffer *b=&v->current;uint32_t address,sample;
-            if(!source(g,b->address,b->count*2,&address))return false;
-            if(ctr_memory_read(&g->memory,address+b->position*2,2,CTR_MEM_READ,&sample)!=CTR_MEM_OK)return fail(g,address,CTR_MEM_UNMAPPED);
-            int32_t s=sample<=32767u?(int32_t)sample:(int32_t)sample-65536;
+            buffer *b=&v->current;int32_t s;
+            if(!voice_sample(g,v,&s))return false;
             for(unsigned lane=0;lane<2;++lane)mix[i*2+lane]+=rounded((int64_t)s*v->gain[lane]);
-            if(++b->position==b->count) {
+            uint64_t phase=v->phase+v->step;v->phase=(uint32_t)phase;
+            unsigned advance=(unsigned)(phase>>32);
+            while(advance-- && b->sequence)if(++b->position==b->count) {
                 if(b->looping) { b->position=0;add(&stats.loops,1); }
                 else {
                     v->last=b->sequence;add(&stats.completed,1);
                     if(v->count) { *b=v->queued[v->head];v->head=(v->head+1)%4;--v->count; }
-                    else { *b=(buffer){0};v->playing=false; }
+                    else { *b=(buffer){0};v->playing=false;v->phase=0; }
                 }
             }
         }
