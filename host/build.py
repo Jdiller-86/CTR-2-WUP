@@ -101,7 +101,9 @@ def _run_build(command, env, log, cwd, *, stage="compile", timeout=None):
                         details={"exit_code": result, "log": str(log)})
 
 
-def prototype(output: str | Path, guest_path=None, *, backend="original", audio_only=False, scene_only=False, stream_audio=False, guest_audio=False, m1_only=False, install_only=False):
+def prototype(output: str | Path, guest_path=None, *, backend="original", audio_only=False, scene_only=False, stream_audio=False, guest_audio=False, guest_stream=False, m1_only=False, install_only=False):
+    if guest_stream:
+        guest_audio=True
     if guest_audio and (guest_path is not None or backend != "original" or audio_only or scene_only or stream_audio or m1_only or install_only):
         raise HostError("invalid_profile", "Guest Audio requires its own original DSP profile", stage="arguments")
     if install_only and (guest_path is not None or backend != "original" or audio_only or scene_only or stream_audio or m1_only):
@@ -155,8 +157,11 @@ def prototype(output: str | Path, guest_path=None, *, backend="original", audio_
             target="ctr2wup-audio-stream-check"
             command += ["OUTPUT=../../artifacts/wiiu-audio-streams", "TARGET="+target, "STREAM_AUDIO=1"]
         if guest_audio:
-            target="ctr2wup-guest-audio"
-            command += ["OUTPUT=../../artifacts/wiiu-guest-audio", "TARGET="+target, "GUEST_AUDIO=1"]
+            target="ctr2wup-guest-audio-stream" if guest_stream else "ctr2wup-guest-audio"
+            directory="wiiu-guest-stream" if guest_stream else "wiiu-guest-audio"
+            command += ["OUTPUT=../../artifacts/"+directory, "TARGET="+target, "GUEST_AUDIO=1"]
+            if guest_stream:
+                command += ["GUEST_STREAM=1", "-j3"]
         if m1_only:
             target="ctr2wup-m1-check"
             command += ["OUTPUT=../../artifacts/wiiu-m1", "TARGET="+target, "M1_ONLY=1", "GUEST_DEFAULT=0"]
@@ -180,7 +185,7 @@ def prototype(output: str | Path, guest_path=None, *, backend="original", audio_
         _run_build(command, env, log, repo)
         if (source_commit, source_dirty) != _source_state(repo):
             raise HostError('source_changed', 'Source identity changed during compilation; use a fresh build', stage='compile')
-        artifact = repo / "artifacts" / ("wiiu-guest" if image else "wiiu-guest-audio" if guest_audio else "wiiu-install" if install_only else "wiiu-m1" if m1_only else "wiiu-audio-streams" if stream_audio else "wiiu-audio" if audio_only else "wiiu-scene" if scene_only else "wiiu") / (target+".rpx")
+        artifact = repo / "artifacts" / ("wiiu-guest" if image else "wiiu-guest-stream" if guest_stream else "wiiu-guest-audio" if guest_audio else "wiiu-install" if install_only else "wiiu-m1" if m1_only else "wiiu-audio-streams" if stream_audio else "wiiu-audio" if audio_only else "wiiu-scene" if scene_only else "wiiu") / (target+".rpx")
         if work: artifact=work/"wiiu"/(target+".rpx")
         _validate_rpx(artifact)
         shutil.copy2(artifact, staging / artifact.name)
@@ -194,13 +199,26 @@ def prototype(output: str | Path, guest_path=None, *, backend="original", audio_
             shutil.copy2(shortcut, staging / shortcut.name)
             published.append(staging / shortcut.name)
         shutil.copy2(log, staging / "build.log")
+        if guest_stream:
+            guide=staging/"READ_ME.txt"
+            guide.write_text(
+                "CTR2WUP Live Guest Audio\n\n"
+                "Launch the WUHB with Aroma. Keep TV and GamePad sound audible. "
+                "The original ARM guest repeats while audio is streamed; no ROM or keys are needed.\n\n"
+                "X pauses/resumes. A finishes the current guest session and drains playback. "
+                "After draining, Plus starts a new run; R/L records correct/incorrect sound. Minus exits. "
+                "Return the single SD folder ctr2wup/guest-stream/results/ by FTP.\n\n"
+                "A foreground interruption invalidates the run. Underruns are recorded and play silence. "
+                "This experimental original profile does not establish commercial game support, "
+                "installed-title exit or physical audio acceptance.\n",encoding="utf-8")
+            published.append(guide)
         manifest = {"schema_version": 1, "ok": True, "stage": "complete",
-                    "target": "guest-fixture" if image else "guest-audio" if guest_audio else "install-check" if install_only else "m1-check" if m1_only else "audio-stream-check" if stream_audio else "audio-check" if audio_only else "scene-check" if scene_only else "prototype", "package_format": "RPX",
+                    "target": "guest-fixture" if image else "guest-audio-stream" if guest_stream else "guest-audio" if guest_audio else "install-check" if install_only else "m1-check" if m1_only else "audio-stream-check" if stream_audio else "audio-check" if audio_only else "scene-check" if scene_only else "prototype", "package_format": "RPX",
                     "host_version": __version__, "runtime_version": __version__,
                     "source_commit": source_commit, "source_dirty": source_dirty,
                     "translator_version": ("external-abi4-checked-v1" if backend=="upstream" else "bounded-aot-v2") if image else None,
                     "backend":backend,"generation":generation,
-                    "profile": "ctr2wup-framebuffer-fixture-v1" if image else "original-guest-dsp-pcm-v1" if guest_audio else "native-install" if install_only else "native-m1" if m1_only else "native-audio-streams" if stream_audio else "native-audio-check" if audio_only else "owned-software-scenes-v1" if scene_only else "native-diagnostics",
+                    "profile": "ctr2wup-framebuffer-fixture-v1" if image else "original-guest-dsp-stream-v1" if guest_stream else "original-guest-dsp-pcm-v1" if guest_audio else "native-install" if install_only else "native-m1" if m1_only else "native-audio-streams" if stream_audio else "native-audio-check" if audio_only else "owned-software-scenes-v1" if scene_only else "native-diagnostics",
                     "input_identity": image["inspection"]["identity"] if image else None,
                     "executable_revision": image["inspection"]["executable_revision"] if image else None,
                     "package_identity": None,

@@ -20,6 +20,12 @@ PICA_HOMEBREW ?= 0
 AUDIO_ONLY ?= 0
 STREAM_AUDIO ?= 0
 GUEST_AUDIO ?= 0
+GUEST_STREAM ?= 0
+ifeq ($(GUEST_STREAM),1)
+ifneq ($(GUEST_AUDIO),1)
+$(error GUEST_STREAM requires GUEST_AUDIO=1)
+endif
+endif
 M1_ONLY ?= 0
 INSTALL_ONLY ?= 0
 SCENE_ONLY ?= 0
@@ -133,6 +139,10 @@ $(error GUEST_AUDIO requires its own original DSP profile)
 endif
 APP_NAME := CTR2WUP Guest Audio $(APP_VERSION)
 SOURCES := guest_audio.c retained_logs.c diagnostic_display.c diagnostic_font.c diagnostic_audio.c audio_stream_diagnostic.c viewport.c image_scale.c test_lifecycle.c test_report.c test_result.c report_storage.c
+ifeq ($(GUEST_STREAM),1)
+APP_NAME := CTR2WUP Live Guest Audio $(APP_VERSION)
+SOURCES := guest_audio_stream.c native_audio_stream.c diagnostic_display.c diagnostic_font.c diagnostic_audio.c viewport.c image_scale.c test_lifecycle.c test_report.c test_result.c report_storage.c
+endif
 endif
 ifeq ($(GX2_GUEST),1)
 SOURCES += gx2_scene.c

@@ -3,4 +3,7 @@
 #include <stdint.h>
 int AXIsInit(void);
 uint32_t AXGetInputSamplesPerSec(void);
+uint32_t AXGetInputSamplesPerFrame(void);
+int AXRegisterAppFrameCallback(void (*callback)(void));
+int AXDeregisterAppFrameCallback(void (*callback)(void));
 #endif

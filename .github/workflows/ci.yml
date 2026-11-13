@@ -448,6 +448,15 @@ jobs:
             --sdk-receipt "$DEVKITPRO/ctr2wup-image-digest.txt" --sdk-licenses "$DEVKITPRO/licenses" \
             --dumper artifacts/ci/dumper.zip --dumper-source artifacts/ci/dumper-source.zip \
             --output artifacts/ci/runtime-round
+      - name: Build live guest-to-AX streaming
+        run: python -m host build --target guest-audio-stream --output artifacts/ci/guest-audio-stream
+      - name: Upload live guest audio
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wiiu-guest-audio-stream-${{ github.sha }}
+          path: artifacts/ci/guest-audio-stream/
+          retention-days: 30
+          if-no-files-found: error
       - name: Upload the focused automatic runtime round
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

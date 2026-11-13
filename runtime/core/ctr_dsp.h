@@ -20,6 +20,8 @@ typedef struct {
 bool ctr_dsp_request(ctr_guest *g,unsigned session,const uint32_t *words,
                      uint32_t command,uint32_t *out,unsigned *count);
 bool ctr_dsp_poll(ctr_guest *g,uint64_t now_ns);
+/* Pending frame's exact guest-clock deadline; leaves output unchanged if idle. */
+bool ctr_dsp_next_deadline(const ctr_guest *g,uint64_t *deadline_ns);
 /* Signal the retained DSP semaphore event, including through duplicated
  * handles. False means an ordinary event; handled=true distinguishes errors. */
 bool ctr_dsp_signal(ctr_guest *g,unsigned event,bool *handled);

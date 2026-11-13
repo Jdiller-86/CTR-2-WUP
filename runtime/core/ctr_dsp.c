@@ -337,6 +337,11 @@ bool ctr_dsp_poll(ctr_guest *g,uint64_t now_ns) {
     if(!g || !g->dsp || !g->dsp->stats.pending || now_ns<g->dsp->deadline)return true;
     return frame(g);
 }
+bool ctr_dsp_next_deadline(const ctr_guest *g,uint64_t *out) {
+    if(!g || !g->dsp || !g->dsp->stats.pending || !out ||
+       (uintptr_t)out%_Alignof(uint64_t) || host_alias(g,out,sizeof(*out)))return false;
+    *out=g->dsp->deadline;return true;
+}
 bool ctr_dsp_signal(ctr_guest *g,unsigned event,bool *handled) {
     struct ctr_guest_dsp *d=g->dsp;*handled=d && d->sem_live && d->sem==event;
     if(!*handled)return false;
