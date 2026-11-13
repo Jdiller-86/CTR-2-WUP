@@ -9,9 +9,9 @@ SOURCES := $(CTR_RUNTIME_SOURCES) test_assets.c $(addprefix ../../runtime/core/,
 $(OUT):
 	mkdir -p "$@"
 $(OUT)/assets: $(SOURCES) ../test_platform.h | $(OUT)
-	$(CC) $(FLAGS) $(SOURCES) -o "$@"
+	$(CC) $(FLAGS) $(SOURCES) -lm -o "$@"
 check: $(OUT)/assets
 	"$(OUT)/assets"
 sanitize: | $(OUT)
-	$(CC) $(FLAGS) -O1 -fno-omit-frame-pointer -fsanitize=address,undefined $(SOURCES) -o "$(OUT)/assets-san"
+	$(CC) $(FLAGS) -O1 -fno-omit-frame-pointer -fsanitize=address,undefined $(SOURCES) -lm -o "$(OUT)/assets-san"
 	ASAN_OPTIONS=detect_leaks=1 "$(OUT)/assets-san"

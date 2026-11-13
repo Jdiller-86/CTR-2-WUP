@@ -26,8 +26,8 @@ def main():
     source.write_text('#include "ctr_cpu.h"\nconst ctr_block_fn ctr_reference_functions[]={0};\n')
     library=out/'oracle.so'
     command=shlex.split(a.cc)+['-std=c11','-O2','-Wall','-Wextra','-Werror','-shared','-fPIC',
-        '-I'+str(ROOT/'runtime/core'),str(ROOT/'runtime/core/ctr_cpu.c'),
-        str(ROOT/'runtime/core/ctr_memory.c'),str(ROOT/'tests/multiple/oracle_bridge.c'),str(source),'-o',str(library)]
+        '-I'+str(ROOT/'runtime/core'),str(ROOT/'runtime/core/ctr_cpu.c'),str(ROOT/'runtime/core/ctr_vfp.c'),
+        str(ROOT/'runtime/core/ctr_memory.c'),str(ROOT/'tests/multiple/oracle_bridge.c'),str(source),'-lm','-o',str(library)]
     p=subprocess.run(command,capture_output=True,text=True)
     (out/'compile.log').write_text(p.stdout+p.stderr)
     if p.returncode:raise RuntimeError('Reference bridge compile failed')

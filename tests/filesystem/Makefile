@@ -8,9 +8,9 @@ SOURCES := $(CTR_RUNTIME_SOURCES) test_filesystem.c $(addprefix $(ROOT)/runtime/
 $(OUT):
 	mkdir -p "$@"
 $(OUT)/filesystem-tests: $(SOURCES) $(CTR_RUNTIME_MANIFEST) $(wildcard $(ROOT)/runtime/core/*.h) | $(OUT)
-	$(CC) $(FLAGS) $(SOURCES) -o "$@"
+	$(CC) $(FLAGS) $(SOURCES) -lm -o "$@"
 check: $(OUT)/filesystem-tests
 	"$(OUT)/filesystem-tests"
 sanitize: | $(OUT)
-	$(CC) $(FLAGS) -O1 -fno-omit-frame-pointer -fsanitize=address,undefined $(SOURCES) -o "$(OUT)/filesystem-tests-sanitized"
+	$(CC) $(FLAGS) -O1 -fno-omit-frame-pointer -fsanitize=address,undefined $(SOURCES) -lm -o "$(OUT)/filesystem-tests-sanitized"
 	ASAN_OPTIONS=detect_leaks=1 "$(OUT)/filesystem-tests-sanitized"

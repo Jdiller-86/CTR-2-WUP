@@ -9,7 +9,9 @@ class TranslatorTests(unittest.TestCase):
         for instruction,action in ((0xE1C100B0,'store'),(0xE1D120B2,'load'),(0xE18230B7,'store'),(0xE19230B7,'load')):
             s=translate(struct.pack('<I',instruction),0x1000,'halfword',False)
             self.assertIn('ctr_cpu_'+action+'_data(cpu, address, 2u,',s)
-        for instruction in (0xE0C100B0,0xE18100BF,0xE1E100B0,0xE1C1F0B0):
+        for instruction in (0xE0C100B0,0xE1E100B0):
+            self.assertIn('ctr_cpu_transfer',translate(struct.pack('<I',instruction),0x1000,'writeback',False))
+        for instruction in (0xE18100BF,0xE1C1F0B0,0xE1F110B2):
             with self.assertRaises(ValueError):translate(struct.pack('<I',instruction),0x1000,'invalid_halfword',False)
     def test_user_tls_read_is_specialized(self):
         source=translate(struct.pack("<I", 0xEE1D6F70), 0x1000, "tls_probe", False)
@@ -17,7 +19,7 @@ class TranslatorTests(unittest.TestCase):
         self.assertNotIn("ctr_cpu_step", source)
 
     def test_tls_write_flag_destination_and_cache_operations_are_rejected(self):
-        for instruction in (0xEE0D0F70, 0xEE1DFF70, 0xEE070F15, 0xEE1D0F50):
+        for instruction in (0xEE0D0F70, 0xEE1DFF70, 0xEE070F15, 0xEE1D0F50, 0xE14F0000):
             with self.assertRaises(ValueError):
                 translate(struct.pack("<I", instruction), 0x1000, "invalid_tls", False)
 
@@ -30,8 +32,9 @@ class TranslatorTests(unittest.TestCase):
             self.assertEqual(translate((root / source).read_bytes(), base, symbol, thumb), (root / output).read_text())
 
     def test_reject_unsupported_vfp(self):
-        with self.assertRaisesRegex(ValueError, "0x00001000 ARM instruction"):
-            translate(struct.pack("<I", 0xEE300A00), 0x1000, "test", False)
+        for instruction in (0xEE300B20,0xEEB40B60):
+            with self.assertRaisesRegex(ValueError, "0x00001000 ARM instruction"):
+                translate(struct.pack("<I", instruction), 0x1000, "test", False)
 
     def test_reject_unknown_thumb(self):
         with self.assertRaisesRegex(ValueError, "Thumb instruction"):
