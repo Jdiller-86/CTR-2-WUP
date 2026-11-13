@@ -8,6 +8,7 @@
 static unsigned checks,acquires,frees,fail_acquire;
 #define CHECK(x) do { ++checks;if(!(x)) { fprintf(stderr,"stream line %d: %s\n",__LINE__,#x);exit(1); } } while(0)
 static bool initialized=true;
+static bool just_started[2];
 static AXVoice voices[2];
 static void (*callback)(void);
 static int16_t input[CTR_NATIVE_STREAM_FRAMES*2];
@@ -23,7 +24,7 @@ AXVoice *AXAcquireVoice(uint32_t priority,void (*f)(void *),void *context) {
     CHECK(false);return NULL;
 }
 void AXFreeVoice(AXVoice *v) { CHECK(initialized && v->live && !v->running);v->live=false;++frees; }
-void AXSetVoiceState(AXVoice *v,uint32_t state) { CHECK(initialized && v->live);v->running=state!=0; }
+void AXSetVoiceState(AXVoice *v,uint32_t state) { CHECK(initialized && v->live);v->running=state!=0;just_started[v->slot]=state!=0; }
 bool AXCheckVoiceOffsets(AXVoiceOffsets *o) { return o->dataType==AX_VOICE_FORMAT_LPCM16 && o->loopingEnabled==AX_VOICE_LOOP_ENABLED; }
 void AXSetVoiceOffsets(AXVoice *v,AXVoiceOffsets *o) { CHECK(!v->running);v->offsets=*o; }
 void AXSetVoiceSrcType(AXVoice *v,uint32_t type) { CHECK(v->live && type==AX_VOICE_SRC_TYPE_NONE); }
@@ -33,7 +34,7 @@ AXResult AXSetVoiceDeviceMix(AXVoice *v,uint32_t device,uint32_t id,AXVoiceDevic
     CHECK(!id && mix[v->slot].bus[0].volume==0x8000 && (device==0 || device==1));return 0;
 }
 void AXGetVoiceOffsets(AXVoice *v,AXVoiceOffsets *o) { CHECK(v->live);*o=v->offsets; }
-bool AXIsVoiceRunning(AXVoice *v) { return v->running; }
+bool AXIsVoiceRunning(AXVoice *v) { return v->running && !just_started[v->slot]; }
 void AXSetVoiceEndOffset(AXVoice *v,uint32_t offset) { v->offsets.endOffset=offset; }
 void AXSetVoiceLoopOffset(AXVoice *v,uint32_t offset) { v->offsets.loopOffset=offset; }
 void DCFlushRange(const void *p,uint32_t bytes) {
@@ -50,6 +51,7 @@ void DCFlushRange(const void *p,uint32_t bytes) {
 /* A small AX model consumes actual published PCM and follows inclusive ends
  * and loop offsets. It invokes the callback before each 144-sample render. */
 static void tick(int expected,bool check_samples) {
+    just_started[0]=just_started[1]=false;
     CHECK(callback!=NULL);callback();
     for(unsigned i=0;i<144;++i)for(unsigned c=0;c<2;++c)if(voices[c].running) {
         AXVoiceOffsets *o=&voices[c].offsets;

@@ -45,6 +45,9 @@ static void frame(void) {
     if(!atomic_load(&s->started) || atomic_load(&s->paused)) {
         for(unsigned c=0;c<2;++c)AXSetVoiceState(s->voices[c],AX_VOICE_STATE_PLAYING);
         atomic_store(&s->started,true);atomic_store(&s->paused,false);
+        /* AX may report the prior stopped state until this render completes.
+         * Initial/paused loop targets are already configured and immutable. */
+        goto done;
     }
     AXVoiceOffsets offsets[2];
     for(unsigned c=0;c<2;++c)AXGetVoiceOffsets(s->voices[c],&offsets[c]);
