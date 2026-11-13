@@ -25,6 +25,7 @@ typedef struct {
     uint64_t fallback_instructions;
     uint64_t exclusive_generation;
     uint32_t exclusive_address;
+    unsigned exclusive_size;
     bool exclusive_valid;
     ctr_mem_result memory_fault;
     ctr_cpu_log_fn log;
@@ -51,6 +52,20 @@ uint32_t ctr_cpu_byte_parallel(ctr_cpu *cpu,uint32_t left,uint32_t right,bool su
 uint32_t ctr_cpu_byte_select(const ctr_cpu *cpu,uint32_t left,uint32_t right);
 int64_t ctr_cpu_signed_half(uint32_t word,unsigned high);
 uint32_t ctr_cpu_half_accumulate(ctr_cpu *cpu,uint32_t left,uint32_t right,uint32_t accumulator,unsigned x,unsigned y);
+uint32_t ctr_cpu_extend(uint32_t value,unsigned kind,unsigned rotation,uint32_t base,bool add);
+uint32_t ctr_cpu_reverse(uint32_t value,unsigned kind);
+unsigned ctr_cpu_clz(uint32_t value);
+uint32_t ctr_cpu_saturating(ctr_cpu *cpu,uint32_t left,uint32_t right,unsigned operation);
+uint32_t ctr_cpu_saturate(ctr_cpu *cpu,uint32_t value,unsigned bits,bool is_unsigned);
+uint32_t ctr_cpu_parallel(ctr_cpu *cpu,uint32_t left,uint32_t right,unsigned mode,unsigned operation);
+ctr_cpu_result ctr_cpu_multiply_long(ctr_cpu *cpu,unsigned lo,unsigned hi,uint32_t left,uint32_t right,
+                                    bool is_signed,bool accumulate,bool flags,bool umaal,uint32_t opcode);
+ctr_cpu_result ctr_cpu_transfer(ctr_cpu *cpu,unsigned base,unsigned reg,uint32_t offset,unsigned width,
+    bool load,bool sign,bool pre,bool writeback,bool up,uint32_t opcode);
+ctr_cpu_result ctr_cpu_exclusive(ctr_cpu *cpu,unsigned base,unsigned result,unsigned source,unsigned width,bool load,uint32_t opcode);
+ctr_cpu_result ctr_cpu_swap(ctr_cpu *cpu,unsigned base,unsigned result,unsigned source,unsigned width,uint32_t opcode);
+ctr_cpu_result ctr_cpu_dsp_multiply(ctr_cpu *cpu,unsigned kind,unsigned dest,unsigned accumulator,
+    unsigned left,unsigned right,unsigned control,uint32_t opcode);
 ctr_cpu_result ctr_cpu_fp_transfer(ctr_cpu *cpu,unsigned first,unsigned words,uint32_t address,bool load,uint32_t opcode);
 void ctr_cpu_barrier(void);
 void ctr_cpu_logic_flags(ctr_cpu *cpu, uint32_t value, unsigned carry);

@@ -6,6 +6,12 @@ Commercial games and the GUI are not supported yet.
 
 ## Current work
 
+The initial ARMv6K/Thumb integer interpreter and original AOT path cover arithmetic,
+media/DSP multiply, normal signed/unsigned memory addressing, typed exclusives and
+long calls ([#17](https://github.com/Jdiller-86/CTR-2-WUP/issues/17)). Remaining CPU
+work is broader reference coverage, VFP arithmetic/controls, observed title gaps
+and Espresso performance; the complete CPU gate is not accepted by this baseline.
+
 1. **Connect guest audio** ([#25](https://github.com/Jdiller-86/CTR-2-WUP/issues/25)).
    The checked CSTM/ADPCM mixer and bounded original NDSP PCM service exist,
    including queued voices, bounded linear/direct PCM rates, unity-rate mono

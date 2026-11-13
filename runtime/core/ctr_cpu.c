@@ -6,6 +6,7 @@
 void ctr_cpu_init(ctr_cpu *cpu, ctr_memory *memory) {
     memset(cpu, 0, sizeof(*cpu));
     cpu->memory = memory;
+    cpu->exclusive_size=4;
     cpu->module_hash = "unidentified";
 }
 
@@ -118,6 +119,175 @@ ctr_cpu_result ctr_cpu_store(ctr_cpu *cpu, uint32_t address, unsigned width, uin
 static uint32_t read_register(const ctr_cpu *cpu, unsigned reg, bool thumb) {
     return cpu->r[reg] + (reg == 15u ? (thumb ? 4u : 8u) : 0u);
 }
+ctr_cpu_result ctr_cpu_exclusive(ctr_cpu *cpu,unsigned rn,unsigned rd,unsigned rm,unsigned width,bool load,uint32_t opcode) {
+    if(rn>=15 || rd>=15 || (!load && (rm>=15 || rd==rn || rd==rm)) ||
+       (width!=1 && width!=2 && width!=4 && width!=8) ||
+       (width==8 && (load?((rd&1u) || rd>=14):((rm&1u) || rm>=14 || rd==rm+1))))
+        return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,opcode);
+    uint32_t address=cpu->r[rn];
+    bool valid=cpu->exclusive_valid && cpu->exclusive_address==address && cpu->exclusive_size==width &&
+        cpu->exclusive_generation==cpu->memory->generation;
+    if(!load)cpu->exclusive_valid=false;
+    if(load || valid) {
+        ctr_mem_result fault=(address&(width-1))?CTR_MEM_ALIGNMENT:
+            ctr_memory_check_range(cpu->memory,address,width,load?CTR_MEM_READ:CTR_MEM_WRITE);
+        if(fault!=CTR_MEM_OK) { cpu->memory_fault=fault;return ctr_cpu_stop(cpu,CTR_CPU_MEMORY_FAULT,address); }
+        for(unsigned i=0;i<(width==8?2u:1u);++i) {
+            ctr_cpu_result result=load?ctr_cpu_load(cpu,address+i*4,width==8?4:width,&cpu->r[rd+i]):
+                ctr_cpu_store(cpu,address+i*4,width==8?4:width,cpu->r[rm+i]);
+            if(result!=CTR_CPU_OK)return result;
+        }
+    }
+    if(load) {
+        cpu->exclusive_valid=true;cpu->exclusive_address=address;cpu->exclusive_size=width;
+        cpu->exclusive_generation=cpu->memory->generation;
+    } else cpu->r[rd]=valid?0:1;
+    return CTR_CPU_OK;
+}
+ctr_cpu_result ctr_cpu_swap(ctr_cpu *cpu,unsigned rn,unsigned rd,unsigned rm,unsigned width,uint32_t opcode) {
+    if(rn>=15 || rd>=15 || rm>=15 || rn==rd || rn==rm || (width!=1 && width!=4))return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,opcode);
+    uint32_t address=cpu->r[rn],value=cpu->r[rm],previous;
+    ctr_mem_result fault=(address&(width-1))?CTR_MEM_ALIGNMENT:
+        ctr_memory_check_range(cpu->memory,address,width,CTR_MEM_READ|CTR_MEM_WRITE);
+    if(fault!=CTR_MEM_OK) { cpu->memory_fault=fault;return ctr_cpu_stop(cpu,CTR_CPU_MEMORY_FAULT,address); }
+    ctr_cpu_result result=ctr_cpu_load(cpu,address,width,&previous);
+    if(result==CTR_CPU_OK)result=ctr_cpu_store(cpu,address,width,value);
+    if(result==CTR_CPU_OK)cpu->r[rd]=previous;
+    return result;
+}
+static int64_t signed_word(uint32_t value) {
+    return value&0x80000000u?(int64_t)value-INT64_C(4294967296):(int64_t)value;
+}
+unsigned ctr_cpu_clz(uint32_t value) {
+    unsigned count=0;while(count<32 && !(value&0x80000000u)) { ++count;value<<=1; }return count;
+}
+uint32_t ctr_cpu_reverse(uint32_t value,unsigned kind) {
+    uint32_t pairs=((value&0x00ff00ffu)<<8)|((value>>8)&0x00ff00ffu);
+    if(kind==0)return (pairs<<16)|(pairs>>16);
+    if(kind==1)return pairs;
+    pairs&=0xffffu;return pairs&0x8000u?pairs|0xffff0000u:pairs;
+}
+uint32_t ctr_cpu_extend(uint32_t value,unsigned kind,unsigned rotation,uint32_t base,bool add) {
+    unsigned ignored;value=ctr_cpu_shift(value,3,rotation,false,0,&ignored);
+    unsigned bits=kind&1u?16:8;uint32_t mask=(1u<<bits)-1u;
+    uint32_t low=value&mask;
+    if(!(kind&4u) && (low&(1u<<(bits-1))))low|=~mask;
+    if(kind&2u)return low+(add?base:0);
+    uint32_t high=(value>>16)&255u;
+    if(!(kind&4u) && (high&128u))high|=0xffffff00u;
+    return ((low+(add?base&0xffffu:0))&0xffffu)|((high+(add?base>>16:0))<<16);
+}
+static int64_t saturate_word(ctr_cpu *cpu,int64_t value) {
+    if(value>INT32_MAX) { cpu->cpsr|=0x08000000u;return INT32_MAX; }
+    if(value<INT32_MIN) { cpu->cpsr|=0x08000000u;return INT32_MIN; }return value;
+}
+uint32_t ctr_cpu_saturating(ctr_cpu *cpu,uint32_t left,uint32_t right,unsigned operation) {
+    int64_t a=signed_word(left),b=signed_word(right);
+    if(operation&2u)b=saturate_word(cpu,b*2);
+    return (uint32_t)saturate_word(cpu,(operation&1u)?a-b:a+b);
+}
+uint32_t ctr_cpu_saturate(ctr_cpu *cpu,uint32_t value,unsigned bits,bool is_unsigned) {
+    int64_t n=signed_word(value),lo=is_unsigned?0:-(INT64_C(1)<<(bits-1));
+    int64_t hi=(INT64_C(1)<<(is_unsigned?bits:bits-1))-1;
+    if(n<lo) { n=lo;cpu->cpsr|=0x08000000u; }
+    if(n>hi) { n=hi;cpu->cpsr|=0x08000000u; }return (uint32_t)n;
+}
+uint32_t ctr_cpu_parallel(ctr_cpu *cpu,uint32_t left,uint32_t right,unsigned mode,unsigned op) {
+    unsigned bits=op&4u?8:16;uint32_t mask=(1u<<bits)-1,result=0,ge=0;
+    bool unsign=(mode&4u)!=0;unsigned action=mode&3u;
+    for(unsigned lane=0;lane<32/bits;++lane) {
+        unsigned other=(bits==16 && (op==1 || op==2))?lane^1u:lane;
+        uint32_t a=(left>>(lane*bits))&mask,b=(right>>(other*bits))&mask;
+        int64_t x=a,y=b;
+        if(!unsign) { if(a&(1u<<(bits-1)))x-=1u<<bits;if(b&(1u<<(bits-1)))y-=1u<<bits; }
+        bool sub=op==3 || op==7 || (op==1 && lane==0) || (op==2 && lane==1);
+        int64_t n=sub?x-y:x+y;
+        if(action==1 && (unsign?(sub?n>=0:n>mask):n>=0))ge|=(bits==16?3u:1u)<<(lane*(bits/8));
+        if(action==2) {
+            int64_t lo=unsign?0:-(INT64_C(1)<<(bits-1)),hi=unsign?mask:(INT64_C(1)<<(bits-1))-1;
+            if(n<lo)n=lo;
+            if(n>hi)n=hi;
+        } else if(action==3)n=n>=0?n/2:-((-n+1)/2);
+        result|=((uint32_t)n&mask)<<(lane*bits);
+    }
+    if(action==1)cpu->cpsr=(cpu->cpsr&~0x000f0000u)|(ge<<16);
+    return result;
+}
+ctr_cpu_result ctr_cpu_multiply_long(ctr_cpu *cpu,unsigned lo,unsigned hi,uint32_t left,uint32_t right,
+                                    bool is_signed,bool accumulate,bool flags,bool umaal,uint32_t opcode) {
+    if(lo>=15 || hi>=15 || lo==hi)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,opcode);
+    uint64_t value=is_signed?(uint64_t)(signed_word(left)*signed_word(right)):(uint64_t)left*right;
+    if(umaal)value+=(uint64_t)cpu->r[lo]+cpu->r[hi];
+    else if(accumulate)value+=((uint64_t)cpu->r[hi]<<32)|cpu->r[lo];
+    cpu->r[lo]=(uint32_t)value;cpu->r[hi]=(uint32_t)(value>>32);
+    if(flags)cpu->cpsr=(cpu->cpsr&~(CTR_FLAG_N|CTR_FLAG_Z))|
+        (cpu->r[hi]&CTR_FLAG_N)|(value?0:CTR_FLAG_Z);
+    return CTR_CPU_OK;
+}
+ctr_cpu_result ctr_cpu_dsp_multiply(ctr_cpu *cpu,unsigned kind,unsigned rd,unsigned ra,
+    unsigned rm,unsigned rs,unsigned control,uint32_t opcode) {
+    bool pair=kind==3 || kind==6 || kind==7;
+    if(kind>10 || rd>=15 || rm>=15 || rs>=15 || ra>15 ||
+       (pair && (ra==15 || ra==rd)) || ((kind==1 || kind==9) && ra==15))
+        return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,opcode);
+    uint32_t a=cpu->r[rm],b=cpu->r[rs];int64_t value=0;
+    if(kind==0 || kind==3)value=ctr_cpu_signed_half(a,control&1)*ctr_cpu_signed_half(b,(control>>1)&1);
+    else if(kind==1 || kind==2) {
+        value=signed_word(a)*ctr_cpu_signed_half(b,control&1);
+        value=value>=0?value/65536:-((-value+65535)/65536);
+        if(kind==1)value+=signed_word(cpu->r[ra]);
+    } else if(kind>=4 && kind<=7) {
+        int64_t low=ctr_cpu_signed_half(a,0)*ctr_cpu_signed_half(b,control&1);
+        int64_t high=ctr_cpu_signed_half(a,1)*ctr_cpu_signed_half(b,(control&1)^1u);
+        value=(kind==5 || kind==7)?low-high:low+high;
+        if(kind<=5 && ra!=15)value+=signed_word(cpu->r[ra]);
+    } else if(kind==8 || kind==9) {
+        uint64_t product=(uint64_t)(signed_word(a)*signed_word(b));
+        uint64_t acc=ra==15?0:(uint64_t)cpu->r[ra]<<32;
+        uint64_t result=kind==9?acc-product:acc+product;
+        if(control&1)result+=UINT64_C(0x80000000);
+        cpu->r[rd]=(uint32_t)(result>>32);return CTR_CPU_OK;
+    } else {
+        for(unsigned i=0;i<4;++i) {
+            int x=(int)((a>>(i*8))&255),y=(int)((b>>(i*8))&255);value+=x>y?x-y:y-x;
+        }
+        cpu->r[rd]=(uint32_t)value+(ra==15?0:cpu->r[ra]);return CTR_CPU_OK;
+    }
+    if(pair) {
+        uint64_t result=(((uint64_t)cpu->r[rd]<<32)|cpu->r[ra])+(uint64_t)value;
+        cpu->r[ra]=(uint32_t)result;cpu->r[rd]=(uint32_t)(result>>32);
+    } else {
+        if((kind==1 || kind==4 || kind==5) && (value>INT32_MAX || value<INT32_MIN))cpu->cpsr|=0x08000000u;
+        cpu->r[rd]=(uint32_t)value;
+    }
+    return CTR_CPU_OK;
+}
+ctr_cpu_result ctr_cpu_transfer(ctr_cpu *cpu,unsigned rn,unsigned rd,uint32_t offset,unsigned width,
+    bool load,bool sign,bool pre,bool writeback,bool up,uint32_t opcode) {
+    if(rn>15 || rd>15 || (width!=1 && width!=2 && width!=4 && width!=8) ||
+       (writeback && (rn==15 || (load && rn==rd))) ||
+       (rd==15 && (width!=4 || sign)) || (sign && (!load || width==4 || width==8)) ||
+       (width==8 && ((rd&1u) || rd>=14 || (load && writeback && rn==rd+1))))
+        return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,opcode);
+    uint32_t base=read_register(cpu,rn,false),adjusted=up?base+offset:base-offset;
+    uint32_t address=pre?adjusted:base,value=read_register(cpu,rd,false);
+    if(width==8) {
+        if(address&7u) { cpu->memory_fault=CTR_MEM_ALIGNMENT;return ctr_cpu_stop(cpu,CTR_CPU_MEMORY_FAULT,address); }
+        for(unsigned i=0;i<2;++i) {
+            ctr_cpu_result result=load?ctr_cpu_load(cpu,address+i*4,4,&cpu->r[rd+i]):
+                ctr_cpu_store(cpu,address+i*4,4,cpu->r[rd+i]);
+            if(result!=CTR_CPU_OK)return result;
+        }
+    } else {
+        ctr_cpu_result result=load?(rd==15?ctr_cpu_load(cpu,address,width,&value):ctr_cpu_load_data(cpu,address,width,&value)):
+            ctr_cpu_store_data(cpu,address,width,value);
+        if(result!=CTR_CPU_OK)return result;
+        if(sign && (value&(1u<<(width*8-1))))value|=width==1?0xffffff00u:0xffff0000u;
+        if(load) { if(rd==15)ctr_cpu_branch_exchange(cpu,value);else cpu->r[rd]=value; }
+    }
+    if(writeback)cpu->r[rn]=adjusted;
+    return CTR_CPU_OK;
+}
 ctr_cpu_result ctr_cpu_load_data(ctr_cpu *cpu,uint32_t address,unsigned width,uint32_t *value) {
     ctr_mem_result result=ctr_memory_read_data(cpu->memory,address,width,value);
     if(result==CTR_MEM_OK)return CTR_CPU_OK;
@@ -181,9 +351,96 @@ ctr_cpu_result ctr_cpu_multiple(ctr_cpu *cpu,unsigned rn,uint16_t registers,
 static ctr_cpu_result arm_step(ctr_cpu *cpu, uint32_t insn) {
     uint32_t pc = cpu->r[15], next = pc + 4u;
     unsigned cond = insn >> 28;
-    if (cond == 15u) return ctr_cpu_stop(cpu, CTR_CPU_UNSUPPORTED, insn);
+    if(cond==15u) {
+        if((insn&0xfe000000u)==0xfa000000u) {
+            uint32_t offset=((insn&0xffffffu)<<2)|((insn>>23)&2u);
+            if(offset&0x2000000u)offset|=0xfc000000u;
+            cpu->r[14]=next;ctr_cpu_branch_exchange(cpu,(pc+8+offset)|1u);return CTR_CPU_OK;
+        }
+        if(insn==0xf57ff01fu) { cpu->exclusive_valid=false;cpu->r[15]=next;return CTR_CPU_OK; }
+        if((insn&0xfd70f000u)==0xf550f000u) { cpu->r[15]=next;return CTR_CPU_OK; }
+        return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
+    }
     if (!ctr_cpu_condition(cpu, cond)) { cpu->r[15] = next; return CTR_CPU_OK; }
-    if((insn&0x0fff0fffu)==0x0e070f9au || (insn&0x0fff0fffu)==0x0e070fbau) {
+    uint32_t dsp=insn&0x0ff00090u;unsigned dsp_kind=11,control=0;
+    if(dsp==0x01600080u) { dsp_kind=0;control=((insn>>5)&3); }
+    else if(dsp==0x01200080u) { dsp_kind=insn&0x20u?2:1;control=(insn>>6)&1; }
+    else if(dsp==0x01400080u) { dsp_kind=3;control=(insn>>5)&3; }
+    else if(dsp==0x07000010u || dsp==0x07400010u) { dsp_kind=(dsp==0x07000010u?4:6)+((insn>>6)&1);control=(insn>>5)&1; }
+    else if((insn&0x0ff00010u)==0x07500010u && ((insn>>6)&3u)%3u==0) {
+        dsp_kind=insn&0x40u?9:8;control=(insn>>5)&1;
+    } else if((insn&0x0ff000f0u)==0x07800010u)dsp_kind=10;
+    if(dsp_kind!=11) {
+        ctr_cpu_result result=ctr_cpu_dsp_multiply(cpu,dsp_kind,(insn>>16)&15,(insn>>12)&15,
+            insn&15,(insn>>8)&15,control,insn);
+        if(result==CTR_CPU_OK)cpu->r[15]=next;
+        return result;
+    }
+    if((insn&0x0fb00ff0u)==0x01000090u) {
+        ctr_cpu_result result=ctr_cpu_swap(cpu,(insn>>16)&15,(insn>>12)&15,insn&15,insn&0x400000u?1:4,insn);
+        if(result==CTR_CPU_OK)cpu->r[15]=next;
+        return result;
+    }
+    if((insn&0x0f900fffu)==0x01900f9fu || (insn&0x0f900ff0u)==0x01800f90u) {
+        static const unsigned widths[]={4,8,1,2};bool load=(insn&0x100000u)!=0;
+        ctr_cpu_result result=ctr_cpu_exclusive(cpu,(insn>>16)&15,(insn>>12)&15,load?0:insn&15,
+            widths[(insn>>21)&3],load,insn);
+        if(result==CTR_CPU_OK)cpu->r[15]=next;
+        return result;
+    }
+    if((insn&0x0f800f10u)==0x06000f10u) {
+        unsigned mode=(insn>>20)&7,op=(insn>>5)&7,rd=(insn>>12)&15,rn=(insn>>16)&15,rm=insn&15;
+        if(mode==0 || mode==4 || op==5 || op==6 || rd==15 || rn==15 || rm==15)
+            return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
+        cpu->r[rd]=ctr_cpu_parallel(cpu,cpu->r[rn],cpu->r[rm],mode,op);cpu->r[15]=next;return CTR_CPU_OK;
+    }
+    if((insn&0x0fa00030u)==0x06a00010u) {
+        unsigned rd=(insn>>12)&15,rm=insn&15,ignored,bits=(insn>>16)&31;bool unsign=(insn&0x400000u)!=0;
+        if(rd==15 || rm==15)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
+        uint32_t value=ctr_cpu_shift(cpu->r[rm],insn&0x40u?2:0,(insn>>7)&31,true,0,&ignored);
+        cpu->r[rd]=ctr_cpu_saturate(cpu,value,bits+(unsign?0:1),unsign);cpu->r[15]=next;return CTR_CPU_OK;
+    }
+    if((insn&0x0fb00ff0u)==0x06a00f30u) {
+        unsigned rd=(insn>>12)&15,rm=insn&15,bits=(insn>>16)&15;bool unsign=(insn&0x400000u)!=0;
+        if(rd==15 || rm==15)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
+        uint32_t value=0;
+        for(unsigned i=0;i<2;++i)value|=(ctr_cpu_saturate(cpu,(uint32_t)ctr_cpu_signed_half(cpu->r[rm],i),bits+(unsign?0:1),unsign)&0xffffu)<<(i*16);
+        cpu->r[rd]=value;cpu->r[15]=next;return CTR_CPU_OK;
+    }
+    if((insn&0x0ff00030u)==0x06800010u) {
+        unsigned rd=(insn>>12)&15,rn=(insn>>16)&15,rm=insn&15,ignored;bool top=(insn&0x40u)!=0;
+        if(rd==15 || rn==15 || rm==15)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
+        uint32_t value=ctr_cpu_shift(cpu->r[rm],top?2:0,(insn>>7)&31,true,0,&ignored);
+        cpu->r[rd]=top?(cpu->r[rn]&0xffff0000u)|(value&0xffffu):(cpu->r[rn]&0xffffu)|(value&0xffff0000u);
+        cpu->r[15]=next;return CTR_CPU_OK;
+    }
+    uint32_t special=insn&0x0fff0ff0u;
+    if(special==0x016f0f10u || special==0x06bf0f30u || special==0x06bf0fb0u || special==0x06ff0fb0u) {
+        unsigned rd=(insn>>12)&15,rm=insn&15;
+        if(rd==15 || rm==15)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
+        cpu->r[rd]=special==0x016f0f10u?ctr_cpu_clz(cpu->r[rm]):
+            ctr_cpu_reverse(cpu->r[rm],special==0x06bf0f30u?0:special==0x06bf0fb0u?1:2);
+        cpu->r[15]=next;return CTR_CPU_OK;
+    }
+    if((insn&0x0f900ff0u)==0x01000050u) {
+        unsigned rd=(insn>>12)&15,rn=(insn>>16)&15,rm=insn&15;
+        if(rd==15 || rn==15 || rm==15)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
+        cpu->r[rd]=ctr_cpu_saturating(cpu,cpu->r[rm],cpu->r[rn],(insn>>21)&3);
+        cpu->r[15]=next;return CTR_CPU_OK;
+    }
+    if((insn&0x0fbf0fffu)==0x010f0000u) {
+        unsigned rd=(insn>>12)&15;if(rd==15 || (insn&0x400000u))return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
+        cpu->r[rd]=cpu->cpsr;cpu->r[15]=next;return CTR_CPU_OK;
+    }
+    if((insn&0x0fb0fff0u)==0x0120f000u || (insn&0x0fb0f000u)==0x0320f000u) {
+        if((insn&0x400000u) || (!(insn&0x2000000u) && (insn&15u)==15))
+            return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
+        unsigned ignored;uint32_t value=insn&0x2000000u?
+            ctr_cpu_shift(insn&255u,3,((insn>>8)&15)*2,false,0,&ignored):cpu->r[insn&15];
+        uint32_t mask=(insn&0x80000u?0xf8000000u:0)|(insn&0x40000u?0x000f0000u:0);
+        cpu->cpsr=(cpu->cpsr&~mask)|(value&mask);cpu->r[15]=next;return CTR_CPU_OK;
+    }
+    if((insn&0x0fff0fffu)==0x0e070f9au || (insn&0x0fff0fffu)==0x0e070fbau || (insn&0x0fff0fffu)==0x0e070f95u) {
         if(((insn>>12)&15u)==15u)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
         ctr_cpu_barrier();cpu->r[15]=next;return CTR_CPU_OK;
     }
@@ -235,19 +492,13 @@ static ctr_cpu_result arm_step(ctr_cpu *cpu, uint32_t insn) {
         return CTR_CPU_OK;
     }
     uint32_t media=insn&0x0ff00ff0u;
-    uint32_t extend=insn&0x0fff03f0u;
-    if(extend==0x06af0070u || extend==0x06bf0070u ||
-       extend==0x06ef0070u || extend==0x06ff0070u) {
-        /* ARMv6 SXTB/SXTH/UXTB/UXTH, including ROR #0/8/16/24.
-           Adding/paired forms remain unsupported; none of these alter flags. */
+    unsigned kind=(insn>>20)&7u;
+    if((insn&0x0f8003f0u)==0x06800070u && kind!=1 && kind!=5) {
         unsigned rd=(insn>>12)&15u,rm=insn&15u;
         if(rd==15u || rm==15u)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
-        unsigned ignored;
-        uint32_t value=ctr_cpu_shift(cpu->r[rm],3,((insn>>10)&3u)*8u,false,0,&ignored);
-        uint32_t mask=(insn&0x00100000u)?0xffffu:0xffu;
-        value&=mask;
-        if(!(insn&0x00400000u) && (value&((mask+1u)>>1)))value|=~mask;
-        cpu->r[rd]=value;cpu->r[15]=next;return CTR_CPU_OK;
+        unsigned rn=(insn>>16)&15;
+        cpu->r[rd]=ctr_cpu_extend(cpu->r[rm],kind,((insn>>10)&3)*8,rn==15?0:cpu->r[rn],rn!=15);
+        cpu->r[15]=next;return CTR_CPU_OK;
     }
     if((insn&0x0ff00090u)==0x01000080u) { /* SMLAxy, signed halves and sticky Q. */
         unsigned rd=(insn>>16)&15,rn=(insn>>12)&15,rs=(insn>>8)&15,rm=insn&15;
@@ -270,33 +521,14 @@ static ctr_cpu_result arm_step(ctr_cpu *cpu, uint32_t insn) {
         if(result==CTR_CPU_OK && !(load && (insn&0x8000u)))cpu->r[15]=next;
         return result;
     }
-    /* ARMv6K word exclusives. A single deterministic guest CPU is modeled. */
-    if ((insn & UINT32_C(0x0ff00fff)) == UINT32_C(0x01900f9f)) {
-        unsigned rn = (insn >> 16) & 15u, rd = (insn >> 12) & 15u;
-        if (rn == 15u || rd == 15u) return ctr_cpu_stop(cpu, CTR_CPU_UNSUPPORTED, insn);
-        uint32_t address = cpu->r[rn];
-        ctr_cpu_result result = ctr_cpu_load(cpu, address, 4u, &cpu->r[rd]);
-        if (result != CTR_CPU_OK) return result;
-        cpu->exclusive_valid = true;
-        cpu->exclusive_address = address;
-        cpu->exclusive_generation = cpu->memory->generation;
-        cpu->r[15] = next;
-        return CTR_CPU_OK;
-    }
-    if ((insn & UINT32_C(0x0ff00ff0)) == UINT32_C(0x01800f90)) {
-        unsigned rn = (insn >> 16) & 15u, rd = (insn >> 12) & 15u, rm = insn & 15u;
-        if (rn == 15u || rd == 15u || rm == 15u || rd == rn || rd == rm)
-            return ctr_cpu_stop(cpu, CTR_CPU_UNSUPPORTED, insn);
-        bool valid = cpu->exclusive_valid && cpu->exclusive_address == cpu->r[rn] &&
-                     cpu->exclusive_generation == cpu->memory->generation;
-        cpu->exclusive_valid = false;
-        if (valid) {
-            ctr_cpu_result result = ctr_cpu_store(cpu, cpu->r[rn], 4u, cpu->r[rm]);
-            if (result != CTR_CPU_OK) return result;
-        }
-        cpu->r[rd] = valid ? 0u : 1u;
-        cpu->r[15] = next;
-        return CTR_CPU_OK;
+    if((insn&0x0f8000f0u)==0x00800090u || (insn&0x0ff000f0u)==0x00400090u) {
+        unsigned hi=(insn>>16)&15,lo=(insn>>12)&15,rs=(insn>>8)&15,rm=insn&15;
+        bool umaal=(insn&0x0ff000f0u)==0x00400090u;
+        if(rs==15 || rm==15)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
+        ctr_cpu_result result=ctr_cpu_multiply_long(cpu,lo,hi,cpu->r[rm],cpu->r[rs],
+            (insn&0x400000u)!=0 && !umaal,(insn&0x200000u)!=0,(insn&0x100000u)!=0,umaal,insn);
+        if(result==CTR_CPU_OK)cpu->r[15]=next;
+        return result;
     }
     if ((insn & UINT32_C(0x0fc000f0)) == UINT32_C(0x00000090)) {
         unsigned rd = (insn >> 16) & 15u, rn = (insn >> 12) & 15u;
@@ -311,44 +543,33 @@ static ctr_cpu_result arm_step(ctr_cpu *cpu, uint32_t insn) {
         cpu->r[15] = next;
         return CTR_CPU_OK;
     }
-    if ((insn & UINT32_C(0x0e0000f0)) == UINT32_C(0x000000b0)) {
-        unsigned rn=(insn>>16)&15u,rd=(insn>>12)&15u;
-        bool immediate=(insn&UINT32_C(0x00400000))!=0;
-        if(!(insn&UINT32_C(0x01000000)) || (!immediate && ((insn&0xf00u) || (insn&15u)==15)) ||
-            (insn&UINT32_C(0x00200000)) || rd==15u)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
-        uint32_t offset=immediate?((insn>>4)&0xf0u)|(insn&15u):cpu->r[insn&15u],base=read_register(cpu,rn,false);
-        uint32_t address=(insn&UINT32_C(0x00800000))?base+offset:base-offset;
-        bool load=(insn&UINT32_C(0x00100000))!=0;uint32_t value=cpu->r[rd];
-        ctr_cpu_result result=load?ctr_cpu_load_data(cpu,address,2u,&value):ctr_cpu_store_data(cpu,address,2u,value);
-        if(result!=CTR_CPU_OK)return result;
-        if(load)cpu->r[rd]=value;
-        cpu->r[15]=next;return CTR_CPU_OK;
+    if((insn&0x0e000090u)==0x00000090u && (insn&0x60u)) {
+        unsigned rn=(insn>>16)&15,rd=(insn>>12)&15,kind=(insn>>5)&3;
+        bool immediate=(insn&0x400000u)!=0,load=(insn&0x100000u)!=0;
+        bool sign=load && kind!=1,pre=(insn&0x1000000u)!=0;
+        unsigned width=load || kind==1?(kind==2?1:2):8;
+        if(width==8)load=kind==2;
+        if(!immediate && ((insn&0xf00u) || (insn&15u)==15))return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
+        uint32_t offset=immediate?((insn>>4)&0xf0u)|(insn&15u):cpu->r[insn&15];
+        ctr_cpu_result result=ctr_cpu_transfer(cpu,rn,rd,offset,width,load,sign,pre,
+            !pre || (insn&0x200000u)!=0,(insn&0x800000u)!=0,insn);
+        if(result==CTR_CPU_OK)cpu->r[15]=next;
+        return result;
     }
-    if ((insn & UINT32_C(0x0c000000)) == UINT32_C(0x04000000)) {
-        unsigned rn = (insn >> 16) & 15u, rd = (insn >> 12) & 15u;
-        bool load = (insn & UINT32_C(0x00100000)) != 0u;
-        bool pre = (insn & UINT32_C(0x01000000)) != 0u;
-        bool writeback = !pre || (insn & UINT32_C(0x00200000)) != 0u;
-        unsigned width = (insn & UINT32_C(0x00400000)) != 0u ? 1u : 4u;
-        if ((writeback && (rn == 15u || (load && rn == rd))) || (rd == 15u && (!load || width != 4u)) ||
-            (!pre && (insn & UINT32_C(0x00200000)) != 0u))
-            return ctr_cpu_stop(cpu, CTR_CPU_UNSUPPORTED, insn);
-        uint32_t offset = insn & 0xfffu;
-        if ((insn & UINT32_C(0x02000000)) != 0u) {
-            if ((insn & 0x10u) != 0u) return ctr_cpu_stop(cpu, CTR_CPU_UNSUPPORTED, insn);
-            unsigned carry;
-            offset = ctr_cpu_shift(read_register(cpu, insn & 15u, false), (insn >> 5) & 3u,
-                                   (insn >> 7) & 31u, true, (cpu->cpsr & CTR_FLAG_C) != 0u, &carry);
+    if((insn&0x0c000000u)==0x04000000u) {
+        unsigned rn=(insn>>16)&15,rd=(insn>>12)&15;
+        bool load=(insn&0x100000u)!=0,pre=(insn&0x1000000u)!=0;
+        unsigned width=insn&0x400000u?1:4;
+        uint32_t offset=insn&0xfffu;
+        if(insn&0x2000000u) {
+            if(insn&0x10u)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
+            unsigned ignored;offset=ctr_cpu_shift(read_register(cpu,insn&15,false),(insn>>5)&3,
+                (insn>>7)&31,true,(cpu->cpsr&CTR_FLAG_C)!=0,&ignored);
         }
-        uint32_t base = read_register(cpu, rn, false);
-        uint32_t adjusted = (insn & UINT32_C(0x00800000)) != 0u ? base + offset : base - offset;
-        uint32_t address = pre ? adjusted : base, value = cpu->r[rd];
-        ctr_cpu_result result = load ? (rd==15u?ctr_cpu_load(cpu,address,width,&value):ctr_cpu_load_data(cpu,address,width,&value)) : ctr_cpu_store_data(cpu,address,width,value);
-        if (result != CTR_CPU_OK) return result;
-        if (writeback) cpu->r[rn] = adjusted;
-        if (load) cpu->r[rd] = value;
-        if (load && rd == 15u) ctr_cpu_branch_exchange(cpu, value); else cpu->r[15] = next;
-        return CTR_CPU_OK;
+        ctr_cpu_result result=ctr_cpu_transfer(cpu,rn,rd,offset,width,load,false,pre,
+            !pre || (insn&0x200000u)!=0,(insn&0x800000u)!=0,insn);
+        if(result==CTR_CPU_OK && !(load && rd==15))cpu->r[15]=next;
+        return result;
     }
     if ((insn & UINT32_C(0x0c000000)) == 0u) {
         unsigned op = (insn >> 21) & 15u, rn = (insn >> 16) & 15u, rd = (insn >> 12) & 15u;
@@ -362,7 +583,7 @@ static ctr_cpu_result arm_step(ctr_cpu *cpu, uint32_t insn) {
             right = rotation == 0u ? insn & 255u : ctr_cpu_shift(insn & 255u, 3u, rotation, false, carry, &carry);
         } else {
             bool reg_shift = (insn & 16u) != 0u;
-            if (reg_shift && ((insn & 128u) != 0u || (insn & 15u) == 15u || ((insn >> 8) & 15u) == 15u || rn == 15u))
+            if (reg_shift && ((insn & 128u) != 0u || ((insn >> 8) & 15u) == 15u))
                 return ctr_cpu_stop(cpu, CTR_CPU_UNSUPPORTED, insn);
             unsigned amount = reg_shift ? cpu->r[(insn >> 8) & 15u] & 255u : (insn >> 7) & 31u;
             right = ctr_cpu_shift(read_register(cpu, insn & 15u, false), (insn >> 5) & 3u, amount,
@@ -450,6 +671,15 @@ static ctr_cpu_result thumb_step(ctr_cpu *cpu, uint32_t insn) {
             cpu->r[rd] = op == 0u ? left + right : right;
             if (rd == 15u) { cpu->r[15] &= ~UINT32_C(1); return CTR_CPU_OK; }
         }
+    } else if((insn&0xf000u)==0x5000u) {
+        unsigned rd=insn&7,rn=(insn>>3)&7,rm=(insn>>6)&7,op=(insn>>9)&7;
+        static const unsigned widths[]={4,2,1,1,4,2,1,2};unsigned width=widths[op];
+        uint32_t address=cpu->r[rn]+cpu->r[rm],value=cpu->r[rd];
+        ctr_cpu_result result=op>=3?ctr_cpu_load_data(cpu,address,width,&value):ctr_cpu_store_data(cpu,address,width,value);
+        if(result!=CTR_CPU_OK)return result;
+        if(op==3 && (value&128u))value|=0xffffff00u;
+        if(op==7 && (value&32768u))value|=0xffff0000u;
+        if(op>=3)cpu->r[rd]=value;
     } else if ((insn & 0xf800u) == 0x4800u) {
         unsigned rd = (insn >> 8) & 7u;
         ctr_cpu_result result = ctr_cpu_load(cpu, ((pc + 4u) & ~UINT32_C(3)) + (insn & 255u) * 4u, 4u, &cpu->r[rd]);
@@ -471,6 +701,23 @@ static ctr_cpu_result thumb_step(ctr_cpu *cpu, uint32_t insn) {
         cpu->r[(insn >> 8) & 7u] = ((insn & 0x800u) != 0u ? cpu->r[13] : (pc + 4u) & ~UINT32_C(3)) + (insn & 255u) * 4u;
     } else if ((insn & 0xff00u) == 0xb000u) {
         cpu->r[13] = (insn & 128u) != 0u ? cpu->r[13] - (insn & 127u) * 4u : cpu->r[13] + (insn & 127u) * 4u;
+    } else if((insn&0xff00u)==0xb200u) {
+        static const unsigned kinds[]={3,2,7,6};
+        cpu->r[insn&7]=ctr_cpu_extend(cpu->r[(insn>>3)&7],kinds[(insn>>6)&3],0,0,false);
+    } else if((insn&0xff00u)==0xba00u) {
+        unsigned kind=(insn>>6)&3;
+        if(kind==2)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
+        cpu->r[insn&7]=ctr_cpu_reverse(cpu->r[(insn>>3)&7],kind==3?2:kind);
+    } else if((insn&0xf800u)==0xf000u) {
+        uint32_t offset=(insn&0x7ffu)<<12;
+        if(offset&0x400000u)offset|=0xff800000u;
+        cpu->r[14]=pc+4+offset;
+    } else if((insn&0xf800u)==0xf800u || (insn&0xf800u)==0xe800u) {
+        bool exchange=(insn&0xf800u)==0xe800u;
+        if(exchange && (insn&1u))return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
+        uint32_t target=cpu->r[14]+(insn&0x7ffu)*2;cpu->r[14]=next|1u;
+        if(exchange)cpu->cpsr&=~CTR_FLAG_T;
+        next=target&~(exchange?3u:1u);
     } else if((insn&0xf600u)==0xb400u) {
         bool load=(insn&0x800u)!=0;uint16_t list=(uint16_t)(insn&255u);
         if(insn&0x100u)list|=(uint16_t)(1u<<(load?15:14));

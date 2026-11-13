@@ -34,7 +34,7 @@ static void import_cpu(Engine *e) {
     memcpy(e->vfp,p->vfp,sizeof(e->vfp));e->fpscr=p->fpscr;
     c->n=p->cpsr>>31;c->z=(p->cpsr>>30)&1;c->c=(p->cpsr>>29)&1;c->v=(p->cpsr>>28)&1;
     c->q=(p->cpsr>>27)&1;c->ge=(p->cpsr>>16)&15;c->thumb=(p->cpsr&CTR_FLAG_T)!=0;
-    c->exclusive=p->exclusive_valid && p->exclusive_generation==p->memory->generation;
+    c->exclusive=p->exclusive_valid && p->exclusive_size==4 && p->exclusive_generation==p->memory->generation;
     c->exclusive_address=p->exclusive_address;
     c->tls=p->tls_address;
 }
@@ -46,6 +46,7 @@ static void export_cpu(Engine *e) {
         ((uint32_t)c->c<<29)|((uint32_t)c->v<<28)|((uint32_t)c->q<<27)|((uint32_t)c->ge<<16)|
         (c->thumb?CTR_FLAG_T:0);
     p->exclusive_valid=c->exclusive!=0;p->exclusive_address=c->exclusive_address;
+    p->exclusive_size=4;
     p->exclusive_generation=p->memory->generation;p->svc_number=c->svc;
 }
 _Noreturn void ctr_recomp_abort(Context *c,ctr_cpu_result result,uint32_t detail) {

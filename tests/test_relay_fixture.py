@@ -22,8 +22,8 @@ class RelayFixtureTests(unittest.TestCase):
 
     def test_word_exclusives_are_specialized_and_bad_operands_rejected(self):
         load='\n'.join(arm(0xe1920f9f,0x1000));store='\n'.join(arm(0xe1821f93,0x1004))
-        self.assertIn('exclusive_generation = cpu->memory->generation',load)
-        self.assertIn('exclusive_generation == cpu->memory->generation',store)
+        self.assertIn('ctr_cpu_exclusive(cpu, 2u, 0u, 0u, 4u, true,',load)
+        self.assertIn('ctr_cpu_exclusive(cpu, 2u, 1u, 3u, 4u, false,',store)
         self.assertNotIn('ctr_cpu_step',load+store)
         for instruction in (0xe19f0f9f,0xe192ff9f,0xe1822f93,0xe1823f93,0xe1821f9f):
             with self.subTest(instruction=hex(instruction)),self.assertRaises(ValueError):arm(instruction,0x1000)

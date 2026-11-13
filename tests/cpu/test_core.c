@@ -319,8 +319,8 @@ static void halfword_tests(void) {
     CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[15]==0x1004 && data[1]==0x34 && data[2]==0x12);
     setup(0xe1c100b0);cpu.r[1]=0x1000;
     CHECK(ctr_cpu_step(&cpu)==CTR_CPU_MEMORY_FAULT && cpu.memory_fault==CTR_MEM_PERMISSION && cpu.r[15]==0x1000);
-    const uint32_t unsupported[]={0xe0c100b0,0xe18100bf,0xe1e100b0,0xe1c1f0b0};
-    for(unsigned i=0;i<4;++i){setup(unsupported[i]);CHECK(ctr_cpu_step(&cpu)==CTR_CPU_UNSUPPORTED && cpu.r[15]==0x1000);}
+    const uint32_t unsupported[]={0xe18100bf,0xe1c1f0b0,0xe1f110b2};
+    for(unsigned i=0;i<3;++i){setup(unsupported[i]);CHECK(ctr_cpu_step(&cpu)==CTR_CPU_UNSUPPORTED && cpu.r[15]==0x1000);}
 }
 static void extend_tests(void) {
     const uint32_t forms[]={0xe6af4072,0xe6bf4072,0xe6ef4072,0xe6ff4072};
@@ -339,14 +339,44 @@ static void extend_tests(void) {
     CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[2]==0xab); /* Same source and destination. */
     setup(0x06ef4072);cpu.cpsr=0x10;cpu.r[4]=123;
     CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[4]==123 && cpu.r[15]==0x1004); /* Failed EQ. */
-    const uint32_t rejected[]={0xe6eff072,0xe6ef407f,0xe6e24072,0xe68f4072};
+    const uint32_t rejected[]={0xe6eff072,0xe6ef407f,0xe69f4072,0xe6df4072};
     for(unsigned i=0;i<4;++i) {
         setup(rejected[i]);cpu.r[4]=123;
         CHECK(ctr_cpu_step(&cpu)==CTR_CPU_UNSUPPORTED && cpu.r[4]==123 && cpu.r[15]==0x1000);
     }
 }
+static void initial_integer_tests(void) {
+    setup(0xe0810392);cpu.r[2]=cpu.r[3]=UINT32_MAX; /* UMULL */
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[0]==1 && cpu.r[1]==0xfffffffeu);
+    setup(0xe1f100d1);cpu.r[1]=0x2000;data[1]=0x80; /* LDRSB r0,[r1,#1]! */
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[0]==0xffffff80u && cpu.r[1]==0x2001);
+    setup(0xe1f100d1);cpu.r[1]=0x3000;cpu.r[0]=123;
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_MEMORY_FAULT && cpu.r[0]==123 && cpu.r[1]==0x3000 && cpu.r[15]==0x1000);
+    setup(0xe1b80f9f);cpu.r[8]=0x2000;data[0]=7;data[4]=9; /* LDREXD */
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[0]==7 && cpu.r[1]==9 && cpu.exclusive_size==8);
+    uint32_t store=0xe1a84f92; /* STREXD r4,r2,r3,[r8] */
+    for(unsigned i=0;i<4;++i)code[4+i]=(uint8_t)(store>>(8*i));
+    cpu.r[2]=13;cpu.r[3]=17;
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[4]==0 && data[0]==13 && data[4]==17 && !cpu.exclusive_valid);
+    setup(0xe1d80f9f);cpu.r[8]=0x2000; /* Byte monitor cannot authorize a word store. */
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.exclusive_size==1);
+    store=0xe1884f92;
+    for(unsigned i=0;i<4;++i)code[4+i]=(uint8_t)(store>>(8*i));
+    cpu.r[2]=123;CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[4]==1 && !data[0]);
+    setup(0xe1080091);cpu.r[8]=0x2000;cpu.r[1]=3;data[0]=5; /* SWP */
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[0]==5 && data[0]==3);
+    setup(0x00005e88);cpu.cpsr=CTR_FLAG_T;cpu.r[1]=0x2000;cpu.r[2]=2;data[3]=0x80;
+    CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.r[0]==0xffff8000u);
+    for(unsigned exchange=0;exchange<2;++exchange) {
+        setup(exchange?0xe81ef000:0xf81ef000);cpu.cpsr=CTR_FLAG_T;
+        CHECK(ctr_cpu_run(&cpu,1)==CTR_CPU_LIMIT && cpu.r[15]==0x1002 && cpu.r[14]==0x1004);
+        CHECK(ctr_cpu_run(&cpu,1)==CTR_CPU_LIMIT && cpu.r[15]==0x1040 && cpu.r[14]==0x1005);
+        CHECK(((cpu.cpsr&CTR_FLAG_T)!=0)==!exchange);
+    }
+}
 int main(void) {
     memory_tests();resource_version_tests();flag_tests();instruction_tests();viewport_tests();halfword_tests();extend_tests();
+    initial_integer_tests();
     clock_t start=clock();
     for (unsigned i=0;i<1000;++i) CHECK(ctr_cpu_selftest()==0);
     double seconds=(double)(clock()-start)/CLOCKS_PER_SEC;
