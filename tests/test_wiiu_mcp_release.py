@@ -86,6 +86,7 @@ class SetupTests(unittest.TestCase):
     def fixture(self, root):
         content = io.BytesIO()
         with zipfile.ZipFile(content, "w") as archive:
+            archive.writestr("CTR2WUP/", "")
             archive.writestr("CTR2WUP/runtime/wiiu/Makefile", "# original fixture\n")
         files = {"source.zip": content.getvalue(), "sd-card/wiiu/apps/ctr2wup-prototype.wuhb": b"WUHBfixture"}
         for name, data in files.items():

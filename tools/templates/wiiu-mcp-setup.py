@@ -49,7 +49,8 @@ def extract_source(archive, destination):
             raise ValueError("Source archive inventory exceeds the contract")
         for info in infos:
             name = info.filename.rstrip("/")
-            if not name.startswith("CTR2WUP/") or stat.S_ISLNK(info.external_attr >> 16):
+            if (not (name.startswith("CTR2WUP/") or (name == "CTR2WUP" and info.is_dir()))
+                    or stat.S_ISLNK(info.external_attr >> 16)):
                 raise ValueError("Unexpected source entry")
             safe_path(destination, name)
         destination.mkdir(parents=True)
