@@ -73,10 +73,23 @@ class Wizard:
         ttk.Label(main, textvariable=self.title, style="Heading.TLabel").grid(row=0, column=0, sticky="w")
         intro = ttk.Label(main, textvariable=self.description, style="Intro.TLabel", wraplength=620)
         intro.grid(row=1, column=0, sticky="w", pady=(10, 22))
-        self.card = ttk.Frame(main, padding=24, style="Card.TFrame")
-        self.card.grid(row=2, column=0, sticky="nsew")
+        viewport = ttk.Frame(main, style="Card.TFrame")
+        viewport.grid(row=2, column=0, sticky="nsew")
+        viewport.columnconfigure(0, weight=1)
+        viewport.rowconfigure(0, weight=1)
+        self.canvas = tk.Canvas(viewport, bg="white", highlightthickness=0)
+        self.canvas.grid(row=0, column=0, sticky="nsew")
+        scrollbar = ttk.Scrollbar(viewport, orient="vertical", command=self.canvas.yview)
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        self.canvas.configure(yscrollcommand=scrollbar.set)
+        self.card = ttk.Frame(self.canvas, padding=24, style="Card.TFrame")
+        card_window = self.canvas.create_window((0, 0), window=self.card, anchor="nw")
+        self.canvas.bind("<Configure>", lambda event: self.canvas.itemconfigure(card_window, width=event.width))
         self.card.columnconfigure(0, weight=1)
-        self.card.bind("<Configure>", lambda event: self.wrap_labels(self.card, max(360, event.width - 48)))
+        self.card.bind("<Configure>", self.card_layout)
+        window.bind_all("<MouseWheel>", lambda event: self.canvas.yview_scroll(-1 if event.delta > 0 else 1, "units"))
+        window.bind_all("<Button-4>", lambda event: self.canvas.yview_scroll(-1, "units"))
+        window.bind_all("<Button-5>", lambda event: self.canvas.yview_scroll(1, "units"))
         self.progress = ttk.Progressbar(main, mode="indeterminate")
         self.progress.grid(row=3, column=0, sticky="ew", pady=(18, 9))
         status = ttk.Label(main, textvariable=self.status, style="Status.TLabel", wraplength=620)
@@ -112,6 +125,10 @@ class Wizard:
             if isinstance(widget, ttk.Label) and int(str(widget.cget("wraplength"))) != width:
                 widget.configure(wraplength=width)
 
+    def card_layout(self, event):
+        self.wrap_labels(self.card, max(320, event.width - 48))
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
     def folder_field(self, variable, row, title):
         frame = ttk.Frame(self.card, style="Card.TFrame")
         frame.grid(row=row, column=0, sticky="ew", pady=(0, 20))
@@ -139,6 +156,7 @@ class Wizard:
         if self.busy:
             return
         self.page = page
+        self.canvas.yview_moveto(0)
         for widget in (*self.card.winfo_children(), *self.footer.winfo_children()):
             widget.destroy()
         for index, label in enumerate(self.steps):
@@ -178,7 +196,7 @@ class Wizard:
             controls.grid(row=4, column=0, sticky="w", pady=(0, 16))
             ttk.Button(controls, text="Save connection", command=self.save_connection, style="Accent.TButton").grid(row=0, column=0)
             ttk.Button(controls, text="Test connection", command=self.test_connection).grid(row=0, column=1, padx=10)
-            ttk.Button(controls, text="Copy configuration", command=self.copy_configuration).grid(row=0, column=2)
+            ttk.Button(controls, text="Copy settings", command=self.copy_configuration).grid(row=0, column=2)
             self.label("After saving, restart Codex to load the tools. Cloud Codex also needs a secure route to this computer.", 5)
             self.footer_button("Back", lambda: self.show(1), column=0, accent=False)
             self.footer_button("Done", self.close)

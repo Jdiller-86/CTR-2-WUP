@@ -70,7 +70,8 @@ def check(kit, output):
         root = Path(temporary)
         installed = root / "Installed bridge"
         result = actions.install(backend, kit, installed)
-        assert result["command"] == [str(installed / "runtime/WiiU-MCP-Bridge.exe")]
+        assert len(result["command"]) == 1, result["command"]
+        assert Path(result["command"][0]).resolve() == (installed / "runtime/WiiU-MCP-Bridge.exe").resolve(), result["command"]
         assert not (installed / "local/venv").exists(), "Frozen install unexpectedly needed a Python environment"
         shortcut = actions.make_shortcut(installed, root / "Start menu/Wii U MCP.lnk")
         assert Path(shortcut).is_file()
