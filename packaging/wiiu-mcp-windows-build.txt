@@ -1,0 +1,9 @@
+# Windows freezing and screenshot checks; runtime dependencies use the hash lock.
+pyinstaller==6.22.3
+packaging==26.3
+setuptools==84.2.1
+pefile==2023.2.7; sys_platform == "win32"
+pyinstaller-hooks-contrib==2026.10
+altgraph==0.17.5
+pywin32-ctypes==0.2.3; sys_platform == "win32"
+Pillow==13.0.0

@@ -184,3 +184,10 @@ license texts accompany the kit. Those components retain their original
 licenses and are not relicensed under CTR2WUP's MIT license. Python dependencies
 are installed separately from PyPI using published wheel hashes; their package
 notices are installed with them. The full devkitPro SDK is not redistributed.
+
+The optional Windows testing kit includes a Python runtime, Tcl/Tk, and the MCP
+runtime dependencies frozen with PyInstaller 6.22.3. Their licenses and package
+source references accompany the kit in licenses/windows/. PyInstaller's
+bootloader exception permits distribution of the frozen application under its
+own license; its original GPL/exception notices are retained. The build runs on
+Windows and includes no native compiler SDK or commercial content.
