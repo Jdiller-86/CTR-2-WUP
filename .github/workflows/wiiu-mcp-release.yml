@@ -2,6 +2,9 @@ name: Publish Wii U MCP starter kit
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - 'wiiu-mcp-v*-alpha.*'
 
 permissions:
   contents: read
@@ -23,9 +26,16 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Require main and exact clean source
+      - name: Require main or the exact alpha tag and clean source
         run: |
-          test "$GITHUB_REF" = refs/heads/main
+          python3 - <<'PY'
+          import os, re, runpy
+          version = runpy.run_path('tools/package-wiiu-mcp.py')['VERSION']
+          ref = os.environ['GITHUB_REF']
+          assert ref == 'refs/heads/main' or (
+              re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+-alpha\.[0-9]+', version)
+              and ref == 'refs/tags/wiiu-mcp-v'+version), 'Require main or the exact alpha tag'
+          PY
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test -z "$(git status --porcelain)"
           mkdir -p artifacts/wiiu-mcp-release/logs
@@ -100,7 +110,7 @@ jobs:
 
   release:
     needs: build
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/wiiu-mcp-v')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -129,7 +139,11 @@ jobs:
           existing = subprocess.run(['gh', 'release', 'view', tag], capture_output=True)
           assert existing.returncode != 0, 'Existing release preserved; choose a new kit version'
           ref = subprocess.run(['gh', 'api', 'repos/'+os.environ['GH_REPO']+'/git/ref/tags/'+tag], capture_output=True, text=True)
-          assert ref.returncode != 0 and 'HTTP 404' in ref.stderr, 'Existing tag or lookup failure; publication stopped'
+          if ref.returncode == 0:
+              resolved = subprocess.check_output(['gh', 'api', 'repos/'+os.environ['GH_REPO']+'/commits/'+tag, '--jq', '.sha'], text=True).strip()
+              assert resolved == manifest['source_commit'], 'Existing tag targets a different source; publication stopped'
+          else:
+              assert 'HTTP 404' in ref.stderr, 'Tag lookup failed; publication stopped'
           notes = root/'notes.txt'
           notes.write_text('Wii U MCP starter kit. Source: '+manifest['source_commit']+'\n\n'
               'Includes the bridge wheel, original diagnostic WUHB, ten pinned Aroma components, '
