@@ -41,6 +41,7 @@ class Wizard:
             default = self.kit
         self.destination = tk.StringVar(value=str(default))
         self.sd_root = tk.StringVar()
+        self.sd_root.trace_add("write", self.card_selection_changed)
         self.address = tk.StringVar()
         self.add_codex = tk.BooleanVar(value=True)
         self.status = tk.StringVar(value="Ready to install. Your Wii U can stay offline.")
@@ -108,7 +109,7 @@ class Wizard:
 
     def wrap_labels(self, parent, width):
         for widget in parent.winfo_children():
-            if isinstance(widget, ttk.Label) and int(widget.cget("wraplength")) != width:
+            if isinstance(widget, ttk.Label) and int(str(widget.cget("wraplength"))) != width:
                 widget.configure(wraplength=width)
 
     def folder_field(self, variable, row, title):
@@ -125,6 +126,11 @@ class Wizard:
             self.plan = None
             if variable is self.sd_root:
                 self.check_card()
+
+    def card_selection_changed(self, *unused):
+        self.plan = None
+        if hasattr(self, "copy_button") and self.copy_button.winfo_exists():
+            self.copy_button.configure(state="disabled")
 
     def footer_button(self, text, command, column=2, accent=True):
         ttk.Button(self.footer, text=text, command=command, style="Accent.TButton" if accent else "TButton").grid(row=0, column=column, sticky="e" if column else "w", padx=(12 if column else 0, 0))
@@ -172,7 +178,7 @@ class Wizard:
             controls.grid(row=4, column=0, sticky="w", pady=(0, 16))
             ttk.Button(controls, text="Save connection", command=self.save_connection, style="Accent.TButton").grid(row=0, column=0)
             ttk.Button(controls, text="Test connection", command=self.test_connection).grid(row=0, column=1, padx=10)
-            ttk.Button(controls, text="Copy configuration", command=self.copy_configuration).grid(row=1, column=0, sticky="w", pady=(10, 0))
+            ttk.Button(controls, text="Copy configuration", command=self.copy_configuration).grid(row=0, column=2)
             self.label("After saving, restart Codex to load the tools. Cloud Codex also needs a secure route to this computer.", 5)
             self.footer_button("Back", lambda: self.show(1), column=0, accent=False)
             self.footer_button("Done", self.close)
@@ -248,6 +254,7 @@ class Wizard:
             self.status.set("Choose your SD card folder first.")
             return
         card = Path(self.sd_root.get())
+        self.card_selection_changed()
         self.task(lambda: self.actions.sd_plan(self.backend, self.kit, card), self.card_checked)
 
     def card_checked(self, plan):
@@ -330,6 +337,8 @@ def main():
     kit = args.kit or (Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).parent)
     window = tk.Tk()
     try:
+        if not all((kit / name).is_file() for name in ("manifest.json", "setup.py", "installer-actions.py")):
+            raise ValueError("Choose Extract All on the downloaded ZIP, then open the installer from the extracted folder.")
         wizard = Wizard(window, kit)
         if args.preview_page:
             wizard.show(args.preview_page - 1)
@@ -339,6 +348,8 @@ def main():
                 wizard.show(page)
                 window.update()
                 assert wizard.title.get() and wizard.card.winfo_width() > 400
+                for widget in wizard.card.winfo_children():
+                    assert widget.winfo_y() + widget.winfo_height() <= wizard.card.winfo_height(), "Setup content is clipped"
                 sizes.append({"page": page + 1, "width": wizard.card.winfo_width(), "height": wizard.card.winfo_height()})
             report = {"ok": True, "pages": sizes, "console_contacted": False}
             if args.report:

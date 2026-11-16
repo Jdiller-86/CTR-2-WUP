@@ -26,8 +26,9 @@ def build(output):
     common = [sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--noupx", "--onefile",
               "--paths", str(ROOT), "--distpath", str(output / "bin"),
               "--workpath", str(output / "build"), "--specpath", str(output / "spec")]
-    server = common + ["--name", "WiiU-MCP-Bridge", "--recursive-copy-metadata", "mcp"]
-    for package in ("mcp", "mcp_types", "pydantic", "jsonschema_specifications"):
+    server = common + ["--name", "WiiU-MCP-Bridge", "--recursive-copy-metadata", "mcp",
+                       "--collect-data", "mcp", "--exclude-module", "mcp.cli"]
+    for package in ("mcp_types", "pydantic", "jsonschema_specifications"):
         server += ["--collect-all", package]
     server += ["--hidden-import", "opentelemetry.context.contextvars_context",
                str(ROOT / "tools/windows/wiiu-mcp-server.py")]
