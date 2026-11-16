@@ -44,7 +44,7 @@ def create_server(bridge: WiiUBridge):
 
     @server.tool(annotations=read)
     def wiiu_status() -> dict[str, Any]:
-        """Check FTPiiU access to SD and host wiiload availability; does not launch or prove execution."""
+        """Check FTPiiU access to SD and launch sender availability; does not launch or prove execution."""
         return bridge.status()
 
     @server.tool(annotations=read)
@@ -74,7 +74,7 @@ def create_server(bridge: WiiUBridge):
 
     @server.tool(annotations=launch)
     def wiiu_launch(local_file: str) -> dict[str, Any]:
-        """Send one local RPX/WUHB through official wiiload. This changes the running app; never auto-retry."""
+        """Send one local RPX/WUHB over wiiload. This changes the running app; never auto-retry."""
         return bridge.launch(local_file)
 
     @server.tool(annotations=write)

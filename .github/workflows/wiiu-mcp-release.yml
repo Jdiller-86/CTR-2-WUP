@@ -1,0 +1,142 @@
+name: Publish Wii U MCP starter kit
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wiiu-mcp-release
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Require main and exact clean source
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          mkdir -p artifacts/wiiu-mcp-release/logs
+          printf 'CTR2WUP_SDK_ROOT=%s/ctr2wup-sdk\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Install host tools and pinned runtime dependencies
+        run: |
+          python -m pip install --only-binary=:all: --require-hashes -r packaging/wiiu-mcp-requirements.lock
+          python -m pip install '.[mcp-test,packaging]' build
+      - name: Run host and release checks
+        run: |
+          set -euo pipefail
+          make check-python PYTHON=python 2>&1 | tee artifacts/wiiu-mcp-release/logs/host-tests.log
+          python -m unittest discover -s tests -p 'test_wiiu*.py' -v \
+            2>&1 | tee artifacts/wiiu-mcp-release/logs/release-tests.log
+      - name: Build original native diagnostic with the verified SDK
+        run: |
+          set -euo pipefail
+          bash tools/install-wiiu-sdk.sh
+          export DEVKITPRO="$CTR2WUP_SDK_ROOT" DEVKITPPC="$CTR2WUP_SDK_ROOT/devkitPPC"
+          python -m host build --target prototype --output artifacts/wiiu-mcp-release/native \
+            2>&1 | tee artifacts/wiiu-mcp-release/logs/native-build.log
+      - name: Build wheel and check its installed entry point
+        run: |
+          python -m build --wheel --outdir artifacts/wiiu-mcp-release/wheel
+          python -m venv "$RUNNER_TEMP/mcp-wheel"
+          "$RUNNER_TEMP/mcp-wheel/bin/python" -m pip install --no-deps artifacts/wiiu-mcp-release/wheel/*.whl
+          (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/mcp-wheel/bin/ctr2wup-wiiu" --help) \
+            > artifacts/wiiu-mcp-release/logs/wheel-smoke.log
+      - name: Build strict documentation in its pinned environment
+        run: |
+          python -m venv "$RUNNER_TEMP/mcp-docs"
+          "$RUNNER_TEMP/mcp-docs/bin/python" -m pip install -r docs-requirements.txt
+          "$RUNNER_TEMP/mcp-docs/bin/python" tools/build-docs-site.py \
+            > artifacts/wiiu-mcp-release/logs/docs-build.log 2>&1
+      - name: Package pinned components, sources and verified host artifacts
+        run: |
+          python - <<'PY'
+          import json, os, pathlib
+          names = ['host-tests', 'release-tests', 'native-build', 'docs-build', 'wheel-smoke']
+          root = pathlib.Path('artifacts/wiiu-mcp-release')
+          assert all((root/'logs'/f'{name}.log').is_file() for name in names)
+          (root/'evidence.json').write_text(json.dumps({'ok': True, 'source_commit': os.environ['GITHUB_SHA'],
+              'checks': [{'name': name, 'exit_code': 0} for name in names]}, indent=2)+'\n')
+          PY
+          python tools/package-wiiu-mcp.py --wheel artifacts/wiiu-mcp-release/wheel/*.whl \
+            --native artifacts/wiiu-mcp-release/native --sdk "$CTR2WUP_SDK_ROOT" \
+            --evidence artifacts/wiiu-mcp-release/evidence.json --cache artifacts/wiiu-mcp-release/cache \
+            --output artifacts/wiiu-mcp-release/publish
+          python - <<'PY'
+          import pathlib, subprocess, sys, zipfile
+          root = pathlib.Path('artifacts/wiiu-mcp-release')
+          archive, = (root/'publish').glob('*.zip')
+          with zipfile.ZipFile(archive) as z:
+              z.extractall(root/'smoke')
+          subprocess.run([sys.executable, str(root/'smoke/setup.py'), '--verify-only'], check=True)
+          PY
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wiiu-mcp-kit-${{ github.sha }}
+          path: artifacts/wiiu-mcp-release/publish/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: wiiu-mcp-logs-${{ github.sha }}
+          path: artifacts/wiiu-mcp-release/logs/
+
+  release:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: wiiu-mcp-kit-${{ github.sha }}
+          path: publish
+      - name: Publish immutable starter prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          python - <<'PY'
+          import hashlib, json, os, pathlib, subprocess, zipfile
+          root = pathlib.Path('publish')
+          archive, = root.glob('*.zip')
+          digest, name = (root/'SHA256SUMS.txt').read_text().strip().split('  ', 1)
+          assert name == archive.name and hashlib.sha256(archive.read_bytes()).hexdigest() == digest
+          with zipfile.ZipFile(archive) as z:
+              assert z.testzip() is None
+              manifest = json.loads(z.read('manifest.json'))
+          assert manifest['source_commit'] == os.environ['GITHUB_SHA']
+          tag = 'wiiu-mcp-v' + manifest['version']
+          existing = subprocess.run(['gh', 'release', 'view', tag], capture_output=True)
+          assert existing.returncode != 0, 'Existing release preserved; choose a new kit version'
+          ref = subprocess.run(['gh', 'api', 'repos/'+os.environ['GH_REPO']+'/git/ref/tags/'+tag], capture_output=True, text=True)
+          assert ref.returncode != 0 and 'HTTP 404' in ref.stderr, 'Existing tag or lookup failure; publication stopped'
+          notes = root/'notes.txt'
+          notes.write_text('Wii U MCP starter kit. Source: '+manifest['source_commit']+'\n\n'
+              'Includes the bridge wheel, original diagnostic WUHB, ten pinned Aroma components, '
+              'upstream source/licenses, setup helper and checksums. Follow START-HERE.txt. '
+              'Python 3.12+ and Internet for host dependency installation are required. '
+              'Aroma must already be installed. Native rebuilds need a Git checkout and the verified SDK. '
+              'Hardware acceptance and additional console controls remain pending.\n')
+          subprocess.run(['gh', 'release', 'create', tag, '--target', manifest['source_commit'],
+              '--draft', '--prerelease', '--latest=false', '--title', 'Wii U MCP starter kit '+manifest['version'],
+              '--notes-file', str(notes), str(archive), str(root/'SHA256SUMS.txt'), str(root/'package-report.json')], check=True)
+          subprocess.run(['gh', 'release', 'edit', tag, '--draft=false', '--prerelease', '--latest=false'], check=True)
+          PY

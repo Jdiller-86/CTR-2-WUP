@@ -1,0 +1,165 @@
+{
+  "schema_version": 1,
+  "components": [
+    {
+      "repository": "wiiu-env/ftpiiu_plugin",
+      "version": "v0.4.5",
+      "commit": "c2fc7310526124a9d63a8c28feaaca9356d504a6",
+      "url": "https://github.com/wiiu-env/ftpiiu_plugin/releases/download/v0.4.5/ftpiiu_v0_4_5.zip",
+      "bytes": 300296,
+      "sha256": "36afd4ca2583ff9a6b1f37fd8dd7961223739cda5fe5fd4393c2c0147788a702",
+      "source_url": "https://codeload.github.com/wiiu-env/ftpiiu_plugin/zip/c2fc7310526124a9d63a8c28feaaca9356d504a6",
+      "source_sha256": "686f87f7910c28bcd4b6843c8efed2cb2ed1776b898625916e55d2d9ade78bfb",
+      "source_bytes": 103506,
+      "license_members": [
+        "ftpiiu_plugin-c2fc7310526124a9d63a8c28feaaca9356d504a6/LICENSE"
+      ],
+      "archive_member": "ftpiiu.wps",
+      "sd_path": "wiiu/environments/aroma/plugins/ftpiiu.wps"
+    },
+    {
+      "repository": "wiiu-env/wiiload_plugin",
+      "version": "v0.2.5",
+      "commit": "5afa3a72565601c9158f432fd59ae6acb782e21f",
+      "url": "https://github.com/wiiu-env/wiiload_plugin/releases/download/v0.2.5/wiiload_v0_2_5.zip",
+      "bytes": 171521,
+      "sha256": "689a8f62937af276ef4c210ad0cfdfd197bf4d1565ca5ce9508c7a3fa09c045e",
+      "source_url": "https://codeload.github.com/wiiu-env/wiiload_plugin/zip/5afa3a72565601c9158f432fd59ae6acb782e21f",
+      "source_sha256": "cd8f999a043ed3f73d82be5728f9d8234ffa56229cdb5e36b433d0528f6eea0f",
+      "source_bytes": 38516,
+      "license_members": [
+        "wiiload_plugin-5afa3a72565601c9158f432fd59ae6acb782e21f/LICENSE"
+      ],
+      "archive_member": "wiiload.wps",
+      "sd_path": "wiiu/environments/aroma/plugins/wiiload.wps"
+    },
+    {
+      "repository": "wiiu-env/RPXLoadingModule",
+      "version": "v0.3.5",
+      "commit": "307f892e0ca692d43c9878957486d0b366080d7c",
+      "url": "https://github.com/wiiu-env/RPXLoadingModule/releases/download/v0.3.5/RPXLoadingModule_v0_3_5.zip",
+      "bytes": 131377,
+      "sha256": "c7a77269d486058e9a518cf66f6297a8f47014758f0a113442fec564ad699e1c",
+      "source_url": "https://codeload.github.com/wiiu-env/RPXLoadingModule/zip/307f892e0ca692d43c9878957486d0b366080d7c",
+      "source_sha256": "390a571967686d72fe274dd9a7200e02abe0c00a67ec3e3e60cb5392a913d300",
+      "source_bytes": 49635,
+      "license_members": [
+        "RPXLoadingModule-307f892e0ca692d43c9878957486d0b366080d7c/LICENSE"
+      ],
+      "archive_member": "RPXLoadingModule.wms",
+      "sd_path": "wiiu/environments/aroma/modules/RPXLoadingModule.wms"
+    },
+    {
+      "repository": "wiiu-env/NotificationModule",
+      "version": "v0.1.4",
+      "commit": "ef2b5fd94b278ff5014b7f837b154bbba298a7bc",
+      "url": "https://github.com/wiiu-env/NotificationModule/releases/download/v0.1.4/NotificationModule_v0_1_4.zip",
+      "bytes": 178736,
+      "sha256": "32fb28b1f526b523434f57595c6df42fecd1c6a236d26542a5fcd33927f51516",
+      "source_url": "https://codeload.github.com/wiiu-env/NotificationModule/zip/ef2b5fd94b278ff5014b7f837b154bbba298a7bc",
+      "source_sha256": "e327d14f02d9e9f39cf5545fc5a0acf127c7dce269f4c4df891b8a7dc346b63f",
+      "source_bytes": 96760,
+      "license_members": [
+        "NotificationModule-ef2b5fd94b278ff5014b7f837b154bbba298a7bc/LICENSE"
+      ],
+      "archive_member": "NotificationModule.wms",
+      "sd_path": "wiiu/environments/aroma/modules/NotificationModule.wms"
+    },
+    {
+      "repository": "wiiu-env/WiiUPluginLoaderBackend",
+      "version": "v0.4.1",
+      "commit": "e3e67f8a8ebee77b351a43ff79561ecb6955dea6",
+      "url": "https://github.com/wiiu-env/WiiUPluginLoaderBackend/releases/download/v0.4.1/WiiUPluginLoaderBackend_v0_4_1.zip",
+      "bytes": 589373,
+      "sha256": "526726b319ac2664562f00031a7ae2f26b8b8aa09da22ac71e323a6bf7fea749",
+      "source_url": "https://codeload.github.com/wiiu-env/WiiUPluginLoaderBackend/zip/e3e67f8a8ebee77b351a43ff79561ecb6955dea6",
+      "source_sha256": "fedb56b698996f80970d7799f0af29065927db9790380e072f43832136093e58",
+      "source_bytes": 401052,
+      "license_members": [
+        "WiiUPluginLoaderBackend-e3e67f8a8ebee77b351a43ff79561ecb6955dea6/LICENSE"
+      ],
+      "archive_member": "PluginBackend.wms",
+      "sd_path": "wiiu/environments/aroma/modules/PluginBackend.wms"
+    },
+    {
+      "repository": "wiiu-env/ContentRedirectionModule",
+      "version": "v0.2.9",
+      "commit": "31b319b6b4370caf4ab173f0db91cf838c6819d0",
+      "url": "https://github.com/wiiu-env/ContentRedirectionModule/releases/download/v0.2.9/ContentRedirectionModule_v0_2_9.zip",
+      "bytes": 188723,
+      "sha256": "46567281c688f3fd2a534fca914244001c8d36faf1989629e5c4741691297c0d",
+      "source_url": "https://codeload.github.com/wiiu-env/ContentRedirectionModule/zip/31b319b6b4370caf4ab173f0db91cf838c6819d0",
+      "source_sha256": "524c6f4c4f2e3d15a42021c517c9eff142075cd80166e238ccc3f6c4076038e5",
+      "source_bytes": 63980,
+      "license_members": [
+        "ContentRedirectionModule-31b319b6b4370caf4ab173f0db91cf838c6819d0/LICENSE"
+      ],
+      "archive_member": "ContentRedirectionModule.wms",
+      "sd_path": "wiiu/environments/aroma/modules/ContentRedirectionModule.wms"
+    },
+    {
+      "repository": "wiiu-env/WUHBUtilsModule",
+      "version": "v0.1.4",
+      "commit": "8d848e8476f583d8c03de0d3d3b995c92acc2778",
+      "url": "https://github.com/wiiu-env/WUHBUtilsModule/releases/download/v0.1.4/WUHBUtilsModule_v0_1_4.zip",
+      "bytes": 123154,
+      "sha256": "41480d981b1d37dc18199ee062615782bf37d9e0f6184ad1954ffd24726c61d1",
+      "source_url": "https://codeload.github.com/wiiu-env/WUHBUtilsModule/zip/8d848e8476f583d8c03de0d3d3b995c92acc2778",
+      "source_sha256": "cce55bf39519103a5a5f5bc3f401f9623a71adc53ec4279245f53ff86faaee70",
+      "source_bytes": 29047,
+      "license_members": [
+        "WUHBUtilsModule-8d848e8476f583d8c03de0d3d3b995c92acc2778/LICENSE"
+      ],
+      "archive_member": "WUHBUtilsModule.wms",
+      "sd_path": "wiiu/environments/aroma/modules/WUHBUtilsModule.wms"
+    },
+    {
+      "repository": "wiiu-env/WUMSLoader",
+      "version": "v0.3.0",
+      "commit": "bc7113f1e5a290dc1335098adc74d934d2c171ff",
+      "url": "https://github.com/wiiu-env/WUMSLoader/releases/download/v0.3.0/WUMSLoader_v0_3_0.zip",
+      "bytes": 239214,
+      "sha256": "bf74eaf89dc5c4fe2856ceb2fb2796473a8d073aa876075e6aa5eb394adc9f93",
+      "source_url": "https://codeload.github.com/wiiu-env/WUMSLoader/zip/bc7113f1e5a290dc1335098adc74d934d2c171ff",
+      "source_sha256": "427c23ec7bdbc37a36710bb2813300ec2cb28ef5e26f757cf610d0889e03cfab",
+      "source_bytes": 158663,
+      "license_members": [
+        "WUMSLoader-bc7113f1e5a290dc1335098adc74d934d2c171ff/LICENSE"
+      ],
+      "archive_member": "10_wums_loader.rpx",
+      "sd_path": "wiiu/environments/aroma/modules/setup/10_wums_loader.rpx"
+    },
+    {
+      "repository": "wiiu-env/FunctionPatcherModule",
+      "version": "v0.2.5",
+      "commit": "1a294db7eab9c87d561fbbd3ab08a71a565b1ef2",
+      "url": "https://github.com/wiiu-env/FunctionPatcherModule/releases/download/v0.2.5/FunctionPatcherModule_v0_2_5.zip",
+      "bytes": 68806,
+      "sha256": "26d656af70f3d16030f755e0014e34e5e5c21344b680af60ad6e52fd84a1e457",
+      "source_url": "https://codeload.github.com/wiiu-env/FunctionPatcherModule/zip/1a294db7eab9c87d561fbbd3ab08a71a565b1ef2",
+      "source_sha256": "da1ce617d614c8f39bdae43b48c1313aaaf9a1d2319716ffd5a266fa479fa5a4",
+      "source_bytes": 45089,
+      "license_members": [
+        "FunctionPatcherModule-1a294db7eab9c87d561fbbd3ab08a71a565b1ef2/LICENSE"
+      ],
+      "archive_member": "FunctionPatcherModule.wms",
+      "sd_path": "wiiu/environments/aroma/modules/FunctionPatcherModule.wms"
+    },
+    {
+      "repository": "wiiu-env/MemoryMappingModule",
+      "version": "v0.2.7",
+      "commit": "b849fecf421f9f7ce3056d8d08581ef0bb0a4d91",
+      "url": "https://github.com/wiiu-env/MemoryMappingModule/releases/download/v0.2.7/MemoryMappingModule_v0_2_7.zip",
+      "bytes": 30044,
+      "sha256": "426509bd1cc0900f4c8f613cbe517f6c6a3014c312746ffa2e497ab9609de061",
+      "source_url": "https://codeload.github.com/wiiu-env/MemoryMappingModule/zip/b849fecf421f9f7ce3056d8d08581ef0bb0a4d91",
+      "source_sha256": "b57e5cdf4e9d5ec46167014773ae77b448ed39d5abda4c3071d90f76f2fe0f4f",
+      "source_bytes": 41165,
+      "license_members": [
+        "MemoryMappingModule-b849fecf421f9f7ce3056d8d08581ef0bb0a4d91/LICENSE"
+      ],
+      "archive_member": "MemoryMappingModule.wms",
+      "sd_path": "wiiu/environments/aroma/modules/MemoryMappingModule.wms"
+    }
+  ]
+}
