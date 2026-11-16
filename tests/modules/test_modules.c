@@ -23,8 +23,17 @@ static uint32_t word(ctr_guest *g,uint32_t at) {
     uint32_t value=0;CHECK(ctr_memory_read(&g->memory,at,4,CTR_MEM_READ,&value)==CTR_MEM_OK);return value;
 }
 static void run(ctr_guest *g,bool translated,uint64_t budget) {
-    for(unsigned i=0;i<3000 && g->state!=CTR_GUEST_EXITED && g->state!=CTR_GUEST_FAULTED;++i)
+    bool checked_batch=false;
+    for(unsigned i=0;i<3000 && g->state!=CTR_GUEST_EXITED && g->state!=CTR_GUEST_FAULTED;++i) {
         ctr_guest_run(g,budget,0,translated);
+        if(!checked_batch && ctr_modules_has_code(g,0x300180)) {
+            uint32_t first=word(g,0x3000f8),value;
+            CHECK(ctr_memory_read(&g->memory,first+6,1,CTR_MEM_READ,&value)==CTR_MEM_OK && value==1);
+            CHECK(ctr_memory_read(&g->memory,first+18,1,CTR_MEM_READ,&value)==CTR_MEM_OK && value==0);
+            checked_batch=true;
+        }
+    }
+    CHECK(checked_batch);
     if(g->state!=CTR_GUEST_EXITED)fprintf(stderr,"state=%s fault=%s detail=%08x pc=%08x ipc=%s/%08x result=%08x\n",
         ctr_guest_state_name(g->state),ctr_cpu_result_name(g->fault),g->fault_detail,g->cpu.r[15],g->ipc_service,g->ipc_header,g->ipc_result);
     CHECK(g->state==CTR_GUEST_EXITED && !g->cpu.fallback_instructions);

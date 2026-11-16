@@ -16,6 +16,7 @@ enum { MAGIC,NAME,NEXT,PREVIOUS,FILE_SIZE,BSS_SIZE,FIXED,ZERO,
     IMPORT_MODULES,IMPORT_MODULE_COUNT,EXTERNAL,EXTERNAL_COUNT,IMPORTS,IMPORT_COUNT,
     INDEX_IMPORTS,INDEX_IMPORT_COUNT,ANON_IMPORTS,ANON_IMPORT_COUNT,IMPORT_STRINGS,IMPORT_STRINGS_SIZE,
     STATIC_ANON,STATIC_ANON_COUNT,INTERNAL,INTERNAL_COUNT,STATIC_RELOCS,STATIC_RELOC_COUNT,FIELDS };
+_Static_assert(0x80u+FIELDS*4u==HEADER,"CRO0 header layout");
 typedef struct { uint32_t offset,size,type,address; } segment;
 typedef struct {
     const ctr_module_image *image;
@@ -189,15 +190,15 @@ static ctr_module_result relocate(const module *m,staging *s,const uint8_t *p,ui
     else if(type!=2 && type!=38)return CTR_MODULE_UNSUPPORTED;
     write32(dest,value);return CTR_MODULE_OK;
 }
-static ctr_module_result batch(const module *m,staging *s,uint32_t offset,uint32_t symbol,bool *used,bool *seen) {
+static ctr_module_result batch(const module *m,staging *s,uint32_t offset,uint32_t symbol,bool resolve,bool *used,bool *seen) {
     uint32_t first=field(m,EXTERNAL),count=field(m,EXTERNAL_COUNT);
     if(offset<first || (offset-first)%12 || (offset-first)/12>=count)return CTR_MODULE_FORMAT;
+    s->file[offset+6]=resolve?1:0;
     for(unsigned i=(offset-first)/12;i<count;++i) {
         const uint8_t *p=raw(m,EXTERNAL,i,12);
         if(used[i] || p[5]>1 || p[6] || p[7])return CTR_MODULE_FORMAT;
         used[i]=true;ctr_module_result result=relocate(m,s,p,symbol,seen);
         if(result!=CTR_MODULE_OK)return result;
-        s->file[field(m,EXTERNAL)+i*12+6]=1;
         if(p[5])return CTR_MODULE_OK;
     }
     return CTR_MODULE_FORMAT;
@@ -206,6 +207,7 @@ static ctr_module_result apply_links(loader *l,module *m,staging *s,bool link) {
     size_t words=0;for(unsigned i=0;i<field(m,SEGMENT_COUNT);++i)words+=(m->segments[i].size+3u)/4u;
     bool *seen=calloc(words?words:1,sizeof(bool));if(!seen)return CTR_MODULE_CAPACITY;
     bool used[MAX_RELOCS]={false};ctr_module_result result=CTR_MODULE_OK;
+    for(unsigned i=0;i<field(m,EXTERNAL_COUNT);++i)s->file[field(m,EXTERNAL)+i*12+6]=0;
     for(unsigned i=0;i<field(m,INTERNAL_COUNT);++i) {
         const uint8_t *p=raw(m,INTERNAL,i,12);
         if(p[5]>=field(m,SEGMENT_COUNT) || p[6] || p[7]) { result=CTR_MODULE_FORMAT;goto done; }
@@ -223,7 +225,7 @@ static ctr_module_result apply_links(loader *l,module *m,staging *s,bool link) {
             }
         }
         if(link && matches!=1) { result=CTR_MODULE_SYMBOL;goto done; }
-        result=batch(m,s,read32(p+4),address,used,seen);if(result)goto done;
+        result=batch(m,s,read32(p+4),address,link,used,seen);if(result)goto done;
     }
     bool index_used[MAX_SYMBOLS]={false},anon_used[MAX_SYMBOLS]={false};
     for(unsigned i=0;i<field(m,IMPORT_MODULE_COUNT);++i) {
@@ -255,7 +257,7 @@ static ctr_module_result apply_links(loader *l,module *m,staging *s,bool link) {
                     }
                     if(!tag_address(provider,value,1,&symbol)) { result=CTR_MODULE_SYMBOL;goto done; }
                 }
-                result=batch(m,s,read32(entry+4),symbol,used,seen);if(result)goto done;
+                result=batch(m,s,read32(entry+4),symbol,link,used,seen);if(result)goto done;
             }
         }
     }
@@ -480,7 +482,6 @@ ctr_module_result ctr_modules_load(ctr_guest *g,uint32_t source,uint32_t address
         if(link && memcmp(s.file+field(&m,CODE),image->code,image->code_size)) { result=CTR_MODULE_IDENTITY;goto done; }
     }
     rebase_metadata(&m,&s);
-    for(unsigned i=0;i<field(&m,EXTERNAL_COUNT);++i)s.file[field(&m,EXTERNAL)+i*12+6]=link?1:0;
     ctr_memory next=g->memory;
     if(map_file(&next,&m,s.file,link)!=CTR_MEM_OK) { result=CTR_MODULE_MEMORY;goto done; }
     ctr_memory_write_range outputs[]={{data,s.data,is_static?0:segment_size(&m,2)},{bss,s.bss,is_static?0:segment_size(&m,3)}};
@@ -518,7 +519,6 @@ ctr_module_result ctr_modules_link(ctr_guest *g,uint32_t address,bool link) {
     if(!stage_current(g,m,&s)) { release_stage(&s);return record(g,CTR_MODULE_MEMORY); }
     result=apply_links(l,m,&s,link);if(result)goto done;
     if(link && memcmp(s.file+field(m,CODE),m->image->code,m->image->code_size)) { result=CTR_MODULE_IDENTITY;goto done; }
-    for(unsigned i=0;i<field(m,EXTERNAL_COUNT);++i)s.file[field(m,EXTERNAL)+i*12+6]=link?1:0;
     ctr_memory next=g->memory;
     if(ctr_memory_change_range(&next,address,m->image->size,0,true)!=CTR_MEM_OK || map_file(&next,m,s.file,link)!=CTR_MEM_OK) {
         result=CTR_MODULE_MEMORY;goto done;
@@ -586,8 +586,10 @@ ctr_cpu_result ctr_modules_dispatch(ctr_guest *g,uint64_t budget) {
             if(!m->linked)return ctr_cpu_stop(&g->cpu,CTR_CPU_MISSING_BLOCK,pc);
             program=(ctr_program){m->image->blocks,m->image->block_count,m->image->identity,l->generation};break;
         }
+        uint64_t before=g->cpu.instructions;
         ctr_cpu_result result=ctr_cpu_dispatch(&g->cpu,&program,1,false);
         if(result!=CTR_CPU_LIMIT)return result;
+        if(g->cpu.instructions==before)return ctr_cpu_stop(&g->cpu,CTR_CPU_UNSUPPORTED,pc);
     }
     return CTR_CPU_LIMIT;
 }

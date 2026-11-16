@@ -13,6 +13,25 @@ HEAP=0x08010000
 CLIENT_DATA=0x08011000
 CODE=0x180
 
+def export_tree(names):
+    """Original bounded binary lookup records, including the sentinel root."""
+    if not names:return b''
+    nodes=[None]
+    def branch(indices):
+        here=len(nodes);nodes.append(None)
+        if len(indices)==1:
+            nodes[here]=(0,0,0,indices[0]);return 0x8000|here
+        for bit in range(128*8):
+            left=[];right=[]
+            for i in indices:
+                value=ord(names[i][bit//8]) if bit//8<len(names[i]) else 0
+                (right if value&(1<<(bit%8)) else left).append(i)
+            if left and right:break
+        else:raise ValueError('Original exports must have distinct bounded names')
+        nodes[here]=(bit,branch(left),branch(right),0);return here
+    nodes[0]=(0,branch(list(range(len(names)))),0,0)
+    return b''.join(struct.pack('<4H',*node) for node in nodes)
+
 def cro(name,code,segments,exports=(),indexed=(),internal=(),named=(),imports=(),data=b''):
     """Write documented file records; symbol results are checked by guest math."""
     blob=bytearray(4096);h=dict.fromkeys(FIELDS,0);cursor=CODE
@@ -24,7 +43,7 @@ def cro(name,code,segments,exports=(),indexed=(),internal=(),named=(),imports=()
     section('module_name','module_name_size',name.encode()+b'\0');h['name']=h['module_name']
     section('segments','segment_count',b''.join(struct.pack('<3I',*s) for s in segments),12)
     section('exports','export_count',bytes(len(exports)*8),8)
-    section('tree','tree_count',b'',8)
+    section('tree','tree_count',export_tree([symbol for symbol,_ in exports]),8)
     section('index_exports','index_export_count',b''.join(struct.pack('<I',tag) for tag in indexed),4)
     strings=b''.join(symbol.encode()+b'\0' for symbol,_ in exports)
     section('export_strings','export_strings_size',strings)
