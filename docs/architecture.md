@@ -3,7 +3,8 @@
 CTR2WUP is developing a Windows application that turns one supported, owned 3DS
 revision into a standalone Wii U title. The engine must demonstrate execution,
 rendering, audio, saves and real package installation before the GUI presents a
-conversion as supported. Current deliverables are original diagnostics and host tools.
+conversion as supported. Current deliverables include original diagnostics,
+host tools and the [experimental Mario test builder](first-title.md#build-a-private-test-wup).
 
 ## Source map
 

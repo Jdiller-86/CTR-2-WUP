@@ -2,9 +2,16 @@
 
 Build a Windows injector that converts a supported, owned 3DS revision into a
 playable Wii U Menu title. The shared runtime and conversion engine come first.
-Commercial games and the GUI are not supported yet.
+Verified playable commercial games and the GUI are not supported yet.
 
 ## Current work
+
+The [experimental Mario USA test builder](docs/first-title.md#build-a-private-test-wup)
+connects ROM intake, assets, AOT/native compilation and verified WUP publication
+([#189](https://github.com/Jdiller-86/CTR-2-WUP/issues/189),
+[#38](https://github.com/Jdiller-86/CTR-2-WUP/issues/38)). Next, build from the owned
+ROM in a local session, then implement observed execution gaps. Original-input
+build checks do not establish Mario boot or gameplay.
 
 The initial ARMv6K/Thumb interpreter and original AOT path cover integer/media/DSP
 arithmetic, normal signed/unsigned memory addressing, typed exclusives, long calls

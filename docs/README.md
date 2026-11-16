@@ -1,8 +1,9 @@
 # Documentation
 
 CTR2WUP is an experimental 3DS-to-Wii U static recompilation project. Current
-builds provide original diagnostics and developer tools; commercial game
-conversion and the Windows injector GUI are unavailable.
+builds provide original diagnostics, developer tools and an
+[experimental Mario USA test WUP builder](first-title.md#build-a-private-test-wup).
+Verified playable-game conversion and the Windows injector GUI remain unavailable.
 
 ## Use the tools
 

@@ -1,6 +1,8 @@
 # Compatibility
 
-No commercial game profile is enabled. CTR2WUP's original diagnostics exercise
+No verified playable commercial profile is enabled. The CLI offers an
+[experimental Mario USA test WUP build](first-title.md#build-a-private-test-wup).
+CTR2WUP's original diagnostics exercise
 bounded runtime features; upstream desktop emulator compatibility does not imply
 Wii U compatibility. The selected first-title target is
 [Super Mario 3D Land, USA](first-title.md).
@@ -22,7 +24,9 @@ Wii U compatibility. The selected first-title target is
 
 Stable program ID identifies future saves; executable/module hashes identify a
 revision. Profiles must match exact revisions and explicit supported behavior.
-Only the original `ctr2wup-framebuffer-fixture-v1` is enabled by the guest CLI.
+The guest-fixture CLI remains limited to the original
+`ctr2wup-framebuffer-fixture-v1`; the separate Mario test builder records exact
+per-build hashes and explicitly unverified compatibility.
 
 Physical Wii U validation covers native controls/input, tone, stability, save
 reload, transfers and bounded guest draws. Exact source, environment and scope
