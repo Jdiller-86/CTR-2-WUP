@@ -299,11 +299,20 @@ void ctr_modules_close(ctr_guest *g) {
     loader *l=g->modules;if(!l)return;
     for(size_t i=0;i<l->count;++i) {
         module *m=&l->loaded[i];if(!m->file)continue;
+        /* Teardown must leave no mapping into freed backing, including an
+           alias installed by a trusted host adapter. Remove whole mappings. */
+        uintptr_t first=(uintptr_t)m->file,last=first+m->image->size;
+        for(size_t j=0;j<g->memory.count;) {
+            const ctr_mapping *map=&g->memory.maps[j];uintptr_t at=(uintptr_t)map->storage;
+            if(at<last && first<at+map->size)
+                (void)ctr_memory_change_range(&g->memory,map->base,map->size,0,true);
+            else ++j;
+        }
         for(unsigned j=0;j<2;++j)if(m->allocations[j]<NO_ALLOCATION && g->allocations[m->allocations[j]].pins)
             --g->allocations[m->allocations[j]].pins;
         free(m->file);
     }
-    free(l);g->modules=NULL;
+    free(l);g->modules=NULL;g->cpu.exclusive_valid=false;
 }
 static void release_stage(staging *s) { free(s->file);free(s->data);free(s->bss);memset(s,0,sizeof(*s)); }
 static unsigned allocation_for(ctr_guest *g,uint32_t address,uint32_t size) {

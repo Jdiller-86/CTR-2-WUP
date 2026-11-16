@@ -84,6 +84,8 @@ static void rejection_and_close(void) {
     CHECK(ctr_memory_backing_changed(&g->memory,g->storage[0],4)==CTR_MEM_OK);
     CHECK(ctr_modules_unload(g,0x200000,0x08001000,true)==CTR_MODULE_INVALIDATED);
     CHECK(ctr_modules_dispatch(g,1)==CTR_CPU_CODE_INVALIDATED);
+    ctr_modules_close(g);
+    CHECK(!g->modules && ctr_memory_check_range(&g->memory,0x200000,1,CTR_MEM_READ)==CTR_MEM_UNMAPPED);
     ctr_guest_close(g);CHECK(!g->modules);free(g);
 }
 static void malformed_relocation(void) {
