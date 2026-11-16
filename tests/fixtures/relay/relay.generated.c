@@ -2271,25 +2271,16 @@ static ctr_cpu_result ctr_relay_fixture_at_0010042c(ctr_cpu *cpu) {
 
 static ctr_cpu_result ctr_relay_fixture_at_00100430(ctr_cpu *cpu) {
     ++cpu->instructions;
-    uint32_t address = cpu->r[2];
-    ctr_cpu_result result = ctr_cpu_load(cpu, address, 4u, &cpu->r[0]);
+    ctr_cpu_result result = ctr_cpu_exclusive(cpu, 2u, 0u, 0u, 4u, true, UINT32_C(0xe1920f9f));
     if (result != CTR_CPU_OK) return result;
-    cpu->exclusive_valid = true;
-    cpu->exclusive_address = address;
-    cpu->exclusive_generation = cpu->memory->generation;
     cpu->r[15] = UINT32_C(0x00100434);
     return CTR_CPU_OK;
 }
 
 static ctr_cpu_result ctr_relay_fixture_at_00100434(ctr_cpu *cpu) {
     ++cpu->instructions;
-    bool valid = cpu->exclusive_valid && cpu->exclusive_address == cpu->r[2] && cpu->exclusive_generation == cpu->memory->generation;
-    cpu->exclusive_valid = false;
-    if (valid) {
-        ctr_cpu_result result = ctr_cpu_store(cpu, cpu->r[2], 4u, cpu->r[3]);
-        if (result != CTR_CPU_OK) return result;
-    }
-    cpu->r[1] = valid ? 0u : 1u;
+    ctr_cpu_result result = ctr_cpu_exclusive(cpu, 2u, 1u, 3u, 4u, false, UINT32_C(0xe1821f93));
+    if (result != CTR_CPU_OK) return result;
     cpu->r[15] = UINT32_C(0x00100438);
     return CTR_CPU_OK;
 }
@@ -2581,25 +2572,16 @@ static ctr_cpu_result ctr_relay_fixture_at_001004bc(ctr_cpu *cpu) {
 
 static ctr_cpu_result ctr_relay_fixture_at_001004c0(ctr_cpu *cpu) {
     ++cpu->instructions;
-    uint32_t address = cpu->r[2];
-    ctr_cpu_result result = ctr_cpu_load(cpu, address, 4u, &cpu->r[0]);
+    ctr_cpu_result result = ctr_cpu_exclusive(cpu, 2u, 0u, 0u, 4u, true, UINT32_C(0xe1920f9f));
     if (result != CTR_CPU_OK) return result;
-    cpu->exclusive_valid = true;
-    cpu->exclusive_address = address;
-    cpu->exclusive_generation = cpu->memory->generation;
     cpu->r[15] = UINT32_C(0x001004c4);
     return CTR_CPU_OK;
 }
 
 static ctr_cpu_result ctr_relay_fixture_at_001004c4(ctr_cpu *cpu) {
     ++cpu->instructions;
-    bool valid = cpu->exclusive_valid && cpu->exclusive_address == cpu->r[2] && cpu->exclusive_generation == cpu->memory->generation;
-    cpu->exclusive_valid = false;
-    if (valid) {
-        ctr_cpu_result result = ctr_cpu_store(cpu, cpu->r[2], 4u, cpu->r[3]);
-        if (result != CTR_CPU_OK) return result;
-    }
-    cpu->r[1] = valid ? 0u : 1u;
+    ctr_cpu_result result = ctr_cpu_exclusive(cpu, 2u, 1u, 3u, 4u, false, UINT32_C(0xe1821f93));
+    if (result != CTR_CPU_OK) return result;
     cpu->r[15] = UINT32_C(0x001004c8);
     return CTR_CPU_OK;
 }
@@ -2771,12 +2753,8 @@ static ctr_cpu_result ctr_relay_fixture_at_00100514(ctr_cpu *cpu) {
 
 static ctr_cpu_result ctr_relay_fixture_at_00100518(ctr_cpu *cpu) {
     ++cpu->instructions;
-    uint32_t address = cpu->r[6];
-    ctr_cpu_result result = ctr_cpu_load(cpu, address, 4u, &cpu->r[1]);
+    ctr_cpu_result result = ctr_cpu_exclusive(cpu, 6u, 1u, 0u, 4u, true, UINT32_C(0xe1961f9f));
     if (result != CTR_CPU_OK) return result;
-    cpu->exclusive_valid = true;
-    cpu->exclusive_address = address;
-    cpu->exclusive_generation = cpu->memory->generation;
     cpu->r[15] = UINT32_C(0x0010051c);
     return CTR_CPU_OK;
 }
@@ -2900,13 +2878,8 @@ static ctr_cpu_result ctr_relay_fixture_at_0010054c(ctr_cpu *cpu) {
 
 static ctr_cpu_result ctr_relay_fixture_at_00100550(ctr_cpu *cpu) {
     ++cpu->instructions;
-    bool valid = cpu->exclusive_valid && cpu->exclusive_address == cpu->r[6] && cpu->exclusive_generation == cpu->memory->generation;
-    cpu->exclusive_valid = false;
-    if (valid) {
-        ctr_cpu_result result = ctr_cpu_store(cpu, cpu->r[6], 4u, cpu->r[3]);
-        if (result != CTR_CPU_OK) return result;
-    }
-    cpu->r[0] = valid ? 0u : 1u;
+    ctr_cpu_result result = ctr_cpu_exclusive(cpu, 6u, 0u, 3u, 4u, false, UINT32_C(0xe1860f93));
+    if (result != CTR_CPU_OK) return result;
     cpu->r[15] = UINT32_C(0x00100554);
     return CTR_CPU_OK;
 }

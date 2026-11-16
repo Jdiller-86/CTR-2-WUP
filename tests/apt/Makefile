@@ -8,9 +8,9 @@ SOURCES := $(CTR_RUNTIME_SOURCES) test_apt.c $(addprefix $(ROOT)/runtime/core/,c
 $(OUT):
 	mkdir -p "$@"
 $(OUT)/apt-tests: $(SOURCES) $(CTR_RUNTIME_MANIFEST) $(wildcard $(ROOT)/runtime/core/*.h) | $(OUT)
-	$(CC) $(FLAGS) $(SOURCES) -o "$@"
+	$(CC) $(FLAGS) $(SOURCES) -lm -o "$@"
 check: $(OUT)/apt-tests
 	"$(OUT)/apt-tests"
 sanitize: | $(OUT)
-	$(CC) $(FLAGS) -O1 -fno-omit-frame-pointer -fsanitize=address,undefined $(SOURCES) -o "$(OUT)/apt-tests-sanitized"
+	$(CC) $(FLAGS) -O1 -fno-omit-frame-pointer -fsanitize=address,undefined $(SOURCES) -lm -o "$(OUT)/apt-tests-sanitized"
 	ASAN_OPTIONS=detect_leaks=1 "$(OUT)/apt-tests-sanitized"

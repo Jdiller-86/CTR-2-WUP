@@ -92,7 +92,7 @@ def main():
     generated.append('const ctr_block_fn ctr_reference_functions[]={'+','.join(f'ctr_case_{i}_at_{TEXT:08x}' for i in range(len(rows)))+'};\n')
     source=out/'oracle-aot.c';source.write_text('\n'.join(generated));library=out/'oracle.so'
     command=shlex.split(args.cc)+['-std=c11','-O2','-Wall','-Wextra','-Werror','-shared','-fPIC','-I',str(ROOT/'runtime/core'),
-        str(ROOT/'runtime/core/ctr_cpu.c'),str(ROOT/'runtime/core/ctr_memory.c'),str(ROOT/'tests/multiple/oracle_bridge.c'),str(source),'-o',str(library)]
+        str(ROOT/'runtime/core/ctr_cpu.c'),str(ROOT/'runtime/core/ctr_vfp.c'),str(ROOT/'runtime/core/ctr_memory.c'),str(ROOT/'tests/multiple/oracle_bridge.c'),str(source),'-lm','-o',str(library)]
     p=subprocess.run(command,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/'compile.log').write_text(p.stdout)
     if p.returncode:raise RuntimeError('Reference bridge compilation failed')
     bridge=ctypes.CDLL(str(library)).ctr_multiple_reference_step

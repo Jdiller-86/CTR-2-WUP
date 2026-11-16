@@ -1,6 +1,7 @@
 ctr_memory.c
 ctr_resource_cache.c
 ctr_cpu.c
+ctr_vfp.c
 ctr_guest.c
 ctr_ipc.c
 ctr_heap.c

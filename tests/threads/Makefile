@@ -8,9 +8,9 @@ SOURCES := $(CTR_RUNTIME_SOURCES) test_threads.c $(addprefix $(ROOT)/runtime/cor
 $(OUT):
 	mkdir -p "$@"
 $(OUT)/thread-tests: $(SOURCES) $(CTR_RUNTIME_MANIFEST) $(wildcard $(ROOT)/runtime/core/*.h) | $(OUT)
-	$(CC) $(FLAGS) $(SOURCES) -o "$@"
+	$(CC) $(FLAGS) $(SOURCES) -lm -o "$@"
 check: $(OUT)/thread-tests
 	"$(OUT)/thread-tests"
 sanitize: | $(OUT)
-	$(CC) $(FLAGS) -O1 -fno-omit-frame-pointer -fsanitize=address,undefined $(SOURCES) -o "$(OUT)/thread-tests-sanitized"
+	$(CC) $(FLAGS) -O1 -fno-omit-frame-pointer -fsanitize=address,undefined $(SOURCES) -lm -o "$(OUT)/thread-tests-sanitized"
 	ASAN_OPTIONS=detect_leaks=1 "$(OUT)/thread-tests-sanitized"
