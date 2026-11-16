@@ -12,9 +12,12 @@ dependencies = []
 [project.optional-dependencies]
 packaging = ["cryptography>=50.0.2,<51"]
 decryption = ["cryptography>=50.0.2,<51"]
+mcp = ["mcp==2.3.0"]
+mcp-test = ["mcp==2.3.0", "pyftpdlib==2.2.0"]
 
 [project.scripts]
 ctr2wup = "host.cli:main"
+ctr2wup-wiiu = "host.wiiu_mcp:main"
 
 [tool.setuptools]
 packages = ["host", "translator", "renderer"]

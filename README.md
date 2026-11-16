@@ -40,6 +40,8 @@ and hardware validation scope.
 For original diagnostic downloads, follow [getting started](docs/getting-started.md)
 and the single guide inside the chosen package. SD files can be copied by FTP.
 Test instructions and return-folder details ship with each package.
+The optional [Wii U MCP bridge](docs/wiiu-mcp.md) automates host builds, homebrew
+launch submissions and private result collection through existing Aroma plugins.
 
 Host development needs Python 3.12+, GNU Make and a C compiler:
 

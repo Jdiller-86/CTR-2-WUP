@@ -166,3 +166,12 @@ the source/artifact distribution in docs/licenses:
 
 The full devkitPro SDK/image, external lifter binary and unlicensed packaging
 candidate binaries are not part of the delivered source/diagnostic bundles.
+
+Optional Wii U MCP bridge
+------------------------
+The host-only MCP extra installs the official Model Context Protocol Python SDK
+2.3.0 (MIT) and its separately licensed dependencies through pip. The mcp-test
+extra also installs pyftpdlib 2.2.0 (MIT) for original loopback FTP fixtures.
+Neither package is copied into Wii U binaries. The adapter invokes an external
+devkitPro wiiload and interoperates with separately installed Aroma FTPiiU and
+wiiload plugins; their code and binaries are not included in this project.
