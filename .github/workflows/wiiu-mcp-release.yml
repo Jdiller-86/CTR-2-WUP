@@ -134,6 +134,7 @@ jobs:
       - name: Install pinned runtime and freezing tools
         run: |
           python -m pip install --only-binary=:all: --require-hashes -r packaging/wiiu-mcp-requirements.lock
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -m pip install -r packaging/wiiu-mcp-windows-build.txt '.[mcp-test]'
       - name: Freeze the bridge and guided desktop setup
         run: python tools/build-wiiu-mcp-windows.py --output artifacts/wiiu-mcp-windows/frozen
@@ -141,10 +142,12 @@ jobs:
         run: |
           $base = (Get-ChildItem artifacts/wiiu-mcp-windows/base -Filter '*.zip').FullName
           python tools/package-wiiu-mcp-windows.py --base "$base" --frozen artifacts/wiiu-mcp-windows/frozen --output artifacts/wiiu-mcp-windows/publish
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -c "from pathlib import Path; from zipfile import ZipFile; p,=Path('artifacts/wiiu-mcp-windows/publish').glob('*.zip'); ZipFile(p).extractall('artifacts/wiiu-mcp-windows/stage')"
       - name: Check real Windows GUI and frozen MCP operation without a Python installation
         run: |
-          python tools/windows/test-wiiu-mcp-bundle.py --kit artifacts/wiiu-mcp-windows/stage --output artifacts/wiiu-mcp-windows/checks
+          python tools/windows/test-wiiu-mcp-bundle.py --kit artifacts/wiiu-mcp-windows/stage --output artifacts/wiiu-mcp-windows/checks --emit-previews
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Copy-Item artifacts/wiiu-mcp-windows/checks/windows-check.json artifacts/wiiu-mcp-windows/publish/installer-checks.json
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

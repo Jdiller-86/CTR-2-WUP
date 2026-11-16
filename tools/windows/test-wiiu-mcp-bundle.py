@@ -1,6 +1,8 @@
 """Exercise the frozen Windows programs using original local fixtures only."""
 import argparse
 import asyncio
+import base64
+import hashlib
 import importlib.util
 import json
 import os
@@ -24,7 +26,7 @@ def load(name, path):
     return result
 
 
-def screenshots(gui, kit, output):
+def screenshots(gui, kit, output, emit=False):
     import win32con
     import win32gui
     from PIL import ImageGrab
@@ -49,7 +51,15 @@ def screenshots(gui, kit, output):
             if handle is None:
                 raise RuntimeError("Installer window did not appear")
             time.sleep(0.5)
-            ImageGrab.grab(bbox=win32gui.GetWindowRect(handle)).save(output / f"installer-step-{page}.png")
+            image_path = output / f"installer-step-{page}.png"
+            ImageGrab.grab(bbox=win32gui.GetWindowRect(handle)).save(image_path)
+            if emit:
+                data = image_path.read_bytes()
+                encoded = base64.b64encode(data).decode("ascii")
+                print(f"CTR2WUP_PREVIEW_BEGIN {page} {hashlib.sha256(data).hexdigest()} {len(data)}", flush=True)
+                for offset in range(0, len(encoded), 16000):
+                    print(f"CTR2WUP_PREVIEW_DATA {page} {offset} {encoded[offset:offset + 16000]}", flush=True)
+                print(f"CTR2WUP_PREVIEW_END {page}", flush=True)
         finally:
             if handle:
                 win32gui.PostMessage(handle, win32con.WM_CLOSE, 0, 0)
@@ -60,7 +70,7 @@ def screenshots(gui, kit, output):
                 process.wait(timeout=10)
 
 
-def check(kit, output):
+def check(kit, output, emit_previews=False):
     output.mkdir(parents=True)
     gui = kit / "Install Wii U MCP.exe"
     subprocess.run([str(gui), "--kit", str(kit), "--self-test", "--report", str(output / "gui-check.json")], check=True, timeout=40)
@@ -121,7 +131,7 @@ def check(kit, output):
         finally:
             server.close_all()
             thread.join(timeout=5)
-    screenshots(gui, kit, output)
+    screenshots(gui, kit, output, emit=emit_previews)
     report = {"ok": True, "source_commit": json.loads((kit / "manifest.json").read_text())["source_commit"],
               "frozen_bridge_handshake": True, "python_install_required": False,
               "sd_fixture_copied": True, "codex_fixture_registered": True, "physical_console_contacted": False}
@@ -133,5 +143,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--kit", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--emit-previews", action="store_true")
     args = parser.parse_args()
-    print(json.dumps(check(args.kit.resolve(), args.output.resolve())))
+    print(json.dumps(check(args.kit.resolve(), args.output.resolve(), args.emit_previews)))
