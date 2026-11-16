@@ -48,8 +48,10 @@ class Wizard:
         self.title = tk.StringVar()
         self.description = tk.StringVar()
         window.title("CTR2WUP · Wii U MCP Setup")
-        window.geometry("980x680")
-        window.minsize(860, 620)
+        width = min(980, window.winfo_screenwidth() - 40)
+        height = min(680, window.winfo_screenheight() - 120)
+        window.geometry(f"{width}x{height}+20+20")
+        window.minsize(min(860, width), min(540, height))
         window.configure(background="#edf2f7")
         window.protocol("WM_DELETE_WINDOW", self.close)
         self.style()
@@ -366,6 +368,8 @@ def main():
                 wizard.show(page)
                 window.update()
                 assert wizard.title.get() and wizard.card.winfo_width() > 400
+                assert window.winfo_rooty() + window.winfo_height() <= window.winfo_screenheight() - 60, "Setup extends behind the taskbar"
+                assert wizard.footer.winfo_y() + wizard.footer.winfo_height() <= wizard.footer.master.winfo_height(), "Setup buttons are clipped"
                 for widget in wizard.card.winfo_children():
                     assert widget.winfo_y() + widget.winfo_height() <= wizard.card.winfo_height(), "Setup content is clipped"
                 sizes.append({"page": page + 1, "width": wizard.card.winfo_width(), "height": wizard.card.winfo_height()})

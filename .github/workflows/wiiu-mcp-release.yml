@@ -28,7 +28,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Require main or the exact alpha tag and clean source
+      - name: Require an allowed source and clean checkout
         run: |
           python3 - <<'PY'
           import os, re, runpy
@@ -163,7 +163,7 @@ jobs:
 
   release:
     needs: [build, windows]
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/wiiu-mcp-v')
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/wiiu-mcp-v') || github.ref == 'refs/heads/feat/wiiu-mcp-installer'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -197,6 +197,11 @@ jobs:
                   manifest = json.loads(z.read('manifest.json'))
               assert manifest['source_commit'] == os.environ['GITHUB_SHA']
               assert manifest['python_runtime_bundled'] is windows
+          ref_name = os.environ['GITHUB_REF']
+          if ref_name == 'refs/heads/feat/wiiu-mcp-installer':
+              assert manifest['version'] == '0.1.0-alpha.2', 'Feature publication is limited to the installer alpha'
+          else:
+              assert ref_name == 'refs/heads/main' or ref_name == 'refs/tags/wiiu-mcp-v'+manifest['version']
           checks = json.loads((root/'installer-checks.json').read_text())
           assert checks['ok'] and checks['frozen_bridge_handshake'] and checks['source_commit'] == os.environ['GITHUB_SHA']
           tag = 'wiiu-mcp-v' + manifest['version']
