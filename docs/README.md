@@ -29,7 +29,7 @@ Wii U application changes follow the [platform protocol](wiiu-platform.md).
 [Development plan](https://github.com/Jdiller-86/CTR-2-WUP/blob/main/plans.md)
 
 The runtime references describe [CPU execution](cpu.md), [memory](guest-memory.md),
-[services and input](services.md), [display and transfers](graphics-transport.md),
+[services and input](services.md), [CRO modules](modules.md), [display and transfers](graphics-transport.md),
 [software scenes](software-scenes.md), [guest draws](guest-pica-draws.md),
 [filesystem](filesystem.md) and [audio](audio.md). These are bounded contracts,
 not claims of general 3DS compatibility.

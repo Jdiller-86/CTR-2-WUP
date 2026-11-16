@@ -3,6 +3,7 @@ ctr_resource_cache.c
 ctr_cpu.c
 ctr_vfp.c
 ctr_guest.c
+ctr_module.c
 ctr_ipc.c
 ctr_heap.c
 ctr_kernel.c

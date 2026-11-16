@@ -38,7 +38,8 @@ prevent bundling that implementation.
   little-endian callbacks; page pointers/span bypasses are unused. No 4 GiB
   host reservation is needed.
 - Attach checks ABI 4, generation 3, entry ordering and FNV code-piece hashes
-  against executable mappings. CRO/module attachment is rejected.
+  against executable mappings. External-emitter module tables are rejected;
+  [packaged CRO modules](modules.md) use the shared checked original-AOT registry.
 - State is visible at every instruction. Exact budgets resume mid-function;
   SVCs unwind to the shared scheduler for sleep/events/exit. TLS refreshes from
   the current CPU at every execution entry.
