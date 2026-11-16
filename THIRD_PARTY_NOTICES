@@ -173,5 +173,14 @@ The host-only MCP extra installs the official Model Context Protocol Python SDK
 2.3.0 (MIT) and its separately licensed dependencies through pip. The mcp-test
 extra also installs pyftpdlib 2.2.0 (MIT) for original loopback FTP fixtures.
 Neither package is copied into Wii U binaries. The adapter invokes an external
-devkitPro wiiload and interoperates with separately installed Aroma FTPiiU and
-wiiload plugins; their code and binaries are not included in this project.
+devkitPro wiiload when explicitly configured; its default sender is an original
+Python implementation of the public wiiload framing, without copied upstream
+implementation code.
+
+The optional starter kit redistributes unmodified official Aroma plugin/module
+binaries from the exact releases in packaging/wiiu-mcp-components.json. Their
+release archives, commit-pinned source archives, upstream build recipes and
+license texts accompany the kit. Those components retain their original
+licenses and are not relicensed under CTR2WUP's MIT license. Python dependencies
+are installed separately from PyPI using published wheel hashes; their package
+notices are installed with them. The full devkitPro SDK is not redistributed.

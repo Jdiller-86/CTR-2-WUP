@@ -1,4 +1,4 @@
-"""Small Aroma bridge using FTPiiU and the official devkitPro wiiload client.
+"""Small Aroma bridge using FTPiiU and the public wiiload protocol.
 
 No resident agent, custom wire protocol, shell commands or implicit retries.
 File transport receipts are deliberately separate from hardware test verdicts.
@@ -77,7 +77,7 @@ class BridgeConfig:
     project_root: Path
     ftp_port: int = 21
     timeout: float = 10
-    wiiload: str = "wiiload"
+    wiiload: str = "builtin"
     read_roots: tuple[str, ...] = ("ctr2wup", "wiiu/apps", "wiiu/crash_logs", "wiiu/screenshots", "install")
     write_roots: tuple[str, ...] = ("ctr2wup", "wiiu/apps", "install")
 
@@ -122,7 +122,7 @@ class WiiUBridge:
 
     def capabilities(self) -> dict:
         return {
-            "transport": "Aroma FTPiiU + devkitPro wiiload", "mcp_transport": "stdio",
+            "transport": "Aroma FTPiiU + wiiload", "mcp_transport": "stdio",
             "console_host": self.config.console_host, "hardware_verified": False,
             "supported": ["build", "list_sd", "read_sd", "upload_sd_verified",
                           "download_sd_verified", "collect_results", "launch_homebrew", "udp_logs"],
@@ -215,7 +215,8 @@ class WiiUBridge:
             ftp.voidcmd("NOOP")
             self._listing(ftp, SD_ROOT)
         return {"ftp_reachable": True, "sd_readable": True,
-                "wiiload_available": bool(self._wiiload()), "hardware_test_result": "unverified"}
+                "wiiload_available": self.config.wiiload == "builtin" or bool(self._wiiload()),
+                "hardware_test_result": "unverified"}
 
     def list_files(self, sd_path: str) -> dict:
         absolute = self._remote(sd_path)
@@ -358,6 +359,12 @@ class WiiUBridge:
             raise ValueError("Homebrew exceeds the launch limit")
         if data[:4] != (b"WUHB" if source.suffix.lower() == ".wuhb" else b"\x7fELF"):
             raise ValueError("Homebrew header does not match its extension")
+        if self.config.wiiload == "builtin":
+            from .wiiload import send
+            with self._operations:
+                result = send(self.config.console_host, source.name, data)
+            return {"submitted": True, "local_file": local_file, "sha256": digest(data),
+                    "test_verdict": "not_evaluated", **result}
         executable = self._wiiload()
         if executable is None:
             raise ValueError("Install devkitPro wiiload or set its absolute path in the bridge configuration")

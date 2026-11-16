@@ -2,14 +2,21 @@
 
 The optional host bridge builds CTR2WUP diagnostics, transfers files, submits
 homebrew launches and collects results from an owned Aroma Wii U. It reuses
-FTPiiU, devkitPro wiiload and the existing build/report helpers. No new resident
+FTPiiU, the wiiload protocol and the existing build/report helpers. No new resident
 plugin or Wii U application is required. Physical-console acceptance is pending.
 
 ## Setup
 
-On a computer on the console's trusted LAN, install Python 3.12+ and run
+The [Wii U MCP starter kit](https://github.com/Jdiller-86/CTR-2-WUP/releases)
+includes the bridge, a setup helper, all ten pinned Aroma components and their
+source/licenses, an original diagnostic WUHB and a source snapshot. Extract it
+to a permanent folder and follow its single `START-HERE.txt`. Host dependency
+installation requires Internet and Python 3.12+; the SDK is needed only for
+native rebuilds. Hardware acceptance is pending.
+
+For source installation, on a computer on the console's trusted LAN, install Python 3.12+ and run
 `python -m pip install -e '.[mcp]'` in the checkout. Native builds also need the
-[verified SDK](../CONTRIBUTING.md#build-and-validate), which includes wiiload.
+[verified SDK](../CONTRIBUTING.md#build-and-validate).
 Enable the official [FTPiiU](https://github.com/wiiu-env/ftpiiu_plugin) and
 [wiiload](https://github.com/wiiu-env/wiiload_plugin) Aroma plugins and their
 documented dependencies. Leave FTPiiU system-file access disabled. These
@@ -23,7 +30,7 @@ console_host = "192.168.1.50"
 project_root = "/absolute/path/to/CTR-2-WUP"
 ftp_port = 21
 timeout = 10
-wiiload = "wiiload"
+wiiload = "builtin"
 ```
 
 Register this stdio command in the MCP client. For a TOML client configuration:
@@ -36,8 +43,9 @@ env = { CTR2WUP_PROJECT_ROOT = "/absolute/path/to/CTR-2-WUP" }
 ```
 
 Use `.venv/Scripts/python.exe` on Windows; forward slashes work in TOML paths.
-Install the package in that interpreter. If needed, set `wiiload` to its absolute
-executable path. FTPiiU normally accepts empty credentials; optional credentials
+Install the package in that interpreter. The built-in Python wiiload sender
+requires no desktop executable. An official devkitPro executable can still be
+selected by setting `wiiload` to its absolute path. FTPiiU normally accepts empty credentials; optional credentials
 come from `CTR2WUP_FTP_USER`/`CTR2WUP_FTP_PASSWORD`, never tracked files. A numeric
 IPv4 address binds all three transports to one peer. Cloud use needs a separately
 configured route to this host and stdio registration, for example through SSH.
@@ -48,13 +56,13 @@ This package does not add tools to an already running cloud session.
 | Tool | Behavior |
 | --- | --- |
 | `wiiu_capabilities` | Offline operations, access roots, limits and unavailable controls |
-| `wiiu_status` | FTP/SD connectivity and host wiiload availability |
+| `wiiu_status` | FTP/SD connectivity and launch sender availability |
 | `wiiu_build` | Existing diagnostic pipeline with source identity and artifact hashes |
 | `wiiu_list_files`, `wiiu_read_text` | Directory inventory or up to 64 KiB of untrusted SD text |
 | `wiiu_upload` | Stage, read back, publish and verify a new SD file |
 | `wiiu_download` | Two matching reads into a fresh file under `private/wiiu/` |
 | `wiiu_collect_results` | Bounded recursive collection with a private hash receipt |
-| `wiiu_launch` | Submit a local RPX/WUHB once through official wiiload |
+| `wiiu_launch` | Submit a local RPX/WUHB once using the wiiload protocol |
 | `wiiu_start_logs`, `wiiu_read_logs`, `wiiu_stop_logs` | Bounded console-source UDP capture with cursors |
 
 Call capabilities and status, build a diagnostic, then launch its returned local
@@ -111,11 +119,30 @@ WUP automation must preserve the platform protocol's ownership/predecessor check
 
 ## Validation and next acceptance
 
+The starter kit is built by `tools/package-wiiu-mcp.py` from clean source, a
+source-matched wheel/native build, the verified SDK license directory and
+successful check evidence. `packaging/wiiu-mcp-components.json` pins upstream
+release/source hashes and exact SD destinations; no floating latest download is
+used during packaging. The packager checks ZIP CRCs, source/wheel agreement,
+component inventories and read-back hashes. `setup.py --verify-only` validates
+the extracted kit before installation. It never writes to an SD card or contacts
+a console. The staged modules are for an existing Aroma installation, not a CFW
+installer. Back up existing SD files and compare installed versions before merging.
+
+`packaging/wiiu-mcp-requirements.lock` pins the Python dependency closure and
+published wheel hashes, including Windows-specific packages. Setup creates a
+private virtual environment and absolute MCP/configuration paths. The source
+snapshot supports file/launch operations without Git. Native builds need a real
+Git checkout, selected with `setup.py --project`, and the verified SDK; the full
+compiler toolchain and Python runtime are not redistributed in the kit.
+
 Install `.[mcp-test]` and run
 `python -m unittest discover -s tests -p test_wiiu_bridge.py -v` for actual
 loopback FTP/MCP stdio, corruption/size checks, partial evidence preservation,
 UDP buffering and launch timeouts. These tests contact no Wii U. Run `make check`
 and the strict documentation build for repository changes.
+`test_wiiu_mcp_release.py` also checks the built-in sender over an actual TCP
+connection, installer configuration, tamper rejection and archive traversal.
 
 Physical acceptance waits until the console is available: check status, submit
 one original diagnostic and collect its actual results, recording plugin

@@ -212,6 +212,7 @@ class BridgeIntegrationTests(unittest.TestCase):
         self.assertEqual(list((self.sd / "ctr2wup/corrupt").iterdir()), [])
 
     def test_launch_uses_argument_vector_and_no_automatic_retry(self):
+        self.bridge = WiiUBridge(BridgeConfig("127.0.0.1", self.project, wiiload="wiiload"))
         (self.project / "original fixture.wuhb").write_bytes(b"WUHBoriginal fixture")
         with patch.object(self.bridge, "_wiiload", return_value="official-wiiload"), patch("host.wiiu_bridge.subprocess.run") as run:
             run.return_value = subprocess.CompletedProcess([], 0)
