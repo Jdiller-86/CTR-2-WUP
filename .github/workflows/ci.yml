@@ -307,6 +307,15 @@ jobs:
           cp -R "$DEVKITPRO/licenses" artifacts/ci/wiiu/sdk-licenses
           git rev-parse HEAD > artifacts/ci/wiiu/source-commit.txt
           (cd artifacts/ci/wiiu && sha256sum -- *.rpx *.wuhb > SHA256SUMS)
+      - name: Build and package the optional Aroma control plugin
+        run: bash tools/build-wiiu-control.sh
+      - name: Upload the Aroma control plugin and matching source
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wiiu-control-${{ github.sha }}
+          path: artifacts/wiiu-control/bundle/
+          retention-days: 30
+          if-no-files-found: error
       - name: Build the focused original software Scene Check
         run: |
           set -euo pipefail

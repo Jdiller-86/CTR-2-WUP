@@ -21,6 +21,10 @@ bool ctr_report_storage_verify(void *context,const char *path,uint64_t bytes,
  * Uses the same owned FSA client and checked reader as report verification. */
 bool ctr_report_storage_verify_title(void *context,unsigned target,uint64_t title,
                                     const char *relative,uint64_t bytes,const uint8_t sha256[32]);
+/* For a signed, independently verified install inventory. Restricts lookup to
+ * code/content/meta of the exact application and selected volume. */
+bool ctr_report_storage_verify_installed_file(void *context,unsigned target,uint64_t title,
+                                             const char *relative,uint64_t bytes,const uint8_t sha256[32]);
 void ctr_report_storage_close(ctr_report_storage *storage);
 
 #endif
