@@ -9,11 +9,12 @@ installation. Physical-console acceptance of the new plugin is pending.
 ## Setup
 
 The [Wii U MCP starter kit](https://github.com/Jdiller-86/CTR-2-WUP/releases)
-includes the bridge, a setup helper, all ten pinned Aroma components and their
-source/licenses, an original diagnostic WUHB and a source snapshot. Extract it
-to a permanent folder and follow its single `START-HERE.txt`. Host dependency
-installation requires Internet and Python 3.12+; the SDK is needed only for
-native rebuilds. Hardware acceptance is pending.
+includes the paired control plugin, bridge, setup helper, ten pinned upstream
+Aroma components with sources and licenses, an original diagnostic WUHB and a
+source snapshot. Extract it to a permanent folder and follow `START-HERE.txt`.
+Setup generates the local pairing key and exports the public key for the SD card.
+Host dependency installation requires Internet and Python 3.12+. The SDK is
+needed only for native rebuilds. Physical-console validation is pending.
 
 For source installation, on a computer on the console's trusted LAN, install Python 3.12+ and run
 `python -m pip install -e '.[mcp]'` in the checkout. Native builds also need the
@@ -90,7 +91,8 @@ python -m host.wiiu_mcp --config private/wiiu.toml --action collect --sd-path ct
 
 ## Pair the optional Aroma plugin
 
-Use the updated MCP checkout and install it with
+Starter-kit setup generates the pairing files described in `START-HERE.txt`.
+For a source checkout, install the updated host with
 `python -m pip install -e '.[packaging,mcp]'`. Get the `wiiu-control-…` artifact
 from the matching GitHub Actions Wii U build. With the verified devkitPro SDK
 and Docker, you can also run `bash tools/build-wiiu-control.sh` on Linux.
@@ -160,9 +162,9 @@ An already saved screenshot can be downloaded.
 
 ## Validation and next acceptance
 
-The starter kit is built by `tools/package-wiiu-mcp.py` from clean source, a
-source-matched wheel/native build, the verified SDK license directory and
-successful check evidence. `packaging/wiiu-mcp-components.json` pins upstream
+The starter kit is built by `tools/package-wiiu-mcp.py` from clean source,
+source-matched wheel, diagnostic and control plugin builds, the verified SDK
+license directory and successful check evidence. `packaging/wiiu-mcp-components.json` pins upstream
 release/source hashes and exact SD destinations; no floating latest download is
 used during packaging. The packager checks ZIP CRCs, source/wheel agreement,
 component inventories and read-back hashes. `setup.py --verify-only` validates
