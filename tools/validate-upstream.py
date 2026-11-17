@@ -13,7 +13,6 @@ import shlex
 import subprocess
 import struct
 import sys
-import tempfile
 import time
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from host.runtime_sources import runtime_sources

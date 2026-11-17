@@ -16,7 +16,6 @@ import os
 from pathlib import Path
 import re
 import shutil
-import subprocess
 import tempfile
 from urllib.parse import unquote, urlsplit
 import zipfile

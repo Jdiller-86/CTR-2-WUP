@@ -8,8 +8,6 @@ are retained. Preview is read-only; apply requires the exact trusted main.
 import base64
 import hashlib
 import json
-from pathlib import Path
-import re
 
 import project
 

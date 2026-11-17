@@ -1,5 +1,4 @@
 """Strictly profiled NCCH -> original generated C -> desktop execution pipeline."""
-import hashlib
 import json
 from pathlib import Path
 from .runtime_sources import runtime_sources
@@ -8,7 +7,7 @@ import subprocess
 import tempfile
 
 from .atomic import publish_directory
-from .build import _run_build, _sha256, MIN_BUILD_FREE
+from .build_support import MIN_BUILD_FREE, _run_build, _sha256
 from .doctor import repository_root, tool_environment
 from .errors import HostError
 from .guest_fixture import fixture_bytes, guest_code, TEXT_ADDRESS, DATA_ADDRESS, BSS_SIZE, PROGRAM_ID

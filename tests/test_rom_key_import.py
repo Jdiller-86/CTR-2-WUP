@@ -92,7 +92,8 @@ class KeyImportTests(unittest.TestCase):
     def test_imported_exports_feed_double_encrypted_preparation(self):
         try:
             from tests.encrypted_fixtures import KEY_X, encrypted_cia, encrypted_ncch
-        except ImportError: self.skipTest('optional crypto dependency is unavailable')
+        except ImportError as exc:
+            raise unittest.SkipTest('optional crypto dependency is unavailable') from exc
         raw = bytearray()
         for slot, value in KEY_X.items():
             raw += bytes([int(slot, 16), ord('X')]) + bytes(12) + bytes([2, 0]) + value

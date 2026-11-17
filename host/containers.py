@@ -14,14 +14,12 @@ from pathlib import Path
 import struct
 from typing import BinaryIO
 
+from .cia import main_content, read_cia
+from .container_bounds import check_range, fail
 from .errors import HostError
 
 MAX_CODE_BYTES = 128 * 1024 * 1024
 MAX_SECTION_METADATA = 16 * 1024 * 1024
-
-
-def fail(code, message):
-    raise HostError(code, message)
 
 
 def u32(data, offset):
@@ -30,11 +28,6 @@ def u32(data, offset):
 
 def u64(data, offset):
     return struct.unpack_from("<Q", data, offset)[0]
-
-
-def check_range(offset, length, limit, label):
-    if offset < 0 or length < 0 or offset > limit or length > limit - offset:
-        fail("invalid_bounds", f"{label} lies outside its containing region")
 
 
 def check_overlaps(regions):
@@ -129,8 +122,8 @@ def _ascii(raw, label):
     raw = raw.split(b"\0", 1)[0]
     try:
         return raw.decode("ascii")
-    except UnicodeDecodeError:
-        fail("invalid_metadata", f"{label} contains non-ASCII bytes")
+    except UnicodeDecodeError as exc:
+        raise HostError("invalid_metadata", f"{label} contains non-ASCII bytes") from exc
 
 
 def _smdh(data):
@@ -337,7 +330,6 @@ def inspect(path: str | Path):
                     fail("missing_main_partition", "NCSD has no main executable partition 0")
                 partitions = [_ncch(reader, offset, length, partition=index) for index, offset, length in slots]
             elif u32(header, 0) == 0x2020:
-                from .cia import read_cia, main_content
                 cia = read_cia(reader)
                 content = main_content(cia)
                 kind = "CIA"

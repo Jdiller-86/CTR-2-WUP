@@ -6,7 +6,7 @@ This script deliberately has no project imports: copy it to a Windows/Python
 extract arbitrary host paths or establish container authenticity/compatibility.
 """
 import argparse
-from contextlib import ExitStack
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -82,14 +82,10 @@ def fingerprint(value):
 
 
 class Input:
-    def __init__(self, path, stack):
-        self.path = Path(path).absolute()
-        self.initial_path = os.stat(self.path, follow_symlinks=False)
-        if not stat.S_ISREG(self.initial_path.st_mode):
-            fail("unsafe_input", "Inputs must be regular files, not symbolic links")
-        flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
-        fd = os.open(self.path, flags)
-        self.handle = stack.enter_context(os.fdopen(fd, "rb"))
+    def __init__(self, path, initial_path, handle):
+        self.path = path
+        self.initial_path = initial_path
+        self.handle = handle
         self.initial = os.fstat(self.handle.fileno())
         if not stat.S_ISREG(self.initial.st_mode):
             fail("unsafe_input", "Inputs must be regular files")
@@ -123,6 +119,20 @@ class Input:
         for data in self.chunks(0, self.initial.st_size):
             result.update(data)
         return result.hexdigest()
+
+
+@contextmanager
+def open_input(path):
+    path = Path(path).absolute()
+    initial_path = os.stat(path, follow_symlinks=False)
+    if not stat.S_ISREG(initial_path.st_mode):
+        fail("unsafe_input", "Inputs must be regular files, not symbolic links")
+
+    def open_regular(filename, flags):
+        return os.open(filename, flags | getattr(os, "O_NOFOLLOW", 0))
+
+    with open(path, "rb", opener=open_regular) as handle:
+        yield Input(path, initial_path, handle)
 
 
 def unique_keys(pairs):
@@ -270,9 +280,9 @@ def export_samples(manifest, preparation_report, romfs, paths, output):
         fail("output_exists", "Output already exists and was preserved; choose a new ZIP name")
     stage = None
     try:
-        with ExitStack() as stack:
-            manifest_input, preparation_input, blob_input = [Input(p, stack) for p in
-                                                            (manifest, preparation_report, romfs)]
+        with (open_input(manifest) as manifest_input,
+              open_input(preparation_report) as preparation_input,
+              open_input(romfs) as blob_input):
             inputs = (manifest_input, preparation_input, blob_input)
             identities = {(s.initial_path.st_dev, s.initial_path.st_ino) for s in inputs}
             if len(identities) != len(inputs):

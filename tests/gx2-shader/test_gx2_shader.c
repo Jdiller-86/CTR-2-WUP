@@ -358,9 +358,10 @@ static void bounds_and_failures(void) {
     CHECK(ctr_gx2_shader_compile(&p,3,(const uint32_t *)(uintptr_t)(UINTPTR_MAX-3u),2,&out)==CTR_GX2_SHADER_OVERFLOW);
     CHECK(ctr_gx2_shader_compile(&p,3,maps,2,(ctr_gx2_shader *)(uintptr_t)(UINTPTR_MAX-3u))==CTR_GX2_SHADER_OVERFLOW);
     CHECK(!memcmp(&out,&previous,sizeof(out)));
-    ctr_gx2_shader *storage=malloc(sizeof(*storage));CHECK(storage!=NULL);
-    CHECK(ctr_gx2_shader_compile((const ctr_shader_program *)storage,3,maps,2,storage)==CTR_GX2_SHADER_ALIAS);
-    CHECK(ctr_gx2_shader_compile(&p,3,(uint32_t *)storage,2,storage)==CTR_GX2_SHADER_ALIAS);
+    union { ctr_gx2_shader output;ctr_shader_program input;uint32_t semantics[2]; } *storage=malloc(sizeof(*storage));
+    CHECK(storage!=NULL);
+    CHECK(ctr_gx2_shader_compile(&storage->input,3,maps,2,&storage->output)==CTR_GX2_SHADER_ALIAS);
+    CHECK(ctr_gx2_shader_compile(&p,3,storage->semantics,2,&storage->output)==CTR_GX2_SHADER_ALIAS);
     free(storage);
     CHECK(!strcmp(ctr_gx2_shader_result_name(CTR_GX2_SHADER_OK),"ok"));
     CHECK(!strcmp(ctr_gx2_shader_result_name((ctr_gx2_shader_result)999),"unknown"));

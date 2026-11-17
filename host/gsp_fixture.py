@@ -1,7 +1,7 @@
 """Original ARM program: standard HID input -> RGB565 CPU frames -> GSP IPC."""
 import hashlib
 import struct
-from .guest_fixture import Program,immediate
+from .guest_fixture import Program
 from .hid_fixture import hid_startup
 TEXT_ADDRESS=0x00100000
 DATA_ADDRESS=0x08000000

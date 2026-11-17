@@ -186,13 +186,15 @@ def project_graph_svg(snapshot):
     stamp = escape(snapshot['generated_at'], quote=True)
     commit = escape(snapshot['source_commit'], quote=True)
     state = escape(snapshot['state'], quote=True)
+    root = ('<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="490" '
+            'viewBox="0 0 1000 490" role="img" aria-labelledby="title description" '
+            f'data-source-commit="{commit}" data-generated-at="{stamp}" data-state="{state}">')
+    description = ('<desc id="description">Seven milestone states and the status of their tasks and '
+                   'features. Completing work does not accept a full milestone.</desc>')
     parts = [
-        '<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="490" '
-        'viewBox="0 0 1000 490" role="img" aria-labelledby="title description" '
-        f'data-source-commit="{commit}" data-generated-at="{stamp}" data-state="{state}">',
+        root,
         '<title id="title">CTR2WUP Project progress</title>',
-        '<desc id="description">Seven milestone states and the status of their tasks and '
-        'features. Completing work does not accept a full milestone.</desc>',
+        description,
         '<rect width="1000" height="490" rx="12" fill="#0d1117"/>',
         '<g font-family="Verdana,sans-serif" fill="#e6edf3">',
         '<text x="26" y="38" font-size="21" font-weight="bold">CTR2WUP development</text>',
