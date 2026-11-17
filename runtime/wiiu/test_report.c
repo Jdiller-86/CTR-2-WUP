@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 #include "test_report.h"
+#include "ctr_private_file.h"
 
 #include <errno.h>
 #include <string.h>
@@ -18,7 +19,7 @@ static bool directory_ready(const char *path) {
     if (errno == EEXIST && _stat64(path, &information) == 0 &&
         (information.st_mode & _S_IFMT) == _S_IFDIR) return true;
 #else
-    if (mkdir(path, 0777) == 0) return true;
+    if (mkdir(path, 0700) == 0) return true;
     struct stat information;
     if (errno == EEXIST && stat(path, &information) == 0 && S_ISDIR(information.st_mode)) return true;
 #endif
@@ -85,7 +86,7 @@ bool ctr_test_report_open(ctr_test_report *r, const char *directory,
         n = snprintf(r->path, sizeof(r->path), "%s/%s", directory, r->filename);
         if (n < 0 || (size_t)n >= sizeof(r->path)) return fail(r, ENAMETOOLONG, "path");
         errno = 0;
-        r->file = fopen(r->path, "wx");
+        r->file = ctr_create_private_file(r->path, false);
         if (r->file) break;
         if (errno != EEXIST) return fail(r, errno, "open");
     }

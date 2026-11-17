@@ -15,19 +15,21 @@ static uint32_t crc32(const uint8_t *p,size_t n) {
 }
 /* Root files only. Reject invalid UTF-8, traversal, host-device characters and
    embedded separators. Non-ASCII names preserve their exact Unicode spelling. */
-static bool path_ok(const char *s) {
-    size_t n=strlen(s);if(n<2 || n>=CTR_FS_PATH_BYTES || s[0]!='/' || !strcmp(s,"/.") || !strcmp(s,"/.."))return false;
+static size_t path_length(const char *s) {
+    size_t n=0;
+    while(n<CTR_FS_PATH_BYTES && s[n])++n;
+    if(n<2 || n==CTR_FS_PATH_BYTES || s[0]!='/' || !strcmp(s,"/.") || !strcmp(s,"/.."))return 0;
     for(size_t i=1;i<n;) {
         unsigned c=(unsigned char)s[i++],extra=0;uint32_t cp=c,min=0;
         if(c>=0xc2 && c<=0xdf) { extra=1;cp=c&31u;min=0x80; }
         else if(c>=0xe0 && c<=0xef) { extra=2;cp=c&15u;min=0x800; }
         else if(c>=0xf0 && c<=0xf4) { extra=3;cp=c&7u;min=0x10000; }
-        else if(c>=0x80)return false;
-        if(i+extra>n)return false;
-        for(unsigned j=0;j<extra;++j) { c=(unsigned char)s[i++];if((c&0xc0)!=0x80)return false;cp=(cp<<6)|(c&63u); }
-        if(cp<min || cp>0x10ffff || (cp>=0xd800 && cp<=0xdfff) || cp<0x20 || cp==0x7f || cp=='/' || cp=='\\' || cp==':')return false;
+        else if(c>=0x80)return 0;
+        if(i+extra>n)return 0;
+        for(unsigned j=0;j<extra;++j) { c=(unsigned char)s[i++];if((c&0xc0)!=0x80)return 0;cp=(cp<<6)|(c&63u); }
+        if(cp<min || cp>0x10ffff || (cp>=0xd800 && cp<=0xdfff) || cp<0x20 || cp==0x7f || cp=='/' || cp=='\\' || cp==':')return 0;
     }
-    return true;
+    return n;
 }
 static unsigned find(const ctr_fs_volume *v,const char *path) {
     for(unsigned i=0;i<CTR_FS_MAX_FILES;++i)if(v->files[i].active && !strcmp(v->files[i].path,path))return i;
@@ -57,14 +59,18 @@ bool ctr_fs_volume_close(ctr_fs_volume *v) {
     memset(v,0,sizeof(*v));return true;
 }
 uint32_t ctr_fs_seed(ctr_fs_volume *v,const char *path,const void *bytes,uint32_t size) {
-    if(!v || (v->archive_id!=4 && v->archive_id!=9) || !path || !path_ok(path) || (size && !bytes))return CTR_FS_INVALID;
+    if(!v || (v->archive_id!=4 && v->archive_id!=9) || !path || (size && !bytes))return CTR_FS_INVALID;
+    size_t length=path_length(path);
+    if(!length)return CTR_FS_INVALID;
     if(find(v,path)!=CTR_FS_MAX_FILES)return CTR_FS_EXISTS;
     if(size>CTR_FS_MAX_FILE_BYTES || used(v)+size>CTR_FS_MAX_VOLUME_BYTES)return CTR_FS_FULL;
     unsigned i;for(i=0;i<CTR_FS_MAX_FILES && v->files[i].active;++i){}
     if(i==CTR_FS_MAX_FILES)return CTR_FS_FULL;
     uint8_t *p=size?malloc(size):NULL;if(size && !p)return CTR_FS_FULL;
     if(size)memcpy(p,bytes,size);
-    v->files[i]=(ctr_fs_file){.bytes=p,.size=size,.active=true};strcpy(v->files[i].path,path);v->dirty=true;return 0;
+    v->files[i]=(ctr_fs_file){.bytes=p,.size=size,.active=true};
+    memcpy(v->files[i].path,path,length+1);
+    v->dirty=true;return 0;
 }
 bool ctr_fs_mount(ctr_guest *g,ctr_fs_volume *v) {
     if(!g || !v || (v->archive_id!=4 && v->archive_id!=9) || g->state!=CTR_GUEST_READY || g->svc_count || g->cpu.instructions)return false;
@@ -139,7 +145,7 @@ static bool decode_path(ctr_guest *g,uint32_t type,uint32_t size,uint32_t descri
     if(type==3) {
         if(size<2 || size>CTR_FS_PATH_BYTES || raw[size-1] || memchr(raw,0,size-1))return false;
         for(unsigned i=0;i<size-1;++i)if(raw[i]>=128)return false;
-        memcpy(path,raw,size);return path_ok(path);
+        memcpy(path,raw,size);return path_length(path)!=0;
     }
     if(type!=4 || size<4 || (size&1) || raw[size-1] || raw[size-2])return false;
     for(unsigned i=0;i<size-2;i+=2) {
@@ -154,7 +160,7 @@ static bool decode_path(ctr_guest *g,uint32_t type,uint32_t size,uint32_t descri
         if(width==1)path[n++]=(char)cp;
         else { path[n++]=(char)((width==2?0xc0:width==3?0xe0:0xf0)|(cp>>(6*(width-1))));for(unsigned b=width-1;b;--b)path[n++]=(char)(0x80|((cp>>(6*(b-1)))&63)); }
     }
-    path[n]=0;return path_ok(path);
+    path[n]=0;return path_length(path)!=0;
 }
 static unsigned archive(ctr_guest *g,unsigned owner,uint32_t lo,uint32_t hi) {
     unsigned slot=(lo&255u);if(hi || !slot || slot>8)return 8;

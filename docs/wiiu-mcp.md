@@ -95,6 +95,9 @@ Limits are 64 MiB/file, 256 MiB/collection, 1024 entries and 12 directory levels
 
 Start UDP capture before launch if the app/plugin actually emits network logs.
 Port 4405 is the default; standard builds do not enable UDP automatically.
+The listener defaults to the local IPv4 address used to reach the console.
+For WUT broadcast logging, explicitly set `udp_bind_address = "0.0.0.0"` in
+`private/wiiu.toml` on a trusted LAN.
 Capture retains 128 datagrams of up to 4096 bytes and reports buffer overruns.
 Source IP filtering is not authentication; UDP delivery remains best effort.
 

@@ -2,7 +2,7 @@ CC ?= cc
 CFLAGS := -std=c11 -O2 -g -Wall -Wextra -Werror -Istubs -I../../artifacts/report-tests/sdk-stubs -I../../runtime/wiiu -I../../runtime/core
 SOURCES := test_report.c test_audio_stream_app.c test_installed_frontend.c ../../runtime/wiiu/audio_stream_app.c ../../runtime/wiiu/test_report.c ../../runtime/wiiu/test_guide.c ../../runtime/wiiu/test_lifecycle.c ../../runtime/wiiu/image_scale.c ../../runtime/wiiu/viewport.c ../../runtime/wiiu/report_storage.c ../../runtime/wiiu/test_result.c ../../runtime/wiiu/guest_slice.c ../../runtime/core/ctr_sha256.c
 OUT := ../../artifacts/report-tests
-HEADERS := $(wildcard ../../runtime/wiiu/*.h) stubs/coreinit/filesystem_fsa.h native_platform.h ../../runtime/wiiu/install_check.c
+HEADERS := $(wildcard ../../runtime/wiiu/*.h) ../../runtime/core/ctr_private_file.h stubs/coreinit/filesystem_fsa.h native_platform.h ../../runtime/wiiu/install_check.c
 .PHONY: check sanitize clean
 $(OUT):
 	mkdir -p "$@"

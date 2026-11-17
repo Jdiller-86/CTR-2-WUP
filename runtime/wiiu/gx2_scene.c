@@ -760,7 +760,7 @@ static bool begin_targets(void *context,const ctr_scene_surface *initial,
          * only the pitched-linear/depth-tile conversion, with no byte rotation. */
         for(unsigned y=0;y<p->height;++y)
             memcpy((uint8_t *)p->depth_linear.image+(size_t)y*p->depth_linear.pitch*p->depth_bytes,
-                   (const uint8_t *)depth->bytes+(size_t)y*depth->stride,p->width*p->depth_bytes);
+                   (const uint8_t *)depth->bytes+(size_t)y*depth->stride,(size_t)p->width*p->depth_bytes);
         DCFlushRange(p->depth_linear.image,p->depth_linear.imageSize);
         GX2Invalidate(GX2_INVALIDATE_MODE_CPU_TEXTURE,p->depth_linear.image,p->depth_linear.imageSize);
         DCFlushRange(p->depth_target.surface.image,p->depth_target.surface.imageSize);
@@ -1103,7 +1103,7 @@ static bool end_targets(void *context,const ctr_scene_surface *readback,
                (const uint8_t *)p->linear.image+(size_t)y*p->linear.pitch*4u,p->width*4u);
     if(depth)for(unsigned y=0;y<p->height;++y)
         memcpy((uint8_t *)depth->bytes+(size_t)y*depth->stride,
-               (const uint8_t *)p->depth_linear.image+(size_t)y*p->depth_linear.pitch*p->depth_bytes,p->width*p->depth_bytes);
+               (const uint8_t *)p->depth_linear.image+(size_t)y*p->depth_linear.pitch*p->depth_bytes,(size_t)p->width*p->depth_bytes);
     if(s->observe_readback)s->observe_readback(s->readback_context,readback);
     if(depth && s->observe_depth_readback)s->observe_depth_readback(s->readback_context,depth);
     if(!restore(s))return false;

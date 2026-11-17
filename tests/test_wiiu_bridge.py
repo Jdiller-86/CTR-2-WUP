@@ -74,7 +74,9 @@ class BridgeUnitTests(unittest.TestCase):
             probe.bind(("127.0.0.1", 0))
             port = probe.getsockname()[1]
         try:
-            receiver.start(port)
+            capture = receiver.start(port)
+            self.assertEqual(capture["bind_address"], "127.0.0.1")
+            self.assertEqual(receiver.socket.getsockname(), ("127.0.0.1", port))
             with self.assertRaises(ValueError):
                 receiver.start(port)
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sender:
@@ -95,7 +97,7 @@ class BridgeUnitTests(unittest.TestCase):
             receiver.close()
         self.assertFalse(receiver.read(0)["listening"])
         # A different expected source rejects local packets without retaining them.
-        receiver = UDPLogs("192.0.2.1")
+        receiver = UDPLogs("192.0.2.1", bind_address="127.0.0.1")
         try:
             receiver.start(port)
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sender:

@@ -143,7 +143,16 @@ static void publication(void) {
     ctr_fs_volume v;CHECK(ctr_fs_volume_init(&v,4,true));
     const unsigned char first=1;CHECK(ctr_fs_seed(&v,"/counter",&first,1)==0);
     rename_probe probe={0};
-    CHECK(ctr_fs_snapshot_save_with_rename(path,&v,no_replace,&probe));disk_record(path,1,false);
+#ifndef _WIN32
+    mode_t previous_umask=umask(0);
+#endif
+    bool saved=ctr_fs_snapshot_save_with_rename(path,&v,no_replace,&probe);
+#ifndef _WIN32
+    umask(previous_umask);
+    struct stat info;
+    CHECK(stat(path,&info)==0 && (info.st_mode&0777)==0600);
+#endif
+    CHECK(saved);disk_record(path,1,false);
     v.files[0].bytes[0]=2;probe=(rename_probe){0};
     CHECK(ctr_fs_snapshot_save_with_rename(path,&v,no_replace,&probe));
     CHECK(probe.calls==2 && ctr_test_access(pending,F_OK)!=0 && ctr_test_access(previous,F_OK)!=0);disk_record(path,2,false);

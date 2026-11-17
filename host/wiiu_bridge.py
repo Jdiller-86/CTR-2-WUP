@@ -80,10 +80,15 @@ class BridgeConfig:
     wiiload: str = "builtin"
     read_roots: tuple[str, ...] = ("ctr2wup", "wiiu/apps", "wiiu/crash_logs", "wiiu/screenshots", "install")
     write_roots: tuple[str, ...] = ("ctr2wup", "wiiu/apps", "install")
+    udp_bind_address: str | None = None
 
     def __post_init__(self):
         # A numeric address binds FTP, wiiload and UDP filtering to one peer.
         ipaddress.IPv4Address(self.console_host)
+        if self.udp_bind_address is not None:
+            if not isinstance(self.udp_bind_address, str):
+                raise ValueError("udp_bind_address must be a numeric IPv4 address")
+            ipaddress.IPv4Address(self.udp_bind_address)
         if type(self.ftp_port) is not int or not 1 <= self.ftp_port <= 65535:
             raise ValueError("ftp_port must be between 1 and 65535")
         if isinstance(self.timeout, bool) or not 0 < self.timeout <= 60:
@@ -115,7 +120,7 @@ class WiiUBridge:
     def __init__(self, config: BridgeConfig):
         self.config = config
         self._operations = threading.Lock()
-        self._logs = UDPLogs(config.console_host)
+        self._logs = UDPLogs(config.console_host, bind_address=config.udp_bind_address)
 
     def close(self):
         self._logs.close()
@@ -267,6 +272,7 @@ class WiiUBridge:
                 try:
                     ftp.delete(temporary)
                 except (OSError, ftplib.Error):
+                    # The server may have closed the connection or already moved the file.
                     pass
                 raise
         return {"sd_path": sd_path, "bytes": len(data), "sha256": digest(data), "readback_verified": True}
@@ -409,8 +415,9 @@ class WiiUBridge:
 
 class UDPLogs:
     """Bounded, source-filtered diagnostic stream, never a reliable result channel."""
-    def __init__(self, console_host: str):
+    def __init__(self, console_host: str, *, bind_address: str | None = None):
         self.peer = console_host
+        self.bind_address = bind_address
         self.socket = None
         self.thread = None
         self.stop = threading.Event()
@@ -427,9 +434,17 @@ class UDPLogs:
         with self.lifecycle:
             if self.socket is not None:
                 raise ValueError("UDP capture is already running")
+            bind_address = self.bind_address
+            if bind_address is None:
+                # UDP connect selects the local route without sending a datagram.
+                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as route:
+                    route.connect((self.peer, port))
+                    bind_address = route.getsockname()[0]
+                if ipaddress.IPv4Address(bind_address).is_unspecified:
+                    raise OSError("Cannot determine the local address for console UDP capture")
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             try:
-                sock.bind(("0.0.0.0", port))
+                sock.bind((bind_address, port))
                 sock.settimeout(0.2)
             except BaseException:
                 sock.close()
@@ -442,7 +457,8 @@ class UDPLogs:
             self.socket, self.port = sock, port
             self.thread = threading.Thread(target=self._receive, args=(sock,), daemon=True)
             self.thread.start()
-        return {"listening": True, "port": port, "peer": self.peer, "delivery": "best_effort"}
+        return {"listening": True, "bind_address": bind_address, "port": port,
+                "peer": self.peer, "delivery": "best_effort"}
 
     def _receive(self, sock):
         while not self.stop.is_set():
