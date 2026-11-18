@@ -1,8 +1,47 @@
 # First-title technical target
 
 The selected commercial target is **Super Mario 3D Land, USA**. Its executable
-and selected resources inform reusable runtime work. No commercial profile,
-boot/gameplay result or supported conversion is enabled.
+and selected resources inform reusable runtime work. An experimental test-build
+profile connects intake to a native guest WUP; boot/gameplay is unverified.
+
+## Build a private test WUP
+
+Use a source checkout with Python 3.12+, `pip install -e '.[packaging,decryption]'`,
+the [Wii U SDK](build-windows.md) and [pinned lifter](upstream-integration.md).
+The command accepts a full owned USA base-application `.3ds`, `.cxi` or `.cia`
+with RomFS, product `CTR-P-AREE`, program `0004000000054000`, remaster 0:
+
+```sh
+python -m host build "/path/to/owned-game.3ds" --output private/mario-test
+```
+
+Add `--keys-config private/rom-keys/keys.json` for supported encrypted inputs;
+[local key import](encrypted-input.md) documents preparation. The executable-only
+intake export is insufficient. Output must be new. `--title-id` overrides the
+stable program-derived Wii U ID; `--title-version` selects 1..65535 for rebuilds.
+Check that the ID is not used by another installed title. `--jobs` selects 1..8
+compiler processes. Keep outputs and logs private.
+
+The output contains the installable `wup/` candidate, one `START-HERE.txt`, a
+machine-readable `build-report.json` and the private compiler log. Preparation
+checks the container and full RomFS, then the pinned lifter and native compiler
+build the supplied guest. Only a complete independently verified package is
+published. Failed work is retained in the private directory named by the error.
+The report records exact executable/source hashes, source revision and package
+checks; success means the test package is ready, not that gameplay is supported.
+
+The native frontend loads hash-bound executable/RomFS files from installed WUP
+content. It connects shared ARM/HLE, HID/touch, GSP/software PICA, snapshot saves
+and the existing DSP-to-AX stream. Explicit interpreter recovery includes scalar
+VFP under CRT controls. Unsupported CPU/service/GPU/DSP behavior stops with a
+private report under `sd:/ctr2wup/titles/<wiiu-title-id>/results/`; saves use the
+same parent. Arbitrary modules/firmware and actual Mario execution remain open.
+Native installed-title exit/relaunch retains the known limitation in
+[#15](https://github.com/Jdiller-86/CTR-2-WUP/issues/15).
+
+`python tools/validate-game-build.py --output artifacts/game-build-smoke` exercises
+the same real intake/compiler/packager with an original executable and RomFS.
+It requires the SDK/lifter but no game or keys, and establishes no Mario result.
 
 ## Identity and input
 

@@ -17,6 +17,7 @@ static char rows[ROWS][COLUMNS+1];
 static GX2Surface surfaces[2];
 static ctr_scale_plan plans[2];
 static bool initialized,ready,dirty=true,presented;
+static bool guest_mode;
 static char heading[64]="CTR2WUP INSTALL CAPTURE";
 static char footer[84]="MINUS: EXIT / CANCEL AND WAIT FOR MCP";
 
@@ -65,8 +66,34 @@ bool ctr_diagnostic_display_init(void) {
     ready=true;dirty=true;return true;
 }
 
+static bool configure_plans(unsigned top_width,unsigned top_height,unsigned bottom_width,unsigned bottom_height) {
+    const unsigned widths[]={top_width,bottom_width},heights[]={top_height,bottom_height};
+    for(unsigned i=0;i<2;++i) {
+        if(plans[i].view.guest_width==widths[i] && plans[i].view.guest_height==heights[i])continue;
+        CtrViewport view;ctr_scale_plan next={0};
+        if(!ctr_viewport_fit(&view,surfaces[i].width,surfaces[i].height,widths[i],heights[i]) ||
+            !ctr_scale_plan_init(&next,&view))return false;
+        ctr_scale_plan_close(&plans[i]);plans[i]=next;
+    }
+    return true;
+}
+static bool present(void) {
+    WHBGfxBeginRender();
+    WHBGfxBeginRenderTV();
+    GX2CopySurface(&surfaces[0],0,0,&WHBGfxGetTVColourBuffer()->surface,0,0);
+    WHBGfxFinishRenderTV();
+    WHBGfxBeginRenderDRC();
+    GX2CopySurface(&surfaces[1],0,0,&WHBGfxGetDRCColourBuffer()->surface,0,0);
+    WHBGfxFinishRenderDRC();
+    WHBGfxFinishRender();
+    presented=true;return true;
+}
 bool ctr_diagnostic_display_draw(void) {
     if(!ready)return false;
+    if(guest_mode) {
+        if(!configure_plans(WIDTH,HEIGHT,WIDTH,HEIGHT))return false;
+        guest_mode=false;dirty=true;
+    }
     if(dirty) {
         if(presented)GX2DrawDone();
         for(unsigned i=0;i<WIDTH*HEIGHT;++i)pixels[i]=UINT32_C(0x102238ff);
@@ -83,15 +110,24 @@ bool ctr_diagnostic_display_draw(void) {
         }
         dirty=false;
     }
-    WHBGfxBeginRender();
-    WHBGfxBeginRenderTV();
-    GX2CopySurface(&surfaces[0],0,0,&WHBGfxGetTVColourBuffer()->surface,0,0);
-    WHBGfxFinishRenderTV();
-    WHBGfxBeginRenderDRC();
-    GX2CopySurface(&surfaces[1],0,0,&WHBGfxGetDRCColourBuffer()->surface,0,0);
-    WHBGfxFinishRenderDRC();
-    WHBGfxFinishRender();
-    presented=true;return true;
+    return present();
+}
+bool ctr_diagnostic_display_guest(const uint32_t *top,const uint32_t *bottom) {
+    if(!ready || !top || !bottom || !configure_plans(400,240,320,240))return false;
+    if(presented)GX2DrawDone();
+    const uint32_t *images[]={top,bottom};const size_t counts[]={400u*240u,320u*240u};
+    for(unsigned i=0;i<2;++i) {
+        GX2Surface *s=&surfaces[i];
+        if(!ctr_scale_rgba(&plans[i],images[i],counts[i],s->image,s->imageSize,s->pitch))return false;
+        DCFlushRange(s->image,s->imageSize);
+        GX2Invalidate(GX2_INVALIDATE_MODE_CPU_TEXTURE,s->image,s->imageSize);
+    }
+    guest_mode=true;return present();
+}
+bool ctr_diagnostic_display_touch(uint32_t x,uint32_t y,uint16_t *guest_x,uint16_t *guest_y) {
+    CtrViewport view;
+    return ready && ctr_viewport_fit(&view,surfaces[1].width,surfaces[1].height,320,240) &&
+        ctr_viewport_touch(&view,x,y,1280,720,guest_x,guest_y);
 }
 
 void ctr_diagnostic_display_invalidate(void) { dirty=true; }
@@ -104,5 +140,5 @@ void ctr_diagnostic_display_close(bool foreground) {
         memset(&surfaces[i],0,sizeof(surfaces[i]));
     }
     if(initialized)WHBGfxShutdown();
-    initialized=ready=presented=false;
+    initialized=ready=presented=guest_mode=false;
 }

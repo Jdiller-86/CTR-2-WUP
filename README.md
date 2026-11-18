@@ -6,9 +6,10 @@ Experimental 3DS-to-Wii U static recompilation. The goal is a Windows injector
 that creates an individual WUP title, with the top screen on the TV and the
 bottom screen, touch and controls on the GamePad.
 
-**Commercial games, playable-game conversion and the Windows GUI are not
-available yet.** Current builds provide developer tools and original homebrew
-diagnostics. Super Mario 3D Land is the first planned compatibility target.
+**Playable-game compatibility and the Windows GUI are not available yet.**
+The CLI can build an experimental Super Mario 3D Land USA test WUP from an owned
+ROM. Boot/gameplay remains unverified. Original diagnostics and developer tools
+cover the implemented runtime foundations.
 
 [Documentation](https://jdiller-86.github.io/CTR-2-WUP/) ·
 [Downloads](https://github.com/Jdiller-86/CTR-2-WUP/releases) ·
@@ -55,6 +56,17 @@ make check
 
 [Contributing](CONTRIBUTING.md) covers native SDK setup and validation;
 [Windows builds](docs/build-windows.md) covers the Windows toolchain.
+
+With the native SDK and [pinned translator](docs/upstream-integration.md) installed:
+
+```sh
+python -m host build "/path/to/owned-game.3ds" --output private/mario-test
+```
+
+The output contains `wup/`, `START-HERE.txt` and `build-report.json`. Encrypted
+inputs can add `--keys-config private/rom-keys/keys.json`. Executable and RomFS
+assets are included in the WUP; SD stores private logs and saves. See the
+[first-title contract](docs/first-title.md) for the accepted input and limits.
 
 ## Source map
 

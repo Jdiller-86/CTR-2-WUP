@@ -13,8 +13,9 @@ level3_image = builder.image
 ivfc_image = builder.ivfc_image
 
 
-def ncch_romfs(level3=None):
-    image = ncch(); payload = ivfc_image(level3 if level3 is not None else level3_image())
+def ncch_romfs(level3=None, *, code=None):
+    image = ncch([('.code',code)]) if code is not None else ncch()
+    payload = ivfc_image(level3 if level3 is not None else level3_image())
     offset = len(image); image.extend(payload)
     image[0x18F] &= ~2
     struct.pack_into('<I', image, 0x104, len(image)//512)

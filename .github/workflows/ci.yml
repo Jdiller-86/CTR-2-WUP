@@ -383,6 +383,12 @@ jobs:
           set -euo pipefail
           python3 tools/validate-upstream.py --only modules --sanitize --output artifacts/ci/module-aot \
             2>&1 | tee artifacts/ci/sdk/module-aot.log
+      - name: Smoke the complete ROM-to-WUP builder with original inputs
+        run: |
+          set -euo pipefail
+          python -m pip install '.[packaging,decryption]'
+          python tools/validate-game-build.py --output artifacts/ci/game-build \
+            2>&1 | tee artifacts/ci/sdk/game-build.log
       - name: Stage the distinct compiled guest GX2 rendering profile
         run: |
           set -euo pipefail

@@ -92,6 +92,14 @@ int ctr_recomp_instruction(Context *c,uint32_t address,uint32_t opcode) {
     bool fp=!c->thumb && ((opcode&0x0e000000u)==0x0c000000u || (opcode&0x0f000000u)==0x0e000000u) &&
         (((opcode>>8)&15u)==10u || ((opcode>>8)&15u)==11u);
     if(fp && opcode>>28==15u)ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
+    /* Explicit recovery mode uses shared scalar VFP under CRT controls. */
+    if(fp && e->fallback && !fpscr_transfer && !fp_memory && ctr_cpu_condition(&flags,opcode>>28)) {
+        export_cpu(e);
+        ctr_cpu_result result=ctr_cpu_vfp_arm(e->cpu,opcode);
+        if(result!=CTR_CPU_OK) { import_cpu(e);ctr_recomp_abort(c,result,opcode); }
+        e->cpu->r[15]=address+4u;++e->cpu->fallback_instructions;
+        import_cpu(e);c->exit=EXIT_UNWIND;return 0;
+    }
     if(fp && ctr_cpu_condition(&flags,opcode>>28)) {
         if(fpscr_transfer && (opcode&0x00100000u)==0 && ((opcode>>12)&15u)==15u)
             ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);

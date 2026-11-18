@@ -19,7 +19,7 @@ class Parser(argparse.ArgumentParser):
 
 
 def parser():
-    result = Parser(prog="ctr2wup", description="CTR2WUP research CLI. Commercial conversion is not supported yet.")
+    result = Parser(prog="ctr2wup", description="CTR2WUP experimental ROM-to-WUP test builds and developer tools.")
     result.add_argument("--version", action="version", version=__version__)
     commands = result.add_subparsers(dest="command", required=True)
     commands.add_parser("doctor", help="Discover real compiler and WUT prerequisites")
@@ -53,11 +53,16 @@ def parser():
     key_import.add_argument("--output",required=True)
     key_import.add_argument("--aeskeydb");key_import.add_argument("--seeddb")
     key_import.add_argument("--decrypted-titlekeys",help="Locally obtained decTitleKeys-format database declared to contain plaintext title keys")
-    compile_command = commands.add_parser("build", help="Compile the native diagnostic RPX or check a ROM support gate")
+    compile_command = commands.add_parser("build", help="Build an experimental Mario USA test WUP or an original native diagnostic")
     compile_command.add_argument("path", nargs="?")
-    compile_command.add_argument("--target", choices=("prototype", "guest-audio", "guest-audio-stream", "audio-check", "audio-stream-check", "m1-check", "install-check", "scene-check", "guest-fixture", "commercial"), default="commercial")
+    compile_command.add_argument("--target", choices=("prototype", "guest-audio", "guest-audio-stream", "audio-check", "audio-stream-check", "m1-check", "install-check", "scene-check", "guest-fixture", "mario-test", "commercial"), default="commercial")
     compile_command.add_argument("--output", required=True)
-    compile_command.add_argument("--backend",choices=("original","upstream"),default="original")
+    compile_command.add_argument("--backend",choices=("original","upstream"),default="original",
+                                 help="Diagnostic backend; ROM test builds use the pinned external lifter")
+    compile_command.add_argument("--keys-config",help="Optional local 3DS keys configuration for encrypted ROMs")
+    compile_command.add_argument("--title-id",help="Wii U application ID; default is stable per input program ID")
+    compile_command.add_argument("--title-version",type=int,default=1,help="Wii U title version, 1..65535 (default: 1)")
+    compile_command.add_argument("--jobs",type=int,default=3,help="Native compilation jobs, 1..8 (default: 3)")
     package = commands.add_parser("validate-package", help="Validate a WUP directory; reports structural limits")
     package.add_argument("path")
     package.add_argument("--registry")
@@ -125,8 +130,10 @@ def execute(args):
                 raise HostError("usage", "Guest fixture build requires the original fixture .cxi", stage="arguments")
             return build.prototype(args.output,guest_path=args.path,backend=args.backend)
         if not args.path:
-            raise HostError("usage", "Commercial build requires an input .3ds or .cxi", stage="arguments")
-        return build.commercial(args.path, args.output)
+            raise HostError("usage", "ROM build requires an input .3ds, .cxi or .cia", stage="arguments")
+        progress=(lambda stage:print(stage+'...',file=sys.stderr,flush=True)) if sys.stderr.isatty() else None
+        return build.commercial(args.path,args.output,keys_config=args.keys_config,title_id=args.title_id,
+                                title_version=args.title_version,jobs=args.jobs,progress=progress)
     if args.command == "validate-package":
         try:
             from .package_validator import validate_package
