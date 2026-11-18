@@ -21,7 +21,7 @@ typedef enum { CTR_HANDLE_EVENT, CTR_HANDLE_SESSION, CTR_HANDLE_SHARED,
                CTR_HANDLE_MUTEX, CTR_HANDLE_SEMAPHORE, CTR_HANDLE_THREAD, CTR_HANDLE_ARBITER,
                CTR_HANDLE_RESOURCE_LIMIT } ctr_guest_handle_type;
 typedef enum { CTR_SERVICE_SRV, CTR_SERVICE_CFG, CTR_SERVICE_HID, CTR_SERVICE_GSP,
-               CTR_SERVICE_FS, CTR_SERVICE_FILE, CTR_SERVICE_APT, CTR_SERVICE_DSP } ctr_guest_service;
+               CTR_SERVICE_FS, CTR_SERVICE_FILE, CTR_SERVICE_APT, CTR_SERVICE_DSP, CTR_SERVICE_RO } ctr_guest_service;
 typedef struct { uint32_t generation; unsigned object; bool active; ctr_guest_handle_type type; } ctr_guest_handle;
 typedef struct { bool active, registered; unsigned references; ctr_guest_service service;
                  unsigned fs_volume, fs_file, fs_flags; bool fs_closed,fs_romfs; } ctr_guest_session;
@@ -106,6 +106,7 @@ typedef struct ctr_guest {
     ctr_guest_hid hid;
     ctr_guest_gsp gsp;
     struct ctr_guest_dsp *dsp;
+    struct ctr_module_loader *modules;
     /* Guest-owned CPU snapshots/decodes; separate from copied PICA state and
      * native GPU lifetime. Cleared before the memory owner is closed/reused. */
     struct ctr_resource_cache *pica_resources;

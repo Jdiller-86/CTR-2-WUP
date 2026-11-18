@@ -63,6 +63,10 @@ General firmware profiles and continuous guest/AX synchronization remain open.
 host paths derived from guest names. Save publication uses checked pending/backup
 states. [RomFS](romfs-assets.md) exposes an immutable bounded provider.
 
+[Packaged CRO modules](modules.md) add checked static exports, relocations,
+module calls and unloading to the shared interpreter/AOT dispatch. Their fixed
+addresses and executable witnesses are supplied by the conversion package.
+
 ## Wii U ownership and diagnostics
 
 The WUT backend owns TV/GamePad surfaces, VPAD/touch, AX voices, ProcUI and reports.

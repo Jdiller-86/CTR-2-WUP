@@ -14,6 +14,11 @@ broader reference/FP boundary coverage, external-backend FP control parity,
 observed title gaps and Espresso performance; the complete CPU gate is not
 accepted by this baseline.
 
+Initial [CRO/CRS loading](docs/modules.md) supports packaged fixed-address modules,
+checked symbols/relocations and interpreter/AOT load/call/unload. Broader module
+forms and actual title requirements remain open in
+[#24](https://github.com/Jdiller-86/CTR-2-WUP/issues/24).
+
 1. **Connect guest audio** ([#25](https://github.com/Jdiller-86/CTR-2-WUP/issues/25)).
    The checked CSTM/ADPCM mixer and bounded original NDSP PCM service exist,
    including queued voices, bounded linear/direct PCM rates, unity-rate mono

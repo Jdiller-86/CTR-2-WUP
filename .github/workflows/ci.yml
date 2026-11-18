@@ -378,6 +378,11 @@ jobs:
           cp "$DEVKITPRO/ctr2wup-image-digest.txt" artifacts/ci/guest-draws/sdk-image-digest.txt
           git rev-parse HEAD > artifacts/ci/guest-draws/source-commit.txt
           (cd artifacts/ci/guest-draws && sha256sum -- rpx/*.rpx sd-card/wiiu/apps/*.wuhb > SHA256SUMS)
+      - name: Execute the original CRO module guest through the external AOT engine
+        run: |
+          set -euo pipefail
+          python3 tools/validate-upstream.py --only modules --sanitize --output artifacts/ci/module-aot \
+            2>&1 | tee artifacts/ci/sdk/module-aot.log
       - name: Stage the distinct compiled guest GX2 rendering profile
         run: |
           set -euo pipefail
@@ -555,6 +560,8 @@ jobs:
           name: wiiu-prototype-${{ github.sha }}
           path: |
             artifacts/ci/sdk/*.log
+            artifacts/ci/module-aot/report.json
+            artifacts/ci/module-aot/*.log
             artifacts/ci/compiled-textured/*.log
             artifacts/ci/wiiu/
           retention-days: 30

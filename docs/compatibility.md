@@ -16,6 +16,7 @@ Wii U compatibility. The selected first-title target is
 | Decrypted inputs | Base-application CIA, NCCH v2 CXI and NCSD cartridge inspection | No NAND loader, update/DLC merging or arbitrary-ROM execution |
 | Encrypted inputs | Scoped local CIA/NCCH preparation with local key/seed files | Supported profiles only; no bundled keys or console extraction |
 | RomFS | Canonical IVFC/metadata verification, bounded exports and read-only guest provider | No signature authentication or general game integration |
+| Modules | Packaged CRO0/CRS loading, checked relocations/imports, ARM/Thumb interpreter/AOT calls and unload | Fixed addresses and documented relocation profile; no CRR authentication, arbitrary modules or retail compatibility claim |
 | WUP | Original plaintext test-signed candidate and separately configured encrypted packing | Original installation/Menu boot accepted; native exit remains failed and general-title acceptance is open |
 | Windows | Python CLI, native host checks and separate CIA helper | Final injector GUI and end-to-end commercial conversion remain unfinished |
 
