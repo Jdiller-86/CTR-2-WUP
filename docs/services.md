@@ -6,6 +6,10 @@ unavailable service names return SRV NotFound `d88067fa`. No generic-success
 stubs or asynchronous service directory are provided. [CPU threads](cpu.md) and
 [memory](guest-memory.md) define scheduling and backing ownership.
 
+An explicitly configured [module package](modules.md) exposes process-local
+`ldr:ro` loading/linking/unloading. Files, relocations, executable witnesses and
+heap ownership are checked before publication; no CRR stub is supplied.
+
 ## TLS, SRV and CFG
 
 ARM `MRC p15,0,Rd,c13,c0,3` reads the current thread's user read-only TLS address.

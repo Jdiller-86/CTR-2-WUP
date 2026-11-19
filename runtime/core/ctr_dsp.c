@@ -1,6 +1,7 @@
 /* Original bounded NDSP audio HLE. Interface facts: pinned libctru DSP/NDSP.
  * This is not a firmware interpreter, polyphase filter or game-audio profile. */
 #include "ctr_dsp.h"
+#include "ctr_module.h"
 #include "ctr_dsp_adpcm.h"
 #include "ctr_heap.h"
 #include "ctr_kernel.h"
@@ -399,7 +400,7 @@ bool ctr_dsp_request(ctr_guest *g,unsigned session,const uint32_t *w,uint32_t co
         if(d && d->stats.loaded) { out[1]=BUSY;return true; }
         if(!d) { g->dsp=calloc(1,sizeof(*d));d=g->dsp;if(!d) { out[1]=NO_MEMORY;return true; } }
         if(!g->storage[7]) {
-            uint64_t bytes=CTR_DSP_RAM_BYTES;
+            uint64_t bytes=(uint64_t)CTR_DSP_RAM_BYTES+ctr_modules_bytes(g);
             for(unsigned i=0;i<CTR_GUEST_STORAGE_COUNT;++i)bytes+=g->storage_size[i];
             for(unsigned i=0;i<CTR_GUEST_MAX_ALLOCATIONS;++i)if(g->allocations[i].storage)bytes+=g->allocations[i].size;
             for(unsigned i=0;i<8;++i)if(g->shared[i].owned)bytes+=g->shared[i].size;

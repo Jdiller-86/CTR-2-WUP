@@ -1,7 +1,8 @@
 #ifndef CTR_RECOMP_ENGINE_H
 #define CTR_RECOMP_ENGINE_H
 #include "ctr_guest.h"
-/* Attach the statically linked executable. CRO relocation is not yet supported.
+/* Attach the statically linked main executable. Packaged CROs use the shared
+ * checked original-AOT registry; external-emitter module tables stay rejected.
  * Missing code can use the existing bounded interpreter only when requested.
  * Allocation, code hash and ABI failures leave the guest without an executor. */
 bool ctr_recomp_attach(ctr_guest *guest,bool fallback);

@@ -10,6 +10,8 @@ import struct
 import time
 import zlib
 
+from .errors import HostError
+
 
 def send(host: str, filename: str, data: bytes, *, port: int = 4299, timeout: float = 60) -> dict:
     ipaddress.IPv4Address(host)
@@ -23,7 +25,11 @@ def send(host: str, filename: str, data: bytes, *, port: int = 4299, timeout: fl
     compressed = zlib.compress(data)
     header = struct.pack(">4sBBHII", b"HAXX", 0, 5, len(arguments), len(compressed), len(data))
     deadline = time.monotonic() + timeout
-    with socket.create_connection((host, port), timeout=min(timeout, 10)) as stream:
+    try:
+        connection = socket.create_connection((host, port), timeout=min(timeout, 10))
+    except OSError as error:
+        raise HostError("wiiload_unreachable", "The Wii U's wiiload listener is unreachable. Check the console address and the enabled Aroma wiiload plugin", stage="connect") from error
+    with connection as stream:
         for part in (header, compressed, arguments):
             for offset in range(0, len(part), 65536):
                 remaining = deadline - time.monotonic()

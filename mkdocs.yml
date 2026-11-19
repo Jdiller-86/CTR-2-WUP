@@ -93,6 +93,7 @@ nav:
   - Runtime:
       - CPU and threads: docs/cpu.md
       - Guest memory: docs/guest-memory.md
+      - CRO modules: docs/modules.md
       - Services and input: docs/services.md
       - Display and transfers: docs/graphics-transport.md
       - Controlled guest fixture: docs/guest-fixture.md

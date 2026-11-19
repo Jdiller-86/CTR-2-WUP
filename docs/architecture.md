@@ -3,7 +3,8 @@
 CTR2WUP is developing a Windows application that turns one supported, owned 3DS
 revision into a standalone Wii U title. The engine must demonstrate execution,
 rendering, audio, saves and real package installation before the GUI presents a
-conversion as supported. Current deliverables are original diagnostics and host tools.
+conversion as supported. Current deliverables include original diagnostics,
+host tools and the [experimental Mario test builder](first-title.md#build-a-private-test-wup).
 
 ## Source map
 
@@ -62,6 +63,10 @@ General firmware profiles and continuous guest/AX synchronization remain open.
 [Filesystem](filesystem.md) operations use platform-owned private volumes, not
 host paths derived from guest names. Save publication uses checked pending/backup
 states. [RomFS](romfs-assets.md) exposes an immutable bounded provider.
+
+[Packaged CRO modules](modules.md) add checked static exports, relocations,
+module calls and unloading to the shared interpreter/AOT dispatch. Their fixed
+addresses and executable witnesses are supplied by the conversion package.
 
 ## Wii U ownership and diagnostics
 

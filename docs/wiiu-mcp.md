@@ -2,17 +2,19 @@
 
 The optional host bridge builds CTR2WUP diagnostics, transfers files, submits
 homebrew launches and collects results from an owned Aroma Wii U. It reuses
-FTPiiU, the wiiload protocol and the existing build/report helpers. No new resident
-plugin or Wii U application is required. Physical-console acceptance is pending.
+FTPiiU, the wiiload protocol and the existing build/report helpers. An optional
+paired Aroma plugin adds console state, observed launches, reboot and WUP
+installation. Physical-console acceptance of the new plugin is pending.
 
 ## Setup
 
 The [Wii U MCP starter kit](https://github.com/Jdiller-86/CTR-2-WUP/releases)
-includes the bridge, a setup helper, all ten pinned Aroma components and their
-source/licenses, an original diagnostic WUHB and a source snapshot. Extract it
-to a permanent folder and follow its single `START-HERE.txt`. Host dependency
-installation requires Internet and Python 3.12+; the SDK is needed only for
-native rebuilds. Hardware acceptance is pending.
+includes the paired control plugin, bridge, setup helper, ten pinned upstream
+Aroma components with sources and licenses, an original diagnostic WUHB and a
+source snapshot. Extract it to a permanent folder and follow `START-HERE.txt`.
+Setup generates the local pairing key and exports the public key for the SD card.
+Host dependency installation requires Internet and Python 3.12+. The SDK is
+needed only for native rebuilds. Physical-console validation is pending.
 
 For source installation, on a computer on the console's trusted LAN, install Python 3.12+ and run
 `python -m pip install -e '.[mcp]'` in the checkout. Native builds also need the
@@ -62,16 +64,21 @@ This package does not add tools to an already running cloud session.
 | `wiiu_upload` | Stage, read back, publish and verify a new SD file |
 | `wiiu_download` | Two matching reads into a fresh file under `private/wiiu/` |
 | `wiiu_collect_results` | Bounded recursive collection with a private hash receipt |
-| `wiiu_launch` | Submit a local RPX/WUHB once using the wiiload protocol |
+| `wiiu_launch` | Launch a local RPX/WUHB via the paired plugin or wiiload |
+| `wiiu_console_state`, `wiiu_console_result` | Read the paired plugin's current title and operation receipts |
+| `wiiu_reboot` | Request a full restart of the responsive Wii U |
+| `wiiu_install_wup` | Stage, install and verify a new homebrew WUP on MLC or USB |
+| `wiiu_launch_title` | Launch an installed Wii U application by exact title ID |
 | `wiiu_start_logs`, `wiiu_read_logs`, `wiiu_stop_logs` | Bounded console-source UDP capture with cursors |
 
-Call capabilities and status, build a diagnostic, then launch its returned local
-RPX/WUHB. Upload required original assets using the package instructions; the
-executable itself needs no separate upload. Supported build targets are
+Call capabilities and status, build a diagnostic, then pass its `launch_file`
+to `wiiu_launch`. Absolute artifact paths inside the checkout also work. Upload
+required original assets using the package instructions. Supported build targets are
 `prototype`, `audio-check`, `audio-stream-check`, `guest-audio`, `scene-check`,
 `m1-check` and `install-check`. Each FTP connection closes before launch. One
-bridge instance serializes operations; use one controller and avoid competing
-external FTP writes. Launch submission does not confirm execution.
+bridge instance serializes operations. Use one controller and avoid competing
+external FTP writes. The legacy wiiload sender reports submission. The paired
+plugin can observe the requested executable or installed title in a new session.
 
 Direct CLI actions work without installing the MCP SDK:
 
@@ -82,16 +89,57 @@ python -m host.wiiu_mcp --config private/wiiu.toml --action build --target guest
 python -m host.wiiu_mcp --config private/wiiu.toml --action collect --sd-path ctr2wup/results
 ```
 
+## Pair the optional Aroma plugin
+
+Starter-kit setup generates the pairing files described in `START-HERE.txt`.
+For a source checkout, install the updated host with
+`python -m pip install -e '.[packaging,mcp]'`. Get the `wiiu-control-…` artifact
+from the matching GitHub Actions Wii U build. With the verified devkitPro SDK
+and Docker, you can also run `bash tools/build-wiiu-control.sh` on Linux.
+The plugin uses Aroma's Plugin Loader Backend 0.4.1 and RPX Loading Module 0.3.5
+from the starter kit or compatible newer versions.
+
+1. In `private/wiiu.toml`, set `control_key = "private/wiiu-control.key"`.
+   Run `python -m host.wiiu_mcp --config private/wiiu.toml --action pair-control`.
+2. Copy `ctr2wup-control.wps` to `wiiu/environments/aroma/plugins/` and the
+   exported `ctr2wup-control.pub` to `wiiu/` on the SD card. The private
+   `.key` stays on the host. Boot Aroma with FTPiiU and the control plugin
+   enabled, then restart the MCP client to discover the tools.
+3. Call `wiiu_console_state` to check the pairing. If the console opens an
+   account selector, select your user before launching homebrew.
+
+For large WUP transfers, allow time for the upload and read-back. In Codex set
+`tool_timeout_sec = 1800` in the existing `[mcp_servers.wiiu]` table. From the
+Wii U Menu, call `wiiu_install_wup` with the local install directory, its
+`title_id` and `device` (`mlc` or `usb`). It accepts a fresh CTR2WUP
+plaintext homebrew WUP with the `wup-menu-v3` startup profile, up to 1 GiB and
+64 package files. The console needs the signature patches required by that
+package. Existing titles are refused. Keep Aroma in the Menu until the
+installation finishes. Use `wiiu_console_result` with the returned
+`operation_id`. At `installed_verified`, call `wiiu_launch_title` with the
+same title ID. Staged files and receipts stay on SD for inspection.
+
+`wiiu_reboot` requests a normal full restart. When FTPiiU reconnects, check
+`wiiu_console_state` for the new session. After any interrupted operation, read
+its receipt and console state before submitting another request. A new session
+showing the requested title or homebrew operation confirms the observed launch.
+The app's own results remain the evidence for its behavior.
+
 ## Transport and evidence contract
 
 Read roots default to `ctr2wup`, `wiiu/apps`, `wiiu/crash_logs`,
 `wiiu/screenshots` and `install`; write roots to `ctr2wup`, `wiiu/apps` and
 `install`. Nonempty `read_roots`/`write_roots` arrays can change SD subdirectories.
-Remote paths are relative to SD, local sources to the checkout. Traversal,
-control characters and local symbolic links are rejected. Existing files are
-preserved; use distinct build names/directories. Uploads are individually
-verified, not a multi-file transaction or protection against external writers.
-Limits are 64 MiB/file, 256 MiB/collection, 1024 entries and 12 directory levels.
+Remote paths are relative to SD. Local artifacts stay inside the checkout.
+Traversal, control characters and local symbolic links are rejected. Existing
+files are preserved. General transfers are bounded at 64 MiB per file,
+256 MiB per collection, 1024 entries and 12 directory levels.
+
+The paired plugin uses the FTPiiU SD connection for its signed request mailbox.
+Requests are bound to one console session and sequence. Keep FTPiiU on a
+trusted LAN and keep SD writes to one controller. The pairing key authorizes
+the fixed commands. Anyone who can replace SD files or the plugin itself must
+already be trusted.
 
 Start UDP capture before launch if the app/plugin actually emits network logs.
 Port 4405 is the default; standard builds do not enable UDP automatically.
@@ -111,20 +159,15 @@ hardware-round review archive. Commercial assets, credentials and console logs
 stay private. Retained crash logs must first be copied to SD by the official
 dumper; this adapter does not read SLC.
 
-Transfer success, launch submission, log text and cleanup markers never become
-test passes. Active title identity, Menu return and execution remain unconfirmed.
-After a failed/timed-out launch, inspect console state before deciding to retry.
-Controller/touch injection, triggered screenshots, live memory debugging,
-installed-title launch/installation and power recovery are explicitly unavailable.
-An already saved screenshot can be downloaded. Add runtime input/state hooks
-only for a concrete test; system-wide control needs a separately verified plugin.
-WUP automation must preserve the platform protocol's ownership/predecessor checks.
+Transfer success, launch receipts, log text and cleanup markers do not establish
+a diagnostic verdict. The soft reboot requires a running controller on the Wii U.
+An already saved screenshot can be downloaded.
 
 ## Validation and next acceptance
 
-The starter kit is built by `tools/package-wiiu-mcp.py` from clean source, a
-source-matched wheel/native build, the verified SDK license directory and
-successful check evidence. `packaging/wiiu-mcp-components.json` pins upstream
+The starter kit is built by `tools/package-wiiu-mcp.py` from clean source,
+source-matched wheel, diagnostic and control plugin builds, the verified SDK
+license directory and successful check evidence. `packaging/wiiu-mcp-components.json` pins upstream
 release/source hashes and exact SD destinations; no floating latest download is
 used during packaging. The packager checks ZIP CRCs, source/wheel agreement,
 component inventories and read-back hashes. `setup.py --verify-only` validates
@@ -147,8 +190,8 @@ and the strict documentation build for repository changes.
 `test_wiiu_mcp_release.py` also checks the built-in sender over an actual TCP
 connection, installer configuration, tamper rejection and archive traversal.
 
-Physical acceptance waits until the console is available: check status, submit
-one original diagnostic and collect its actual results, recording plugin
-versions and source/artifact identity. Extend disconnect/relaunch tests for
-specific changed or unresolved paths. The known installed-title exit conflict
-remains unresolved; this host adapter does not justify replaying that failure.
+Physical acceptance uses one original diagnostic WUHB and a fresh original
+WUP. Record the paired launch observation, install receipt, installed-title
+launch and the new session after reboot. Use the original diagnostic's report
+to assess execution. The known installed-title exit conflict remains tracked
+separately.

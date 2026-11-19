@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "modules": [
+    {
+      "file": "main.crs",
+      "address": 2097152,
+      "static": true
+    },
+    {
+      "file": "math.cro",
+      "address": 3145728,
+      "data_address": 134283264,
+      "bss_address": 134283392,
+      "ranges": [
+        {
+          "offset": 0,
+          "size": 32
+        },
+        {
+          "offset": 40,
+          "size": 4,
+          "thumb": true
+        }
+      ]
+    },
+    {
+      "file": "client.cro",
+      "address": 4194304,
+      "data_address": 134287360,
+      "ranges": [
+        {
+          "offset": 0,
+          "size": 16
+        }
+      ]
+    }
+  ]
+}

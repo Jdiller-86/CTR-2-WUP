@@ -81,6 +81,7 @@ class BridgeConfig:
     read_roots: tuple[str, ...] = ("ctr2wup", "wiiu/apps", "wiiu/crash_logs", "wiiu/screenshots", "install")
     write_roots: tuple[str, ...] = ("ctr2wup", "wiiu/apps", "install")
     udp_bind_address: str | None = None
+    control_key: str | None = None
 
     def __post_init__(self):
         # A numeric address binds FTP, wiiload and UDP filtering to one peer.
@@ -99,6 +100,10 @@ class BridgeConfig:
             raise ValueError("project_root must identify the CTR-2-WUP checkout")
         if not self.wiiload or any(c in self.wiiload for c in "\r\n\0"):
             raise ValueError("wiiload must name the official local executable")
+        if self.control_key is not None:
+            relative_path(self.control_key)
+            if not self.control_key.startswith("private/") or not self.control_key.endswith(".key"):
+                raise ValueError("Store the console control key under private/ with a .key suffix")
         for roots in (self.read_roots, self.write_roots):
             if not isinstance(roots, (list, tuple)) or not roots:
                 raise ValueError("SD roots must be a nonempty list")
@@ -122,17 +127,54 @@ class WiiUBridge:
         self._operations = threading.Lock()
         self._logs = UDPLogs(config.console_host, bind_address=config.udp_bind_address)
 
+    def _control(self):
+        from .wiiu_control import ConsoleControl
+        if self.config.control_key is None:
+            raise ValueError("Configure a local control_key and install the optional Aroma control plugin")
+        return ConsoleControl(self, local_path(self.config.project_root, self.config.control_key))
+
+    def pair_control(self):
+        from .wiiu_control import pair
+        return pair(self._control().key_path)
+
+    def console_state(self):
+        with self._operations:
+            return self._control().state()
+
+    def console_result(self, operation_id):
+        with self._operations:
+            return self._control().result(operation_id)
+
+    def reboot(self):
+        with self._operations:
+            return self._control().reboot()
+
+    def launch_title(self, title_id):
+        with self._operations:
+            return self._control().launch_title(title_id)
+
+    def install(self, local_dir, title_id, target):
+        path = self._local_artifact(local_dir)
+        if not path.is_dir():
+            raise ValueError("Select the local WUP directory inside the checkout")
+        with self._operations:
+            return self._control().install(path, title_id, target)
+
     def close(self):
         self._logs.close()
 
     def capabilities(self) -> dict:
+        control = self.config.control_key is not None
+        commands = ["console_state", "console_result", "reboot", "installed_title_launch", "wup_install"]
         return {
-            "transport": "Aroma FTPiiU + wiiload", "mcp_transport": "stdio",
+            "transport": "Aroma FTPiiU + control plugin" if control else "Aroma FTPiiU + wiiload",
+            "mcp_transport": "stdio",
             "console_host": self.config.console_host, "hardware_verified": False,
             "supported": ["build", "list_sd", "read_sd", "upload_sd_verified",
-                          "download_sd_verified", "collect_results", "launch_homebrew", "udp_logs"],
+                          "download_sd_verified", "collect_results", "launch_homebrew", "udp_logs"] + (commands if control else []),
+            "console_control_configured": control,
             "unavailable": ["controller_injection", "live_memory_debugging", "trigger_screenshot",
-                            "installed_title_launch", "automatic_wup_install", "remote_power_recovery"],
+                            "remote_power_recovery"] + ([] if control else commands),
             "read_roots": list(self.config.read_roots), "write_roots": list(self.config.write_roots),
             "build_targets": list(SUPPORTED_BUILDS),
             "limits": {"file_bytes": MAX_FILE, "collection_bytes": MAX_TOTAL, "entries": MAX_ENTRIES},
@@ -244,6 +286,10 @@ class WiiUBridge:
     def upload(self, local_file: str, sd_path: str) -> dict:
         absolute = self._remote(sd_path, write=True)
         source = local_path(self.config.project_root, local_file)
+        if self.config.control_key is not None:
+            key = local_path(self.config.project_root, self.config.control_key)
+            if key.exists() and source.exists() and source.samefile(key):
+                raise ValueError("The console control private key must remain on the host")
         if not source.is_file() or source.stat().st_size > MAX_FILE:
             raise ValueError("Local source must be a regular file within the transfer limit")
         with source.open("rb") as stream:
@@ -353,8 +399,17 @@ class WiiUBridge:
     def _wiiload(self):
         return shutil.which(self.config.wiiload, path=tool_environment().get("PATH"))
 
+    def _local_artifact(self, value: str) -> Path:
+        path = Path(value)
+        if path.is_absolute():
+            try:
+                value = path.relative_to(self.config.project_root).as_posix()
+            except ValueError as error:
+                raise ValueError("The artifact must be inside the configured checkout") from error
+        return local_path(self.config.project_root, value)
+
     def launch(self, local_file: str) -> dict:
-        source = local_path(self.config.project_root, local_file)
+        source = self._local_artifact(local_file)
         if source.suffix.lower() not in (".rpx", ".wuhb") or not source.is_file():
             raise ValueError("Launch requires a local RPX or WUHB file")
         if not 4 <= source.stat().st_size <= MAX_FILE:
@@ -365,6 +420,10 @@ class WiiUBridge:
             raise ValueError("Homebrew exceeds the launch limit")
         if data[:4] != (b"WUHB" if source.suffix.lower() == ".wuhb" else b"\x7fELF"):
             raise ValueError("Homebrew header does not match its extension")
+        if self.config.control_key is not None:
+            with self._operations:
+                result = self._control().launch_homebrew(source.suffix.lower(), data)
+            return {"local_file": local_file, "sha256": digest(data), "test_verdict": "not_evaluated", **result}
         if self.config.wiiload == "builtin":
             from .wiiload import send
             with self._operations:
@@ -400,7 +459,13 @@ class WiiUBridge:
             raise ValueError("Run this bridge from its configured checkout or set CTR2WUP_PROJECT_ROOT")
         output = local_path(self.config.project_root, "artifacts/wiiu-mcp/build-" + uuid.uuid4().hex)
         with self._operations:
-            return prototype(output, **SUPPORTED_BUILDS[target])
+            result = prototype(output, **SUPPORTED_BUILDS[target])
+        files = [entry["name"] for entry in result["artifacts"]]
+        app = next((name for name in files if name.endswith(".wuhb")), None)
+        if app is None:
+            app = next(name for name in files if name.endswith(".rpx"))
+        result["launch_file"] = (output / app).relative_to(self.config.project_root).as_posix()
+        return result
 
     def start_logs(self, port: int = 4405) -> dict:
         return self._logs.start(port)

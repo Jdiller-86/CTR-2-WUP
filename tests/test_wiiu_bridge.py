@@ -1,6 +1,8 @@
 """Original loopback fixtures: no console, credentials or commercial data."""
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import replace
 import io
 import json
 from pathlib import Path
@@ -218,7 +220,7 @@ class BridgeIntegrationTests(unittest.TestCase):
         (self.project / "original fixture.wuhb").write_bytes(b"WUHBoriginal fixture")
         with patch.object(self.bridge, "_wiiload", return_value="official-wiiload"), patch("host.wiiu_bridge.subprocess.run") as run:
             run.return_value = subprocess.CompletedProcess([], 0)
-            result = self.bridge.launch("original fixture.wuhb")
+            result = self.bridge.launch(str(self.project / "original fixture.wuhb"))
             self.assertTrue(result["submitted"])
             self.assertFalse(result["execution_confirmed"])
             command = run.call_args.args[0]
@@ -233,6 +235,57 @@ class BridgeIntegrationTests(unittest.TestCase):
             with self.assertRaises(subprocess.TimeoutExpired):
                 self.bridge.launch("original fixture.wuhb")
             self.assertEqual(run.call_count, 1)
+
+    def test_paired_install_stages_a_verified_wup_and_signs_the_request(self):
+        try:
+            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+        except ImportError:
+            self.skipTest("Install .[packaging] for the signed console control fixture")
+        from host.package_homebrew import pack_homebrew
+        from host.title_stage import stage_title
+        from host.wiiu_control import ENTRY, HEADER, INSTALL, ROOT
+        from tests.test_package_writer import original_inputs
+
+        bridge = WiiUBridge(replace(self.bridge.config, control_key="private/control.key"))
+        self.addCleanup(bridge.close)
+        pairing = bridge.pair_control()
+        key = Ed25519PublicKey.from_public_bytes(Path(pairing["public_file"]).read_bytes())
+
+        mailbox = self.sd / ROOT
+        mailbox.mkdir(parents=True)
+        session, sequence = "0000000000000718", "00000001"
+        (mailbox / "state.txt").write_bytes(
+            f"CTR1 {session} {sequence} 0005001010040100 {pairing['pairing_id']} 1 -\n".encode())
+        title = "0005000043543257"
+        source, _, _ = original_inputs(self.project / "control-fixture")
+        stage = self.project / "control-stage"
+        package = self.project / "control-wup"
+        stage_title(source / "code/probe.rpx", stage, title_id=title, version=7)
+        pack_homebrew(stage, package, require_startup=True)
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            pending = executor.submit(bridge.install, str(package), title, "usb")
+            request = mailbox / f"req-{session}-{sequence}.bin"
+            deadline = time.monotonic() + 8
+            while not request.exists() and time.monotonic() < deadline:
+                if pending.done():
+                    self.fail(f"Expected the install request, received {pending.result()}")
+                time.sleep(0.02)
+            packet = request.read_bytes()
+            key.verify(packet[:64], packet[64:])
+            magic, epoch, index, action, target, count, installed, version, title_id, job = HEADER.unpack_from(packet, 64)
+            self.assertEqual((magic, epoch, index, action, target, version, title_id),
+                             (b"CTR1", int(session, 16), 1, INSTALL, 1, 7, int(title, 16)))
+            self.assertGreater(installed, 0)
+            self.assertEqual(len(packet), 64 + HEADER.size + (count + installed) * ENTRY.size)
+            staged = self.sd / "install" / ("ctr2wup-" + job.hex())
+            self.assertEqual(sorted(file.name for file in staged.iterdir()),
+                             sorted(file.name for file in package.iterdir() if file.name != "pack-report.json"))
+            self.assertEqual((staged / "title.tmd").read_bytes(), (package / "title.tmd").read_bytes())
+            (mailbox / f"result-{job.hex()}.txt").write_bytes(
+                f"CTR1 {session} {sequence} {job.hex()} installed_verified 0\n".encode())
+            result = pending.result(timeout=5)
+        self.assertEqual((result["state"], result["operation_id"]), ("installed_verified", job.hex()))
 
     def test_cli_no_network_capabilities_and_clean_errors(self):
         output, errors = io.StringIO(), io.StringIO()

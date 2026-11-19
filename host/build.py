@@ -1,7 +1,7 @@
 """Real prototype compilation and transactional publication.
 
-Commercial conversion stays gated until guest execution, GPU, service and
-physical-console milestones are met. Never publish placeholder game packages.
+The experimental title builder is separate from original diagnostics;
+package generation does not establish physical Wii U gameplay.
 """
 
 from __future__ import annotations
@@ -221,10 +221,6 @@ def prototype(output: str | Path, guest_path=None, *, backend="original", audio_
             shutil.rmtree(staging)
 
 
-def commercial(path, output):
-    inspection = inspect(path)
-    raise HostError("unsupported_profile", "ROM inspection succeeded, but commercial ARM/HLE/PICA conversion is not yet supported. No package was generated. Use 'build --target prototype' for the native Wii U diagnostic", stage="profile",
-                    details={"identity": inspection["identity"],
-                             "executable_revision": inspection["executable_revision"],
-                             "compatibility": "unsupported",
-                             "required_gates": ["translated guest boot", "required HLE services", "PICA rendering", "physical Wii U gameplay/save verification"]})
+def commercial(path, output, **options):
+    from .mario_build import build_mario
+    return build_mario(path, output, **options)

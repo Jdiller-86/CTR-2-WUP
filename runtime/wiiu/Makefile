@@ -11,6 +11,7 @@ TEXTURED_HOMEBREW ?= 0
 TARGET ?= $(if $(filter 1,$(TEXTURED_HOMEBREW)),ctr2wup-textured-guest,$(if $(filter 1,$(GX2_GUEST)),ctr2wup-gx2-guest,ctr2wup-prototype))
 GUEST_DEFAULT ?= 0
 EXTERNAL_AOT ?= 0
+GAME_TEST ?= 0
 COMPILED_HOMEBREW ?= 0
 FILESYSTEM_HOMEBREW ?= 0
 ROMFS_HOMEBREW ?= 0
@@ -147,6 +148,14 @@ endif
 ifeq ($(GX2_GUEST),1)
 SOURCES += gx2_scene.c
 endif
+ifeq ($(GAME_TEST),1)
+ifneq ($(EXTERNAL_AOT),1)
+$(error GAME_TEST requires EXTERNAL_AOT=1)
+endif
+CFLAGS += -DCTR_GAME_TEST -I"$(GAME_DIR)"
+APP_NAME := CTR2WUP Mario Test
+SOURCES := game_main.c diagnostic_display.c diagnostic_font.c diagnostic_audio.c native_audio_stream.c viewport.c image_scale.c guest_slice.c test_lifecycle.c test_report.c report_storage.c
+endif
 OBJECTS := $(addprefix $(BUILD)/,$(SOURCES:.c=.o))
 CORE_SOURCES := $(CTR_RUNTIME_SOURCES) ../core/ctr_cpu_selftest.c \
     ../core/ctr_fs_snapshot.c ../core/ctr_guest_fixture.c \
@@ -184,8 +193,12 @@ ifeq ($(GUEST_AUDIO),1)
 CORE_SOURCES += ../core/ctr_dsp_fixture.c ../../tests/fixtures/dsp/dsp.generated.c ../../tests/fixtures/dsp/dsp-image.generated.c
 CORE_OBJECTS += $(BUILD)/ctr_dsp_fixture.o $(BUILD)/dsp.generated.o $(BUILD)/dsp-image.generated.o
 endif
+ifeq ($(GAME_TEST),1)
+CORE_SOURCES := $(CTR_RUNTIME_SOURCES) ../core/ctr_fs_snapshot.c ../core/ctr_sha256.c ../core/ctr_romfs_file.c ../recomp/ctr_recomp.c $(GAME_DIR)/game_image.generated.c $(UPSTREAM_DIR)/entries.c $(wildcard $(UPSTREAM_DIR)/code*.c)
+CORE_OBJECTS := $(addprefix $(BUILD)/,$(notdir $(CORE_SOURCES:.c=.o)))
+endif
 OBJECTS += $(CORE_OBJECTS)
-vpath %.c ../../tests/fixtures/dsp ../core ../recomp ../../tests/fixtures/cpu ../../tests/fixtures/guest ../../tests/fixtures/services ../../tests/fixtures/heap ../../tests/fixtures/kernel ../../tests/fixtures/hid ../../tests/fixtures/gsp ../../tests/fixtures/relay ../../tests/fixtures/stack ../../tests/fixtures/threads $(UPSTREAM_DIR)
+vpath %.c ../../tests/fixtures/dsp ../core ../recomp ../../tests/fixtures/cpu ../../tests/fixtures/guest ../../tests/fixtures/services ../../tests/fixtures/heap ../../tests/fixtures/kernel ../../tests/fixtures/hid ../../tests/fixtures/gsp ../../tests/fixtures/relay ../../tests/fixtures/stack ../../tests/fixtures/threads $(UPSTREAM_DIR) $(GAME_DIR)
 .PHONY: all clean identity-force
 all: $(OUTPUT)/$(TARGET).rpx $(OUTPUT)/$(TARGET).wuhb
 $(BUILD):

@@ -6,6 +6,7 @@
 #include "ctr_fs.h"
 #include "ctr_apt.h"
 #include "ctr_dsp.h"
+#include "ctr_module.h"
 #include "ctr_resource_cache.h"
 #include "ctr_texture_cache.h"
 #include <stdlib.h>
@@ -26,6 +27,7 @@ void ctr_guest_close(ctr_guest *guest) {
     for(unsigned i=0;i<16;++i)if(guest->sessions[i].active)ctr_fs_session_closed(guest,i);
     ctr_apt_close(guest);
     ctr_dsp_close(guest);
+    ctr_modules_close(guest);
     ctr_resource_cache_destroy(guest->pica_resources);
     ctr_texture_cache_destroy(guest->pica_textures);
     free(guest->gsp.pica_scene);
@@ -198,7 +200,7 @@ void ctr_guest_object_release(ctr_guest *g,ctr_guest_handle_type type,unsigned o
     if (e->references && --e->references==0) memset(e,0,sizeof(*e));
 }
 uint32_t ctr_guest_session_open(ctr_guest *g,ctr_guest_service service) {
-    if ((unsigned)service>CTR_SERVICE_DSP) return 0;
+    if ((unsigned)service>CTR_SERVICE_RO) return 0;
     for (unsigned i=0;i<16;++i) if (!g->sessions[i].active) {
         g->sessions[i]=(ctr_guest_session){.active=true,.service=service,.fs_closed=true};
         uint32_t handle=ctr_guest_handle_new(g,CTR_HANDLE_SESSION,i);
@@ -343,7 +345,7 @@ ctr_guest_state ctr_guest_run(ctr_guest *g,uint64_t budget,uint64_t now_ns,bool 
         if(g->threads_enabled && remaining>g->quantum_left)remaining=g->quantum_left;
         uint64_t before=g->cpu.instructions;
         ctr_cpu_result result=translated?(g->executor?g->executor(&g->cpu,g->executor_context,remaining):
-            ctr_cpu_dispatch(&g->cpu,&g->program,remaining,false)):ctr_cpu_run(&g->cpu,remaining);
+            ctr_modules_dispatch(g,remaining)):ctr_modules_interpret(g,remaining);
         if(g->threads_enabled) {
             uint64_t charged=g->cpu.instructions-before;
             g->quantum_left=charged>=g->quantum_left?0:g->quantum_left-(unsigned)charged;
