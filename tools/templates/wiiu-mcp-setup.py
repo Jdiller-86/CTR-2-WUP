@@ -22,7 +22,7 @@ def safe_path(root, name):
     result = root
     for part in path.parts:
         result = result / part
-        if result.is_symlink():
+        if result.is_symlink() or getattr(result, "is_junction", lambda: False)():
             raise ValueError("Package paths cannot traverse links")
     return result
 
@@ -75,8 +75,9 @@ def write_new_or_same(path, content):
         stream.write(data)
 
 
-def prepare(root, console, project=None, *, install=True):
-    ipaddress.IPv4Address(console)
+def prepare(root, console=None, project=None, *, install=True, server_executable=None, log=None):
+    if console:
+        ipaddress.IPv4Address(console)
     manifest = verify(root)
     local = safe_path(root, "local")
     local.mkdir(exist_ok=True)
@@ -85,8 +86,9 @@ def prepare(root, console, project=None, *, install=True):
         raise ValueError("Existing unowned local directory preserved")
     marker.touch(exist_ok=True)
     if project is None:
-        snapshot = safe_path(root, "local/source/CTR2WUP")
-        project = snapshot if snapshot.is_dir() else extract_source(root / "source.zip", safe_path(root, "local/source"))
+        source_directory = "local/source/" + manifest["source_commit"]
+        snapshot = safe_path(root, source_directory + "/CTR2WUP")
+        project = snapshot if snapshot.is_dir() else extract_source(root / "source.zip", safe_path(root, source_directory))
     else:
         project = Path(project).expanduser().resolve()
     if not (project / "runtime/wiiu/Makefile").is_file():
@@ -102,38 +104,56 @@ def prepare(root, console, project=None, *, install=True):
     environment = safe_path(root, "local/venv")
     if environment.exists() and not (environment / "pyvenv.cfg").is_file():
         raise ValueError("Existing non-venv directory preserved")
-    if install:
+    if install and server_executable is None:
         venv.create(environment, with_pip=True)
     python = environment / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-    if install:
+    if install and server_executable is None:
         subprocess.run([str(python), "-m", "pip", "install", "--only-binary=:all:", "--require-hashes",
-                        "-r", str(root / "requirements.lock")], check=True)
+                        "-r", str(root / "requirements.lock")], check=True, stdout=log,
+                       stderr=subprocess.STDOUT if log else None)
         wheel, = (root / "wheels").glob("ctr2wup-*.whl")
-        subprocess.run([str(python), "-m", "pip", "install", "--no-deps", str(wheel)], check=True)
-        subprocess.run([str(python), "-m", "pip", "check"], check=True)
+        subprocess.run([str(python), "-m", "pip", "install", "--no-deps", str(wheel)], check=True, stdout=log,
+                       stderr=subprocess.STDOUT if log else None)
+        subprocess.run([str(python), "-m", "pip", "check"], check=True, stdout=log,
+                       stderr=subprocess.STDOUT if log else None)
+    if server_executable is not None:
+        executable = Path(server_executable).resolve()
+        if not executable.is_relative_to(root.resolve()) or not executable.is_file():
+            raise ValueError("The packaged bridge executable is missing")
+        command = [str(executable)]
+    else:
+        command = [str(python), "-I", "-m", "host.wiiu_mcp"]
+    result = {"prepared": True, "console_contacted": False, "source_commit": manifest["source_commit"],
+              "project": str(project), "command": command,
+              "starter_payload": "artifacts/wiiu-mcp-starter/ctr2wup-prototype.wuhb"}
+    if not console:
+        return result
     configuration = safe_path(root, "local/wiiu.toml")
-    project_path = json.dumps(str(project), ensure_ascii=False)
-    config_path = json.dumps(str(configuration), ensure_ascii=False)
     write_new_or_same(configuration, "console_host = " + json.dumps(console) + "\nproject_root = "
-                      + project_path + '\nwiiload = "builtin"\ncontrol_key = "private/wiiu-control.key"\n')
+                      + json.dumps(str(project), ensure_ascii=False)
+                      + '\nwiiload = "builtin"\ncontrol_key = "private/wiiu-control.key"\n')
     public_key = None
     if install:
-        subprocess.run([str(python), "-I", "-m", "host.wiiu_mcp", "--config", str(configuration),
-                        "--action", "pair-control"], check=True, stdout=subprocess.DEVNULL)
+        subprocess.run(command + ["--config", str(configuration), "--action", "pair-control"],
+                       check=True, stdout=subprocess.DEVNULL)
         public_key = safe_path(root, "local/ctr2wup-control.pub")
         data = safe_path(project, "private/ctr2wup-control.pub").read_bytes()
         if len(data) != 32:
             raise ValueError("Expected a 32-byte console public key")
         write_new_or_same(public_key, data)
-    client = ('[mcp_servers.wiiu]\ncommand = ' + json.dumps(str(python), ensure_ascii=False)
-              + '\nargs = ["-I", "-m", "host.wiiu_mcp", "--config", ' + config_path
-              + ']\nenv = { CTR2WUP_PROJECT_ROOT = ' + project_path + ' }\ntool_timeout_sec = 1800\n')
+    client = client_configuration(command, configuration, project)
     write_new_or_same(safe_path(root, "local/mcp-server.toml"), client)
-    return {"prepared": True, "console_contacted": False, "source_commit": manifest["source_commit"],
-            "project": str(project), "mcp_configuration": str(local / "mcp-server.toml"),
+    return {**result, "mcp_configuration": str(local / "mcp-server.toml"),
             "bridge_configuration": str(configuration),
             "console_public_key": str(public_key) if public_key else None,
             "starter_payload": "artifacts/wiiu-mcp-starter/ctr2wup-prototype.wuhb"}
+
+
+def client_configuration(command, configuration, project):
+    return ('[mcp_servers.wiiu]\ncommand = ' + json.dumps(command[0], ensure_ascii=False)
+            + '\nargs = ' + json.dumps(command[1:] + ["--config", str(configuration)], ensure_ascii=False)
+            + '\nenv = { CTR2WUP_PROJECT_ROOT = ' + json.dumps(str(project), ensure_ascii=False)
+            + ' }\ntool_timeout_sec = 1800\n')
 
 
 def main():

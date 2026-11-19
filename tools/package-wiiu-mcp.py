@@ -137,6 +137,8 @@ def package(wheel, native, control, sdk, evidence, cache, output):
     entries.update({
         "source.zip": source, "wheels/" + wheel.name: wheel_bytes,
         "setup.py": (ROOT / "tools/templates/wiiu-mcp-setup.py").read_bytes(),
+        "installer.py": (ROOT / "tools/templates/wiiu-mcp-installer.py").read_bytes(),
+        "installer-actions.py": (ROOT / "tools/templates/wiiu-mcp-installer-actions.py").read_bytes(),
         "requirements.lock": (ROOT / "packaging/wiiu-mcp-requirements.lock").read_bytes(),
         "components.json": (ROOT / "packaging/wiiu-mcp-components.json").read_bytes(),
         "sd-card/wiiu/apps/ctr2wup-prototype.wuhb": wuhb,

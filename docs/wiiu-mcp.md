@@ -9,12 +9,19 @@ installation. Physical-console acceptance of the new plugin is pending.
 ## Setup
 
 The [Wii U MCP starter kit](https://github.com/Jdiller-86/CTR-2-WUP/releases)
-includes the paired control plugin, bridge, setup helper, ten pinned upstream
-Aroma components with sources and licenses, an original diagnostic WUHB and a
-source snapshot. Extract it to a permanent folder and follow `START-HERE.txt`.
-Setup generates the local pairing key and exports the public key for the SD card.
-Host dependency installation requires Internet and Python 3.12+. The SDK is
-needed only for native rebuilds. Physical-console validation is pending.
+includes the bridge, guided installer, paired control plugin, ten pinned Aroma
+components with their sources and licenses, an original diagnostic WUHB and
+a source snapshot. On Windows,
+download the Windows-x64 ZIP, choose **Extract All**, then double-click
+**Install Wii U MCP.exe**. Python and runtime dependencies are included.
+
+The wizard installs into a per-user folder, previews SD changes with automatic
+backups, and adds the bridge to local Codex. Enter the console IP and save the
+connection, then restart Codex. SD preparation and the IP can be completed later.
+The portable kit uses the same wizard through `python installer.py` and needs
+Python 3.12+ and Internet for initial dependency installation. Follow
+`START-HERE.txt` to export and copy the public key to the SD card. The SDK is
+needed only for native rebuilds.
 
 For source installation, on a computer on the console's trusted LAN, install Python 3.12+ and run
 `python -m pip install -e '.[mcp]'` in the checkout. Native builds also need the
@@ -171,16 +178,30 @@ license directory and successful check evidence. `packaging/wiiu-mcp-components.
 release/source hashes and exact SD destinations; no floating latest download is
 used during packaging. The packager checks ZIP CRCs, source/wheel agreement,
 component inventories and read-back hashes. `setup.py --verify-only` validates
-the extracted kit before installation. It never writes to an SD card or contacts
-a console. The staged modules are for an existing Aroma installation, not a CFW
-installer. Back up existing SD files and compare installed versions before merging.
+the extracted kit before installation. The command-line helper never writes to
+an SD card or contacts a console. The wizard copies only the staged SD inventory
+after an explicit preview/copy action. It validates an existing Aroma layout,
+backs up all changed originals before publishing replacements and verifies each
+copied file. A changed card invalidates its preview. The staged modules require
+an existing Aroma installation; no CFW, formatting or title installation is performed.
 
 `packaging/wiiu-mcp-requirements.lock` pins the Python dependency closure and
 published wheel hashes, including Windows-specific packages. Setup creates a
 private virtual environment and absolute MCP/configuration paths. The source
 snapshot supports file/launch operations without Git. Native builds need a real
 Git checkout, selected with `setup.py --project`, and the verified SDK; the full
-compiler toolchain and Python runtime are not redistributed in the kit.
+compiler toolchain is not redistributed. The Windows kit bundles Python and
+the MCP dependencies in source-matched executables built on a Windows runner.
+The portable kit does not bundle Python. Windows freezing uses the pinned tools
+in `packaging/wiiu-mcp-windows-build.txt`; Python, Tcl/Tk and package notices are
+included with the executables. The Windows check runs the real wizard and a
+frozen MCP handshake/FTP call with Python removed from the child search path.
+
+Codex registration adds one managed `mcp_servers.wiiu` block and backs up
+changed settings. Unrelated configuration is preserved and parsed before/after
+the change. An existing unmanaged Wii U entry is preserved for manual review;
+the wizard also offers Copy configuration for other MCP clients. Only Test
+connection contacts the configured console, checking FTPiiU/SD without a launch.
 
 Install `.[mcp-test]` and run
 `python -m unittest discover -s tests -p test_wiiu_bridge.py -v` for actual

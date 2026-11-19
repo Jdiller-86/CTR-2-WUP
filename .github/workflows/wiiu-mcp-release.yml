@@ -26,7 +26,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Require main or the exact alpha tag and clean source
+      - name: Require an allowed source and clean checkout
         run: |
           python3 - <<'PY'
           import os, re, runpy
@@ -114,8 +114,59 @@ jobs:
           name: wiiu-mcp-logs-${{ github.sha }}
           path: artifacts/wiiu-mcp-release/logs/
 
-  release:
+  windows:
+    name: Build and test the Windows installer
     needs: build
+    runs-on: windows-2025
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: wiiu-mcp-kit-${{ github.sha }}
+          path: artifacts/wiiu-mcp-windows/base
+      - name: Install pinned runtime and freezing tools
+        run: |
+          python -m pip install --only-binary=:all: --require-hashes -r packaging/wiiu-mcp-requirements.lock
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m pip install -r packaging/wiiu-mcp-windows-build.txt '.[mcp-test]'
+      - name: Freeze the bridge and guided desktop setup
+        run: python tools/build-wiiu-mcp-windows.py --output artifacts/wiiu-mcp-windows/frozen
+      - name: Package the self-contained Windows kit
+        run: |
+          $base = (Get-ChildItem artifacts/wiiu-mcp-windows/base -Filter '*.zip').FullName
+          python tools/package-wiiu-mcp-windows.py --base "$base" --frozen artifacts/wiiu-mcp-windows/frozen --output artifacts/wiiu-mcp-windows/publish
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -c "from pathlib import Path; from zipfile import ZipFile; p,=Path('artifacts/wiiu-mcp-windows/publish').glob('*.zip'); ZipFile(p).extractall('artifacts/wiiu-mcp-windows/stage')"
+      - name: Check real Windows GUI and frozen MCP operation without a Python installation
+        run: |
+          python tools/windows/test-wiiu-mcp-bundle.py --kit artifacts/wiiu-mcp-windows/stage --output artifacts/wiiu-mcp-windows/checks --emit-previews
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item artifacts/wiiu-mcp-windows/checks/windows-check.json artifacts/wiiu-mcp-windows/publish/installer-checks.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wiiu-mcp-windows-${{ github.sha }}
+          path: artifacts/wiiu-mcp-windows/publish/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: wiiu-mcp-installer-preview-${{ github.sha }}
+          path: artifacts/wiiu-mcp-windows/checks/
+          if-no-files-found: warn
+
+  release:
+    needs: [build, windows]
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/wiiu-mcp-v')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -126,6 +177,10 @@ jobs:
         with:
           name: wiiu-mcp-kit-${{ github.sha }}
           path: publish
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: wiiu-mcp-windows-${{ github.sha }}
+          path: publish
       - name: Publish immutable starter prerelease
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -134,13 +189,22 @@ jobs:
           python - <<'PY'
           import hashlib, json, os, pathlib, subprocess, zipfile
           root = pathlib.Path('publish')
-          archive, = root.glob('*.zip')
-          digest, name = (root/'SHA256SUMS.txt').read_text().strip().split('  ', 1)
-          assert name == archive.name and hashlib.sha256(archive.read_bytes()).hexdigest() == digest
-          with zipfile.ZipFile(archive) as z:
-              assert z.testzip() is None
-              manifest = json.loads(z.read('manifest.json'))
-          assert manifest['source_commit'] == os.environ['GITHUB_SHA']
+          archives = list(root.glob('*.zip'))
+          assert len(archives) == 2
+          for archive in archives:
+              windows = archive.name.endswith('-Windows-x64.zip')
+              checksum = root/('SHA256SUMS-Windows-x64.txt' if windows else 'SHA256SUMS.txt')
+              digest, name = checksum.read_text().strip().split('  ', 1)
+              assert name == archive.name and hashlib.sha256(archive.read_bytes()).hexdigest() == digest
+              with zipfile.ZipFile(archive) as z:
+                  assert z.testzip() is None
+                  manifest = json.loads(z.read('manifest.json'))
+              assert manifest['source_commit'] == os.environ['GITHUB_SHA']
+              assert manifest['python_runtime_bundled'] is windows
+          ref_name = os.environ['GITHUB_REF']
+          assert ref_name == 'refs/heads/main' or ref_name == 'refs/tags/wiiu-mcp-v'+manifest['version']
+          checks = json.loads((root/'installer-checks.json').read_text())
+          assert checks['ok'] and checks['frozen_bridge_handshake'] and checks['source_commit'] == os.environ['GITHUB_SHA']
           tag = 'wiiu-mcp-v' + manifest['version']
           existing = subprocess.run(['gh', 'release', 'view', tag], capture_output=True)
           assert existing.returncode != 0, 'Existing release preserved; choose a new kit version'
@@ -152,15 +216,18 @@ jobs:
               assert 'HTTP 404' in ref.stderr, 'Tag lookup failed; publication stopped'
           notes = root/'notes.txt'
           notes.write_text('Wii U MCP starter kit built from `'+manifest['source_commit']+'`.\n\n'
-              '- The host accepts the build tool’s launch path.\n'
-              '- Paired Aroma control adds console state, observed homebrew launches and reboot.\n'
-              '- Install a fresh CTR2WUP WUP to MLC or USB, verify its files and launch it by title ID.\n\n'
-              'Download the ZIP and follow `START-HERE.txt`. It includes the original diagnostic, the '
-              'paired control plugin, the pinned Aroma components, matching sources and checksums. '
-              'Setup requires Python 3.12+, Internet for host dependencies and an existing Aroma installation.\n\n'
-              'Physical-console validation is tracked in #192.\n', encoding='utf-8')
+              'Windows: download the Windows-x64 ZIP, Extract All, and double-click Install Wii U MCP.exe. '
+              'The three-step wizard installs the bridge, previews and backs up SD changes, and registers the bridge in local Codex. '
+              'No Python installation, terminal commands or hand-edited configuration are required for the Windows kit. '
+              'SD preparation and the Wii U IP can be completed later. Restart Codex after saving the connection.\n\n'
+              'Other platforms: use the portable ZIP with Python 3.12+ and Internet for initial host dependency installation. '
+              'Both kits include the original diagnostic WUHB, paired control plugin and ten pinned Aroma components with sources, licenses and checksums. '
+              'Aroma must already be installed. Native rebuilds need a Git checkout and the verified SDK. '
+              'Cloud connectivity needs a separately configured secure route. '
+              'See START-HERE.txt for pairing. Physical-console validation is tracked in #192.\n', encoding='utf-8')
+          assets = [str(path) for path in sorted(root.iterdir()) if path.name != 'notes.txt']
           subprocess.run(['gh', 'release', 'create', tag, '--target', manifest['source_commit'],
               '--draft', '--prerelease', '--latest=false', '--title', 'Wii U MCP starter kit '+manifest['version'],
-              '--notes-file', str(notes), str(archive), str(root/'SHA256SUMS.txt'), str(root/'package-report.json')], check=True)
+              '--notes-file', str(notes), *assets], check=True)
           subprocess.run(['gh', 'release', 'edit', tag, '--draft=false', '--prerelease', '--latest=false'], check=True)
           PY

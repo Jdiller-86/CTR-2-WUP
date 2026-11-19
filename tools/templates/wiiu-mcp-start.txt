@@ -1,23 +1,34 @@
 CTR2WUP Wii U MCP starter kit @VERSION@
 Source commit @SOURCE_COMMIT@. Physical-console validation is pending.
 
-Install Python 3.12+ on a computer on the Wii U's LAN and extract this ZIP to a
-permanent folder. Open a terminal there and run the command with your Wii U's IP.
+Windows x64: choose Extract All, then double-click Install Wii U MCP.exe.
+Click Install & continue, select your SD card when available, and enter the
+Wii U IP in Connect Codex. Save the connection, then restart Codex. Python and
+the bridge dependencies are included; no terminal commands or manual settings
+editing are needed. Installation is per-user and adds a Start menu shortcut.
+You can skip the SD card and connection steps until you're home.
 
-    python setup.py --console 192.168.1.50
+The SD step requires an existing Aroma installation. Keep the console powered
+off while the card is removed. Check the preview, then click Back up & copy
+files; changed originals are backed up before replacement and copied files
+are verified. Games and saves are left in place. Restart Aroma with the card,
+enable FTPiiU and wiiload, and leave system-file access disabled. Find the Wii U
+IP in FTPiiU settings. Test connection checks FTPiiU without launching an app.
 
-Setup verifies the kit, installs pinned Python dependencies over the Internet
-and generates local/mcp-server.toml and local/ctr2wup-control.pub. The bundled
-source snapshot is the default project. Use --project with a Git checkout and
-the verified devkitPro SDK for native rebuilds.
+Other platforms: install Python 3.12+ and run python installer.py for the same
+wizard, or use python setup.py --console YOUR_WII_U_IP. The portable kit needs
+Internet for its initial dependency installation. Native rebuilds require a Git
+checkout and the verified SDK; the included original diagnostic can be launched
+without a compiler. Cloud access also needs a secure route to the companion
+computer and MCP registration. See docs/wiiu-mcp.md in source.zip for details.
 
-While the Wii U is off, copy the required files from sd-card/ to the SD root
-of your existing Aroma installation. Compare versions before replacing Aroma
-modules or plugins. Copy local/ctr2wup-control.pub to wiiu/ on the SD card.
-Keep the private key on the companion computer. Boot Aroma and enable FTPiiU
-and CTR2WUP Control. Leave FTPiiU system-file access disabled.
+For paired console controls, save the connection in the Windows wizard and
+run this PowerShell command from the installation folder.
 
-Add the entry from local/mcp-server.toml to your MCP client configuration
-and restart the client. Start with wiiu_console_state. For a first launch, pass
-artifacts/wiiu-mcp-starter/ctr2wup-prototype.wuhb to wiiu_launch. See
-docs/wiiu-mcp.md in source.zip for console receipts, WUP installs and reboot.
+    .\runtime\WiiU-MCP-Bridge.exe --config local/wiiu.toml --action pair-control
+
+Copy the returned public_file to wiiu/ctr2wup-control.pub on the SD card while
+the Wii U is off. The portable setup.py command exports the same file at
+local/ctr2wup-control.pub and writes local/mcp-server.toml for MCP registration.
+Start Aroma, enable CTR2WUP Control, and use wiiu_console_state to check pairing.
+Keep the private key on the companion computer.
