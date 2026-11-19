@@ -2,7 +2,6 @@
 import importlib.util
 import json
 import shutil
-import struct
 import subprocess
 import tempfile
 from pathlib import Path

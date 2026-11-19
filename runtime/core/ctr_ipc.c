@@ -89,9 +89,9 @@ void ctr_ipc_request(ctr_guest *g) {
                    CTR_MEM_READ|CTR_MEM_WRITE),base)) return;
     if (!memory_ok(g,ctr_memory_read(&g->memory,base,4,CTR_MEM_READ,&words[0]),base)) return;
     g->ipc_header=words[0];
-    unsigned count=1+((words[0]>>6)&63u)+(words[0]&63u);
-    if ((words[0]&0xf000u) || count>CTR_IPC_WORDS) { unsupported(g,words[0]);return; }
-    for (unsigned i=1;i<count;++i)
+    unsigned request_words=1+((words[0]>>6)&63u)+(words[0]&63u);
+    if ((words[0]&0xf000u) || request_words>CTR_IPC_WORDS) { unsupported(g,words[0]);return; }
+    for (unsigned i=1;i<request_words;++i)
         if (!memory_ok(g,ctr_memory_read(&g->memory,base+i*4,4,CTR_MEM_READ,&words[i]),base+i*4)) return;
     uint32_t out[9]={0};
     if (session->service==CTR_SERVICE_SRV) {

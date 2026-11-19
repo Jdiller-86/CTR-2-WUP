@@ -1,4 +1,6 @@
+#define _POSIX_C_SOURCE 200809L
 #include "test_result.h"
+#include "ctr_private_file.h"
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
@@ -48,7 +50,7 @@ bool ctr_test_result_open(ctr_test_result *r,const char *directory,
         if(n<0 || (size_t)n>=sizeof(r->path))return fail(r,ENAMETOOLONG,"path");
         n=snprintf(r->identity,sizeof(r->identity),"CTR2WUP result report\nApplication: %s | Build: %s\nSession ticks: %016llx\nFile: %s\n",application,version,(unsigned long long)id,r->filename);
         if(n<0 || (size_t)n>=sizeof(r->identity))return fail(r,ENAMETOOLONG,"identity");
-        file=fopen(r->path,"wbx");if(file)break;
+        file=ctr_create_private_file(r->path,true);if(file)break;
         if(errno!=EEXIST)return fail(r,errno,"open");
     }
     if(!file)return fail(r,EEXIST,"open");

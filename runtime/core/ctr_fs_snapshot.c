@@ -1,4 +1,6 @@
+#define _POSIX_C_SOURCE 200809L
 #include "ctr_fs_snapshot.h"
+#include "ctr_private_file.h"
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -57,7 +59,7 @@ bool ctr_fs_snapshot_save_with_rename(const char *path,const ctr_fs_volume *v,
     }
     if(ok && backup) { errno=EEXIST;ok=false; }
     if(!ok) { int error=errno;free(previous);free(temp);free(p);errno=error;return false; }
-    FILE *file=fopen(temp,"wbx");
+    FILE *file=ctr_create_private_file(temp,true);
     if(!file) { int error=errno;free(previous);free(temp);free(p);errno=error;return false; }
     ok=fwrite(p,1,n,file)==n;
     if(fflush(file))ok=false;

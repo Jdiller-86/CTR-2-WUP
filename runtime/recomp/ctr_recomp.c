@@ -155,9 +155,6 @@ int ctr_recomp_instruction(Context *c,uint32_t address,uint32_t opcode) {
         ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
     if (!c->thumb && (opcode&0x0f000f10u)==0x0e000f10u &&
         ((opcode>>28)==15u || (!barrier && (opcode&0x0fff0fffu)!=0x0e1d0f70u) || ((opcode>>12)&15u)==15u)) {
-        ctr_cpu flags={0};
-        flags.cpsr=((uint32_t)c->n<<31)|((uint32_t)c->z<<30)|
-                   ((uint32_t)c->c<<29)|((uint32_t)c->v<<28);
         if (opcode>>28==15u || ctr_cpu_condition(&flags,opcode>>28))
             ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
     }

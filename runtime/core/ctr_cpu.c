@@ -476,12 +476,12 @@ static ctr_cpu_result arm_step(ctr_cpu *cpu, uint32_t insn) {
         return CTR_CPU_OK;
     }
     uint32_t media=insn&0x0ff00ff0u;
-    unsigned kind=(insn>>20)&7u;
-    if((insn&0x0f8003f0u)==0x06800070u && kind!=1 && kind!=5) {
+    unsigned extend_kind=(insn>>20)&7u;
+    if((insn&0x0f8003f0u)==0x06800070u && extend_kind!=1 && extend_kind!=5) {
         unsigned rd=(insn>>12)&15u,rm=insn&15u;
         if(rd==15u || rm==15u)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
         unsigned rn=(insn>>16)&15;
-        cpu->r[rd]=ctr_cpu_extend(cpu->r[rm],kind,((insn>>10)&3)*8,rn==15?0:cpu->r[rn],rn!=15);
+        cpu->r[rd]=ctr_cpu_extend(cpu->r[rm],extend_kind,((insn>>10)&3)*8,rn==15?0:cpu->r[rn],rn!=15);
         cpu->r[15]=next;return CTR_CPU_OK;
     }
     if((insn&0x0ff00090u)==0x01000080u) { /* SMLAxy, signed halves and sticky Q. */

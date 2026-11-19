@@ -7,32 +7,19 @@ package generation does not establish physical Wii U gameplay.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-import hashlib
 import json
-import os
 from pathlib import Path
 import shutil
-import signal
 import struct
 import subprocess
 import tempfile
 
 from . import __version__
+from .build_support import MIN_BUILD_FREE, _run_build, _sha256
 from .containers import inspect
 from .doctor import doctor, repository_root, tool_environment
 from .errors import HostError
 from .atomic import publish_directory
-
-MIN_BUILD_FREE = 64 * 1024 * 1024
-
-
-def _sha256(path):
-    digest = hashlib.sha256()
-    with Path(path).open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
 
 def _source_state(repo):
     """Read source identity without depending on a caller's current directory."""
@@ -65,40 +52,6 @@ def _validate_rpx(path):
             _, kind, _, _, offset, size, _, _, _, _ = struct.unpack_from(">10I", sections, index * 40)
             if kind not in (0, 8) and offset + size > path.stat().st_size:
                 raise HostError("invalid_artifact", "RPX ELF section extends beyond the artifact", stage="compile")
-
-
-def _run_build(command, env, log, cwd, *, stage="compile", timeout=None):
-    """No shell interpolation; cancellation terminates and joins the compiler."""
-    with log.open("wb") as output:
-        process_options = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
-                           if os.name == "nt" else {"start_new_session": True})
-        process = subprocess.Popen(command, env=env, cwd=cwd, stdout=output,
-                                   stderr=subprocess.STDOUT, **process_options)
-        try:
-            result = process.wait(timeout=timeout)
-        except BaseException:
-            if process.poll() is None:
-                try:
-                    if os.name == "nt":
-                        process.send_signal(signal.CTRL_BREAK_EVENT)
-                    else:
-                        os.killpg(process.pid, signal.SIGTERM)
-                except (OSError, ProcessLookupError):
-                    process.terminate()
-                try:
-                    process.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    if os.name == "nt":
-                        subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"],
-                                       capture_output=True, check=False)
-                    else:
-                        os.killpg(process.pid, signal.SIGKILL)
-                    process.kill()
-                    process.wait()
-            raise
-    if result:
-        raise HostError("compile_failed" if stage=="compile" else "guest_execution_failed", "Compilation/execution failed; inspect the retained log", stage=stage,
-                        details={"exit_code": result, "log": str(log)})
 
 
 def prototype(output: str | Path, guest_path=None, *, backend="original", audio_only=False, scene_only=False, stream_audio=False, guest_audio=False, guest_stream=False, m1_only=False, install_only=False):

@@ -78,10 +78,11 @@ def verify(commit, get=fetch, *, with_project=False):
 
 
 def verify_until_ready(commit, *, attempts=6, delay=10, get=fetch, wait=time.sleep, with_project=False):
-    if not 1 <= attempts <= 12 or not 0 <= delay <= 30:
+    if not isinstance(attempts, int) or not 1 <= attempts <= 12 or not 0 <= delay <= 30:
         raise ValueError('Verification retry budget is outside the supported bounds')
     failures = []
-    for attempt in range(1, attempts + 1):
+    attempt = 1
+    while True:
         try:
             return dict(verify(commit, get, with_project=with_project), attempts=attempt, retry_failures=failures)
         except VerificationError as error:
@@ -98,6 +99,7 @@ def verify_until_ready(commit, *, attempts=6, delay=10, get=fetch, wait=time.sle
             return {'ok': False, 'source_commit': commit, 'canonical_url': CANONICAL,
                     'error': message, 'error_code': code, 'attempts': attempt, 'retry_failures': failures}
         wait(delay)
+        attempt += 1
 
 
 def main():

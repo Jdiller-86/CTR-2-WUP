@@ -12,7 +12,7 @@ from host.errors import HostError
 from host.intake_export import export_intake
 from host.loader import load_image
 from host.guest_fixture import fixture_bytes
-from tests.host_fixtures import CODE, PROGRAM_ID, cia, ncch
+from tests.host_fixtures import PROGRAM_ID, cia, ncch
 
 
 class CiaTests(unittest.TestCase):

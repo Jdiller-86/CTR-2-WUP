@@ -17,7 +17,6 @@ import xml.etree.ElementTree as ET
 
 from .atomic import publish_directory
 from .build import _validate_rpx
-from .errors import HostError
 from .package_crypto import PackagingInputs, cipher, fail
 from .package_validator import CONTENT_START, SIGNATURE_TYPE, ValidatorError, _title_id
 

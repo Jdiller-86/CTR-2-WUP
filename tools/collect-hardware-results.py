@@ -29,9 +29,6 @@ def patterns(version):
     return result, logs
 
 
-RESULT_PATTERN, PATTERN = patterns(VERSION)
-
-
 def trace_identity_matches(name, data, commit, version=VERSION):
     app = next((app for app in APPS if name.startswith(app+'-')), None)
     text = data.decode('utf-8', errors='replace')

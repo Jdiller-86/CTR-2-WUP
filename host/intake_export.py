@@ -10,7 +10,7 @@ import zipfile
 
 from .atomic import publish_directory
 from .cia import read_cia
-from .containers import Reader, inspect, _ncch, u32
+from .containers import Reader, inspect, u32
 from .errors import HostError
 
 MAX_VIEW = 30 * 1024 * 1024

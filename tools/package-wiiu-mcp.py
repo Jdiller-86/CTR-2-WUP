@@ -8,7 +8,6 @@ import io
 import json
 from pathlib import Path, PurePosixPath
 import re
-import subprocess
 import tomllib
 import urllib.parse
 import urllib.request

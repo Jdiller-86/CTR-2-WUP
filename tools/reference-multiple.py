@@ -60,7 +60,8 @@ def cases():
     # Link targets include LR itself, to check that it is captured before linking.
     for thumb in (False,True):
         for rn in (0,8,14):
-            for target_thumb in (False,True):
+            # Adjacent cases alternate the target state by index in main().
+            for _ in range(2):
                 rows.append(((0x4780|rn<<3) if thumb else (0xe12fff30|rn),thumb,0x98050010|(0x20 if thumb else 0)))
     # Compiled newlib uses unsigned byte arithmetic and GE-based selection.
     for op in (0xe6524f93,0xe6524ff3,0xe6824fb3):

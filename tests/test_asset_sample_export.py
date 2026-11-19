@@ -1,6 +1,5 @@
 """Original-byte fixtures for standalone private sample publication boundaries."""
 import copy
-from contextlib import ExitStack
 import hashlib
 import importlib.util
 import json
@@ -303,8 +302,8 @@ class AssetSampleExportTests(unittest.TestCase):
                                  st_mtime_ns=actual.st_mtime_ns//10**9*10**9,
                                  st_ctime_ns=actual.st_ctime_ns//10**9*10**9)
         # Model Windows CRT fstat precision while path stat retains nanoseconds.
-        with ExitStack() as stack, patch.object(exporter.os, "fstat", return_value=handle):
-            source = exporter.Input(self.blob, stack)
+        with (patch.object(exporter.os, "fstat", return_value=handle),
+              exporter.open_input(self.blob) as source):
             source.unchanged()
             self.assertEqual(source.sha256(), sha(self.blob.read_bytes()))
             self.blob.write_bytes(self.blob.read_bytes()+b"changed")

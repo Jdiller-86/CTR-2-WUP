@@ -55,7 +55,7 @@ class DocsPackageTests(unittest.TestCase):
         self.assertIn('&lt;img src="private.key"&gt;',text)
         self.assertNotIn('src="docs/images/diagram.svg"',text)
         parsed = DOCS.LinkAudit(text)
-        self.assertTrue(set(parsed.targets)<=parsed.ids)
+        self.assertLessEqual(set(parsed.targets),parsed.ids)
         self.assertIn(DOCS.page_id('index.html')+'--shared',parsed.ids)
         self.assertIn(DOCS.page_id('docs/guide/index.html')+'--shared',parsed.ids)
         with zipfile.ZipFile(self.options.output/result['public_bundle']) as archive:

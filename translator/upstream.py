@@ -36,7 +36,7 @@ def checked_source(source=None):
 
 def generate_into(path, output, *, source=None, generator=None):
     """Internal caller-owned staging; output must not exist."""
-    from host.build import _run_build, _sha256
+    from host.build_support import _run_build, _sha256
     from host.doctor import repository_root, tool_environment
     from .portable import adapt_source
     checked_source(source)
@@ -114,7 +114,7 @@ def analyze(path, *, binary=None, source=None):
     workspace = repository_root().parent
     executable="3dsrecomp.exe" if os.name=="nt" else "3dsrecomp"
     binary = Path(binary or os.environ.get("CTR2WUP_LIFTER", workspace / "ctr2wup-tools/3dsrecomp-target/release" / executable))
-    source = checked_source(source)
+    checked_source(source)
     if not binary.is_file():
         raise HostError("missing_lifter", "Run tools/install-translator.sh or configure an audited external lifter", stage="analyze")
     result = subprocess.run([str(binary.resolve()), "analyze", str(Path(path).resolve())], capture_output=True, text=True, errors="replace", check=False)

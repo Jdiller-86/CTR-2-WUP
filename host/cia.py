@@ -2,7 +2,7 @@
 import hashlib
 import struct
 
-from .containers import check_range, fail
+from .container_bounds import check_range, fail
 
 HEADER_SIZE = 0x2020
 SIGNATURE_BODIES = {0x10003: 0x240, 0x10004: 0x140, 0x10005: 0x80}

@@ -184,7 +184,7 @@ void GX2CopySurface(const GX2Surface *src,unsigned a,unsigned b,GX2Surface *dst,
             depth_linear_image=src->image;depth_target_image=dst->image;
             for(unsigned y=0;y<src->height;++y) {
                 const uint8_t *row=(const uint8_t *)src->image+(size_t)y*src->pitch*pixel_bytes;
-                assert(!memcmp(row,(const uint8_t *)expected_depth->bytes+(size_t)y*expected_depth->stride,src->width*pixel_bytes));
+                assert(!memcmp(row,(const uint8_t *)expected_depth->bytes+(size_t)y*expected_depth->stride,(size_t)src->width*pixel_bytes));
                 for(unsigned x=src->width*pixel_bytes;x<src->pitch*pixel_bytes;++x)assert(row[x]==0u);
             }
         } else {
@@ -193,7 +193,8 @@ void GX2CopySurface(const GX2Surface *src,unsigned a,unsigned b,GX2Surface *dst,
         ++depth_copies;
     }
     for(unsigned y=0;y<src->height;++y)
-        memcpy((uint8_t *)dst->image+y*dst->pitch*pixel_bytes,(uint8_t *)src->image+y*src->pitch*pixel_bytes,src->width*pixel_bytes);
+        memcpy((uint8_t *)dst->image+(size_t)y*dst->pitch*pixel_bytes,
+               (const uint8_t *)src->image+(size_t)y*src->pitch*pixel_bytes,(size_t)src->width*pixel_bytes);
 }
 void DCFlushRange(void *bytes,unsigned size) {
     assert(bytes && size);

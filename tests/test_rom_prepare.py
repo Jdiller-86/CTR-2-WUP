@@ -13,7 +13,7 @@ from host.errors import HostError
 from host.intake_export import export_intake
 from host.rom_keys import RomKeys, scramble
 from host.rom_prepare import prepare_rom, cipher
-from tests.host_fixtures import cia, ncch, ncsd, rehash_exefs
+from tests.host_fixtures import cia, ncch, ncsd
 
 try:
     from tests.encrypted_fixtures import (COMMON_KEY, KEY_X, encrypted_cia, encrypted_ncch,
