@@ -2,9 +2,29 @@
 
 Build a Windows injector that converts a supported, owned 3DS revision into a
 playable Wii U Menu title. The shared runtime and conversion engine come first.
-Commercial games and the GUI are not supported yet.
+Verified playable commercial games and the GUI are not supported yet.
 
 ## Current work
+
+The [experimental Mario USA test builder](docs/first-title.md#build-a-private-test-wup)
+connects ROM intake, assets, AOT/native compilation and verified WUP publication
+([#189](https://github.com/Jdiller-86/CTR-2-WUP/issues/189),
+[#38](https://github.com/Jdiller-86/CTR-2-WUP/issues/38)). Next, build from the owned
+ROM in a local session, then implement observed execution gaps. Original-input
+build checks do not establish Mario boot or gameplay.
+
+The initial ARMv6K/Thumb interpreter and original AOT path cover integer/media/DSP
+arithmetic, normal signed/unsigned memory addressing, typed exclusives, long calls
+and scalar VFPv2 arithmetic, conversions and register transport
+([#17](https://github.com/Jdiller-86/CTR-2-WUP/issues/17)). Remaining CPU work is
+broader reference/FP boundary coverage, external-backend FP control parity,
+observed title gaps and Espresso performance; the complete CPU gate is not
+accepted by this baseline.
+
+Initial [CRO/CRS loading](docs/modules.md) supports packaged fixed-address modules,
+checked symbols/relocations and interpreter/AOT load/call/unload. Broader module
+forms and actual title requirements remain open in
+[#24](https://github.com/Jdiller-86/CTR-2-WUP/issues/24).
 
 1. **Connect guest audio** ([#25](https://github.com/Jdiller-86/CTR-2-WUP/issues/25)).
    The checked CSTM/ADPCM mixer and bounded original NDSP PCM service exist,

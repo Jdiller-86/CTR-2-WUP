@@ -24,7 +24,7 @@ bool ctr_report_storage_sync(void *context) {
 static bool verify_file(void *context,const char *path,uint64_t bytes,
                         const uint8_t expected[32]) {
     ctr_report_storage *storage=context;
-    if(!storage || storage->client<=0 || !path || !expected || !bytes || bytes>UINT32_MAX) {
+    if(!storage || storage->client<=0 || !path || !expected || bytes>UINT32_MAX) {
         errno=EINVAL;return false;
     }
     FSAStat stat;FSAFileHandle file;
@@ -71,8 +71,31 @@ bool ctr_report_storage_verify_title(void *context,unsigned target,uint64_t titl
     bool valid=false;
     if(relative)for(size_t i=0;i<sizeof(allowed)/sizeof(*allowed);++i)
         if(!strcmp(relative,allowed[i]))valid=true;
-    if(!valid || target>1 || (title>>32)!=UINT64_C(0x00050000)) { errno=EINVAL;return false; }
-    char path[192];
+    if(!valid) { errno=EINVAL;return false; }
+    return ctr_report_storage_verify_installed_file(context,target,title,relative,bytes,expected);
+}
+
+bool ctr_report_storage_verify_installed_file(void *context,unsigned target,uint64_t title,
+                                             const char *relative,uint64_t bytes,const uint8_t expected[32]) {
+    if(!relative || target>1 || (title>>32)!=UINT64_C(0x00050000) || !(uint32_t)title ||
+       (strncmp(relative,"code/",5) && strncmp(relative,"content/",8) && strncmp(relative,"meta/",5))) {
+        errno=EINVAL;return false;
+    }
+    const char *component=relative;
+    for(const char *p=relative;;++p) {
+        unsigned char c=(unsigned char)*p;
+        if(c=='/' || !c) {
+            size_t length=(size_t)(p-component);
+            if(!length || (length==1 && component[0]=='.') || (length==2 && !memcmp(component,"..",2))) {
+                errno=EINVAL;return false;
+            }
+            if(!c)break;
+            component=p+1;
+        } else if(!((c>='a' && c<='z') || (c>='A' && c<='Z') || (c>='0' && c<='9') || c=='.' || c=='_' || c=='-')) {
+            errno=EINVAL;return false;
+        }
+    }
+    char path[256];
     int n=snprintf(path,sizeof(path),"/vol/storage_%s01/usr/title/00050000/%08x/%s",
                    target?"usb":"mlc",(unsigned)(uint32_t)title,relative);
     if(n<0 || (size_t)n>=sizeof(path)) { errno=ENAMETOOLONG;return false; }

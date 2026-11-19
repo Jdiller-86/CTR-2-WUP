@@ -66,12 +66,13 @@ def extract_source(archive, destination):
 
 
 def write_new_or_same(path, content):
+    data = content.encode("utf-8") if isinstance(content, str) else content
     if path.exists():
-        if path.read_text(encoding="utf-8") != content:
+        if path.read_bytes() != data:
             raise ValueError("Existing configuration preserved: " + str(path))
         return
-    with path.open("x", encoding="utf-8") as stream:
-        stream.write(content)
+    with path.open("xb") as stream:
+        stream.write(data)
 
 
 def prepare(root, console=None, project=None, *, install=True, server_executable=None, log=None):
@@ -121,7 +122,7 @@ def prepare(root, console=None, project=None, *, install=True, server_executable
             raise ValueError("The packaged bridge executable is missing")
         command = [str(executable)]
     else:
-        command = [str(python), "-m", "host.wiiu_mcp"]
+        command = [str(python), "-I", "-m", "host.wiiu_mcp"]
     result = {"prepared": True, "console_contacted": False, "source_commit": manifest["source_commit"],
               "project": str(project), "command": command,
               "starter_payload": "artifacts/wiiu-mcp-starter/ctr2wup-prototype.wuhb"}
@@ -129,18 +130,30 @@ def prepare(root, console=None, project=None, *, install=True, server_executable
         return result
     configuration = safe_path(root, "local/wiiu.toml")
     write_new_or_same(configuration, "console_host = " + json.dumps(console) + "\nproject_root = "
-                      + json.dumps(str(project)) + '\nwiiload = "builtin"\n')
+                      + json.dumps(str(project), ensure_ascii=False)
+                      + '\nwiiload = "builtin"\ncontrol_key = "private/wiiu-control.key"\n')
+    public_key = None
+    if install:
+        subprocess.run(command + ["--config", str(configuration), "--action", "pair-control"],
+                       check=True, stdout=subprocess.DEVNULL)
+        public_key = safe_path(root, "local/ctr2wup-control.pub")
+        data = safe_path(project, "private/ctr2wup-control.pub").read_bytes()
+        if len(data) != 32:
+            raise ValueError("Expected a 32-byte console public key")
+        write_new_or_same(public_key, data)
     client = client_configuration(command, configuration, project)
     write_new_or_same(safe_path(root, "local/mcp-server.toml"), client)
     return {**result, "mcp_configuration": str(local / "mcp-server.toml"),
             "bridge_configuration": str(configuration),
+            "console_public_key": str(public_key) if public_key else None,
             "starter_payload": "artifacts/wiiu-mcp-starter/ctr2wup-prototype.wuhb"}
 
 
 def client_configuration(command, configuration, project):
-    return ('[mcp_servers.wiiu]\ncommand = ' + json.dumps(command[0])
-            + '\nargs = ' + json.dumps(command[1:] + ["--config", str(configuration)])
-            + '\nenv = { CTR2WUP_PROJECT_ROOT = ' + json.dumps(str(project)) + ' }\n')
+    return ('[mcp_servers.wiiu]\ncommand = ' + json.dumps(command[0], ensure_ascii=False)
+            + '\nargs = ' + json.dumps(command[1:] + ["--config", str(configuration)], ensure_ascii=False)
+            + '\nenv = { CTR2WUP_PROJECT_ROOT = ' + json.dumps(str(project), ensure_ascii=False)
+            + ' }\ntool_timeout_sec = 1800\n')
 
 
 def main():

@@ -3,8 +3,6 @@ name: Publish Wii U MCP starter kit
 on:
   workflow_dispatch:
   push:
-    branches:
-      - feat/wiiu-mcp-installer
     tags:
       - 'wiiu-mcp-v*-alpha.*'
 
@@ -34,7 +32,7 @@ jobs:
           import os, re, runpy
           version = runpy.run_path('tools/package-wiiu-mcp.py')['VERSION']
           ref = os.environ['GITHUB_REF']
-          assert ref in ('refs/heads/main', 'refs/heads/feat/wiiu-mcp-installer') or (
+          assert ref == 'refs/heads/main' or (
               re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+-alpha\.[0-9]+', version)
               and ref == 'refs/tags/wiiu-mcp-v'+version), 'Require main or the exact alpha tag'
           PY
@@ -62,6 +60,10 @@ jobs:
           export DEVKITPRO="$CTR2WUP_SDK_ROOT" DEVKITPPC="$CTR2WUP_SDK_ROOT/devkitPPC"
           python -m host build --target prototype --output artifacts/wiiu-mcp-release/native \
             2>&1 | tee artifacts/wiiu-mcp-release/logs/native-build.log
+      - name: Build and verify the paired Aroma control plugin
+        run: |
+          set -euo pipefail
+          bash tools/build-wiiu-control.sh 2>&1 | tee artifacts/wiiu-mcp-release/logs/control-build.log
       - name: Build wheel and check its installed entry point
         run: |
           python -m build --wheel --outdir artifacts/wiiu-mcp-release/wheel
@@ -79,14 +81,15 @@ jobs:
         run: |
           python - <<'PY'
           import json, os, pathlib
-          names = ['host-tests', 'release-tests', 'native-build', 'docs-build', 'wheel-smoke']
+          names = ['host-tests', 'release-tests', 'native-build', 'control-build', 'docs-build', 'wheel-smoke']
           root = pathlib.Path('artifacts/wiiu-mcp-release')
           assert all((root/'logs'/f'{name}.log').is_file() for name in names)
           (root/'evidence.json').write_text(json.dumps({'ok': True, 'source_commit': os.environ['GITHUB_SHA'],
               'checks': [{'name': name, 'exit_code': 0} for name in names]}, indent=2)+'\n')
           PY
           python tools/package-wiiu-mcp.py --wheel artifacts/wiiu-mcp-release/wheel/*.whl \
-            --native artifacts/wiiu-mcp-release/native --sdk "$CTR2WUP_SDK_ROOT" \
+            --native artifacts/wiiu-mcp-release/native --control artifacts/wiiu-control/bundle \
+            --sdk "$CTR2WUP_SDK_ROOT" \
             --evidence artifacts/wiiu-mcp-release/evidence.json --cache artifacts/wiiu-mcp-release/cache \
             --output artifacts/wiiu-mcp-release/publish
           python - <<'PY'
@@ -97,7 +100,8 @@ jobs:
               z.extractall(root/'smoke')
           subprocess.run([sys.executable, str(root/'smoke/setup.py'), '--verify-only'], check=True)
           installer = runpy.run_path(str(root/'smoke/setup.py'))
-          installer['prepare']((root/'smoke').resolve(), '192.0.2.1', install=False)
+          report = installer['prepare']((root/'smoke').resolve(), '192.0.2.1')
+          assert pathlib.Path(report['console_public_key']).stat().st_size == 32
           PY
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -163,7 +167,7 @@ jobs:
 
   release:
     needs: [build, windows]
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/wiiu-mcp-v') || github.ref == 'refs/heads/feat/wiiu-mcp-installer'
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/wiiu-mcp-v')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -198,10 +202,7 @@ jobs:
               assert manifest['source_commit'] == os.environ['GITHUB_SHA']
               assert manifest['python_runtime_bundled'] is windows
           ref_name = os.environ['GITHUB_REF']
-          if ref_name == 'refs/heads/feat/wiiu-mcp-installer':
-              assert manifest['version'] == '0.1.0-alpha.2', 'Feature publication is limited to the installer alpha'
-          else:
-              assert ref_name == 'refs/heads/main' or ref_name == 'refs/tags/wiiu-mcp-v'+manifest['version']
+          assert ref_name == 'refs/heads/main' or ref_name == 'refs/tags/wiiu-mcp-v'+manifest['version']
           checks = json.loads((root/'installer-checks.json').read_text())
           assert checks['ok'] and checks['frozen_bridge_handshake'] and checks['source_commit'] == os.environ['GITHUB_SHA']
           tag = 'wiiu-mcp-v' + manifest['version']
@@ -214,16 +215,16 @@ jobs:
           else:
               assert 'HTTP 404' in ref.stderr, 'Tag lookup failed; publication stopped'
           notes = root/'notes.txt'
-          notes.write_text('Wii U MCP starter kit. Source: '+manifest['source_commit']+'\n\n'
+          notes.write_text('Wii U MCP starter kit built from `'+manifest['source_commit']+'`.\n\n'
               'Windows: download the Windows-x64 ZIP, Extract All, and double-click Install Wii U MCP.exe. '
               'The three-step wizard installs the bridge, previews and backs up SD changes, and registers the bridge in local Codex. '
               'No Python installation, terminal commands or hand-edited configuration are required for the Windows kit. '
               'SD preparation and the Wii U IP can be completed later. Restart Codex after saving the connection.\n\n'
               'Other platforms: use the portable ZIP with Python 3.12+ and Internet for initial host dependency installation. '
-              'Both kits include the original diagnostic WUHB and all ten pinned Aroma components with source/licenses and checksums. '
+              'Both kits include the original diagnostic WUHB, paired control plugin and ten pinned Aroma components with sources, licenses and checksums. '
               'Aroma must already be installed. Native rebuilds need a Git checkout and the verified SDK. '
               'Cloud connectivity needs a separately configured secure route. '
-              'Hardware acceptance and additional console controls remain pending.\n')
+              'See START-HERE.txt for pairing. Physical-console validation is tracked in #192.\n', encoding='utf-8')
           assets = [str(path) for path in sorted(root.iterdir()) if path.name != 'notes.txt']
           subprocess.run(['gh', 'release', 'create', tag, '--target', manifest['source_commit'],
               '--draft', '--prerelease', '--latest=false', '--title', 'Wii U MCP starter kit '+manifest['version'],

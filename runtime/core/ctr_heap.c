@@ -1,5 +1,6 @@
 #include "ctr_heap.h"
 #include "ctr_kernel.h"
+#include "ctr_module.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -54,7 +55,7 @@ static uint32_t allocate(ctr_guest *g,uint32_t *address,uint32_t size,unsigned p
     uint32_t base=*address?*address:available(&g->memory,begin,limit,size);
     if (!base) return OUT_OF_MEMORY;
     if (available(&g->memory,base,base+size,size)!=base) return INVALID_STATE;
-    uint64_t bytes=size;unsigned slot=CTR_GUEST_MAX_ALLOCATIONS;
+    uint64_t bytes=(uint64_t)size+ctr_modules_bytes(g);unsigned slot=CTR_GUEST_MAX_ALLOCATIONS;
     for (unsigned i=0;i<CTR_GUEST_STORAGE_COUNT;++i) bytes+=g->storage_size[i];
     for (unsigned i=0;i<CTR_GUEST_MAX_ALLOCATIONS;++i) {
         if (g->allocations[i].storage) bytes+=g->allocations[i].size;
@@ -113,6 +114,7 @@ void ctr_heap_control(ctr_guest *g) {
 static unsigned state_of(const ctr_guest *g,const ctr_mapping *m) {
     const ctr_guest_allocation *a=owner(g,m);
     if (ctr_shared_mapping(g,m)) return 6u;
+    if (ctr_modules_mapping(g,m)) return 4u;
     if (a) return a->linear?7u:5u; /* Continuous / Private. */
     for (unsigned i=0;i<CTR_GUEST_STORAGE_COUNT;++i) if (g->storage[i] && m->storage==g->storage[i])
         return i<2?4u:i>=3?11u:5u; /* Code / Locked stack and TLS / Private data. */
@@ -173,6 +175,7 @@ void ctr_heap_resource_svc(ctr_guest *g,uint32_t number) {
     }
     uint64_t current[9]={0};const uint64_t limits[]={0x18,CTR_GUEST_MAX_BYTES,CTR_GUEST_MAX_THREADS,32,16,16,0,8,8};
     current[0]=0x18;
+    current[1]=ctr_modules_bytes(g);
     for(unsigned i=0;i<CTR_GUEST_STORAGE_COUNT;++i)current[1]+=g->storage_size[i];
     for(unsigned i=0;i<CTR_GUEST_MAX_ALLOCATIONS;++i)if(g->allocations[i].storage)current[1]+=g->allocations[i].size;
     for(unsigned i=0;i<CTR_GUEST_MAX_THREADS;++i)current[2]+=g->threads[i].active && !g->threads[i].finished;

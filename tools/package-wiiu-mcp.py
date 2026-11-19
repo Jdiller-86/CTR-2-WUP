@@ -15,8 +15,10 @@ import urllib.request
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "0.1.0-alpha.2"
-REQUIRED_CHECKS = {"host-tests", "release-tests", "native-build", "docs-build", "wheel-smoke"}
+VERSION = "0.1.0-alpha.3"
+REQUIRED_CHECKS = {"host-tests", "release-tests", "native-build", "control-build", "docs-build", "wheel-smoke"}
+CONTROL_BINARY = "ctr2wup-control.wps"
+CONTROL_DESTINATION = "sd-card/wiiu/environments/aroma/plugins/" + CONTROL_BINARY
 spec = importlib.util.spec_from_file_location("mcp_release_audio_helpers", ROOT / "tools/package-audio-round.py")
 helpers = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(helpers)
@@ -74,7 +76,26 @@ def component_entries(lock, cache):
     return entries
 
 
-def package(wheel, native, sdk, evidence, cache, output):
+def control_entries(control, commit):
+    def read(name, limit=8 * 1024 * 1024):
+        return helpers.release.regular(control / name, limit).read_bytes()
+
+    binary = read(CONTROL_BINARY)
+    if (read("source-commit.txt", 128).decode("ascii").strip() != commit
+            or read("sdk-image-digest.txt", 256).decode("ascii").strip() != helpers.release.SDK_IMAGE
+            or read("SHA256SUMS", 256).decode("ascii").split() != [sha(binary), CONTROL_BINARY]
+            or binary[:7] != b"\x7fELF\x01\x02\x01" or binary[9:11] != b"PL"
+            or binary[18:20] != b"\x00\x14"):
+        raise ValueError("Require a verified source-matched PowerPC control plugin")
+    entries = {CONTROL_DESTINATION: binary}
+    for name in ("GPL-3.0", "wups-LICENSE", "rpxloader-LICENSE", "monocypher-LICENSE"):
+        entries["licenses/control/" + name + ".txt"] = read(name)
+    for name in ("wups.tar.gz", "rpxloader.tar.gz", "monocypher-4.0.3.tar.gz"):
+        entries["upstream/control/" + name] = read("source/upstream/" + name)
+    return entries
+
+
+def package(wheel, native, control, sdk, evidence, cache, output):
     commit = helpers.identity()
     if output.exists() or any(p.is_symlink() for p in (output, *output.parents)):
         raise ValueError("Use a fresh, real package output directory")
@@ -97,6 +118,7 @@ def package(wheel, native, sdk, evidence, cache, output):
         raise ValueError("Native SDK image differs from the verified pin")
     lock = json.loads((ROOT / "packaging/wiiu-mcp-components.json").read_text())
     entries = component_entries(lock, cache)
+    entries.update(control_entries(control, commit))
     source = helpers.checked_source(commit)
     wheel_bytes = helpers.release.regular(wheel).read_bytes()
     helpers.release.validate_zip(wheel)
@@ -131,7 +153,8 @@ def package(wheel, native, sdk, evidence, cache, output):
     manifest = {"schema_version": 1, "kind": "ctr2wup-wiiu-mcp-kit", "version": VERSION,
                 "source_commit": commit, "hardware_verified": False,
                 "python_runtime_bundled": False, "python_dependencies_install_requires_internet": True,
-                "console_components": len(lock["components"]), "sdk_bundled": False,
+                "console_components": len(lock["components"]) + 1, "sdk_bundled": False,
+                "control_plugin": CONTROL_DESTINATION,
                 "files": {n: {"bytes": len(d), "sha256": sha(d)} for n, d in sorted(entries.items())}}
     entries["manifest.json"] = (json.dumps(manifest, indent=2) + "\n").encode()
     entries["SHA256SUMS.txt"] = "".join(sha(d) + "  " + n + "\n" for n, d in sorted(entries.items())).encode()
@@ -155,7 +178,7 @@ def package(wheel, native, sdk, evidence, cache, output):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    for name in ("wheel", "native", "sdk", "evidence", "cache", "output"):
+    for name in ("wheel", "native", "control", "sdk", "evidence", "cache", "output"):
         parser.add_argument("--" + name, type=Path, required=True)
     args = parser.parse_args()
-    print(json.dumps(package(args.wheel, args.native, args.sdk, args.evidence, args.cache, args.output)))
+    print(json.dumps(package(args.wheel, args.native, args.control, args.sdk, args.evidence, args.cache, args.output)))

@@ -77,6 +77,11 @@ invalidating unchanged executable snapshots. Adding/removing executable mappings
 changing execute protection and writes through executable aliases still invalidate
 AOT. Dynamic heap management therefore preserves normal translated execution.
 
+[Packaged CRO modules](modules.md) own their file/code mappings and pin supplied
+DATA/BSS heap allocations. QueryMemory reports module files as Code; the loader
+alone changes their mapping lifetime. Module backing counts toward the same
+retained-memory/resource-limit budget as image, heap, shared and DSP storage.
+
 Renderer resource keys bind a live memory owner, virtual range, permissions,
 mapping version and maximum backing-page write version. A fixed 1024-entry table
 tracks hashed host 4 KiB pages; aliases share dirty versions. Page sharing and

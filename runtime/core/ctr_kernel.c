@@ -1,6 +1,7 @@
 /* Original single-process shared-object and synchronization implementation. */
 #include "ctr_kernel.h"
 #include "ctr_heap.h"
+#include "ctr_module.h"
 #include <stdlib.h>
 #include <string.h>
 #define BAD_HANDLE UINT32_C(0xd8e007f7)
@@ -16,7 +17,7 @@ static unsigned free_shared(ctr_guest *g) {
     return 8;
 }
 uint32_t ctr_shared_create(ctr_guest *g,uint32_t size,unsigned permissions) {
-    unsigned slot=free_shared(g);uint64_t bytes=size;
+    unsigned slot=free_shared(g);uint64_t bytes=(uint64_t)size+ctr_modules_bytes(g);
     if (!size || size%CTR_GUEST_PAGE || permissions&~3u || slot==8) return 0;
     for (unsigned i=0;i<CTR_GUEST_STORAGE_COUNT;++i) bytes+=g->storage_size[i];
     for (unsigned i=0;i<CTR_GUEST_MAX_ALLOCATIONS;++i) if (g->allocations[i].storage) bytes+=g->allocations[i].size;

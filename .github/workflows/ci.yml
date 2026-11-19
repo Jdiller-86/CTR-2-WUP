@@ -139,6 +139,13 @@ jobs:
           mkdir -p artifacts/ci/native
           "$CC" --version > artifacts/ci/native/compiler.log
           make check-c 2>&1 | tee artifacts/ci/native/tests.log
+      - name: Compare initial integer and scalar VFP execution with ARM1176
+        if: matrix.cc == 'gcc'
+        run: |
+          python3 -m venv artifacts/ci/cpu-reference-env
+          artifacts/ci/cpu-reference-env/bin/python -m pip install unicorn==2.1.4
+          artifacts/ci/cpu-reference-env/bin/python tools/validate-integer-cpu.py --output artifacts/ci/integer-reference
+          artifacts/ci/cpu-reference-env/bin/python tools/validate-vfp-cpu.py --output artifacts/ci/vfp-reference
       - name: Compare original scenes with exact pixels and pinned shader encodings
         if: matrix.cc == 'gcc'
         run: |
@@ -169,6 +176,8 @@ jobs:
           name: native-${{ matrix.cc }}-${{ github.sha }}
           path: |
             artifacts/ci/native/*.log
+            artifacts/ci/integer-reference/report.json
+            artifacts/ci/vfp-reference/report.json
             artifacts/ci/native/fragment-programs.json
             artifacts/ci/gx2-shaders/report.json
             artifacts/ci/textured-scenes/report.json
@@ -298,6 +307,15 @@ jobs:
           cp -R "$DEVKITPRO/licenses" artifacts/ci/wiiu/sdk-licenses
           git rev-parse HEAD > artifacts/ci/wiiu/source-commit.txt
           (cd artifacts/ci/wiiu && sha256sum -- *.rpx *.wuhb > SHA256SUMS)
+      - name: Build and package the optional Aroma control plugin
+        run: bash tools/build-wiiu-control.sh
+      - name: Upload the Aroma control plugin and matching source
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wiiu-control-${{ github.sha }}
+          path: artifacts/wiiu-control/bundle/
+          retention-days: 30
+          if-no-files-found: error
       - name: Build the focused original software Scene Check
         run: |
           set -euo pipefail
@@ -360,6 +378,17 @@ jobs:
           cp "$DEVKITPRO/ctr2wup-image-digest.txt" artifacts/ci/guest-draws/sdk-image-digest.txt
           git rev-parse HEAD > artifacts/ci/guest-draws/source-commit.txt
           (cd artifacts/ci/guest-draws && sha256sum -- rpx/*.rpx sd-card/wiiu/apps/*.wuhb > SHA256SUMS)
+      - name: Execute the original CRO module guest through the external AOT engine
+        run: |
+          set -euo pipefail
+          python3 tools/validate-upstream.py --only modules --sanitize --output artifacts/ci/module-aot \
+            2>&1 | tee artifacts/ci/sdk/module-aot.log
+      - name: Smoke the complete ROM-to-WUP builder with original inputs
+        run: |
+          set -euo pipefail
+          python -m pip install '.[packaging,decryption]'
+          python tools/validate-game-build.py --output artifacts/ci/game-build \
+            2>&1 | tee artifacts/ci/sdk/game-build.log
       - name: Stage the distinct compiled guest GX2 rendering profile
         run: |
           set -euo pipefail
@@ -537,6 +566,8 @@ jobs:
           name: wiiu-prototype-${{ github.sha }}
           path: |
             artifacts/ci/sdk/*.log
+            artifacts/ci/module-aot/report.json
+            artifacts/ci/module-aot/*.log
             artifacts/ci/compiled-textured/*.log
             artifacts/ci/wiiu/
           retention-days: 30

@@ -1,5 +1,5 @@
 CTR2WUP Wii U MCP starter kit @VERSION@
-Source: @SOURCE_COMMIT@. Hardware acceptance is pending.
+Source commit @SOURCE_COMMIT@. Physical-console validation is pending.
 
 Windows x64: choose Extract All, then double-click Install Wii U MCP.exe.
 Click Install & continue, select your SD card when available, and enter the
@@ -21,3 +21,14 @@ Internet for its initial dependency installation. Native rebuilds require a Git
 checkout and the verified SDK; the included original diagnostic can be launched
 without a compiler. Cloud access also needs a secure route to the companion
 computer and MCP registration. See docs/wiiu-mcp.md in source.zip for details.
+
+For paired console controls, save the connection in the Windows wizard and
+run this PowerShell command from the installation folder.
+
+    .\runtime\WiiU-MCP-Bridge.exe --config local/wiiu.toml --action pair-control
+
+Copy the returned public_file to wiiu/ctr2wup-control.pub on the SD card while
+the Wii U is off. The portable setup.py command exports the same file at
+local/ctr2wup-control.pub and writes local/mcp-server.toml for MCP registration.
+Start Aroma, enable CTR2WUP Control, and use wiiu_console_state to check pairing.
+Keep the private key on the companion computer.

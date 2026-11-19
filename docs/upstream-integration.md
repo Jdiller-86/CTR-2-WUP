@@ -2,7 +2,9 @@
 
 The pinned external lifter generates C that links statically against an original
 CTR2WUP ABI/runtime on desktop and Wii U. Its desktop runtime is not a Wii U
-dependency. Commercial conversion stays gated by exact supported profiles.
+dependency. Verified commercial compatibility stays gated by exact supported
+profiles; the [experimental Mario test builder](first-title.md#build-a-private-test-wup)
+records unverified execution and per-build hashes.
 
 ## Reproduction
 
@@ -38,7 +40,8 @@ prevent bundling that implementation.
   little-endian callbacks; page pointers/span bypasses are unused. No 4 GiB
   host reservation is needed.
 - Attach checks ABI 4, generation 3, entry ordering and FNV code-piece hashes
-  against executable mappings. CRO/module attachment is rejected.
+  against executable mappings. External-emitter module tables are rejected;
+  [packaged CRO modules](modules.md) use the shared checked original-AOT registry.
 - State is visible at every instruction. Exact budgets resume mid-function;
   SVCs unwind to the shared scheduler for sleep/events/exit. TLS refreshes from
   the current CPU at every execution entry.
@@ -51,6 +54,8 @@ prevent bundling that implementation.
   invalidate the single emulated CPU's exclusive monitor.
 - Missing blocks and emitted interpreter requests fail by default. Explicit C
   attachment fallback uses only the bounded interpreter and records its count.
+  This mode also routes scalar VFP data operations through the shared interpreter
+  so startup FZ/DN controls use its checked arithmetic semantics.
 - Native guest call depth is bounded to 64; deeper calls unwind to dispatch.
   A 64-dispatch no-progress guard prevents empty/unwinding blocks from consuming
   unlimited host time without guest budget progress.
@@ -66,7 +71,9 @@ unsupported CP15/cache operations, including emitter NOPs, fail visibly.
 Scalar single/double assembly is endian-safe. Basic default-control arithmetic,
 moves and comparisons have original reference probes. Nondefault arithmetic
 controls/vectors and incomplete NaN/denormal/exception/rounding/conversion cases
-remain unsupported or unverified; absent helpers cause compile failure.
+remain unsupported or unverified in strict generated execution; absent helpers
+cause compile failure. Explicit recovery uses shared scalar VFP semantics,
+including FZ/DN, rounding and exception flags, rather than emitted host arithmetic.
 Builds disable contraction/fast math. Integer work may retain nondefault FPSCR.
 
 VPUSH/VPOP and exercised VLDM/VSTM are raw bit transport under CRT flush/default-

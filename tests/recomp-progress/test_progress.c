@@ -100,6 +100,12 @@ int main(void) {
     CHECK(ctr_guest_run(&g,1,0,true)==CTR_GUEST_FAULTED && g.fault==CTR_CPU_UNSUPPORTED);
     CHECK(g.cpu.r[15]==0x100018 && g.cpu.vfp[0]==0x3f800000 && g.cpu.fpscr==0x03000000);
     ctr_guest_close(&g);
+    CHECK(ctr_guest_open(&g,&image,NULL,0));CHECK(ctr_recomp_attach(&g,true));
+    g.cpu.r[15]=0x100018;g.cpu.fpscr=0x03000000;g.cpu.vfp[0]=0x3fa00000;
+    CHECK(ctr_guest_run(&g,1,0,true)==CTR_GUEST_READY);
+    CHECK(g.cpu.r[15]==0x10001c && g.cpu.vfp[0]==0x40200000 && g.cpu.fpscr==0x03000000);
+    CHECK(g.cpu.instructions==1 && g.cpu.fallback_instructions==1);
+    ctr_guest_close(&g);
     watchdog_stop();
     printf("{\"ok\":true,\"assertions\":%u,\"idle_dispatch_deadlock_rejected\":true,\"console_verified\":false}\n",checks);
     return 0;

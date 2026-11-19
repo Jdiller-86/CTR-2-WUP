@@ -1,5 +1,10 @@
 # Original homebrew WUP packaging
 
+The [experimental first-title builder](first-title.md#build-a-private-test-wup)
+also reuses this plaintext packager for private, user-supplied guest code and
+RomFS. It verifies native startup metadata and package integrity while keeping
+gameplay and console acceptance explicitly unverified.
+
 ## Plaintext original homebrew
 
 `host.package_homebrew` adds original plaintext **`0x2000`** contents and a
@@ -100,7 +105,7 @@ local inputs. Those inputs are unnecessary for plaintext homebrew packing.
 
 The original encrypted writer has a separate decrypting verifier. Offline fixtures
 use synthetic inputs; they cannot establish trusted signatures or installer
-acceptance. Commercial conversion remains disabled.
+acceptance. Verified playable commercial conversion remains unavailable.
 
 ## Implemented profile
 

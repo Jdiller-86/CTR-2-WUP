@@ -191,3 +191,10 @@ source references accompany the kit in licenses/windows/. PyInstaller's
 bootloader exception permits distribution of the frozen application under its
 own license; its original GPL/exception notices are retained. The build runs on
 Windows and includes no native compiler SDK or commercial content.
+
+The optional CTR2WUP Control plugin links WiiUPluginSystem 0.9.1
+(6f1550fb41a3a8c53643a40cffd5405c59538d93) and libRPXLoader
+(7b055f15f2c0e31af5b0a4ceda44ecb1ec39cc34), both LGPL-3.0, and the
+Ed25519 implementation from Monocypher 4.0.3 (BSD-2-Clause or CC0).
+The plugin artifact includes the library sources and license texts, matching
+application source, and build inputs for rebuilding or relinking the plugin.

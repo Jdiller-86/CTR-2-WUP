@@ -39,7 +39,7 @@ def validate(output,cc='gcc',sanitize=False):
         binary=output/('probe-'+mode+('.exe' if sys.platform=='win32' else ''))
         command=[cc,'-std=c11','-O1','-g','-Wall','-Wextra','-Werror','-I'+str(ROOT/'runtime/core')]
         if mode=='sanitized': command+=['-fno-omit-frame-pointer','-fsanitize=address,undefined']
-        subprocess.run(command+sources+['-o',str(binary)],check=True,cwd=ROOT)
+        subprocess.run(command+sources+['-lm','-o',str(binary)],check=True,cwd=ROOT)
         pcm=output/('pcm-'+mode+'.bin')
         run=subprocess.run([str(binary),'--pcm'],check=True,capture_output=True)
         row=json.loads(run.stderr)

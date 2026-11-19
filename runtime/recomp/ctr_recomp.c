@@ -1,6 +1,7 @@
 /* Copyright (c) 2026 CTR2WUP contributors. SPDX-License-Identifier: MIT */
 #include "ctr_recomp.h"
 #include "recomp.h"
+#include "ctr_module.h"
 #include <limits.h>
 #include <setjmp.h>
 #include <stdlib.h>
@@ -12,6 +13,7 @@ typedef struct {
     Context context;
     uint32_t vfp[32],fpscr;
     ctr_cpu *cpu;
+    ctr_guest *guest;
     uint64_t code_generation;
     bool fallback;
     bool single_data;
@@ -34,7 +36,7 @@ static void import_cpu(Engine *e) {
     memcpy(e->vfp,p->vfp,sizeof(e->vfp));e->fpscr=p->fpscr;
     c->n=p->cpsr>>31;c->z=(p->cpsr>>30)&1;c->c=(p->cpsr>>29)&1;c->v=(p->cpsr>>28)&1;
     c->q=(p->cpsr>>27)&1;c->ge=(p->cpsr>>16)&15;c->thumb=(p->cpsr&CTR_FLAG_T)!=0;
-    c->exclusive=p->exclusive_valid && p->exclusive_generation==p->memory->generation;
+    c->exclusive=p->exclusive_valid && p->exclusive_size==4 && p->exclusive_generation==p->memory->generation;
     c->exclusive_address=p->exclusive_address;
     c->tls=p->tls_address;
 }
@@ -46,6 +48,7 @@ static void export_cpu(Engine *e) {
         ((uint32_t)c->c<<29)|((uint32_t)c->v<<28)|((uint32_t)c->q<<27)|((uint32_t)c->ge<<16)|
         (c->thumb?CTR_FLAG_T:0);
     p->exclusive_valid=c->exclusive!=0;p->exclusive_address=c->exclusive_address;
+    p->exclusive_size=4;
     p->exclusive_generation=p->memory->generation;p->svc_number=c->svc;
 }
 _Noreturn void ctr_recomp_abort(Context *c,ctr_cpu_result result,uint32_t detail) {
@@ -56,6 +59,7 @@ _Noreturn void ctr_recomp_abort(Context *c,ctr_cpu_result result,uint32_t detail
 }
 int ctr_recomp_instruction(Context *c,uint32_t address,uint32_t opcode) {
     Engine *e=c->user;
+    e->cpu->module_hash=e->guest->program.module_hash;
     if(c->depth>e->maximum_depth)e->maximum_depth=c->depth;
     e->rollback_base=false;
     if(c->thumb)e->single_data=(opcode&0xf000u)==0x5000u || (opcode&0xe000u)==0x6000u ||
@@ -88,6 +92,14 @@ int ctr_recomp_instruction(Context *c,uint32_t address,uint32_t opcode) {
     bool fp=!c->thumb && ((opcode&0x0e000000u)==0x0c000000u || (opcode&0x0f000000u)==0x0e000000u) &&
         (((opcode>>8)&15u)==10u || ((opcode>>8)&15u)==11u);
     if(fp && opcode>>28==15u)ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
+    /* Explicit recovery mode uses shared scalar VFP under CRT controls. */
+    if(fp && e->fallback && !fpscr_transfer && !fp_memory && ctr_cpu_condition(&flags,opcode>>28)) {
+        export_cpu(e);
+        ctr_cpu_result result=ctr_cpu_vfp_arm(e->cpu,opcode);
+        if(result!=CTR_CPU_OK) { import_cpu(e);ctr_recomp_abort(c,result,opcode); }
+        e->cpu->r[15]=address+4u;++e->cpu->fallback_instructions;
+        import_cpu(e);c->exit=EXIT_UNWIND;return 0;
+    }
     if(fp && ctr_cpu_condition(&flags,opcode>>28)) {
         if(fpscr_transfer && (opcode&0x00100000u)==0 && ((opcode>>12)&15u)==15u)
             ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
@@ -191,12 +203,23 @@ static void interpret(Context *c,uint32_t a,uint32_t opcode) {
 static const Host callbacks={read8,read16,read32,write8,write16,write32,interpret,lookup};
 static ctr_cpu_result execute(ctr_cpu *p,void *user,uint64_t budget) {
     Engine *e=user;Context *c=&e->context;e->cpu=p;
+    /* Only the checked loader may refresh unchanged main-code ownership after
+       adding/removing a packaged module. Foreign executable writes stay stale. */
+    if(e->code_generation!=p->memory->code_generation && ctr_modules_generation_current(e->guest))
+        e->code_generation=p->memory->code_generation;
     import_cpu(e);c->budget=(int32_t)(budget>INT32_MAX?INT32_MAX:budget);c->exit=EXIT_NONE;c->depth=0;
     e->rollback_base=false;
     if (setjmp(e->escape)) return e->fault;
     unsigned idle_dispatches=0;
     while(c->budget>0) {
         uint64_t before=p->instructions;
+        if(ctr_modules_has_code(e->guest,c->r[15])) {
+            export_cpu(e);
+            ctr_cpu_result result=ctr_modules_dispatch(e->guest,1);
+            c->budget-=(int32_t)(p->instructions-before);import_cpu(e);
+            if(result!=CTR_CPU_LIMIT)return result;
+            continue;
+        }
         Code code=lookup(c,c->r[15]|c->thumb);
         if(!code) {
             e->rollback_base=false;
@@ -236,7 +259,7 @@ bool ctr_recomp_attach(ctr_guest *g,bool fallback) {
         recomp_module_count || !recomp_entry_count || recomp_entry_count>10000000u || !matches(g))return false;
     for(uint32_t i=1;i<recomp_entry_count;++i)if(recomp_entries[i-1].address>=recomp_entries[i].address)return false;
     Engine *e=calloc(1,sizeof(*e));if(!e)return false;
-    e->cpu=&g->cpu;e->fallback=fallback;e->code_generation=g->memory.code_generation;
+    e->cpu=&g->cpu;e->guest=g;e->fallback=fallback;e->code_generation=g->memory.code_generation;
     e->context.vfp=e->vfp;e->context.fpscr=&e->fpscr;e->context.host=&callbacks;e->context.user=e;
     g->executor=execute;g->executor_context=e;g->executor_close=free;return true;
 }

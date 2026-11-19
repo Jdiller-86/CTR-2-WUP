@@ -106,8 +106,10 @@ class SetupTests(unittest.TestCase):
             config = tomllib.loads(Path(report["bridge_configuration"]).read_text())
             self.assertEqual(config["console_host"], "192.0.2.1")
             self.assertEqual(config["wiiload"], "builtin")
+            self.assertEqual(config["control_key"], "private/wiiu-control.key")
             self.assertTrue((Path(report["project"]) / report["starter_payload"]).is_file())
-            self.assertIn("wiiu", tomllib.loads(Path(report["mcp_configuration"]).read_text())["mcp_servers"])
+            server = tomllib.loads(Path(report["mcp_configuration"]).read_text())["mcp_servers"]["wiiu"]
+            self.assertEqual(server["args"][:3], ["-I", "-m", "host.wiiu_mcp"])
             setup.prepare(root, "192.0.2.1", install=False)
             with self.assertRaises(ValueError):
                 setup.prepare(root, "192.0.2.2", install=False)

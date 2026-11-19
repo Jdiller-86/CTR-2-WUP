@@ -155,7 +155,8 @@ def configure(backend, installation, console):
     config = backend.safe_path(installation, "local/wiiu.toml")
     values = tomllib.loads(config.read_text()) if config.exists() else {}
     values.update(console_host=console, project_root=state["project"], wiiload="builtin")
-    content = "".join(name + " = " + json.dumps(value) + "\n" for name, value in values.items())
+    values.setdefault("control_key", "private/wiiu-control.key")
+    content = "".join(name + " = " + json.dumps(value, ensure_ascii=False) + "\n" for name, value in values.items())
     tomllib.loads(content)
     backup_write(config, content.encode())
     client = backend.client_configuration(state["command"], config, Path(state["project"]))
