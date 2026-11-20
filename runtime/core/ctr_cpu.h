@@ -34,6 +34,10 @@ typedef struct {
     uint32_t svc_number;
     /* User read-only CP15 c13,c0,3; supplied by the guest thread context. */
     uint32_t tls_address;
+    /* Cached active mappings keyed by memory->resource_mapping_version. */
+    uint32_t rx_base, rx_end, rd_base, rd_end;
+    const uint8_t *rx_storage, *rd_storage;
+    uint64_t rx_map_version, rd_map_version;
 } ctr_cpu;
 
 typedef ctr_cpu_result (*ctr_block_fn)(ctr_cpu *cpu);

@@ -106,8 +106,36 @@ void ctr_cpu_branch_exchange(ctr_cpu *cpu, uint32_t address) {
     cpu->r[15] = address & ((address & 1u) != 0u ? ~UINT32_C(1) : ~UINT32_C(3));
 }
 
+static ctr_mem_result cpu_read_cached(const ctr_memory *mem, uint32_t address, unsigned width,
+                                      unsigned permission, uint32_t *base, uint32_t *end,
+                                      const uint8_t **storage, uint64_t *version, uint32_t *value) {
+    if (*storage && *version == mem->resource_mapping_version &&
+        address >= *base && (uint64_t)address + width <= *end && !(address & (width - 1u))) {
+        const uint8_t *p = *storage + (address - *base);
+        *value = width == 1u ? (uint32_t)p[0] :
+                 width == 2u ? ((uint32_t)p[0] | ((uint32_t)p[1] << 8)) :
+                               ((uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24));
+        return CTR_MEM_OK;
+    }
+    ctr_mem_result r = ctr_memory_read(mem, address, width, permission, value);
+    if (r == CTR_MEM_OK) {
+        for (size_t i = 0; i < mem->count; ++i) {
+            const ctr_mapping *m = &mem->maps[i];
+            if ((m->permissions & permission) == permission &&
+                address >= m->base && (uint64_t)address + width <= (uint64_t)m->base + m->size) {
+                *base = m->base; *end = m->base + m->size;
+                *storage = m->storage; *version = mem->resource_mapping_version;
+                break;
+            }
+        }
+    }
+    return r;
+}
+
 ctr_cpu_result ctr_cpu_load(ctr_cpu *cpu, uint32_t address, unsigned width, uint32_t *value) {
-    ctr_mem_result result = ctr_memory_read(cpu->memory, address, width, CTR_MEM_READ, value);
+    ctr_mem_result result = cpu_read_cached(cpu->memory, address, width, CTR_MEM_READ,
+                                            &cpu->rd_base, &cpu->rd_end, &cpu->rd_storage,
+                                            &cpu->rd_map_version, value);
     if (result == CTR_MEM_OK) return CTR_CPU_OK;
     cpu->memory_fault = result;
     return ctr_cpu_stop(cpu, CTR_CPU_MEMORY_FAULT, address);
@@ -748,8 +776,9 @@ static ctr_cpu_result thumb_step(ctr_cpu *cpu, uint32_t insn) {
 ctr_cpu_result ctr_cpu_step(ctr_cpu *cpu) {
     bool thumb = (cpu->cpsr & CTR_FLAG_T) != 0u;
     uint32_t instruction;
-    ctr_mem_result result = ctr_memory_read(cpu->memory, cpu->r[15], thumb ? 2u : 4u,
-                                            CTR_MEM_EXEC, &instruction);
+    ctr_mem_result result = cpu_read_cached(cpu->memory, cpu->r[15], thumb ? 2u : 4u, CTR_MEM_EXEC,
+                                            &cpu->rx_base, &cpu->rx_end, &cpu->rx_storage,
+                                            &cpu->rx_map_version, &instruction);
     if (result != CTR_MEM_OK) {
         cpu->memory_fault = result;
         return ctr_cpu_stop(cpu, CTR_CPU_MEMORY_FAULT, cpu->r[15]);

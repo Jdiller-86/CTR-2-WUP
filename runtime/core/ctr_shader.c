@@ -625,12 +625,15 @@ ctr_shader_result ctr_shader_execute_fast(const ctr_shader_fast *fast,
         if(input->enabled&(1u<<i)) {
             uint8_t ok=0;
             for(unsigned k=0;k<4u;++k) {
-                uint32_t b=float_to_bits(input->input[i][k]);
-                if(round_input(&b))ok|=(uint8_t)(1u<<k);
-                else if(b>UINT32_C(0x7f800000) || (b&UINT32_C(0x7fffffff))>UINT32_C(0x7f800000)) {
-                    /* Leave invalid lane bit clear in defined[i]? No: numeric error on read! */
+                float v=input->input[i][k];
+                uint32_t b=float_to_bits(v);
+                uint32_t exp=b&UINT32_C(0x7f800000);
+                if(exp && exp!=UINT32_C(0x7f800000) && !(b&0xffu)) {
+                    r[i][k]=v;ok|=(uint8_t)(1u<<k);
+                } else {
+                    if(round_input(&b))ok|=(uint8_t)(1u<<k);
+                    r[i][k]=bits_to_float(b);
                 }
-                r[i][k]=bits_to_float(b);
             }
             /* Check if any enabled input lane is non-finite NaN -> record per-lane numeric ok in high nibble! */
             defined[i]=(uint8_t)(15u|(ok<<4));
@@ -643,7 +646,9 @@ ctr_shader_result ctr_shader_execute_fast(const ctr_shader_fast *fast,
     struct { unsigned alternate,join; } branches[8];unsigned branch_count=0;
     struct { unsigned first,after,resume,branches; } calls[8];unsigned call_count=0;
     unsigned loop_first=0,loop_after=0,loop_count=0,loop_stride=0,loop_owner=0;
-    ctr_shader_output result={0};
+    ctr_shader_output result;
+    memset(result.written,0,sizeof(result.written));
+    result.instructions=0;
     for(unsigned pc=fast->entry;;) {
         if(branch_count | call_count | loop_count) {
             for(;;) {
@@ -668,7 +673,14 @@ ctr_shader_result ctr_shader_execute_fast(const ctr_shader_fast *fast,
         if(++result.instructions>CTR_SHADER_MAX_STEPS)return CTR_SHADER_LIMIT;
         if(insn->rel_index && !(address_written&(1u<<(insn->rel_index-1u))))return CTR_SHADER_UNSUPPORTED;
         unsigned op=insn->op;
-        if(op==FAST_END) { *output=result;return CTR_SHADER_OK; }
+        if(op==FAST_END) {
+            output->instructions=result.instructions;
+            memcpy(output->written,result.written,sizeof(result.written));
+            for(unsigned i=0;i<16u;++i)if(result.written[i])
+                for(unsigned k=0;k<4u;++k)if(result.written[i]&(1u<<k))
+                    output->values[i][k]=result.values[i][k];
+            return CTR_SHADER_OK;
+        }
         if(op==FAST_NOP || op==FAST_MASK_SKIP)continue;
         if(op<=FAST_LOOP) {
             switch(op) {

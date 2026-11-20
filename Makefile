@@ -40,8 +40,9 @@ check-c:
 	$(MAKE) -C tests/m1-storage check sanitize
 	$(MAKE) -C tests/install-capture check sanitize
 	$(MAKE) -C tests/recomp-progress check sanitize
+	$(MAKE) -C tests/cemu-display check sanitize
 check-c-portable:
-	@set -e; for suite in cpu guest modules services guest-dsp heap kernel hid gsp gx pica gx2-shader gx2-native vertex scenes guest-draws resource-cache relay multiple threads filesystem assets textures apt report audio dsp-adpcm cstm audio-engine audio-stream-native guest-audio-native recomp-progress; do $(MAKE) -C tests/$$suite check; done
+	@set -e; for suite in cpu guest modules services guest-dsp heap kernel hid gsp gx pica gx2-shader gx2-native vertex scenes guest-draws resource-cache relay multiple threads filesystem assets textures apt report audio dsp-adpcm cstm audio-engine audio-stream-native guest-audio-native recomp-progress cemu-display; do $(MAKE) -C tests/$$suite check; done
 prototype:
 	$(MAKE) -C runtime/wiiu -j 3
 doctor:

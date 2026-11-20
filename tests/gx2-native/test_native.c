@@ -371,6 +371,11 @@ void GX2SetShaderModeEx(unsigned mode,unsigned vs,unsigned vsstack,unsigned gs,u
 void GX2SetVertexShader(const GX2VertexShader *shader) {
     ++gx2_calls;
     assert(shader->size==256 && ((uintptr_t)shader->program&255u)==0);
+    if(shader->regs.num_sq_vtx_semantic==7u) {
+        assert(shader->regs.sq_vtx_semantic_clear==UINT32_C(0xffffff80));
+        bound_vertex_program=shader->program;bound_vertex_metadata=*shader;
+        return;
+    }
     assert(shader->regs.sq_pgm_resources_vs==(0x100u|vertex_gprs()) && shader->regs.num_sq_vtx_semantic==16);
     assert(shader->regs.sq_vtx_semantic_clear==0xffff0000);
     unsigned mask=expected_vertex_mask(),slot=1;uint32_t semantics=UINT32_C(0xffffff00);
@@ -551,6 +556,11 @@ void GX2SetPixelSampler(const GX2Sampler *sampler,unsigned unit) {
 }
 void GX2SetAttribBuffer(unsigned index,unsigned size,unsigned stride,const void *bytes) {
     ++gx2_calls;
+    if(bound_vertex_metadata.regs.num_sq_vtx_semantic==7u) {
+        assert(!index && stride==112u && size==expected_count*112u);
+        bound_vertices=bytes;bound_vertex_bytes=size;++uniform_uploads;
+        return;
+    }
     assert(!index && stride==256 && size==expected_count*256u);
     for(unsigned vertex=0;vertex<expected_count;++vertex)
         assert(!memcmp((const uint8_t *)bytes+vertex*256u,expected_vertices[vertex].input,256));
@@ -3162,6 +3172,29 @@ static void direct_backend_lifecycle(void) {
     assert(backend.begin_depth(&scene,&surface,&depth));
     assert(backend.end_depth(&scene,&surface,&depth));
     assert(scene.direct_depth_skips==1u && scene.readbacks==1u);
+
+    /* Direct PS overflow (>256 unique pixel shaders) must fail cleanly instead
+     * of handing the GPU an unflushed/shared scratch_ps buffer. */
+    ctr_scene_state state;ctr_vertex vertices[3];depth_setup(&state,vertices,&depth);
+    ctr_scene_transformed_vertex tv[3]={0};
+    for(unsigned k=0;k<3u;++k) { tv[k].position[3]=1.0f;tv[k].color[3]=1.0f; }
+    state.registers[0x0c0u]=0u|(1u<<4)|(2u<<8)|(0u<<16)|(1u<<20)|(2u<<24);
+    state.registers[0x0c2u]=4u|(4u<<16);
+    for(unsigned i=0;i<256u;++i) {
+        unsigned o0=i%6u,o1=(i/6u)%6u,o2=(i/36u)%6u,oa=i/216u;
+        state.registers[0x0c1u]=o0|(o1<<4)|(o2<<8)|(oa<<12);
+        assert(backend.begin_depth(&scene,&surface,&depth));
+        rectangle_count=0;
+        assert(backend.draw_transformed(&scene,&state,tv,3,NULL,0u,NULL));
+        assert(backend.end_depth(&scene,&surface,&depth));
+    }
+    assert(scene.direct_shader_compiles==256u && !scene.cache_allocation_failures);
+    state.registers[0x0c1u]=(1u<<12)|(1u<<16);
+    assert(backend.begin_depth(&scene,&surface,&depth));
+    rectangle_count=0;
+    assert(!backend.draw_transformed(&scene,&state,tv,3,NULL,0u,NULL));
+    assert(scene.cache_allocation_failures==1u);
+    assert(backend.end_depth(&scene,&surface,&depth));
     backend.abort(&scene);
     ctr_wiiu_gx2_scene_after_shutdown(&scene);
     clean(&scene);
