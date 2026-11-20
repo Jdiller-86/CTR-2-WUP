@@ -403,10 +403,50 @@ static void boolean_branch(void) {
     CHECK(run()==CTR_GX2_SHADER_OK && out.input_mask==6u && out.pica_instructions==4);
     CHECK(memcmp(out.program,previous.program,out.size)!=0);
 }
+static void game_profile_shader(void) {
+    init();
+    /* Test RCP, RSQ, MOVA + relative read, CMP, IFC/ELSE, CALLC, JMPC, DP4H, LOOP,
+     * fixed/int inputs, light_active/needs_view, and optional color semantics. */
+    p.code[0]=UINT32_C(0x38000000); /* RCP o0, v0 (op 0x0e) */
+    p.code[1]=UINT32_C(0x3c000000); /* RSQ o0, v0 (op 0x0f) */
+    p.code[2]=UINT32_C(0x48000000); /* MOVA v0 (op 0x12) */
+    p.code[3]=UINT32_C(0x4c000000)|(0u<<21)|((32u+0u)<<12)|(1u<<19); /* MOV o0, c0[a0.x] (op 0x13, rel=1) */
+    p.code[4]=UINT32_C(0xb8000000)|(2u<<24)|(2u<<21)|(0u<<12)|(1u<<7); /* CMP v0 < v1 (op 0x2e) */
+    p.code[5]=UINT32_C(0xa0000000)|(2u<<22)|(7u<<10)|1u; /* IFC x (target=7, else=7..8) */
+    p.code[6]=mov(0,0,0);
+    p.code[7]=mov(1,0,0);
+    p.code[8]=UINT32_C(0x94000000)|(2u<<22)|(14u<<10)|1u; /* CALLC x (14, len 1) */
+    p.code[9]=UINT32_C(0xb0000000)|(2u<<22)|(11u<<10); /* JMPC x -> 11 */
+    p.code[10]=mov(0,0,0);
+    p.code[11]=UINT32_C(0x0c000000)|(0u<<21)|(0u<<12)|(1u<<7); /* DP4H o0, v0, v1 (op 0x03) */
+    p.code[12]=UINT32_C(0xa4000000)|(13u<<10); /* LOOP i0, last=13 (op 0x29) */
+    p.code[13]=UINT32_C(0x4c000000)|(0u<<21)|((32u+0u)<<12)|(3u<<19); /* MOV o0, c0[aL] */
+    p.code[14]=mov(0,0,0);
+    p.code[15]=mov(1,1,0); /* orientation/view */
+    p.code[16]=UINT32_C(0x88000000); /* END */
+    for(unsigned i=0;i<=16u;++i)p.code_defined[i]=1;
+    p.uniforms[0][0]=UINT32_C(0x3f800001); /* non-f24 float32 allowed in game profile */
+    p.uniform_defined[0]=15;
+    p.integer_uniforms[0]=1u; /* 2 iterations */
+    p.integer_defined=1u;
+    ctr_gx2_shader_game_options opt={0};
+    opt.output_mask=3u;opt.output_count=2u;
+    opt.output_maps[0]=0x03020100u; /* pos only */
+    opt.output_maps[1]=0x1f070605u; /* orient partial -> missing orient fails when light_active */
+    opt.fixed_mask=2u;opt.int_signed_mask=1u;opt.int_unsigned_mask=4u;
+    CHECK(ctr_gx2_shader_compile_game(&p,&opt,&out)==CTR_GX2_SHADER_OK);
+    CHECK(out.gprs==CTR_GX2_SHADER_GAME_GPRS && out.alu_instructions>0u);
+    opt.light_active=true;
+    CHECK(ctr_gx2_shader_compile_game(&p,&opt,&out)==CTR_GX2_SHADER_UNDEFINED);
+    opt.output_maps[1]=0x07060504u;
+    CHECK(ctr_gx2_shader_compile_game(&p,&opt,&out)==CTR_GX2_SHADER_OK);
+    CHECK(out.light_active && !out.light_needs_view);
+}
 int main(void) {
     original_shader();inputs_uniforms_and_dependencies();swizzles_and_masks();semantic_maps();
     texture_coordinate_exports();texture_coordinate_sets();uniform_revalidation();bounds_and_failures();
     call_and_dot_product();
     boolean_branch();
+    game_profile_shader();
     printf("gx2 shader PASS: %u assertions\n",assertions);return 0;
 }

@@ -1527,6 +1527,22 @@ static ctr_scene_result draw(ctr_scene_state *s,const ctr_scene_resources *resou
             }
             transformed_batch=direct->transformed_batch;
             owns_transformed=false;
+            if(backend->draw_gpu && !immediate_count && s->shader.round_f24) {
+                ctr_scene_gpu_draw gpu_draw={
+                    s,vertex_layout.attributes,vertex_layout.attribute_count,
+                    vertex_layout.streams,vertex_layout.stream_count,
+                    indexed?&vertex_layout.indices:NULL,
+                    (const float (*)[4])vertex_layout.fixed_values,vertex_layout.slots,
+                    vertex_layout.total,vertex_layout.fixed,
+                    indexed?0u:s->registers[0x22au],count,indexed,
+                    samplers,texture_mask,&light
+                };
+                if(backend->draw_gpu(backend->context,&gpu_draw)) {
+                    free_textures(texture_allocations);
+                    ++report->draws;report->triangles+=count/3u;
+                    return CTR_SCENE_OK;
+                }
+            }
         } else {
             transformed_batch=malloc(transformed_cap*sizeof(*transformed_batch));
             if(!transformed_batch) { free_textures(texture_allocations);return CTR_SCENE_NO_MEMORY; }

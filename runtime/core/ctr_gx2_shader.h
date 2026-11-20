@@ -6,8 +6,10 @@
  * the native caller copies it into GX2_SHADER_PROGRAM_ALIGNMENT storage. */
 #define CTR_GX2_SHADER_MAX_BYTES 65536u
 #define CTR_GX2_SHADER_ALU_OFFSET 512u
+#define CTR_GX2_SHADER_GAME_ALU_OFFSET 2048u
 #define CTR_GX2_SHADER_GPRS 53u
 #define CTR_GX2_SHADER_TEXTURED_GPRS 54u
+#define CTR_GX2_SHADER_GAME_GPRS 62u
 typedef enum {
     CTR_GX2_SHADER_OK, CTR_GX2_SHADER_ARGUMENT, CTR_GX2_SHADER_OVERFLOW,
     CTR_GX2_SHADER_ALIAS, CTR_GX2_SHADER_RANGE, CTR_GX2_SHADER_UNSUPPORTED,
@@ -20,10 +22,22 @@ typedef struct {
     uint16_t input_mask;
     bool texcoord0; /* Legacy mirror of texcoord_mask bit 0. */
     uint8_t texcoord_mask; /* Complete UV0=12/13, UV1=14/15, UV2=22/23 pairs. */
+    bool light_active,light_needs_view;
     uint8_t uniform_used[CTR_SHADER_UNIFORMS]; /* Read lane masks. */
     uint16_t uniform_order[CTR_SHADER_UNIFORMS*4]; /* Unique lanes, first-read order. */
     uint16_t uniform_count;
 } ctr_gx2_shader;
+
+typedef struct {
+    uint16_t output_mask;
+    uint16_t fixed_mask;
+    uint16_t int_signed_mask;
+    uint16_t int_unsigned_mask;
+    uint32_t output_maps[7];
+    unsigned output_count;
+    bool light_active;
+    bool light_needs_view;
+} ctr_gx2_shader_game_options;
 
 /* Compile MOV/ADD/MUL/DP4/MAX/MAD/NOP/END and bounded CALL/IFU. The game
  * profile also admits DP3 and JMPU. Branches on boolean uniforms specialize
@@ -46,6 +60,9 @@ ctr_gx2_shader_result ctr_gx2_shader_compile(const ctr_shader_program *program,
                                             const uint32_t *output_maps,
                                             unsigned output_count,
                                             ctr_gx2_shader *output);
+ctr_gx2_shader_result ctr_gx2_shader_compile_game(const ctr_shader_program *program,
+                                                  const ctr_gx2_shader_game_options *options,
+                                                  ctr_gx2_shader *output);
 /* Recheck current uniform definitions and exact float24 values for a previously
  * compiled program with unchanged code/entry/descriptors and output semantics. The
  * recorded first-read order preserves compile diagnostics. Invalid lane-order

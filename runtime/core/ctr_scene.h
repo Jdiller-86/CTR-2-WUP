@@ -117,6 +117,22 @@ enum { CTR_SCENE_BACKEND_DEPTH_FOG=1u, CTR_SCENE_BACKEND_DIRECT=2u };
  * releases scratch without publishing pixels. The caller owns this descriptor
  * and context and keeps them stable throughout execution. No callbacks run for
  * configuration-only lists. */
+typedef struct ctr_scene_gpu_draw {
+    const ctr_scene_state *state;
+    const ctr_vertex_attribute *attributes;
+    size_t attribute_count;
+    const ctr_vertex_stream *streams;
+    size_t stream_count;
+    const ctr_vertex_indices *indices;
+    const float (*fixed_values)[4];
+    const unsigned *fixed_slots;
+    unsigned total_inputs,fixed_mask;
+    unsigned vertex_offset,vertex_count;
+    bool indexed;
+    const ctr_scene_sampler *samplers;
+    unsigned texture_mask;
+    const ctr_scene_light *light;
+} ctr_scene_gpu_draw;
 typedef struct ctr_scene_backend {
     void *context;
     bool (*begin)(void *context,const ctr_scene_surface *initial);
@@ -153,6 +169,7 @@ typedef struct ctr_scene_backend {
                             const ctr_scene_transformed_vertex *vertices,unsigned count,
                             const ctr_scene_sampler samplers[CTR_SCENE_TEXTURE_UNITS],
                             unsigned texture_mask,const ctr_scene_light *light);
+    bool (*draw_gpu)(void *context,const ctr_scene_gpu_draw *draw);
 } ctr_scene_backend;
 typedef struct {
     ctr_scene_result result;
