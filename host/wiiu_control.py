@@ -137,8 +137,8 @@ class ConsoleControl:
         session, sequence, _, stage, code = (field.decode("ascii") for field in result.groups())
         return {"operation_id": job, "session": session, "sequence": sequence, "state": stage, "native_result": int(code)}
 
-    def _upload(self, sd_path, stream, size, expected):
-        """Stream and verify each submission, including WUP contents larger than 64 MiB."""
+    def _upload(self, sd_path, stream, size, expected, *, verify_readback=True):
+        """Stage a control file and publish it after checking the transfer."""
         bridge = self.bridge
         absolute = bridge._remote(sd_path, write=True)
         temporary = absolute + ".part"
@@ -146,19 +146,24 @@ class ConsoleControl:
             if bridge._entry(ftp, absolute, create_parents=True) is not None or bridge._entry(ftp, temporary) is not None:
                 raise ValueError("Console control staging path already exists")
             ftp.storbinary("STOR " + temporary, stream, blocksize=128 * 1024)
-            hash_ = sha256()
-            received = 0
+            if verify_readback:
+                hash_ = sha256()
+                received = 0
 
-            def receive(block):
-                nonlocal received
-                received += len(block)
-                if received > size:
-                    raise ValueError("Control upload read-back exceeds the expected size")
-                hash_.update(block)
+                def receive(block):
+                    nonlocal received
+                    received += len(block)
+                    if received > size:
+                        raise ValueError("Control upload read-back exceeds the expected size")
+                    hash_.update(block)
 
-            ftp.retrbinary("RETR " + temporary, receive, blocksize=128 * 1024)
-            if received != size or hash_.digest() != expected:
-                raise ValueError("Control upload read-back differs")
+                ftp.retrbinary("RETR " + temporary, receive, blocksize=128 * 1024)
+                if received != size or hash_.digest() != expected:
+                    raise ValueError("Control upload read-back differs")
+            else:
+                staged = bridge._entry(ftp, temporary)
+                if staged is None or staged["type"] != "file" or staged["size"] != size:
+                    raise ValueError("Staged control file size differs")
             if bridge._entry(ftp, absolute) is not None:
                 raise ValueError("Control destination appeared during upload")
             ftp.rename(temporary, absolute)
@@ -271,7 +276,10 @@ class ConsoleControl:
                 _entry(name, size, digest)
             for name, size, digest in package_files:
                 with (root / name).open("rb") as stream:
-                    self._upload(f"install/ctr2wup-{job}/{name}", stream, size, digest)
+                    # The signed install request carries these hashes. The
+                    # console checks the staged inventory before submitting it.
+                    self._upload(f"install/ctr2wup-{job}/{name}", stream, size, digest,
+                                 verify_readback=False)
             try:
                 current = self.state()
             except (HostError, ValueError, OSError, EOFError, ftplib.Error):
