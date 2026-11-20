@@ -2726,6 +2726,7 @@ static void mip_uploads(void) {
     assert(scene.texture_uploads==2u && scene.texture_cache_stats.bytes==footprint*2u);
     assert(bound_vertex_program==vertex_program && bound_pixel_program==pixel_program);
     assert(backend.end(&scene,&surface));uploaded_cache_idle_clear(&scene);
+    expected_mips=NULL;expected_texture=NULL;
 }
 static void uploaded_cache_reuse(void) {
     reset();uint8_t pixels[512],copy[512],bytes[1024]={0};texture_pixels(pixels,8,16);

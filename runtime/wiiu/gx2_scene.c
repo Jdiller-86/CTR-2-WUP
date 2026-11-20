@@ -1431,7 +1431,7 @@ static bool depth_clear_seed(const ctr_scene_depth_surface *depth,float *value,u
     unsigned components=bytes==4u?3u:2u;
     if(seed[0]!=0u && seed[0]!=255u)return false;
     for(unsigned i=1;i<components;++i)if(seed[i]!=seed[0])return false;
-    size_t row_bytes=depth->width*bytes;
+    size_t row_bytes=(size_t)depth->width*bytes;
     for(unsigned y=0;y<depth->height;++y) {
         const uint8_t *row=seed+(size_t)y*depth->stride;
         if(memcmp(row,seed,bytes) || memcmp(row,row+bytes,row_bytes-bytes))return false;
@@ -1492,7 +1492,7 @@ static bool begin_targets(void *context,const ctr_scene_surface *initial,
     p->compiled=allocate(s,256,sizeof(*p->compiled));
     p->shader_slots=s->cemu_readback?2u:1u;
     p->vertex_storage=allocate(s,256,sizeof(p->compiled->program)*p->shader_slots);
-    p->pixel_storage=allocate(s,256,PIXEL_BYTES*p->shader_slots);
+    p->pixel_storage=allocate(s,256,(size_t)PIXEL_BYTES*p->shader_slots);
     uint32_t fetch_size=GX2CalcFetchShaderSizeEx(16,GX2_FETCH_SHADER_TESSELLATION_NONE,
                                                GX2_TESSELLATION_MODE_DISCRETE);
     if(!fetch_size || fetch_size>MAX_FETCH_BYTES) {
