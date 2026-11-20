@@ -89,6 +89,23 @@ typedef struct {
     uint8_t key[CTR_GX2_CACHE_PIXEL_KEY_MAX];
     GX2PixelShader shader;
 } direct_ps_entry;
+#define DIRECT_GPU_VS_SLOTS 128u
+#define DIRECT_GPU_VS_ARENA_BYTES (1024u*1024u)
+#define DIRECT_GPU_FETCH_SLOTS 128u
+#define DIRECT_GPU_FETCH_BYTES 512u
+typedef struct {
+    uint64_t hash;
+    GX2VertexShader shader;
+    uint16_t input_mask;
+    uint8_t uniform_used[CTR_SHADER_UNIFORMS];
+    uint32_t pica_instructions;
+    bool has_relative;
+} direct_gpu_vs_entry;
+typedef struct {
+    uint64_t hash;
+    GX2FetchShader shader;
+    unsigned attribute_count;
+} direct_gpu_fetch_entry;
 typedef struct {
     GX2ContextState *context;
     ctr_gx2_shader *compiled;
@@ -110,6 +127,13 @@ typedef struct {
     unsigned ps_count;
     direct_ps_entry ps_entries[DIRECT_PS_SLOTS];
     uint8_t scratch_ps[PIXEL_BYTES];
+    void *gpu_vs_arena;
+    size_t gpu_vs_arena_used;
+    unsigned gpu_vs_count;
+    direct_gpu_vs_entry gpu_vs_entries[DIRECT_GPU_VS_SLOTS];
+    void *gpu_fetch_arena;
+    unsigned gpu_fetch_count;
+    direct_gpu_fetch_entry gpu_fetch_entries[DIRECT_GPU_FETCH_SLOTS];
     bool resident_depth_valid;
     uint32_t resident_depth_address;
     unsigned resident_depth_width,resident_depth_height,resident_depth_format;
@@ -202,4 +226,8 @@ bool ctr_gx2_direct_pixel_program(ctr_wiiu_gx2_scene *s,scene_private *p,const c
 void ctr_gx2_direct_prepare_draw(ctr_wiiu_gx2_scene *s,scene_private *p,unsigned direct_vs_id,
                                  unsigned coordinates,const ctr_scene_light *light);
 void ctr_gx2_direct_bind_pipeline(scene_private *p,direct_pool_state *pool,unsigned direct_vs_id);
+bool ctr_gx2_direct_setup_state(ctr_wiiu_gx2_scene *s,scene_private *p,const ctr_scene_state *state,
+                                const ctr_scene_sampler sources[3],unsigned mask,
+                                const ctr_scene_light *light,bool *skip_draw);
+bool ctr_gx2_draw_gpu_legacy(void *context,const ctr_scene_gpu_draw *draw);
 #endif

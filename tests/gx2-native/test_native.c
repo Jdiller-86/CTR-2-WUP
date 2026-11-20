@@ -239,17 +239,19 @@ void GX2Invalidate(unsigned mode,void *bytes,unsigned size) {
 }
 unsigned GX2CalcFetchShaderSizeEx(unsigned count,unsigned type,unsigned tess) {
     ++gx2_calls;
-    assert((count==16 || count==7) && !type && !tess);return fetch_bytes;
+    assert(count>=1u && count<=16u && !type && !tess);return fetch_bytes;
 }
 void GX2InitFetchShaderEx(GX2FetchShader *fetch,void *bytes,unsigned count,const GX2AttribStream *attributes,unsigned type,unsigned tess) {
     ++gx2_calls;
-    assert(fetch && bytes && (count==16 || count==7) && !type && !tess);
+    assert(fetch && bytes && count>=1u && count<=16u && !type && !tess);
     assert(((uintptr_t)bytes&255u)==0u);
-    for(unsigned i=0;i<count;++i) {
-        assert(attributes[i].location==i && attributes[i].buffer==0 && attributes[i].offset==i*16u);
-        assert(attributes[i].format==GX2_ATTRIB_FORMAT_FLOAT_32_32_32_32);
-        assert(attributes[i].endianSwap==GX2_ENDIAN_SWAP_8_IN_32);
-        assert(attributes[i].mask==UINT32_C(0x00010203));
+    if(count==16u || count==7u) {
+        for(unsigned i=0;i<count;++i) {
+            assert(attributes[i].location==i && attributes[i].buffer==0 && attributes[i].offset==i*16u);
+            assert(attributes[i].format==GX2_ATTRIB_FORMAT_FLOAT_32_32_32_32);
+            assert(attributes[i].endianSwap==GX2_ENDIAN_SWAP_8_IN_32);
+            assert(attributes[i].mask==UINT32_C(0x00010203));
+        }
     }
 }
 void GX2InitViewportReg(GX2ViewportReg *v,float x,float y,float w,float h,float n,float f) {
@@ -376,7 +378,7 @@ void GX2SetVertexShader(const GX2VertexShader *shader) {
         bound_vertex_program=shader->program;bound_vertex_metadata=*shader;
         return;
     }
-    assert(shader->regs.sq_pgm_resources_vs==(0x100u|vertex_gprs()) && shader->regs.num_sq_vtx_semantic==16);
+    assert((shader->regs.sq_pgm_resources_vs==(0x100u|vertex_gprs()) || shader->regs.sq_pgm_resources_vs==(0x100u|CTR_GX2_SHADER_GAME_GPRS)) && shader->regs.num_sq_vtx_semantic==16);
     assert(shader->regs.sq_vtx_semantic_clear==0xffff0000);
     unsigned mask=expected_vertex_mask(),slot=1;uint32_t semantics=UINT32_C(0xffffff00);
     for(unsigned unit=0;unit<3u;++unit)if(mask&(1u<<unit)) {
@@ -386,10 +388,12 @@ void GX2SetVertexShader(const GX2VertexShader *shader) {
     assert(shader->regs.spi_vs_out_config==bit_count(mask)*2u);
     for(unsigned i=0;i<16;++i)assert(shader->regs.sq_vtx_semantic[i]==i);
     assert(((uint8_t *)shader->program)[0]==0x12);
-    uint32_t signature=mock_vertex_signature(expected_shader,(uint16_t)expected_state->registers[0x2bd],
-        &expected_state->registers[0x050],expected_state->registers[0x04f]);
-    for(unsigned byte=0;byte<4u;++byte)
-        assert(((uint8_t *)shader->program)[byte+1u]==(uint8_t)(signature>>(byte*8u)));
+    if(shader->regs.sq_pgm_resources_vs!=(0x100u|CTR_GX2_SHADER_GAME_GPRS)) {
+        uint32_t signature=mock_vertex_signature(expected_shader,(uint16_t)expected_state->registers[0x2bd],
+            &expected_state->registers[0x050],expected_state->registers[0x04f]);
+        for(unsigned byte=0;byte<4u;++byte)
+            assert(((uint8_t *)shader->program)[byte+1u]==(uint8_t)(signature>>(byte*8u)));
+    }
     bound_vertex_program=shader->program;bound_vertex_metadata=*shader;
 }
 static uint32_t little32(const uint8_t *p) {
@@ -561,6 +565,10 @@ void GX2SetAttribBuffer(unsigned index,unsigned size,unsigned stride,const void 
         bound_vertices=bytes;bound_vertex_bytes=size;++uniform_uploads;
         return;
     }
+    if(bound_vertex_metadata.regs.sq_pgm_resources_vs==(0x100u|CTR_GX2_SHADER_GAME_GPRS)) {
+        assert(bytes && size && stride);
+        bound_vertices=bytes;bound_vertex_bytes=size;return;
+    }
     assert(!index && stride==256 && size==expected_count*256u);
     for(unsigned vertex=0;vertex<expected_count;++vertex)
         assert(!memcmp((const uint8_t *)bytes+vertex*256u,expected_vertices[vertex].input,256));
@@ -568,6 +576,9 @@ void GX2SetAttribBuffer(unsigned index,unsigned size,unsigned stride,const void 
 }
 void GX2SetVertexUniformReg(unsigned offset,unsigned count,const void *bytes) {
     ++gx2_calls;
+    if(bound_vertex_metadata.regs.sq_pgm_resources_vs==(0x100u|CTR_GX2_SHADER_GAME_GPRS)) {
+        assert(count==4 && bytes);(void)offset;return;
+    }
     assert(offset==8 && count==4 && !memcmp(bytes,expected_shader->uniforms[2],16));
     memcpy(bound_vertex_uniforms,bytes,sizeof(bound_vertex_uniforms));++uniform_uploads;
 }
@@ -701,6 +712,16 @@ ctr_gx2_shader_result ctr_gx2_shader_compile(const ctr_shader_program *program,u
     if(invalid_compiled_record==2u)compiled.gprs=65u;
     if(invalid_compiled_record==3u)compiled.size=CTR_GX2_SHADER_MAX_BYTES+256u;
     *out=compiled;return CTR_GX2_SHADER_OK;
+}
+ctr_gx2_shader_result ctr_gx2_shader_compile_game(const ctr_shader_program *program,
+                                                  const ctr_gx2_shader_game_options *opts,
+                                                  ctr_gx2_shader *out) {
+    (void)opts;
+    if(!program || !out || !compile_ok)return CTR_GX2_SHADER_UNSUPPORTED;
+    memset(out,0,sizeof(*out));
+    out->program[0]=0x12;out->size=256u;out->gprs=CTR_GX2_SHADER_GAME_GPRS;out->pica_instructions=2u;
+    out->input_mask=1u;out->uniform_used[0]=15u;
+    return CTR_GX2_SHADER_OK;
 }
 static void reset(void) {
     assert(!live_allocations && !live_cache_owners);alloc_attempts=0;fail_allocation=0;fetch_bytes=512;
@@ -3195,6 +3216,27 @@ static void direct_backend_lifecycle(void) {
     assert(!backend.draw_transformed(&scene,&state,tv,3,NULL,0u,NULL));
     assert(scene.cache_allocation_failures==1u);
     assert(backend.end_depth(&scene,&surface,&depth));
+
+    /* Direct GPU VS draw_gpu path: indexed draw + fixed input + clean false fallback. */
+    assert(backend.draw_gpu!=NULL);
+    float vbuf[9]={0.0f,0.0f,0.0f, 1.0f,0.0f,0.0f, 0.0f,1.0f,0.0f};
+    uint8_t ibuf[3]={0,1,2};
+    ctr_vertex_attribute attrs[1]={{0u,0u,CTR_VERTEX_FLOAT,3u,0u}};
+    ctr_vertex_stream streams[1]={{vbuf,sizeof(vbuf),0u,12u}};
+    ctr_vertex_indices indices={ibuf,sizeof(ibuf),0u,CTR_VERTEX_INDEX_UNSIGNED_BYTE};
+    float fixed_vals[2][4]={{0},{1.0f,1.0f,1.0f,1.0f}};
+    unsigned fixed_slots[2]={0u,1u};
+    state.registers[0x0c1u]=0u;
+    state.registers[0x2bdu]=3u;state.registers[0x04fu]=2u;
+    state.registers[0x050u]=0x03020100u;state.registers[0x051u]=0x0b0a0908u;
+    state.shader.uniform_defined[0]=15u;
+    ctr_scene_gpu_draw gpu_draw={&state,attrs,1u,streams,1u,&indices,(const float (*)[4])fixed_vals,fixed_slots,2u,2u,0u,3u,true,NULL,0u,NULL};
+    ctr_wiiu_gx2_scene_set_depth_keep(&scene,true);
+    assert(backend.begin_depth(&scene,&surface,&depth));
+    assert(backend.draw_gpu(&scene,&gpu_draw));
+    assert(!backend.draw_gpu(&scene,NULL));
+    assert(backend.end_depth(&scene,&surface,&depth));
+    ctr_wiiu_gx2_scene_set_depth_keep(&scene,false);
     backend.abort(&scene);
     ctr_wiiu_gx2_scene_after_shutdown(&scene);
     clean(&scene);

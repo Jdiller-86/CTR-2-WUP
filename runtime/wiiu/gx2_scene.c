@@ -2124,6 +2124,68 @@ static bool draw_samples(void *context,const ctr_scene_state *state,const ctr_ve
     ++s->draws;s->shader_instructions+=p->compiled->pica_instructions;
     s->result=CTR_WIIU_GX2_SCENE_OK;return true;
 }
+bool ctr_gx2_direct_setup_state(ctr_wiiu_gx2_scene *s,scene_private *p,const ctr_scene_state *state,
+                                const ctr_scene_sampler sources[3],unsigned mask,
+                                const ctr_scene_light *light,bool *skip_draw) {
+    *skip_draw=false;
+    if(!p || !state || mask>7u || (mask && !sources) || s->quarantined)return false;
+    ctr_fragment_state fragment;ctr_stencil_state stencil;
+    if(!ctr_fragment_decode_depth(state->registers,state->register_defined,true,p->depth_enabled,&fragment) ||
+       !native_fragment(&fragment) || !native_depth(p,state,&stencil,true))
+        return false;
+    float half[2];int offset[2];
+    if(!read_viewport(p,state,half,offset))return false;
+    bool aliases_only=s->texture_cache_disabled && !s->texture_cache;
+    for(unsigned unit=0;unit<3u;++unit)if((mask&(1u<<unit)) &&
+        !texture_chain_valid(s,p,&sources[unit],true,aliases_only))
+        return false;
+    unsigned mode=state->registers[0x065u]&3u;
+    unsigned x1=state->registers[0x066u]&1023u,y1=(state->registers[0x066u]>>16)&1023u;
+    unsigned x2=state->registers[0x067u]&1023u,y2=(state->registers[0x067u]>>16)&1023u;
+    if(x1>p->width)x1=p->width;
+    if(y1>p->height)y1=p->height;
+    if(x2>=p->width)x2=p->width-1u;
+    if(y2>=p->height)y2=p->height-1u;
+    bool empty=x1>x2 || y1>y2;
+    if(mode!=0u && mode!=1u && mode!=3u)return false;
+    if(mode==1u && !empty)return false;
+    if(mode==3u && empty) { *skip_draw=true;return true; }
+    texture_leases_release(s,p);
+    cache_prepare(s);
+    bool texture2_coord1=(mask&4u) && (state->registers[0x080u]&(1u<<13));
+    unsigned implicit_lod=0;
+    for(unsigned unit=0;unit<3u;++unit)if(mask&(1u<<unit)) {
+        unsigned filters=sources[unit].levels[0].params&6u;
+        if(sources[unit].max_level || sources[unit].bias_q8 || (filters!=0u && filters!=6u))
+            implicit_lod|=1u<<unit;
+    }
+    ctr_tev_program tev;
+    bool fog=(state->registers[0x0e0u]&7u)==5u;
+    if(!ctr_tev_decode_game(state->registers,state->register_defined,mask,&tev) ||
+       !pixel_program(s,p,&tev,mask,texture2_coord1,implicit_lod,0u,0u,0u,sources,state,fog,true,
+                      light && light->active?light:NULL,false,BLEND_FIXED))
+        return false;
+    if(!upload_textures(s,p,sources,mask,true))return false;
+    if(!p->draw_context_active) {
+        GX2SetContextState(p->context);p->draw_context_active=true;
+    }
+    viewport(p,half,offset,fog);
+    for(unsigned unit=0;unit<3u;++unit)if(mask&(1u<<unit)) {
+        const GX2Texture *texture=p->texture_lease[unit]?
+            &p->texture_lease[unit]->upload.texture:&p->texture[unit].texture;
+        GX2SetPixelTexture(texture,unit);GX2SetPixelSampler(&p->sampler[unit],unit);
+    }
+    GX2SetPixelUniformReg(0,p->pixel_uniform_vectors*4u,p->pixel_constants);
+    if(s->cemu_readback && !fragment.blend_enabled && fragment.logic_op==6u) {
+        fragment.logic_op=3u;
+        fragment.write_mask=0u;
+    }
+    fragment_state(&fragment);
+    depth_state(p,state,&stencil);
+    if(mode==3u)GX2SetScissor(x1,p->flip_y?p->height-y1-(y2-y1+1u):y1,x2-x1+1u,y2-y1+1u);
+    else GX2SetScissor(0,0,p->width,p->height);
+    return true;
+}
 bool ctr_gx2_draw_mips_legacy(void *context,const ctr_scene_state *state,const ctr_vertex *vertices,unsigned count,
                               const ctr_scene_sampler samplers[3],unsigned mask) {
     return draw_samples(context,state,vertices,NULL,count,samplers,mask,true,NULL);
@@ -2333,7 +2395,7 @@ ctr_scene_backend ctr_wiiu_gx2_scene_backend(ctr_wiiu_gx2_scene *s) {
     return (ctr_scene_backend){s,ctr_gx2_begin_legacy,ctr_gx2_draw_legacy,ctr_gx2_end_legacy,
                                ctr_gx2_abort_cb,ctr_gx2_begin_depth_legacy,ctr_gx2_end_depth_legacy,
                                ctr_gx2_draw_textures_legacy,ctr_gx2_draw_mips_legacy,
-                               CTR_SCENE_BACKEND_DEPTH_FOG,ctr_gx2_draw_transformed_legacy};
+                               CTR_SCENE_BACKEND_DEPTH_FOG,ctr_gx2_draw_transformed_legacy,NULL};
 }
 const char *ctr_wiiu_gx2_scene_result_name(ctr_wiiu_gx2_scene_result result) {
     static const char *const names[]={"ok","argument","allocation","layout","shader","wait","busy","unsupported-readback"};

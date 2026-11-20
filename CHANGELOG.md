@@ -5,6 +5,18 @@ do not establish commercial-game compatibility or installable WUP acceptance.
 
 ## 0.27.0 — unreleased
 
+- Add full PICA vertex-shader-to-Latte-VLIW5 GPU compilation in
+  `runtime/core/ctr_gx2_shader.{h,c}` and wire `draw_gpu` into
+  `runtime/core/ctr_scene.{h,c}` and `runtime/wiiu/gx2_direct.c`:
+  - Support arbitrary float32 uniforms, fixed/integer vertex attributes
+    (`INT_TO_FLT`/`UINT_TO_FLT`), `MIN`/`RCP`/`RSQ`/`MOVA` + relative constant
+    addressing (`MOVA_INT` + `SRC0_REL`), `DP4H`/`DP4HI`, `CMP`, `IFC`/`CALLC`/
+    `JMPC` branching, compile-time `LOOP` unrolling, and lighting
+    `orientation`/`view` exports (`PARAM4..5`).
+  - Reduce Cemu 2.6 `course_direct_probe.rpx` warm frame time from 1023 ms to
+    69 ms (14.8x faster) with 68621/96000 exact pixel parity, and cut live
+    Mario 3D Land `pica_us` share from 50.5% to 31.1% (1461 -> 1610 frames in
+    70s, 41.22 steady FPS, 0 shader errors, 0 fallbacks).
 - Optimize ROM conversion speed and AOT runtime execution:
   - Precompile/guard per-line regexes in `translator/portable.py` and
     parallelize `code*.c` adaptation in `translator/upstream.py` (`Translate ARM
