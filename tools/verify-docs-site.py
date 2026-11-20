@@ -51,7 +51,7 @@ def verify(commit, get=fetch, *, with_project=False):
                 or project.get('repository') != 'Jdiller-86/CTR-2-WUP'
                 or project.get('project_url') != 'https://github.com/users/Jdiller-86/projects/2'
                 or project.get('state') not in ('available', 'unavailable')
-                or project.get('stale_after_seconds') != 7200):
+                or project.get('stale_after_seconds') != 43200):
             raise VerificationError('project_policy', 'Published Project snapshot identity is invalid')
         if project.get('source_commit') != commit:
             raise VerificationError('project_source', 'Published Project snapshot does not match this source commit', True)

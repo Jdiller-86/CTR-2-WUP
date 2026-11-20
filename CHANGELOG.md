@@ -5,6 +5,21 @@ do not establish commercial-game compatibility or installable WUP acceptance.
 
 ## 0.27.0 — unreleased
 
+- Add initial ARMv6K/Thumb integer and scalar VFPv2 interpreter and original AOT
+  translation (#183).
+- Connect continuous guest DSP-to-AX audio streaming, variable-rate PCM, and
+  bounded mono ADPCM playback (#180, #181, #182).
+- Add checked packaged CRO/CRS module loading, relocation, linking, AOT
+  dispatch, and unload (#188).
+- Add experimental Super Mario 3D Land USA ROM-to-WUP CLI test builder and
+  native guest frontend (#190).
+- Add optional Wii U MCP bridge, paired Aroma control plugin, and guided
+  Windows installer (#184, #185, #187, #193).
+- Harden private file creation permissions and restrict the Wii U MCP UDP
+  listener bind address (#191).
+- Add `CODE_OF_CONDUCT.md`, automated CodeQL scanning configuration, progress
+  snapshot staleness/formatting fixes, and bump the Wii U MCP starter kit to
+  `0.1.0-alpha.4`.
 - Consolidate the roadmap into `plans.md`, reduce documentation to usage and
   technical contracts, and replace mirrored tracking catalogs/automations with
   native GitHub issues and milestones. Package instructions ship with their
@@ -338,4 +353,4 @@ do not establish commercial-game compatibility or installable WUP acceptance.
 - Preserve user-reported 0.14.5 successes and the pending Save/RomFS follow-up.
 
 Earlier source/build evidence is preserved in
-[development history](docs/development-history.md).
+[development history](https://github.com/Jdiller-86/CTR-2-WUP/blob/8da7a4a2cde0e6f80f7df5c6ec263efb4c98b702/docs/development-history.md).

@@ -465,8 +465,8 @@
     </main>
     <footer>
       GitHub issues and Project fields are the source of truth. Snapshots
-      refresh hourly and on documentation publication; this page checks for
-      updates each minute. Snapshots older than two hours are marked stale.
+      refresh periodically and on documentation publication; this page checks for
+      updates each minute. Snapshots older than twelve hours are marked stale.
     </footer>
     <script>
       "use strict";
@@ -535,7 +535,7 @@
           data.repository !== REPO ||
           !["available", "unavailable"].includes(data.state) ||
           !/^[0-9a-f]{40}$/.test(data.source_commit) ||
-          data.stale_after_seconds !== 7200
+          data.stale_after_seconds !== 43200
         )
           throw Error("Invalid snapshot identity");
         const generated = Date.parse(data.generated_at);

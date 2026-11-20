@@ -18,7 +18,7 @@ COMMIT = 'a' * 40
 def snapshot():
     data = {'schema_version': 2, 'repository': hosting.SOURCE,
             'project_url': 'https://github.com/users/Jdiller-86/projects/2',
-            'source_commit': COMMIT, 'state': 'available', 'stale_after_seconds': 7200,
+            'source_commit': COMMIT, 'state': 'available', 'stale_after_seconds': 43200,
             'generated_at': datetime.now(timezone.utc).isoformat(), 'milestones': [], 'items': []}
     for number in range(1, 8):
         url = f'https://github.com/{hosting.SOURCE}/issues/{number}'

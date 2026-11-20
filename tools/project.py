@@ -232,7 +232,8 @@ def body_details(body):
     paragraph = next((part.strip() for part in re.split(r'\n\s*\n', clean)
                       if part.strip() and not part.lstrip().startswith('#')), '')
     summary = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', paragraph)
-    summary = re.sub(r'<[^>]*>|[`*_#]', '', summary)
+    summary = re.sub(r'<[^>]*>|[`*#]', '', summary)
+    summary = re.sub(r'(?<!\w)_+|_+(?!\w)', '', summary)
     summary = re.sub(r'\s+', ' ', summary).strip()[:320]
     evidence, seen = [], set()
     for text, url in re.findall(r'\[([^\]\n]+)\]\((https://[^\s)]+)\)', clean):
@@ -320,7 +321,7 @@ def snapshot_base(source_commit, now=None):
     now = now or datetime.now(timezone.utc)
     return {'schema_version': 2, 'project_url': PROJECT_URL, 'repository': REPOSITORY,
         'generated_at': now.astimezone(timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z'),
-        'source_commit': source_commit, 'stale_after_seconds': 7200}
+        'source_commit': source_commit, 'stale_after_seconds': 43200}
 
 
 def write_snapshot(client, output, source_commit):
