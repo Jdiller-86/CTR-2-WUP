@@ -7,6 +7,7 @@
 typedef struct {
     uint8_t *bytes;
     size_t source_size,rgba_size;
+    uint64_t hash;
     unsigned format,width,height,profile,pins;
 } texture_entry;
 struct ctr_texture_cache {
@@ -14,6 +15,17 @@ struct ctr_texture_cache {
     unsigned next;
     ctr_texture_cache_statistics statistics;
 };
+
+static uint64_t hash_source(const uint8_t *bytes,size_t size) {
+    uint64_t h=UINT64_C(14695981039346656037)^(uint64_t)size;
+    size_t i=0;
+    for(;i+8u<=size;i+=8u) {
+        uint64_t w;memcpy(&w,bytes+i,8u);
+        h=(h^w)*UINT64_C(1099511628211);
+    }
+    for(;i<size;++i)h=(h^bytes[i])*UINT64_C(1099511628211);
+    return h;
+}
 
 static bool span(const void *p,size_t n) {
     return p && n<=UINTPTR_MAX-(uintptr_t)p;
@@ -81,11 +93,12 @@ ctr_texture_cache_result ctr_texture_cache_acquire(ctr_texture_cache *cache,
         }
         *lease=(ctr_texture_cache_lease){rgba,NULL,rgba,0};return CTR_TEXTURE_CACHE_OK;
     }
+    uint64_t source_hash=hash_source(source,need);
     for(unsigned i=0;i<CTR_TEXTURE_CACHE_SLOTS;++i) {
         texture_entry *e=&cache->entries[i];
         if(!e->bytes || e->profile!=DECODER_PROFILE || e->format!=format ||
            e->width!=width || e->height!=height || e->source_size!=need ||
-           memcmp(e->bytes,source,need))continue;
+           e->hash!=source_hash || memcmp(e->bytes,source,need))continue;
         if(e->pins==UINT_MAX)return CTR_TEXTURE_CACHE_BUSY;
         ++e->pins;increment(cache,&cache->statistics.hits);
         *lease=(ctr_texture_cache_lease){e->bytes+need,cache,NULL,i};return CTR_TEXTURE_CACHE_OK;
@@ -119,7 +132,7 @@ ctr_texture_cache_result ctr_texture_cache_acquire(ctr_texture_cache *cache,
     if(ctr_texture_decode(bytes,need,format,width,height,bytes+need,rgba_size)!=CTR_TEXTURE_OK) {
         free(bytes);return CTR_TEXTURE_CACHE_DECODE;
     }
-    cache->entries[selected]=(texture_entry){bytes,need,rgba_size,format,width,height,DECODER_PROFILE,1};
+    cache->entries[selected]=(texture_entry){bytes,need,rgba_size,source_hash,format,width,height,DECODER_PROFILE,1};
     cache->statistics.bytes+=required;++cache->statistics.entries;
     if(cache->statistics.bytes>cache->statistics.peak_bytes)cache->statistics.peak_bytes=cache->statistics.bytes;
     increment(cache,&cache->statistics.decodes);

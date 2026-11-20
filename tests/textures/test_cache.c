@@ -63,25 +63,41 @@ static void identity_and_failures(void) {
     CHECK(ctr_texture_cache_acquire(NULL,source,256,0,8,8,&a)==CTR_TEXTURE_CACHE_OK && a.owned && !a.owner);
     ctr_texture_cache_release(&a);CHECK(!a.rgba && !a.owned);
 }
+static void fill_rgba_pattern(uint8_t *source,size_t bytes,unsigned tag) {
+    for(size_t off=0;off+4u<=bytes;off+=4u) {
+        source[off]=(uint8_t)tag;source[off+1u]=(uint8_t)(tag>>8);
+        source[off+2u]=0x5au;source[off+3u]=0xa5u;
+    }
+}
 static void pins_and_eviction(void) {
     uint8_t source[256]={0};ctr_texture_cache *cache=ctr_texture_cache_create();CHECK(cache);
     ctr_texture_cache_lease leases[CTR_TEXTURE_CACHE_SLOTS]={{0}},extra={0};
     for(unsigned i=0;i<CTR_TEXTURE_CACHE_SLOTS;++i) {
-        memset(source,(int)i,sizeof(source));
+        fill_rgba_pattern(source,sizeof(source),i);
         CHECK(ctr_texture_cache_acquire(cache,source,sizeof(source),0,8,8,&leases[i])==CTR_TEXTURE_CACHE_OK);
     }
     CHECK(stats(cache).pins==CTR_TEXTURE_CACHE_SLOTS && !stats(cache).evictions);
-    memset(source,100,sizeof(source));
+    fill_rgba_pattern(source,sizeof(source),0xffffu);
     CHECK(ctr_texture_cache_acquire(cache,source,sizeof(source),0,8,8,&extra)==CTR_TEXTURE_CACHE_BUSY && !extra.rgba);
     CHECK(stats(cache).entries==CTR_TEXTURE_CACHE_SLOTS && !stats(cache).evictions);
     ctr_texture_cache_release(&leases[1]);
     CHECK(ctr_texture_cache_acquire(cache,source,sizeof(source),0,8,8,&extra)==CTR_TEXTURE_CACHE_OK);
     CHECK(stats(cache).evictions==1u && stats(cache).pins==CTR_TEXTURE_CACHE_SLOTS);
     for(unsigned i=0;i<CTR_TEXTURE_CACHE_SLOTS;++i)if(i!=1u) {
-        for(unsigned lane=0;lane<4u;++lane)CHECK(leases[i].rgba[lane]==i);
+        CHECK(leases[i].rgba[0]==0xa5u && leases[i].rgba[1]==0x5au &&
+              leases[i].rgba[2]==(uint8_t)(i>>8) && leases[i].rgba[3]==(uint8_t)i);
         ctr_texture_cache_release(&leases[i]);
     }
-    ctr_texture_cache_release(&extra);CHECK(ctr_texture_cache_destroy(cache));
+    ctr_texture_cache_release(&extra);
+    /* Re-acquiring a warm working set >64 entries retains 0 evictions and hits on repeat. */
+    uint64_t evictions=stats(cache).evictions;
+    for(unsigned pass=0;pass<2u;++pass)for(unsigned i=2u;i<74u;++i) {
+        fill_rgba_pattern(source,sizeof(source),i);
+        CHECK(ctr_texture_cache_acquire(cache,source,sizeof(source),0,8,8,&extra)==CTR_TEXTURE_CACHE_OK);
+        ctr_texture_cache_release(&extra);
+    }
+    CHECK(stats(cache).evictions==evictions && stats(cache).hits>=72u);
+    CHECK(ctr_texture_cache_destroy(cache));
 }
 static void budget(void) {
     const size_t size=1024u*1024u*4u;uint8_t *source=malloc(size);CHECK(source);

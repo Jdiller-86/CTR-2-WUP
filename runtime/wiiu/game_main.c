@@ -12,6 +12,9 @@
 #include "diagnostic_audio.h"
 #include "diagnostic_display.h"
 #include "guest_slice.h"
+#ifdef CTR_GAME_CEMU_TEST
+#include "gx2_scene.h"
+#endif
 #include "native_audio_stream.h"
 #include "report_storage.h"
 #include "test_lifecycle_wiiu.h"
@@ -29,6 +32,10 @@
 #include <sys/stat.h>
 
 static ctr_guest guest;
+#ifdef CTR_GAME_CEMU_TEST
+static ctr_wiiu_gx2_scene gx2_scene;
+static ctr_scene_backend gx2_backend;
+#endif
 static ctr_fs_volume savedata,sdmc;
 static ctr_romfs_file romfs;
 #if CTR_GAME_HAS_MII_ROMFS
@@ -84,13 +91,18 @@ static bool status_report(const char *stage) {
         "\"host_us\":%llu,\"guest_ns\":%llu,\"top_swaps\":%llu,"
         "\"guest_exec_us\":%llu,\"presentation_us\":%llu,"
 #ifdef CTR_GAME_CEMU_TEST
-        "\"gx_us\":%llu,\"pica_us\":%llu,"
+        "\"gx_us\":%llu,\"pica_us\":%llu,\"pica_fallbacks\":%llu,"
+        "\"gx2_draws\":%llu,\"gx2_readbacks\":%llu,\"gx2_waits\":%llu,\"gx2_depth_skips\":%llu,"
 #endif
         "\"vblanks\":%llu,\"coalesced_vblanks\":%llu,\"dropped_gsp_irqs\":%llu,"
         "\"pc\":%u,\"fault\":%u,\"detail\":%u,\"svc\":%u,"
         "\"ipc_service\":\"%s\",\"ipc_header\":%u,\"ipc_result\":%u,"
         "\"pica_result\":%u,\"pica_register\":%u,\"pica_offset\":%u,\"scene_result\":%u,"
+#ifdef CTR_GAME_CEMU_TEST
+        "\"pica_draws\":%llu,\"gx_transfers\":%llu,\"renderer\":\"gx2-direct\",\"gameplay_verified\":false}",
+#else
         "\"pica_draws\":%llu,\"gx_transfers\":%llu,\"renderer\":\"software\",\"gameplay_verified\":false}",
+#endif
         stage,CTR_SOURCE_COMMIT,CTR_GAME_PROGRAM_ID,CTR_GAME_REVISION,ctr_guest_state_name(guest.state),
         (unsigned long long)guest.cpu.instructions,(unsigned long long)guest.cpu.fallback_instructions,
         (unsigned long long)frames,(unsigned long long)OSTicksToMicroseconds(OSGetTime()),
@@ -98,6 +110,9 @@ static bool status_report(const char *stage) {
         (unsigned long long)guest_exec_us,(unsigned long long)presentation_us,
 #ifdef CTR_GAME_CEMU_TEST
         (unsigned long long)guest.gsp.gx_us,(unsigned long long)guest.gsp.pica_us,
+        (unsigned long long)guest.gsp.pica_fallback_lists,
+        (unsigned long long)gx2_scene.draws,(unsigned long long)gx2_scene.readbacks,
+        (unsigned long long)gx2_scene.waits,(unsigned long long)gx2_scene.direct_depth_skips,
 #endif
         (unsigned long long)guest.gsp.vblanks,(unsigned long long)guest.gsp.coalesced_vblanks,
         (unsigned long long)guest.gsp.dropped_interrupts,
@@ -148,6 +163,14 @@ static bool start_guest(void) {
 #endif
     if(CTR_GAME_READONLY_VRAM && !ctr_gsp_open_vram(&guest))return false;
     guest.gsp.pica_round_f24=true;
+#ifdef CTR_GAME_CEMU_TEST
+    ctr_wiiu_gx2_scene_init(&gx2_scene,ctr_diagnostic_display_context());
+    gx2_scene.cemu_readback=true;
+    gx2_scene.batch_transformed=true;
+    gx2_backend=ctr_wiiu_gx2_scene_backend_direct(&gx2_scene);
+    ctr_guest_set_scene_backend(&guest,&gx2_backend);
+    guest.gsp.pica_depth_hint=ctr_wiiu_gx2_scene_set_depth_keep;
+#endif
     guest.dsp_firmware=&ctr_game_dsp_firmware;
     guest.cpu.log=trace;guest.debug=debug;
     if(!ctr_apt_configure(&guest))return false;
@@ -274,7 +297,14 @@ static void cleanup(void *unused) {
 #if CTR_GAME_HAS_MII_ROMFS
     ctr_romfs_file_close(&mii_romfs);
 #endif
-    ctr_romfs_file_close(&romfs);ctr_diagnostic_display_close(foreground);
+    ctr_romfs_file_close(&romfs);
+#ifdef CTR_GAME_CEMU_TEST
+    ctr_wiiu_gx2_scene_abort(&gx2_scene);
+#endif
+    ctr_diagnostic_display_close(foreground);
+#ifdef CTR_GAME_CEMU_TEST
+    ctr_wiiu_gx2_scene_after_shutdown(&gx2_scene);
+#endif
     ctr_test_report_close(&report);
 }
 static const ctr_exit_ops exit_ops={cleanup,clear_callbacks,ctr_procui_request_menu,ctr_procui_messages,
@@ -338,6 +368,9 @@ int main(void) {
         if(status==CTR_PROC_RELEASE) {
             ctr_diagnostic_audio_end(&audio,ctr_native_stream_release,&stream);
             if(save_ready && savedata.dirty && !ctr_fs_snapshot_save(CTR_GAME_DATA_ROOT "/save.snapshot",&savedata))fail("Save publication failed");
+#ifdef CTR_GAME_CEMU_TEST
+            ctr_wiiu_gx2_scene_abort(&gx2_scene);
+#endif
             status_report("background");ctr_report_storage_close(&storage);ctr_procui_release(NULL);
         }
         bool previous_foreground=foreground;foreground=status==CTR_PROC_FOREGROUND;
@@ -345,6 +378,9 @@ int main(void) {
         if(!foreground) { ctr_procui_wait(NULL);continue; }
         if(!previous_foreground) {
             delta=0;last_status_draw_us=0;previous_picture=false;ctr_diagnostic_display_invalidate();
+#ifdef CTR_GAME_CEMU_TEST
+            gx2_scene.restore_context=ctr_diagnostic_display_context();
+#endif
             if(!failure && !open_audio())fail("Audio reacquisition failed");
         }
 #ifdef CTR_GAME_CEMU_TEST
@@ -425,7 +461,12 @@ int main(void) {
         if(now-last_status_us>=5000000u) {
             last_status_us=now;if(!status_report(failure?"stopped":"progress"))fail("Private runtime log failed");
         }
+#ifdef CTR_GAME_CEMU_TEST
+        if(guest.state==CTR_GUEST_WAITING || guest.state==CTR_GUEST_SLEEPING)
+            OSSleepTicks(OSMillisecondsToTicks(1));
+#else
         OSSleepTicks(OSMillisecondsToTicks(1));
+#endif
     }
     if(!ctr_test_complete_exit(&lifecycle,exit_observed,&exit_ops,NULL))failure="Exit transition failed";
     ctr_report_storage_close(&storage);return failure?1:0;

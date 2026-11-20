@@ -233,8 +233,8 @@ static void layout(uint8_t *linear_bytes,uint8_t *raw,unsigned width,unsigned he
                         else if(format==CTR_SCENE_COLOR_RGB565)ctr_rgb565_unpack(word,p);
                         else ctr_rgba4_unpack(word,p);
                     }
-                } else if(encode)for(unsigned lane=0;lane<4;++lane)q[lane]=p[3u-lane];
-                else for(unsigned lane=0;lane<4;++lane)p[lane]=q[3u-lane];
+                } else if(encode) { q[0]=p[3];q[1]=p[2];q[2]=p[1];q[3]=p[0]; }
+                else { p[0]=q[3];p[1]=q[2];p[2]=q[1];p[3]=q[0]; }
             }
         }
     }
@@ -495,6 +495,7 @@ ctr_gx_result ctr_guest_pica_execute(ctr_guest *g,const void *commands,size_t si
     uint8_t empty[4]={0};
     ctr_scene_resources resources={0};ctr_scene_surface surface={empty,4,1,1,4};
     ctr_scene_depth_surface depth={0};
+    bool direct_backend=false,keep_depth=false;
     if(draws) {
         report.byte_offset=first_draw;report.reg=draw_register;
         uint32_t geometry_base=array_draws?geometry_anchor:bound[0];
@@ -566,14 +567,45 @@ ctr_gx_result ctr_guest_pica_execute(ctr_guest *g,const void *commands,size_t si
         memcpy(raw,color_initial.bytes,target_bytes);
         ctr_resource_cache_release(&color_initial);
         layout(pixels,raw,width,height,color_format,top_down,false);
+        direct_backend=g->gsp.pica_backend &&
+            (g->gsp.pica_backend->features&CTR_SCENE_BACKEND_DIRECT)!=0u &&
+            color_format==CTR_SCENE_COLOR_RGBA8;
+        if(direct_backend) {
+            keep_depth=depth_bytes && g->gsp.gpu_depth_valid &&
+                depth_address==g->gsp.gpu_depth_address && width==g->gsp.gpu_depth_width &&
+                height==g->gsp.gpu_depth_height && bound[4]==g->gsp.gpu_depth_format &&
+                ctr_memory_resource_key_current(&g->memory,&g->gsp.gpu_depth_key);
+            if(g->gsp.pica_depth_hint)g->gsp.pica_depth_hint(g->gsp.pica_backend->context,keep_depth);
+        }
         if(depth_bytes) {
-            depth_raw=malloc(depth_bytes);depth_pixels=malloc(depth_bytes);
-            if(!depth_raw || !depth_pixels) { result=CTR_GX_NO_MEMORY;report.result=CTR_SCENE_NO_MEMORY;goto done; }
-            result=snapshot(g,CTR_RESOURCE_DEPTH,depth_virtual,depth_bytes,CTR_MEM_READ|CTR_MEM_WRITE,&depth_initial,c);
-            if(result!=CTR_GX_OK) { report.result=CTR_SCENE_LAYOUT;goto done; }
-            memcpy(depth_raw,depth_initial.bytes,depth_bytes);
-            ctr_resource_cache_release(&depth_initial);
-            depth_layout(depth_pixels,depth_raw,width,height,depth_element,top_down,false);
+            depth_pixels=keep_depth?calloc(1,depth_bytes):malloc(depth_bytes);
+            if(!keep_depth)depth_raw=malloc(depth_bytes);
+            if(!depth_pixels || (!keep_depth && !depth_raw)) {
+                result=CTR_GX_NO_MEMORY;report.result=CTR_SCENE_NO_MEMORY;goto done;
+            }
+            if(!keep_depth) {
+                result=snapshot(g,CTR_RESOURCE_DEPTH,depth_virtual,depth_bytes,CTR_MEM_READ|CTR_MEM_WRITE,&depth_initial,c);
+                if(result!=CTR_GX_OK) { report.result=CTR_SCENE_LAYOUT;goto done; }
+                memcpy(depth_raw,depth_initial.bytes,depth_bytes);
+                ctr_resource_cache_release(&depth_initial);
+                bool uniform=true;
+                if(depth_element==4u) {
+                    uint32_t w0;memcpy(&w0,depth_raw,4u);
+                    for(uint32_t k=4u;k<depth_bytes;k+=4u) {
+                        uint32_t wk;memcpy(&wk,depth_raw+k,4u);
+                        if(wk!=w0) { uniform=false;break; }
+                    }
+                    if(uniform)for(uint32_t k=0;k<depth_bytes;k+=4u)memcpy(depth_pixels+k,&w0,4u);
+                } else {
+                    uint16_t w0;memcpy(&w0,depth_raw,2u);
+                    for(uint32_t k=2u;k<depth_bytes;k+=2u) {
+                        uint16_t wk;memcpy(&wk,depth_raw+k,2u);
+                        if(wk!=w0) { uniform=false;break; }
+                    }
+                    if(uniform)for(uint32_t k=0;k<depth_bytes;k+=2u)memcpy(depth_pixels+k,&w0,2u);
+                }
+                if(!uniform)depth_layout(depth_pixels,depth_raw,width,height,depth_element,top_down,false);
+            }
             depth=(ctr_scene_depth_surface){depth_pixels,depth_bytes,width,height,width*depth_element,depth_address,bound[4]};
         }
         size_t total_texture_bytes=0;
@@ -609,14 +641,35 @@ ctr_gx_result ctr_guest_pica_execute(ctr_guest *g,const void *commands,size_t si
         ctr_scene_execute_targets_format_cached(trial,commands,size,&resources,&surface,color_address,color_format,
                                                 depth_bytes?&depth:NULL,g->gsp.pica_backend,g->pica_textures,&report):
         ctr_scene_apply_setup(trial,commands,size,writes,wire.writes,&report);
+    if(draws && keep_depth && rendered==CTR_SCENE_OK && report.backend_fallback) {
+        g->gsp.gpu_depth_valid=false;
+        if(!depth_raw)depth_raw=malloc(depth_bytes);
+        if(!depth_raw) { result=CTR_GX_NO_MEMORY;report.result=CTR_SCENE_NO_MEMORY;goto done; }
+        result=snapshot(g,CTR_RESOURCE_DEPTH,depth_virtual,depth_bytes,CTR_MEM_READ|CTR_MEM_WRITE,&depth_initial,c);
+        if(result!=CTR_GX_OK) { report.result=CTR_SCENE_LAYOUT;goto done; }
+        memcpy(depth_raw,depth_initial.bytes,depth_bytes);
+        ctr_resource_cache_release(&depth_initial);
+        depth_layout(depth_pixels,depth_raw,width,height,depth_element,top_down,false);
+        if(g->gsp.pica_scene)*trial=*g->gsp.pica_scene; else ctr_scene_init(trial);
+        trial->shader.round_f24=g->gsp.pica_round_f24;
+        memcpy(trial->registers,g->gsp.pica.registers,sizeof(trial->registers));
+        trial->lists=g->gsp.pica.committed_lists;
+        layout(pixels,raw,width,height,color_format,top_down,false);
+        report=(ctr_scene_report){0};
+        rendered=ctr_scene_execute_targets_format_cached(trial,commands,size,&resources,&surface,color_address,color_format,
+                                                         &depth,NULL,g->pica_textures,&report);
+        report.backend_fallback=true;
+    }
     if(rendered!=CTR_SCENE_OK) { result=rendered==CTR_SCENE_NO_MEMORY?CTR_GX_NO_MEMORY:CTR_GX_UNSUPPORTED;goto done; }
     if(draws) {
+        bool skip_depth_write=depth_bytes && direct_backend && !report.backend_fallback;
+        if(report.backend_fallback)++g->gsp.pica_fallback_lists;
         layout(pixels,raw,width,height,color_format,top_down,true);
         ctr_memory_write_range targets[2]={{target_address,raw,target_bytes},{depth_virtual,depth_raw,depth_bytes}};
-        if(depth_bytes)depth_layout(depth_pixels,depth_raw,width,height,depth_element,top_down,true);
+        if(depth_bytes && !skip_depth_write)depth_layout(depth_pixels,depth_raw,width,height,depth_element,top_down,true);
         /* Commit ordinary mappings atomically before the already validated
          * VRAM writes. The staged targets have distinct backing spans. */
-        ctr_memory_write_range ordinary[2];unsigned ordinary_count=0,target_count=depth_bytes?2u:1u;
+        ctr_memory_write_range ordinary[2];unsigned ordinary_count=0,target_count=(depth_bytes && !skip_depth_write)?2u:1u;
         bool video[2];
         for(unsigned i=0;i<target_count;++i) {
             video[i]=ctr_gx_vram_backing(g,targets[i].address,targets[i].size)!=NULL;
@@ -626,6 +679,13 @@ ctr_gx_result ctr_guest_pica_execute(ctr_guest *g,const void *commands,size_t si
         if(c->memory!=CTR_MEM_OK) { result=CTR_GX_MEMORY;report.result=CTR_SCENE_LAYOUT;goto done; }
         for(unsigned i=0;i<target_count;++i)if(video[i])
             ctr_gx_write_target(g,targets[i].address,targets[i].input,targets[i].size);
+        if(depth_bytes) {
+            if(skip_depth_write) {
+                g->gsp.gpu_depth_valid=ctr_memory_resource_key_capture(&g->memory,depth_virtual,depth_bytes,CTR_MEM_READ,&g->gsp.gpu_depth_key);
+                g->gsp.gpu_depth_address=depth_address;g->gsp.gpu_depth_width=width;
+                g->gsp.gpu_depth_height=height;g->gsp.gpu_depth_format=bound[4];
+            } else g->gsp.gpu_depth_valid=false;
+        }
     }
     /* No fallible operations remain after the atomic color/depth guest commit. */
     if(g->gsp.pica_scene)*g->gsp.pica_scene=*trial;

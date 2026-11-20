@@ -422,6 +422,566 @@ ctr_shader_result ctr_shader_execute(const ctr_shader_program *program,
         }
     }
 }
+enum {
+    FAST_ERR=0, FAST_NOP, FAST_END, FAST_CALL, FAST_CALLC, FAST_JMPC, FAST_JMPU,
+    FAST_IFU, FAST_IFC, FAST_LOOP, FAST_MASK_SKIP, FAST_CMP, FAST_MOVA, FAST_MOV,
+    FAST_ADD, FAST_MUL, FAST_MAX, FAST_MAD, FAST_DP3, FAST_DP4, FAST_DPH,
+    FAST_RCP, FAST_RSQ
+};
+enum {
+    FAST_UNARY=1u, FAST_NEG0=2u, FAST_NEG1=4u, FAST_NEG2=8u,
+    FAST_REL_SECOND=16u, FAST_POL=32u, FAST_DESC_ERR=64u
+};
+static float bits_to_float(uint32_t b) { float v;memcpy(&v,&b,sizeof(v));return v; }
+static uint32_t float_to_bits(float v) { uint32_t b;memcpy(&b,&v,sizeof(b));return b; }
+static bool fast_is_nan(float v) { return v!=v; }
+static bool fast_cond(uint8_t bits,const bool compared[2]) {
+    unsigned mode=bits&3u;
+    bool x=compared[0]==((bits>>3)&1u),y=compared[1]==((bits>>2)&1u);
+    return mode==0u?(x||y):mode==1u?(x&&y):mode==2u?x:y;
+}
+static ctr_shader_result fast_read_slow(const ctr_shader_fast *fast,float r[32][4],
+                                        const uint8_t defined[32],unsigned src,unsigned lane,
+                                        bool neg,float *out) {
+    float v;
+    if(src<32u) {
+        if(!(defined[src]&(1u<<lane)))return CTR_SHADER_UNDEFINED;
+        if(!(defined[src]&(1u<<(lane+4u))))return CTR_SHADER_NUMERIC;
+        v=r[src][lane];
+    } else if(src<32u+CTR_SHADER_UNIFORMS) {
+        unsigned idx=src-32u;
+        if(!(fast->uniform_defined[idx]&(1u<<lane)))return CTR_SHADER_UNDEFINED;
+        if(!(fast->uniform_numeric[idx]&(1u<<lane)))return CTR_SHADER_NUMERIC;
+        v=fast->uniforms[idx][lane];
+    } else {
+        v=1.0f;
+    }
+    if(neg && (v!=0.0f || (float_to_bits(v)&UINT32_C(0x80000000))))v=-v;
+    *out=v;
+    return CTR_SHADER_OK;
+}
+bool ctr_shader_prepare_fast(const ctr_shader_program *program,ctr_shader_fast *out) {
+    if(!program || !out || !span(program,sizeof(*program)) || !span(out,sizeof(*out)))return false;
+    if(overlap(out,sizeof(*out),program,sizeof(*program)))return false;
+    if(!program->round_f24 || program->entry>=CTR_SHADER_MAX_CODE)return false;
+    out->entry=program->entry;
+    out->boolean_uniforms=program->boolean_uniforms;
+    out->boolean_defined=program->boolean_defined;
+    out->integer_defined=program->integer_defined;
+    memcpy(out->integer_uniforms,program->integer_uniforms,sizeof(out->integer_uniforms));
+    memcpy(out->uniform_defined,program->uniform_defined,sizeof(out->uniform_defined));
+    for(unsigned i=0;i<CTR_SHADER_UNIFORMS;++i) {
+        uint8_t num=0;
+        for(unsigned lane=0;lane<4u;++lane) {
+            if(program->uniform_defined[i]&(1u<<lane)) {
+                uint32_t b=program->uniforms[i][lane];
+                if(round_input(&b)) { num|=(uint8_t)(1u<<lane);out->uniforms[i][lane]=bits_to_float(b); }
+                else out->uniforms[i][lane]=0.0f;
+            } else out->uniforms[i][lane]=0.0f;
+        }
+        out->uniform_numeric[i]=num;
+    }
+    for(unsigned pc=0;pc<CTR_SHADER_MAX_CODE;++pc) {
+        ctr_shader_fast_insn *insn=&out->insns[pc];
+        memset(insn,0,sizeof(*insn));
+        if(!program->code_defined[pc]) { insn->op=FAST_ERR;insn->err=CTR_SHADER_UNDEFINED;continue; }
+        uint32_t word=program->code[pc];unsigned op=word>>26;
+        if(op==0x21u || op==0x22u) {
+            if(word&UINT32_C(0x03ffffff)) { insn->op=FAST_ERR;insn->err=CTR_SHADER_UNSUPPORTED; }
+            else insn->op=(uint8_t)(op==0x22u?FAST_END:FAST_NOP);
+            continue;
+        }
+        if(op==0x24u || op==0x25u) {
+            unsigned target=(word>>10)&4095u,length=word&255u;
+            if(target>=CTR_SHADER_MAX_CODE || length>CTR_SHADER_MAX_CODE-target) {
+                insn->op=FAST_ERR;insn->err=CTR_SHADER_RANGE;continue;
+            }
+            insn->op=(uint8_t)(op==0x24u?FAST_CALL:FAST_CALLC);
+            insn->target=(uint16_t)target;insn->extra=(uint16_t)length;
+            unsigned mode=(word>>22)&3u,refs=((word>>24)&3u);
+            insn->reg_idx=(uint8_t)(mode|(refs<<2));
+            continue;
+        }
+        if(op==0x2cu || op==0x2du) {
+            unsigned target=(word>>10)&4095u;
+            if(target>=CTR_SHADER_MAX_CODE) { insn->op=FAST_ERR;insn->err=CTR_SHADER_RANGE;continue; }
+            insn->target=(uint16_t)target;
+            if(op==0x2du) {
+                insn->op=FAST_JMPU;insn->reg_idx=(uint8_t)((word>>22)&15u);
+                if(word&1u)insn->flags=FAST_POL;
+            } else {
+                insn->op=FAST_JMPC;
+                unsigned mode=(word>>22)&3u,refs=(word>>24)&3u;
+                insn->reg_idx=(uint8_t)(mode|(refs<<2));
+            }
+            continue;
+        }
+        if(op>=0x27u && op<=0x29u) {
+            unsigned target=(word>>10)&4095u;
+            if(target<pc+1u || target>=CTR_SHADER_MAX_CODE) { insn->op=FAST_ERR;insn->err=CTR_SHADER_RANGE;continue; }
+            insn->target=(uint16_t)target;
+            if(op==0x29u) {
+                unsigned uniform=(word>>22)&15u;
+                if(uniform>=4u) { insn->op=FAST_ERR;insn->err=CTR_SHADER_UNSUPPORTED; }
+                else { insn->op=FAST_LOOP;insn->reg_idx=(uint8_t)uniform; }
+            } else {
+                unsigned join=target+(word&255u);
+                if(join>CTR_SHADER_MAX_CODE) { insn->op=FAST_ERR;insn->err=CTR_SHADER_RANGE;continue; }
+                insn->extra=(uint16_t)join;
+                if(op==0x27u) { insn->op=FAST_IFU;insn->reg_idx=(uint8_t)((word>>22)&15u); }
+                else {
+                    insn->op=FAST_IFC;
+                    unsigned mode=(word>>22)&3u,refs=(word>>24)&3u;
+                    insn->reg_idx=(uint8_t)(mode|(refs<<2));
+                }
+            }
+            continue;
+        }
+        bool cmp=op==0x2eu || op==0x2fu,mad=op>=0x38u;
+        bool inverted=op==0x18u,homogeneous=op==0x03u || inverted;
+        bool dot_product=op==0x02u || op==0x01u || homogeneous;
+        bool reciprocal_op=op==0x0eu || op==0x0fu;
+        if(!cmp && !mad && !dot_product && op!=0x12u && op!=0x13u && op!=0x00u &&
+           op!=0x08u && op!=0x0cu && !reciprocal_op) {
+            insn->op=FAST_ERR;insn->err=CTR_SHADER_UNSUPPORTED;continue;
+        }
+        unsigned index=(word>>(mad?22u:19u))&3u;
+        unsigned descriptor=word&(mad?31u:127u),dest=(word>>(mad?24u:21u))&31u;
+        unsigned src0=(word>>(mad?17u:12u))&(mad?31u:127u),src1=(word>>(mad?10u:7u))&(mad?127u:31u);
+        if(inverted) { src0=(word>>14)&31u;src1=(word>>7)&127u; }
+        insn->rel_index=(uint8_t)index;
+        if(mad || inverted)insn->flags|=FAST_REL_SECOND;
+        if(!program->descriptor_defined[descriptor]) {
+            insn->op=FAST_ERR;insn->err=CTR_SHADER_UNDEFINED;insn->flags|=FAST_DESC_ERR;continue;
+        }
+        uint32_t pattern=program->descriptors[descriptor];
+        if(pattern&UINT32_C(0x80000000)) {
+            insn->op=FAST_ERR;insn->err=CTR_SHADER_UNSUPPORTED;insn->flags|=FAST_DESC_ERR;continue;
+        }
+        unsigned mask=pattern&15u;
+        bool unary=op==0x12u || op==0x13u || reciprocal_op;
+        if(op==0x12u)mask&=12u;
+        unsigned read_mask=mask;
+        if(cmp)read_mask=12u;
+        else if(mask && dot_product)read_mask=op==0x01u?14u:15u;
+        else if(mask && reciprocal_op)read_mask=8u;
+        if(!read_mask) { insn->op=FAST_MASK_SKIP;continue; }
+        insn->dest=(uint8_t)dest;
+        insn->src[0]=(uint8_t)src0;insn->src[1]=(uint8_t)src1;insn->src[2]=(uint8_t)((word>>5)&31u);
+        insn->mask=(uint8_t)mask;insn->read_mask=(uint8_t)read_mask;
+        insn->wmask=(uint8_t)(((mask&8u)>>3)|((mask&4u)>>1)|((mask&2u)<<1)|((mask&1u)<<3));
+        if(unary)insn->flags|=FAST_UNARY;
+        if(pattern&16u)insn->flags|=FAST_NEG0;
+        if(pattern&(1u<<13))insn->flags|=FAST_NEG1;
+        if(pattern&(1u<<22))insn->flags|=FAST_NEG2;
+        insn->cmp_op[0]=(uint8_t)((word>>24)&7u);
+        insn->cmp_op[1]=(uint8_t)((word>>21)&7u);
+        for(unsigned lane=0;lane<4u;++lane) {
+            uint8_t w0=(uint8_t)((pattern>>(11u-lane*2u))&3u);
+            uint8_t w1=(uint8_t)((pattern>>(20u-lane*2u))&3u);
+            uint8_t w2=(uint8_t)((pattern>>(29u-lane*2u))&3u);
+            insn->swiz[0][lane]=w0;insn->swiz[1][lane]=w1;insn->swiz[2][lane]=w2;
+            if(read_mask&(8u>>lane)) {
+                if(!(homogeneous && lane==3u))insn->src_mask[0]|=(uint8_t)(1u<<w0);
+                if(!unary)insn->src_mask[1]|=(uint8_t)(1u<<w1);
+                if(mad)insn->src_mask[2]|=(uint8_t)(1u<<w2);
+            }
+        }
+        unsigned rel_op=(mad || inverted)?1u:0u;
+        for(unsigned k=0;k<(mad?3u:unary?1u:2u);++k) {
+            if(index && k==rel_op && insn->src[k]>=32u)continue;
+            unsigned s=insn->src[k];
+            if(s>=32u+CTR_SHADER_UNIFORMS)insn->safe_srcs|=(uint8_t)(1u<<k);
+            else if(s>=32u) {
+                unsigned idx=s-32u;
+                uint8_t ok=out->uniform_defined[idx]&out->uniform_numeric[idx];
+                if((ok&insn->src_mask[k])==insn->src_mask[k])insn->safe_srcs|=(uint8_t)(1u<<k);
+            }
+        }
+        if(cmp)insn->op=FAST_CMP;
+        else if(op==0x12u)insn->op=FAST_MOVA;
+        else if(op==0x13u)insn->op=FAST_MOV;
+        else if(op==0x00u)insn->op=FAST_ADD;
+        else if(op==0x08u)insn->op=FAST_MUL;
+        else if(op==0x0cu)insn->op=FAST_MAX;
+        else if(mad)insn->op=FAST_MAD;
+        else if(op==0x01u)insn->op=FAST_DP3;
+        else if(op==0x02u)insn->op=FAST_DP4;
+        else if(homogeneous)insn->op=FAST_DPH;
+        else if(op==0x0eu)insn->op=FAST_RCP;
+        else insn->op=FAST_RSQ;
+    }
+    return true;
+}
+ctr_shader_result ctr_shader_execute_fast(const ctr_shader_fast *fast,
+                                          const ctr_vertex *input,
+                                          ctr_shader_output *output) {
+    if(!fast || !input || !output)return CTR_SHADER_ARGUMENT;
+    if(!span(fast,sizeof(*fast)) || !span(input,sizeof(*input)) || !span(output,sizeof(*output)))return CTR_SHADER_OVERFLOW;
+    if(overlap(output,sizeof(*output),fast,sizeof(*fast)) || overlap(output,sizeof(*output),input,sizeof(*input)))return CTR_SHADER_ALIAS;
+    if(fast->entry>=CTR_SHADER_MAX_CODE)return CTR_SHADER_RANGE;
+    float r[32][4];uint8_t defined[32];
+    for(unsigned i=0;i<16u;++i) {
+        if(input->enabled&(1u<<i)) {
+            uint8_t ok=0;
+            for(unsigned k=0;k<4u;++k) {
+                uint32_t b=float_to_bits(input->input[i][k]);
+                if(round_input(&b))ok|=(uint8_t)(1u<<k);
+                else if(b>UINT32_C(0x7f800000) || (b&UINT32_C(0x7fffffff))>UINT32_C(0x7f800000)) {
+                    /* Leave invalid lane bit clear in defined[i]? No: numeric error on read! */
+                }
+                r[i][k]=bits_to_float(b);
+            }
+            /* Check if any enabled input lane is non-finite NaN -> record per-lane numeric ok in high nibble! */
+            defined[i]=(uint8_t)(15u|(ok<<4));
+        } else defined[i]=0xf0u;
+        defined[16u+i]=0xf0u; /* Temps start undefined in low nibble, always numeric-ok in high nibble. */
+    }
+    static const float ones[4]={1.0f,1.0f,1.0f,1.0f};
+    int address[3]={0};unsigned address_written=0;
+    bool compare[2]={false,false},compared=false;
+    struct { unsigned alternate,join; } branches[8];unsigned branch_count=0;
+    struct { unsigned first,after,resume,branches; } calls[8];unsigned call_count=0;
+    unsigned loop_first=0,loop_after=0,loop_count=0,loop_stride=0,loop_owner=0;
+    ctr_shader_output result={0};
+    for(unsigned pc=fast->entry;;) {
+        if(branch_count | call_count | loop_count) {
+            for(;;) {
+                unsigned enclosing=call_count?calls[call_count-1u].branches:0u;
+                if(branch_count>enclosing && pc==branches[branch_count-1u].alternate)
+                    pc=branches[--branch_count].join;
+                if(loop_count && call_count==loop_owner && pc==loop_after) {
+                    address[2]+=(int)loop_stride;
+                    if(--loop_count)pc=loop_first;
+                }
+                if(!call_count)break;
+                if(pc!=calls[call_count-1u].after) {
+                    if(pc<calls[call_count-1u].first || pc>calls[call_count-1u].after)return CTR_SHADER_RANGE;
+                    break;
+                }
+                if(branch_count!=enclosing || (loop_count && call_count==loop_owner))return CTR_SHADER_RANGE;
+                pc=calls[--call_count].resume;
+            }
+        }
+        if(pc>=CTR_SHADER_MAX_CODE)return CTR_SHADER_NO_END;
+        const ctr_shader_fast_insn *insn=&fast->insns[pc++];
+        if(++result.instructions>CTR_SHADER_MAX_STEPS)return CTR_SHADER_LIMIT;
+        if(insn->rel_index && !(address_written&(1u<<(insn->rel_index-1u))))return CTR_SHADER_UNSUPPORTED;
+        unsigned op=insn->op;
+        if(op==FAST_END) { *output=result;return CTR_SHADER_OK; }
+        if(op==FAST_NOP || op==FAST_MASK_SKIP)continue;
+        if(op<=FAST_LOOP) {
+            switch(op) {
+            case FAST_ERR:return (ctr_shader_result)insn->err;
+            case FAST_CALLC:
+                if(!compared)return CTR_SHADER_UNDEFINED;
+                if(!fast_cond(insn->reg_idx,compare))continue;
+                /* fallthrough */
+            case FAST_CALL:
+                if(!insn->extra)continue;
+                if(call_count==8u)return CTR_SHADER_LIMIT;
+                calls[call_count].first=insn->target;calls[call_count].after=insn->target+insn->extra;
+                calls[call_count].resume=pc;calls[call_count++].branches=branch_count;
+                pc=insn->target;continue;
+            case FAST_JMPC:
+                if(!compared)return CTR_SHADER_UNDEFINED;
+                if(fast_cond(insn->reg_idx,compare))pc=insn->target;
+                continue;
+            case FAST_JMPU:
+                if(!fast->boolean_defined)return CTR_SHADER_UNDEFINED;
+                if(((fast->boolean_uniforms&(1u<<insn->reg_idx))!=0)!=((insn->flags&FAST_POL)!=0))pc=insn->target;
+                continue;
+            case FAST_IFU: {
+                if(!fast->boolean_defined)return CTR_SHADER_UNDEFINED;
+                bool taken=(fast->boolean_uniforms&(1u<<insn->reg_idx))!=0;
+                if(!taken)pc=insn->target;
+                else if(insn->extra!=insn->target) {
+                    if(branch_count==8u)return CTR_SHADER_LIMIT;
+                    branches[branch_count].alternate=insn->target;branches[branch_count++].join=insn->extra;
+                }
+                continue;
+            }
+            case FAST_IFC: {
+                if(!compared)return CTR_SHADER_UNDEFINED;
+                bool taken=fast_cond(insn->reg_idx,compare);
+                if(!taken)pc=insn->target;
+                else if(insn->extra!=insn->target) {
+                    if(branch_count==8u)return CTR_SHADER_LIMIT;
+                    branches[branch_count].alternate=insn->target;branches[branch_count++].join=insn->extra;
+                }
+                continue;
+            }
+            case FAST_LOOP: {
+                if(loop_count)return CTR_SHADER_UNSUPPORTED;
+                if(!(fast->integer_defined&(1u<<insn->reg_idx)))return CTR_SHADER_UNDEFINED;
+                uint32_t inputs=fast->integer_uniforms[insn->reg_idx];
+                loop_first=pc;loop_after=insn->target+1u;loop_count=(inputs&255u)+1u;loop_stride=(inputs>>16)&255u;
+                loop_owner=call_count;address[2]=(int)((inputs>>8)&255u);address_written|=4u;
+                continue;
+            }
+            default:break;
+            }
+        }
+        unsigned s0=insn->src[0],s1=insn->src[1],s2=insn->src[2];
+        bool all_safe=true;
+        if(insn->rel_index) {
+            int off=address[insn->rel_index-1u];
+            if(off<-128 || off>127)off=0;
+            if(insn->flags&FAST_REL_SECOND) { if(s1>=32u) { s1=32u+((s1-32u+(unsigned)off)&127u);all_safe=false; } }
+            else if(s0>=32u) { s0=32u+((s0-32u+(unsigned)off)&127u);all_safe=false; }
+        }
+        if(all_safe) {
+            uint8_t m0=insn->src_mask[0];
+            if(!(insn->safe_srcs&1u) && (s0>=32u || (defined[s0]&(m0|(m0<<4)))!=(m0|(m0<<4))))all_safe=false;
+            if(all_safe && !(insn->flags&FAST_UNARY)) {
+                uint8_t m1=insn->src_mask[1];
+                if(!(insn->safe_srcs&2u) && (s1>=32u || (defined[s1]&(m1|(m1<<4)))!=(m1|(m1<<4))))all_safe=false;
+            }
+            if(all_safe && op==FAST_MAD) {
+                uint8_t m2=insn->src_mask[2];
+                if(!(insn->safe_srcs&4u) && (s2>=32u || (defined[s2]&(m2|(m2<<4)))!=(m2|(m2<<4))))all_safe=false;
+            }
+        }
+        const float *p0=s0<32u?r[s0]:(s0<32u+CTR_SHADER_UNIFORMS?fast->uniforms[s0-32u]:ones);
+        const float *p1=s1<32u?r[s1]:(s1<32u+CTR_SHADER_UNIFORMS?fast->uniforms[s1-32u]:ones);
+        unsigned dest=insn->dest;
+        if(all_safe) {
+            float m0=(insn->flags&FAST_NEG0)?-1.0f:1.0f,m1=(insn->flags&FAST_NEG1)?-1.0f:1.0f;
+            float *dst=dest<16u?result.values[dest]:r[dest];
+            uint8_t mask=insn->mask;
+            switch(op) {
+            case FAST_MOV:
+                if(mask&8u)dst[0]=p0[insn->swiz[0][0]]*m0;
+                if(mask&4u)dst[1]=p0[insn->swiz[0][1]]*m0;
+                if(mask&2u)dst[2]=p0[insn->swiz[0][2]]*m0;
+                if(mask&1u)dst[3]=p0[insn->swiz[0][3]]*m0;
+                if(dest<16u)result.written[dest]|=insn->wmask; else defined[dest]|=insn->wmask;
+                continue;
+            case FAST_ADD: {
+                float v0=0,v1=0,v2=0,v3=0;
+                if(mask&8u) { v0=p0[insn->swiz[0][0]]*m0+p1[insn->swiz[1][0]]*m1;if(fast_is_nan(v0))return CTR_SHADER_NUMERIC; }
+                if(mask&4u) { v1=p0[insn->swiz[0][1]]*m0+p1[insn->swiz[1][1]]*m1;if(fast_is_nan(v1))return CTR_SHADER_NUMERIC; }
+                if(mask&2u) { v2=p0[insn->swiz[0][2]]*m0+p1[insn->swiz[1][2]]*m1;if(fast_is_nan(v2))return CTR_SHADER_NUMERIC; }
+                if(mask&1u) { v3=p0[insn->swiz[0][3]]*m0+p1[insn->swiz[1][3]]*m1;if(fast_is_nan(v3))return CTR_SHADER_NUMERIC; }
+                if(mask&8u)dst[0]=v0;
+                if(mask&4u)dst[1]=v1;
+                if(mask&2u)dst[2]=v2;
+                if(mask&1u)dst[3]=v3;
+                if(dest<16u)result.written[dest]|=insn->wmask; else defined[dest]|=insn->wmask;
+                continue;
+            }
+            case FAST_MUL: {
+                float v[4]={0};bool fallback=false;
+                for(unsigned l=0;l<4u;++l)if(mask&(8u>>l)) {
+                    float a=p0[insn->swiz[0][l]]*m0,b=p1[insn->swiz[1][l]]*m1;
+                    float res=a*b;
+                    if(fast_is_nan(res)) { if(a==0.0f || b==0.0f)res=0.0f; else { fallback=true;break; } }
+                    else if(res==0.0f)res=0.0f;
+                    v[l]=res;
+                }
+                if(!fallback) {
+                    if(mask&8u)dst[0]=v[0];
+                    if(mask&4u)dst[1]=v[1];
+                    if(mask&2u)dst[2]=v[2];
+                    if(mask&1u)dst[3]=v[3];
+                    if(dest<16u)result.written[dest]|=insn->wmask; else defined[dest]|=insn->wmask;
+                    continue;
+                }
+                return CTR_SHADER_NUMERIC;
+            }
+            case FAST_MAD: {
+                const float *p2=s2<32u?r[s2]:(s2<32u+CTR_SHADER_UNIFORMS?fast->uniforms[s2-32u]:ones);
+                float m2=(insn->flags&FAST_NEG2)?-1.0f:1.0f;
+                float v[4]={0};
+                for(unsigned l=0;l<4u;++l)if(mask&(8u>>l)) {
+                    float a=p0[insn->swiz[0][l]]*m0,b=p1[insn->swiz[1][l]]*m1,c=p2[insn->swiz[2][l]]*m2;
+                    float prod=a*b;
+                    if(fast_is_nan(prod)) { if(a==0.0f || b==0.0f)prod=0.0f; else return CTR_SHADER_NUMERIC; }
+                    else if(prod==0.0f)prod=0.0f;
+                    float res=prod+c;
+                    if(fast_is_nan(res))return CTR_SHADER_NUMERIC;
+                    v[l]=res;
+                }
+                if(mask&8u)dst[0]=v[0];
+                if(mask&4u)dst[1]=v[1];
+                if(mask&2u)dst[2]=v[2];
+                if(mask&1u)dst[3]=v[3];
+                if(dest<16u)result.written[dest]|=insn->wmask; else defined[dest]|=insn->wmask;
+                continue;
+            }
+            case FAST_DP3: {
+                float d=0.0f;
+                for(unsigned l=0;l<3u;++l) {
+                    float a=p0[insn->swiz[0][l]]*m0,b=p1[insn->swiz[1][l]]*m1,prod=a*b;
+                    if(fast_is_nan(prod)) { if(a==0.0f || b==0.0f)prod=0.0f; else return CTR_SHADER_NUMERIC; }
+                    else if(prod==0.0f)prod=0.0f;
+                    d+=prod;
+                }
+                if(fast_is_nan(d))return CTR_SHADER_NUMERIC;
+                if(mask&8u)dst[0]=d;
+                if(mask&4u)dst[1]=d;
+                if(mask&2u)dst[2]=d;
+                if(mask&1u)dst[3]=d;
+                if(dest<16u)result.written[dest]|=insn->wmask; else defined[dest]|=insn->wmask;
+                continue;
+            }
+            case FAST_DP4: {
+                float d=0.0f;
+                for(unsigned l=0;l<4u;++l) {
+                    float a=p0[insn->swiz[0][l]]*m0,b=p1[insn->swiz[1][l]]*m1,prod=a*b;
+                    if(fast_is_nan(prod)) { if(a==0.0f || b==0.0f)prod=0.0f; else return CTR_SHADER_NUMERIC; }
+                    else if(prod==0.0f)prod=0.0f;
+                    d+=prod;
+                }
+                if(fast_is_nan(d))return CTR_SHADER_NUMERIC;
+                if(mask&8u)dst[0]=d;
+                if(mask&4u)dst[1]=d;
+                if(mask&2u)dst[2]=d;
+                if(mask&1u)dst[3]=d;
+                if(dest<16u)result.written[dest]|=insn->wmask; else defined[dest]|=insn->wmask;
+                continue;
+            }
+            case FAST_DPH: {
+                float d=0.0f;
+                for(unsigned l=0;l<4u;++l) {
+                    float a=l==3u?1.0f:p0[insn->swiz[0][l]]*m0,b=p1[insn->swiz[1][l]]*m1,prod=a*b;
+                    if(fast_is_nan(prod)) { if(a==0.0f || b==0.0f)prod=0.0f; else return CTR_SHADER_NUMERIC; }
+                    else if(prod==0.0f)prod=0.0f;
+                    d+=prod;
+                }
+                if(fast_is_nan(d))return CTR_SHADER_NUMERIC;
+                if(mask&8u)dst[0]=d;
+                if(mask&4u)dst[1]=d;
+                if(mask&2u)dst[2]=d;
+                if(mask&1u)dst[3]=d;
+                if(dest<16u)result.written[dest]|=insn->wmask; else defined[dest]|=insn->wmask;
+                continue;
+            }
+            case FAST_MAX: {
+                float v0=0,v1=0,v2=0,v3=0;
+                if(mask&8u) { float a=p0[insn->swiz[0][0]]*m0,b=p1[insn->swiz[1][0]]*m1;v0=a>b?a:b; }
+                if(mask&4u) { float a=p0[insn->swiz[0][1]]*m0,b=p1[insn->swiz[1][1]]*m1;v1=a>b?a:b; }
+                if(mask&2u) { float a=p0[insn->swiz[0][2]]*m0,b=p1[insn->swiz[1][2]]*m1;v2=a>b?a:b; }
+                if(mask&1u) { float a=p0[insn->swiz[0][3]]*m0,b=p1[insn->swiz[1][3]]*m1;v3=a>b?a:b; }
+                if(mask&8u)dst[0]=v0;
+                if(mask&4u)dst[1]=v1;
+                if(mask&2u)dst[2]=v2;
+                if(mask&1u)dst[3]=v3;
+                if(dest<16u)result.written[dest]|=insn->wmask; else defined[dest]|=insn->wmask;
+                continue;
+            }
+            case FAST_CMP: {
+                for(unsigned l=0;l<2u;++l) {
+                    float a=p0[insn->swiz[0][l]]*m0,b=p1[insn->swiz[1][l]]*m1;
+                    compare[l]=comparison(insn->cmp_op[l],a,b);
+                }
+                compared=true;continue;
+            }
+            case FAST_MOVA: {
+                if(mask&8u) { float c=p0[insn->swiz[0][0]]*m0;address[0]=c>-129.0f && c<128.0f?(int)c:0;address_written|=1u; }
+                if(mask&4u) { float c=p0[insn->swiz[0][1]]*m0;address[1]=c>-129.0f && c<128.0f?(int)c:0;address_written|=2u; }
+                continue;
+            }
+            case FAST_RCP: {
+                float a=p0[insn->swiz[0][0]];
+                if(insn->flags&FAST_NEG0 && (a!=0.0f || (float_to_bits(a)&UINT32_C(0x80000000))))a=-a;
+                float d=1.0f/a;
+                if(mask&8u)dst[0]=d;
+                if(mask&4u)dst[1]=d;
+                if(mask&2u)dst[2]=d;
+                if(mask&1u)dst[3]=d;
+                if(dest<16u)result.written[dest]|=insn->wmask; else defined[dest]|=insn->wmask;
+                continue;
+            }
+            case FAST_RSQ: {
+                float a=p0[insn->swiz[0][0]];
+                if(insn->flags&FAST_NEG0 && (a!=0.0f || (float_to_bits(a)&UINT32_C(0x80000000))))a=-a;
+                uint32_t abits=float_to_bits(a);float d;
+                if(!(abits&UINT32_C(0x7fffffff)))d=bits_to_float(abits|UINT32_C(0x7f800000));
+                else if(abits==UINT32_C(0x7f800000))d=0.0f;
+                else if(abits&UINT32_C(0x80000000))return CTR_SHADER_NUMERIC;
+                else {
+                    float y=bits_to_float(UINT32_C(0x5f375a86)-(abits>>1)),half=0.5f*a;
+                    y=y*(1.5f-half*y*y);y=y*(1.5f-half*y*y);y=y*(1.5f-half*y*y);
+                    d=y;
+                }
+                if(mask&8u)dst[0]=d;
+                if(mask&4u)dst[1]=d;
+                if(mask&2u)dst[2]=d;
+                if(mask&1u)dst[3]=d;
+                if(dest<16u)result.written[dest]|=insn->wmask; else defined[dest]|=insn->wmask;
+                continue;
+            }
+            default:break;
+            }
+        }
+        float moved[4]={0.0f,0.0f,0.0f,0.0f},dot=0.0f;
+        unsigned unknown=0,read_mask=insn->read_mask,mask=insn->mask;
+        bool unary=(insn->flags&FAST_UNARY)!=0,cmp=op==FAST_CMP;
+        bool neg0=(insn->flags&FAST_NEG0)!=0,neg1=(insn->flags&FAST_NEG1)!=0,neg2=(insn->flags&FAST_NEG2)!=0;
+        for(unsigned lane=0;lane<4u;++lane)if(read_mask&(8u>>lane)) {
+            float a=0.0f,b=0.0f,c=0.0f;ctr_shader_result st=CTR_SHADER_OK;
+            if(op==FAST_DPH && lane==3u)a=1.0f;
+            else st=fast_read_slow(fast,r,defined,s0,insn->swiz[0][lane],neg0,&a);
+            if(st==CTR_SHADER_OK && !unary)
+                st=fast_read_slow(fast,r,defined,s1,insn->swiz[1][lane],neg1,&b);
+            if(st==CTR_SHADER_OK && op==FAST_MAD)
+                st=fast_read_slow(fast,r,defined,s2,insn->swiz[2][lane],neg2,&c);
+            if(st==CTR_SHADER_UNDEFINED && !cmp && op!=FAST_MOVA) { unknown|=8u>>lane;continue; }
+            if(st!=CTR_SHADER_OK)return st;
+            switch(op) {
+            case FAST_MOVA:case FAST_MOV:moved[lane]=a;break;
+            case FAST_CMP:compare[lane]=comparison(insn->cmp_op[lane],a,b);break;
+            case FAST_ADD: { float res=a+b;if(fast_is_nan(res))return CTR_SHADER_NUMERIC;moved[lane]=res;break; }
+            case FAST_MUL: { float res=(a==0.0f || b==0.0f)?0.0f:a*b;if(fast_is_nan(res))return CTR_SHADER_NUMERIC;moved[lane]=res;break; }
+            case FAST_MAX:moved[lane]=a>b?a:b;break;
+            case FAST_MAD: {
+                float p=(a==0.0f || b==0.0f)?0.0f:a*b;
+                float res=p+c;if(fast_is_nan(res))return CTR_SHADER_NUMERIC;
+                moved[lane]=res;break;
+            }
+            case FAST_DP3:case FAST_DP4:case FAST_DPH: {
+                float p=(a==0.0f || b==0.0f)?0.0f:a*b;
+                float res=p+dot;if(fast_is_nan(res))return CTR_SHADER_NUMERIC;
+                dot=res;break;
+            }
+            case FAST_RCP:dot=1.0f/a;break;
+            case FAST_RSQ: {
+                uint32_t abits=float_to_bits(a);
+                if(!(abits&UINT32_C(0x7fffffff)))dot=bits_to_float(abits|UINT32_C(0x7f800000));
+                else if(abits==UINT32_C(0x7f800000))dot=0.0f;
+                else if(abits&UINT32_C(0x80000000))return CTR_SHADER_NUMERIC;
+                else {
+                    float y=bits_to_float(UINT32_C(0x5f375a86)-(abits>>1)),half=0.5f*a;
+                    y=y*(1.5f-half*y*y);y=y*(1.5f-half*y*y);y=y*(1.5f-half*y*y);
+                    dot=y;
+                }
+                break;
+            }
+            default:break;
+            }
+        }
+        if(cmp) { compared=true;continue; }
+        if(op==FAST_MOVA) {
+            for(unsigned lane=0;lane<2u;++lane)if(mask&(8u>>lane)) {
+                float comp=moved[lane];
+                address[lane]=comp>-129.0f && comp<128.0f?(int)comp:0;
+                address_written|=1u<<lane;
+            }
+            continue;
+        }
+        bool scalar=op==FAST_DP3 || op==FAST_DP4 || op==FAST_DPH || op==FAST_RCP || op==FAST_RSQ;
+        if(scalar && unknown)unknown=mask;
+        for(unsigned lane=0;lane<4u;++lane)if(mask&(8u>>lane)) {
+            uint8_t *valid=dest<16u?&result.written[dest]:&defined[dest];
+            if(unknown&(8u>>lane)) { *valid&=(uint8_t)~(1u<<lane);continue; }
+            float w=scalar?dot:moved[lane];
+            if(dest<16u)result.values[dest][lane]=w;
+            else r[dest][lane]=w;
+            *valid|=(uint8_t)(1u<<lane);
+        }
+    }
+}
 const char *ctr_shader_result_name(ctr_shader_result result) {
     static const char *const names[]={"ok","argument","overflow","alias","range",
         "unsupported-instruction-or-state","undefined-source-or-code","unsupported-numeric-value","missing-end","step-limit"};

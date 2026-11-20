@@ -26,6 +26,10 @@ typedef struct {
     uint32_t base_value;
     jmp_buf escape;
     ctr_cpu_result fault;
+    uint32_t rx_base,rx_end;
+    const uint8_t *rx_storage;
+    uint64_t rx_map_version;
+    struct { uint32_t addr; Code code; } lookup_cache[4096];
 } Engine;
 _Static_assert(sizeof(float)==4 && sizeof(double)==8,"IEEE scalar sizes required");
 _Static_assert(offsetof(Context,budget)==72 && offsetof(Context,read_pages)==96,"ABI 4 fixed-width prefix");
@@ -71,11 +75,28 @@ int ctr_recomp_instruction(Context *c,uint32_t address,uint32_t opcode) {
     }
     c->r[15]=address;
     if (!c->budget) { c->exit=EXIT_BUDGET;return 0; }
-    if (e->cpu->memory->code_generation!=e->code_generation)
+    const ctr_memory *mem=e->cpu->memory;
+    if (mem->code_generation!=e->code_generation)
         ctr_recomp_abort(c,CTR_CPU_CODE_INVALIDATED,address);
     uint32_t actual;
-    ctr_mem_result r=ctr_memory_read(e->cpu->memory,address,c->thumb?2:4,CTR_MEM_EXEC,&actual);
-    if (r!=CTR_MEM_OK) { e->cpu->memory_fault=r;ctr_recomp_abort(c,CTR_CPU_MEMORY_FAULT,address); }
+    unsigned sz=c->thumb?2u:4u;
+    if (e->rx_storage && e->rx_map_version==mem->resource_mapping_version &&
+        address>=e->rx_base && (uint64_t)address+sz<=e->rx_end && !(address&(sz-1u))) {
+        const uint8_t *p=e->rx_storage+(address-e->rx_base);
+        actual=sz==2u?((uint32_t)p[0]|((uint32_t)p[1]<<8)):
+            ((uint32_t)p[0]|((uint32_t)p[1]<<8)|((uint32_t)p[2]<<16)|((uint32_t)p[3]<<24));
+    } else {
+        ctr_mem_result r=ctr_memory_read(mem,address,sz,CTR_MEM_EXEC,&actual);
+        if (r!=CTR_MEM_OK) { e->cpu->memory_fault=r;ctr_recomp_abort(c,CTR_CPU_MEMORY_FAULT,address); }
+        for(size_t i=0;i<mem->count;++i) {
+            const ctr_mapping *m=&mem->maps[i];
+            if((m->permissions&CTR_MEM_EXEC) && address>=m->base && (uint64_t)address+sz<=(uint64_t)m->base+m->size) {
+                e->rx_base=m->base;e->rx_end=m->base+m->size;
+                e->rx_storage=m->storage;e->rx_map_version=mem->resource_mapping_version;
+                break;
+            }
+        }
+    }
     if (actual!=opcode) ctr_recomp_abort(c,CTR_CPU_CODE_INVALIDATED,address);
     --c->budget;++e->cpu->instructions;
     uint32_t flags=((uint32_t)c->n<<31)|((uint32_t)c->z<<30)|
@@ -183,9 +204,17 @@ static void write8(Context *c,uint32_t a,uint8_t n) { write_value(c,a,1,n); }
 static void write16(Context *c,uint32_t a,uint16_t n) { write_value(c,a,2,n); }
 static void write32(Context *c,uint32_t a,uint32_t n) { write_value(c,a,4,n); }
 static Code lookup(Context *c,uint32_t a) {
-    (void)c;uint32_t lo=0,hi=recomp_entry_count;
-    while(lo<hi) { uint32_t m=lo+(hi-lo)/2;if(recomp_entries[m].address<a)lo=m+1;else hi=m; }
-    return lo<recomp_entry_count && recomp_entries[lo].address==a?recomp_entries[lo].code:NULL;
+    Engine *e=c->user;
+    if(a) {
+        uint32_t slot=(a>>1)&4095u;
+        if(e->lookup_cache[slot].addr==a)return e->lookup_cache[slot].code;
+        uint32_t lo=0,hi=recomp_entry_count;
+        while(lo<hi) { uint32_t m=lo+(hi-lo)/2;if(recomp_entries[m].address<a)lo=m+1;else hi=m; }
+        Code found=lo<recomp_entry_count && recomp_entries[lo].address==a?recomp_entries[lo].code:NULL;
+        e->lookup_cache[slot].addr=a;e->lookup_cache[slot].code=found;
+        return found;
+    }
+    return NULL;
 }
 static void interpret(Context *c,uint32_t a,uint32_t opcode) {
     Engine *e=c->user;

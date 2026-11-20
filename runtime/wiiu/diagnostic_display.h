@@ -2,11 +2,13 @@
 #define CTR_DIAGNOSTIC_DISPLAY_H
 #include <stdbool.h>
 #include <stdint.h>
+typedef struct GX2ContextState GX2ContextState;
 /* Shared checked display, originally accepted in Install Capture.
  * The caller owns ProcUI and must only draw while in the foreground. */
 void ctr_diagnostic_display_labels(const char *title,const char *footer);
 bool ctr_diagnostic_display_row(unsigned row,const char *text);
 bool ctr_diagnostic_display_init(void);
+GX2ContextState *ctr_diagnostic_display_context(void);
 void ctr_diagnostic_display_line(const char *text);
 bool ctr_diagnostic_display_draw(void);
 bool ctr_diagnostic_display_guest(const uint32_t *top,const uint32_t *bottom);

@@ -2736,6 +2736,75 @@ static void cached_material_scenes(void) {
     CHECK(ctr_texture_cache_destroy(cache));
 }
 
+typedef struct {
+    unsigned begins,draws,ends,aborts;
+    bool fail_draw;
+} direct_test_ctx;
+static bool direct_test_begin(void *ctx,const ctr_scene_surface *s) {
+    (void)s;++((direct_test_ctx *)ctx)->begins;return true;
+}
+static bool direct_test_draw(void *ctx,const ctr_scene_state *st,const ctr_vertex *v,unsigned count,
+                             const ctr_scene_texture *t) {
+    (void)ctx;(void)st;(void)v;(void)count;(void)t;return false;
+}
+static bool direct_test_end(void *ctx,const ctr_scene_surface *s) {
+    (void)s;++((direct_test_ctx *)ctx)->ends;return true;
+}
+static void direct_test_abort(void *ctx) { ++((direct_test_ctx *)ctx)->aborts; }
+static bool direct_test_draw_transformed(void *ctx,const ctr_scene_state *st,
+                                         const ctr_scene_transformed_vertex *v,unsigned count,
+                                         const ctr_scene_sampler t[3],unsigned mips,const ctr_scene_light *l) {
+    (void)st;(void)v;(void)count;(void)t;(void)mips;(void)l;
+    direct_test_ctx *c=ctx;
+    if(c->fail_draw)return false;
+    ++c->draws;return true;
+}
+static void direct_backend_and_fast_shader(void) {
+    ctr_scene_fixture f;ctr_scene_fixture_make(&f,false);
+    ctr_scene_state state;target_state(&state);
+
+    enum { SIZE=64u*260u+12u };
+    uint8_t pixels[SIZE],reference[SIZE];ctr_scene_fixture_background(reference,sizeof(reference));
+    memcpy(pixels,reference,sizeof(pixels));
+    ctr_scene_resources resources={UINT32_C(0x18000000),f.resources,f.resource_bytes,NULL,0};
+    ctr_scene_surface ref_surf={reference,sizeof(reference),64,64,260};
+    ctr_scene_surface surf={pixels,sizeof(pixels),64,64,260};
+    ctr_scene_report report={0};
+    ctr_scene_state expected=state;
+    CHECK(ctr_scene_execute_target(&expected,f.commands,f.command_bytes,&resources,&ref_surf,UINT32_C(0x18010000),&report)==CTR_SCENE_OK);
+
+    direct_test_ctx ctx={0};
+    ctr_scene_backend backend={&ctx,direct_test_begin,direct_test_draw,direct_test_end,direct_test_abort,
+                               NULL,NULL,NULL,NULL,CTR_SCENE_BACKEND_DIRECT,direct_test_draw_transformed};
+    ctr_scene_state s1=state;s1.shader.round_f24=true;
+    CHECK(ctr_scene_execute_targets_format_cached(&s1,f.commands,f.command_bytes,&resources,&surf,UINT32_C(0x18010000),0u,NULL,&backend,NULL,&report)==CTR_SCENE_OK);
+    CHECK(!report.backend_fallback && ctx.begins==1u && ctx.draws==2u && ctx.ends==1u && !ctx.aborts);
+
+    ctr_shader_fast fast;CHECK(ctr_shader_prepare_fast(&s1.shader,&fast));
+    ctr_vertex v={0};v.enabled=3u;
+    v.input[0][0]=0.25f;v.input[0][1]=-0.5f;v.input[0][2]=0.75f;v.input[0][3]=1.0f;
+    v.input[1][0]=1.0f;v.input[1][1]=0.5f;v.input[1][2]=0.25f;v.input[1][3]=1.0f;
+    ctr_shader_output a={0},b={0};
+    CHECK(ctr_shader_execute(&s1.shader,&v,&a)==CTR_SHADER_OK);
+    CHECK(ctr_shader_execute_fast(&fast,&v,&b)==CTR_SHADER_OK);
+    CHECK(a.instructions==b.instructions && !memcmp(a.written,b.written,sizeof(a.written)));
+    for(unsigned i=0;i<16u;++i)if(a.written[i])
+        for(unsigned k=0;k<4u;++k)if(a.written[i]&(1u<<k))
+            CHECK(a.values[i][k]==b.values[i][k]);
+
+    /* Direct draw failure falls back cleanly to software and matches reference. */
+    ctx=(direct_test_ctx){.fail_draw=true};
+    ctr_scene_state s2=state;s2.shader.round_f24=true;ctr_scene_fixture_background(pixels,sizeof(pixels));
+    CHECK(ctr_scene_execute_targets_format_cached(&s2,f.commands,f.command_bytes,&resources,&surf,UINT32_C(0x18010000),0u,NULL,&backend,NULL,&report)==CTR_SCENE_OK);
+    CHECK(report.backend_fallback && ctx.aborts==1u && !memcmp(pixels,reference,sizeof(pixels)));
+
+    /* Non-RGBA8 target format automatically falls back without calling direct begin. */
+    ctx=(direct_test_ctx){0};
+    ctr_scene_state s3=state;s3.shader.round_f24=true;s3.registers[0x117u]=UINT32_C(2)<<16;ctr_scene_fixture_background(pixels,sizeof(pixels));
+    CHECK(ctr_scene_execute_targets_format_cached(&s3,f.commands,f.command_bytes,&resources,&surf,UINT32_C(0x18010000),CTR_SCENE_COLOR_RGB5A1,NULL,&backend,NULL,&report)==CTR_SCENE_OK);
+    CHECK(report.backend_fallback && !ctx.begins && !ctx.draws);
+}
+
 int main(void) {
     floats24();shader_patterns();shader_relative_dot();shader_control_flow();shader_arithmetic();
     arithmetic_boundaries();shader_errors();shader_capacity();
@@ -2745,5 +2814,6 @@ int main(void) {
     stencil_contract();stencil_images();geometry_after_depth_target();stencil_depth_comparisons();stencil_order_and_retention();stencil_quantization();stencil_rollback();stencil_backend_parity();stencil_capacity();
     buffer_images();buffer_retention();buffer_rollback();buffer_backend_parity();
     multiunit_images();multiunit_rollback_and_backend();cached_material_scenes();
+    direct_backend_and_fast_shader();
     printf("original shader/scene tests: %u assertions passed\n",assertions);return 0;
 }

@@ -5,6 +5,13 @@ do not establish commercial-game compatibility or installable WUP acceptance.
 
 ## 0.27.0 — unreleased
 
+- Add direct hardware GX2 scene execution (`CTR_SCENE_BACKEND_DIRECT`,
+  `ctr_wiiu_gx2_scene_backend_direct`), vectorized `ctr_shader_execute_fast`
+  (no `-lm`), expanded 256-slot texture cache and 128-slot resource cache,
+  GPU depth retention/fallback, `WHBGfx` textured-quad Cemu presenter, and
+  AOT RX mapping + block-lookup caches (measured up to 39.58 FPS on the
+  Super Mario 3D Land title screen in Cemu 2.6, vs ~2.17 FPS baseline;
+  physical Wii U hardware acceptance remains separate).
 - Expand CPU/AOT translation and Mario test builds with 16 process-local threads
   (two TLS pages), direct truncating VFP conversions, compact aligned jump-table
   dispatch, `SMULxy`/media and `conversion` upstream probe coverage, WUT CRT
