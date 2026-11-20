@@ -21,6 +21,7 @@ WUPS_PLUGIN_DESCRIPTION("Paired local Wii U testing commands");
 WUPS_PLUGIN_VERSION("0.1.0");
 WUPS_PLUGIN_AUTHOR("CTR2WUP contributors");
 WUPS_PLUGIN_LICENSE("MIT");
+WUPS_USE_WUT_DEVOPTAB();
 
 static OSThread worker __attribute__((aligned(64)));
 static uint8_t stack[0x20000] __attribute__((aligned(64)));

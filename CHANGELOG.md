@@ -5,6 +5,10 @@ do not establish commercial-game compatibility or installable WUP acceptance.
 
 ## 0.27.0 — unreleased
 
+- Fix the Wii U MCP control plugin to enable `WUPS_USE_WUT_DEVOPTAB`, pass the
+  `/vol/app_sd` path to `MCP_InstallTitleAsync` while verifying staged files via
+  `fs:/vol/external01`, skip redundant FTP readback during console-hash-verified
+  WUP staging, and bump the Wii U MCP starter kit to `0.1.0-alpha.5`.
 - Add initial ARMv6K/Thumb integer and scalar VFPv2 interpreter and original AOT
   translation (#183).
 - Connect continuous guest DSP-to-AX audio streaming, variable-rate PCM, and

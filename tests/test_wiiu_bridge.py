@@ -1,8 +1,9 @@
 """Original loopback fixtures: no console, credentials or commercial data."""
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from dataclasses import replace
+import hashlib
 import io
 import json
 from pathlib import Path
@@ -109,6 +110,51 @@ class BridgeUnitTests(unittest.TestCase):
         finally:
             receiver.close()
 
+    def test_control_upload_without_readback_skips_retr_and_rejects_size_mismatch(self):
+        from unittest.mock import MagicMock
+        from host.wiiu_control import ConsoleControl
+
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            (project / "runtime/wiiu").mkdir(parents=True)
+            (project / "runtime/wiiu/Makefile").write_text("# original fixture\n")
+            bridge = WiiUBridge(BridgeConfig("127.0.0.1", project))
+            control = ConsoleControl(bridge, project / "private/control.key")
+            fake_ftp = MagicMock()
+            ftp_cm = MagicMock()
+            ftp_cm.__enter__.return_value = fake_ftp
+            ftp_cm.__exit__.return_value = False
+
+            with (
+                patch.object(bridge, "_ftp", return_value=ftp_cm),
+                patch.object(bridge, "_entry", side_effect=[None, None, {"type": "file", "size": 5}, None]),
+            ):
+                with self.assertRaisesRegex(ValueError, "Staged control file size differs"):
+                    control._upload(
+                        "install/ctr2wup-mismatch/00000000.app",
+                        io.BytesIO(b"short"),
+                        16,
+                        hashlib.sha256(b"short").digest(),
+                        verify_readback=False,
+                    )
+            fake_ftp.retrbinary.assert_not_called()
+            fake_ftp.rename.assert_not_called()
+
+            fake_ftp.reset_mock()
+            with (
+                patch.object(bridge, "_ftp", return_value=ftp_cm),
+                patch.object(bridge, "_entry", side_effect=[None, None, {"type": "file", "size": 7}, None]),
+            ):
+                control._upload(
+                    "install/ctr2wup-ok/00000000.app",
+                    io.BytesIO(b"payload"),
+                    7,
+                    hashlib.sha256(b"payload").digest(),
+                    verify_readback=False,
+                )
+            fake_ftp.retrbinary.assert_not_called()
+            fake_ftp.rename.assert_called_once()
+
 
 @unittest.skipUnless(FTPServer, "Install .[mcp-test] for real FTP/MCP loopback integration")
 class BridgeIntegrationTests(unittest.TestCase):
@@ -214,6 +260,49 @@ class BridgeIntegrationTests(unittest.TestCase):
             self.bridge.upload("corruption.bin", "ctr2wup/corrupt/fixture.bin")
         self.assertFalse((self.sd / "ctr2wup/corrupt/fixture.bin").exists())
         self.assertEqual(list((self.sd / "ctr2wup/corrupt").iterdir()), [])
+
+    def test_control_upload_size_mismatch_without_readback_is_not_published(self):
+        from host.wiiu_control import ConsoleControl
+
+        control = ConsoleControl(self.bridge, self.project / "private/control.key")
+        short_payload = b"short"
+        with self.assertRaisesRegex(ValueError, "Staged control file size differs"):
+            control._upload(
+                "install/ctr2wup-mismatch/00000000.app",
+                io.BytesIO(short_payload),
+                16,
+                hashlib.sha256(short_payload).digest(),
+                verify_readback=False,
+            )
+        self.assertFalse((self.sd / "install/ctr2wup-mismatch/00000000.app").exists())
+
+        payload = b"wup-content-payload"
+        retr_calls = []
+        real_ftp = self.bridge._ftp
+
+        @contextmanager
+        def tracked_ftp():
+            with real_ftp() as ftp:
+                original_retr = ftp.retrbinary
+
+                def wrapped_retr(*args, **kwargs):
+                    retr_calls.append(args[0] if args else "")
+                    return original_retr(*args, **kwargs)
+
+                ftp.retrbinary = wrapped_retr
+                yield ftp
+
+        with patch.object(self.bridge, "_ftp", side_effect=tracked_ftp):
+            control._upload(
+                "install/ctr2wup-skip-readback/00000000.app",
+                io.BytesIO(payload),
+                len(payload),
+                hashlib.sha256(payload).digest(),
+                verify_readback=False,
+            )
+        self.assertEqual(retr_calls, [])
+        self.assertEqual((self.sd / "install/ctr2wup-skip-readback/00000000.app").read_bytes(), payload)
+        self.assertEqual(list((self.sd / "install/ctr2wup-skip-readback").glob("*.part")), [])
 
     def test_launch_uses_argument_vector_and_no_automatic_retry(self):
         self.bridge = WiiUBridge(BridgeConfig("127.0.0.1", self.project, wiiload="wiiload"))

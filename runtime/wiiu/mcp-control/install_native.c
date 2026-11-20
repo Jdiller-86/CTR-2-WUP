@@ -116,8 +116,10 @@ static bool installed(const CtrControlRequest *r) {
 
 void ctr_control_install(const CtrControlRequest *r) {
     Install i={.request=r,.mcp=-1,.error=0};
-    snprintf(i.path,sizeof(i.path),"/vol/external01/install/ctr2wup-%s",r->job);
-    char path[sizeof(i.path)+3];snprintf(path,sizeof(path),"fs:%s",i.path);
+    /* The installer and the application's SD filesystem use different paths. */
+    snprintf(i.path,sizeof(i.path),"/vol/app_sd/install/ctr2wup-%s",r->job);
+    char path[128];
+    snprintf(path,sizeof(path),"fs:/vol/external01/install/ctr2wup-%s",r->job);
     if(!ctr_install_capture_verify(path,r->files,r->file_count,NULL)) {
         ctr_control_receipt(r,"package_mismatch",-errno);return;
     }

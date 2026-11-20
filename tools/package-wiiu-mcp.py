@@ -14,7 +14,7 @@ import urllib.request
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "0.1.0-alpha.4"
+VERSION = "0.1.0-alpha.5"
 REQUIRED_CHECKS = {"host-tests", "release-tests", "native-build", "control-build", "docs-build", "wheel-smoke"}
 CONTROL_BINARY = "ctr2wup-control.wps"
 CONTROL_DESTINATION = "sd-card/wiiu/environments/aroma/plugins/" + CONTROL_BINARY
