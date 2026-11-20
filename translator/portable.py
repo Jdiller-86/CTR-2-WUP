@@ -10,12 +10,33 @@ _LOCAL = re.compile(r"    (?:uint32_t|uint8_t) (reg\d+_|flag_[nzcv]_|vfp\d+_|fps
 _TOKEN = re.compile(r"\b(reg(\d+)_|flag_([nzcv])_|vfp(\d+)_|fpscr_|budget_)\b")
 _COMMENT = re.compile(r"    /\* ([0-9A-F]{8}) ([0-9A-F]{4}|[0-9A-F]{8}) \*/")
 _MACRO = re.compile(r"#(?:undef|define) (SYNC_OUT|SYNC_IN|BUDGET_LEFT|READ_PAGES|WRITE_PAGES|FPSCR)\b.*")
+_DISPATCH = re.compile(r"    if \((!?ctx->thumb)\) switch \((target(?: - module_base)?)\) \{")
+_CASE = re.compile(r"    case 0x([0-9A-F]{8})u: goto L_\1;")
 
 
 def adapt_source(source):
     """Keep translated operations; replace synchronization and budget machinery."""
     result, instructions = [], 0
+    shift = 0
     for line in source.splitlines():
+        if shift:
+            if line == "    }":
+                shift = 0
+            else:
+                case = _CASE.fullmatch(line)
+                if not case or int(case[1], 16) & ((1 << shift) - 1):
+                    raise ValueError("Unexpected or unaligned pinned lifter dispatch label")
+                result.append(f"    case 0x{int(case[1], 16) >> shift:08X}u: goto L_{case[1]};")
+                continue
+        dispatch = _DISPATCH.fullmatch(line)
+        if dispatch:
+            mode, offset = dispatch.groups()
+            shift = 1 if mode == "ctx->thumb" else 2
+            alignment_mask = (1 << shift) - 1
+            # The full address lookup has no entries between guest instructions.
+            # Index by aligned instructions to avoid redundant PowerPC jump table relocations.
+            result.append(f"    if ({mode} && !(({offset}) & {alignment_mask}u)) switch (({offset}) >> {shift}) {{")
+            continue
         if _MACRO.fullmatch(line) or _LOCAL.fullmatch(line):
             continue
         if line == "    int32_t budget_ = ctx->budget;":
@@ -47,6 +68,10 @@ def adapt_source(source):
             return "(*ctx->fpscr)" if m[0] == "fpscr_" else "ctx->budget"
 
         line = _TOKEN.sub(token, line)
+        # Thumb NEG/MVN share the emitter's binary-ALU declaration. Preserve
+        # its reads while marking the unused destination snapshot explicitly.
+        line = re.sub(r'(\{ uint32_t a = [^;]+;)( r = (?:0 - b|~b);)',
+                      r'\1 (void)a;\2', line)
         # Clang diagnoses the emitter's redundant equality parentheses under
         # -Wall/-Werror; keep the same comparison and one conditional pair.
         line = re.sub(r'^(\s*if )\(\((ctx->[nzcv] == ctx->[nzcv])\)\)( \{)$',r'\1(\2)\3',line)
@@ -57,6 +82,6 @@ def adapt_source(source):
             line = line[:at+1]+" (void)acc;"+line[at+1:]
         result.append(line)
     adapted = "\n".join(result) + "\n"
-    if not instructions or re.search(r"\b(?:reg\d+_|vfp\d+_|read_pages_|write_pages_|resume|out_of_budget_\d+)\b", adapted):
+    if shift or not instructions or re.search(r"\b(?:reg\d+_|vfp\d+_|read_pages_|write_pages_|resume|out_of_budget_\d+)\b", adapted):
         raise ValueError("Unexpected pinned lifter grammar; refusing unchecked output")
     return adapted, instructions

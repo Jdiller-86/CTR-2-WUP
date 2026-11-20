@@ -21,10 +21,10 @@ fault before display state changes. These are scoped HLE policies, not retail
 error-code or timing conformance.
 
 Top is 400×240 and bottom 320×240. Active index and display-select must equal 0/1;
-the unknown word is 0 and secondary address is 0 or primary. Formats 0..4, top 2D
-bit 6 and local-memory bit 8 are supported. Top requires bit 6; bottom clears it.
-Stereo, wide 800, VRAM bit 9 and other modes fail. Column stride contains 240 pixels
-and is at most 4096 bytes. The rotated reader uses
+the unknown word is 0. Formats 0–4 and local-memory bit 8 are supported. Top
+accepts 2D bit 6 or stereo bit 5. A stereo descriptor validates both eye buffers
+and presents the left eye on the flat display. Bottom uses a single buffer.
+Column stride contains 240 pixels and is at most 4096 bytes. The rotated reader uses
 `base + x*stride + (239-y)*bytes_per_pixel`, checking the complete source extent
 on every presentation, including adjacent mappings and permission changes.
 
@@ -68,19 +68,27 @@ Stop/should-stop state is retained.
 
 | Command | Implemented boundary |
 |---|---|
-| DMA (0) | Staged byte copy; nonempty, at most 4 MiB |
+| DMA (0) | Staged byte copy; optional source flush; nonempty, at most 4 MiB |
 | PICA list (1) | Finalized no-draw configuration plus the bounded [guest draw adapter](guest-pica-draws.md) |
 | Fill (2) | LE16/24/32-bit pattern, either/both banks, trigger, 8-byte endpoints and whole patterns; at most 4 MiB/bank |
-| Display transfer (3) | Five formats; linear/tiled/same layout and vertical flip; equal 1..1024 dimensions; tiled multiples of 8 |
-| Texture copy (4) | Flags 8; whole 16-byte units; independent line widths/gaps; preserve gaps |
+| Display transfer (3) | Five formats, linear or tiled layout, equal-size vertical flip and flag-2 crop. Dimensions are 1–1024 with tiled multiples of eight. |
+| Texture copy (4) | Flags `0x8` or `0xc`; whole 16-byte units; independent line widths and preserved gaps |
 | Cache regions (5) | Checked coherent CPU-backed ranges/barrier |
 
-DMA accepts the virtual addresses on its wire interface; this is not general
-physical translation. Commands preflight spans, permissions, alignment, arithmetic
+The guest PICA adapter follows tail jumps through two command-buffer slots.
+Each continuation resolves to a checked immutable span of guest linear memory
+or VRAM. The complete chain is bounded to 128 spans, 4 MiB and 262,144 writes.
+Each source span retains the 65,536-write limit.
+Target aliasing and repeated addresses reject the submission before any scene
+state or pixels commit.
+
+DMA accepts virtual addresses on its wire interface. The title's declared
+read-only VRAM window has checked GPU writes to the same backing. Commands
+preflight spans, permissions, alignment, arithmetic
 and allocations. Staging permits source/destination overlap. Output cannot alias
 relay backing through any guest mapping. Complete-range memory APIs cover adjacent
 mappings and invalidate exclusive/code generations; host buffers cannot alias
-backing. Transfers do not scale/crop or implement asynchronous GPU/DSP caches.
+backing. Transfers run synchronously at their source resolution.
 
 PSC0/PSC1/PPF/DMA completions use the IRQ ring. Two-bank fill emits one PSC0;
 full rings record drops and do not signal for IRQs that were not enqueued.

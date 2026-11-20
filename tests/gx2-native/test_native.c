@@ -20,6 +20,7 @@ static const GX2DepthBuffer *bound_depth;
 static const ctr_scene_depth_surface *expected_depth;
 static void *depth_target_image,*depth_linear_image;
 static unsigned depth_inits,depth_hiz_sets,depth_binds,depth_copies,depth_invalidates;
+static unsigned depth_clears;
 static unsigned depth_control_sets,captured_depth_function;
 static bool captured_depth_test,captured_depth_write;
 static bool captured_stencil_test,captured_stencil_backface;
@@ -29,6 +30,7 @@ static float depth_scale,depth_offset,depth_min,depth_max;
 static const ctr_shader_program *expected_shader;
 static const ctr_vertex *expected_vertices;
 static const ctr_scene_texture *expected_texture;
+static const ctr_scene_sampler *expected_mips;
 static const ctr_scene_texture *material_textures;
 static unsigned material_mask,material_vertex_mask;
 static bool material_mode,dump_materials;
@@ -56,6 +58,7 @@ static unsigned texture_inits,texture_binds,sampler_binds,texture_flushes,textur
 static unsigned expected_count,gpu_draws,read_invalidates,uniform_uploads;
 static unsigned context_switches;
 static unsigned wait_calls,fail_wait_call;
+static unsigned timestamp_waits,special_surfaces;
 static unsigned scissor[4],rectangles[4][4],rectangle_count;
 static float half_x,half_y,offset_x,offset_y;
 static bool cull_front,cull_back;
@@ -156,20 +159,39 @@ bool GX2DrawDone(void) {
     if(ok)gpu_pending=false;
     return ok;
 }
+int64_t GX2GetLastSubmittedTimeStamp(void) { return wait_calls; }
+bool GX2WaitTimeStamp(int64_t timestamp) {
+    assert(timestamp==wait_calls);
+    ++timestamp_waits;gpu_pending=false;
+    return true;
+}
 void GX2CalcSurfaceSizeAndAlignment(GX2Surface *surface) {
     ++gx2_calls;
-    assert(surface->depth==1 && surface->mipLevels==1);
+    assert(surface->depth==1 && surface->mipLevels>=1u && surface->mipLevels<=CTR_SCENE_MAX_MIP_LEVELS);
     surface->pitch=surface->width+8u;surface->alignment=256;
+    if(surface->tileMode==GX2_TILE_MODE_LINEAR_SPECIAL)++special_surfaces;
     assert(surface->format==GX2_SURFACE_FORMAT_UNORM_R8_G8_B8_A8 ||
         surface->format==GX2_SURFACE_FORMAT_UNORM_R16 ||
-        surface->format==GX2_SURFACE_FORMAT_UNORM_R24_X8);
+        surface->format==GX2_SURFACE_FORMAT_UNORM_R24_X8 || surface->format==GX2_SURFACE_FORMAT_FLOAT_R32);
     if(surface->use&GX2_SURFACE_USE_DEPTH_BUFFER) {
         assert(surface->use==(GX2_SURFACE_USE_TEXTURE|GX2_SURFACE_USE_DEPTH_BUFFER));
         assert(surface->tileMode==GX2_TILE_MODE_TILED_2D_THIN1 || surface->tileMode==GX2_TILE_MODE_LINEAR_ALIGNED);
     }
     surface->imageSize=surface->pitch*surface->height*(surface->format==GX2_SURFACE_FORMAT_UNORM_R16?2u:4u);
     if(surface->use==GX2_SURFACE_USE_TEXTURE && texture_image_size)surface->imageSize=texture_image_size;
+    if(surface->mipLevels>1u) {
+        assert(surface->use==GX2_SURFACE_USE_TEXTURE);
+        surface->mipLevelOffset[0]=(surface->imageSize+255u)&~255u;
+        for(unsigned level=1u;level<surface->mipLevels;++level) {
+            if(level>1u)surface->mipLevelOffset[level-1u]=surface->mipmapSize;
+            surface->mipmapSize+=GX2GetSurfaceMipPitch(surface,level)*(surface->height>>level)*4u;
+        }
+    }
     if(!layout_ok)surface->imageSize=0;
+}
+uint32_t GX2GetSurfaceMipPitch(GX2Surface *surface,uint32_t level) {
+    assert(level<surface->mipLevels);
+    return (surface->width>>level)+8u;
 }
 void GX2CopySurface(const GX2Surface *src,unsigned a,unsigned b,GX2Surface *dst,unsigned c,unsigned d) {
     ++gx2_calls;
@@ -287,6 +309,31 @@ void GX2InitDepthBufferHiZEnable(GX2DepthBuffer *target,bool enable) {
     ++gx2_calls;
     assert(target && !enable && !target->hiZPtr);++depth_hiz_sets;
 }
+void GX2ClearDepthStencilEx(GX2DepthBuffer *target,float depth,uint8_t stencil,GX2ClearFlags mode) {
+    ++gx2_calls;++depth_clears;
+    assert(target && expected_depth && depth_inits==1u && depth_hiz_sets==1u);
+    const uint8_t *seed=expected_depth->bytes;
+    bool packed=expected_depth->format==CTR_SCENE_DEPTH_D24S8;
+    assert(depth==(seed[0]?1.0f:0.0f) && stencil==(packed?seed[3]:0u));
+    assert(mode==(packed?GX2_CLEAR_FLAGS_BOTH:GX2_CLEAR_FLAGS_DEPTH));
+    depth_target_image=target->surface.image;
+    gpu_pending=true;
+}
+void GX2ClearColor(GX2ColorBuffer *target,float r,float g,float b,float a) {
+    ++gx2_calls;
+    assert(target->surface.image && r==0.0f && g==0.0f && b==0.0f && a==0.0f);
+    memset(target->surface.image,0,target->surface.imageSize);
+}
+void GX2ConvertDepthBufferToTextureSurface(GX2DepthBuffer *depth,GX2Surface *texture,uint32_t mip,uint32_t slice) {
+    ++gx2_calls;
+    assert(depth->surface.image==depth_target_image && texture->image &&
+        texture->format==GX2_SURFACE_FORMAT_FLOAT_R32 && !mip && !slice);
+    /* Synthetic host marker for the byte-flow check, not a depth renderer. */
+    for(unsigned y=0;y<texture->height;++y)for(unsigned x=0;x<texture->width;++x) {
+        uint8_t *sample=(uint8_t *)texture->image+((size_t)y*texture->pitch+x)*4u;
+        sample[0]=sample[1]=sample[2]=0;sample[3]=0x3f;
+    }
+}
 void GX2SetDepthBuffer(const GX2DepthBuffer *target) {
     ++gx2_calls;
     assert(target && target->surface.image==depth_target_image && depth_inits==1u && depth_hiz_sets==1u);
@@ -374,7 +421,8 @@ static void check_pixel_program(const uint8_t *program,unsigned size) {
                 unsigned coord=unit==2u && (expected_state->registers[0x80]&(1u<<13))?1u:unit;
                 unsigned input=1u+bit_count(coordinates&((1u<<coord)-1u));
                 unsigned sample=mask>1u?11u+unit:2u;
-                assert(little32(program+fetch)==(0x13u|(unit<<8)|(input<<16)));
+                unsigned opcode=expected_mips && unit==0u?0x10u:0x13u;
+                assert(little32(program+fetch)==(opcode|(unit<<8)|(input<<16)));
                 assert(little32(program+fetch+4u)==(UINT32_C(0xf00d1000)|sample));
                 assert(little32(program+fetch+8u)==(UINT32_C(0xb0800000)|(unit<<15)));
                 assert(!little32(program+fetch+12u));
@@ -427,7 +475,8 @@ void GX2InitTextureRegs(GX2Texture *texture) {
     assert(texture && !gpu_pending && texture->surface.image);
     assert(texture->surface.tileMode==GX2_TILE_MODE_LINEAR_ALIGNED && texture->surface.use==GX2_SURFACE_USE_TEXTURE);
     assert(texture->surface.format==GX2_SURFACE_FORMAT_UNORM_R8_G8_B8_A8);
-    assert(!texture->viewFirstMip && texture->viewNumMips==1u && !texture->viewFirstSlice && texture->viewNumSlices==1u);
+    assert(!texture->viewFirstMip && texture->viewNumMips==texture->surface.mipLevels &&
+        !texture->viewFirstSlice && texture->viewNumSlices==1u);
     assert(texture->compMap==0x00010203u && ((uintptr_t)texture->surface.image&255u)==0u);
     unsigned slot=texture_slot(NULL);assert(slot<texture_slot_limit());texture_images[slot]=texture->surface.image;
     texture_published[slot]=false;
@@ -446,13 +495,33 @@ void GX2SetPixelTexture(const GX2Texture *texture,unsigned unit) {
         assert(!memcmp(row,expected,texture->surface.width*4u));
         for(unsigned at=texture->surface.width*4u;at<texture->surface.pitch*4u;++at)assert(row[at]==0u);
     }
+    if(expected_mips && unit==0u) {
+        const GX2Surface *surface=&texture->surface;
+        assert(surface->mipLevels==expected_mips->max_level+1u);
+        assert(surface->mipmaps==(const uint8_t *)surface->image+surface->mipLevelOffset[0]);
+        for(unsigned level=1;level<surface->mipLevels;++level) {
+            const ctr_scene_texture *expected=&expected_mips->levels[level];
+            const uint8_t *start=(const uint8_t *)surface->mipmaps+(level==1u?0u:surface->mipLevelOffset[level-1u]);
+            unsigned pitch=(surface->width>>level)+8u;
+            for(unsigned y=0;y<expected->height;++y) {
+                const uint8_t *row=start+(size_t)y*pitch*4u;
+                assert(!memcmp(row,expected->rgba+(size_t)(expected->height-1u-y)*expected->width*4u,expected->width*4u));
+                for(unsigned at=expected->width*4u;at<pitch*4u;++at)assert(!row[at]);
+            }
+        }
+    }
     bound_texture=texture;unit_textures[unit]=texture;++texture_binds;++unit_binds[unit];
 }
 void GX2InitSampler(GX2Sampler *sampler,GX2TexClampMode clamp,unsigned filter) {
     ++gx2_calls;
     assert(clamp==GX2_TEX_CLAMP_MODE_CLAMP &&
         (filter==GX2_TEX_XY_FILTER_MODE_POINT || filter==GX2_TEX_XY_FILTER_MODE_LINEAR));
-    memset(sampler,0,sizeof(*sampler));sampler->filter=filter;
+    memset(sampler,0,sizeof(*sampler));sampler->mag_filter=sampler->min_filter=filter;
+}
+void GX2InitSamplerXYFilter(GX2Sampler *sampler,unsigned mag,unsigned min,unsigned aniso) {
+    ++gx2_calls;
+    assert(aniso==GX2_TEX_ANISO_RATIO_NONE);
+    sampler->mag_filter=mag;sampler->min_filter=min;
 }
 void GX2InitSamplerClamping(GX2Sampler *sampler,GX2TexClampMode x,GX2TexClampMode y,GX2TexClampMode z) {
     ++gx2_calls;
@@ -470,9 +539,14 @@ void GX2SetPixelSampler(const GX2Sampler *sampler,unsigned unit) {
     const ctr_scene_texture *source=expected_unit(unit);
     assert(sampler->clamp[0]==wraps[(source->params>>12)&7u]);
     assert(sampler->clamp[1]==wraps[(source->params>>8)&7u] && sampler->clamp[2]==GX2_TEX_CLAMP_MODE_CLAMP);
-    assert(sampler->filter==((source->params&6u)?GX2_TEX_XY_FILTER_MODE_LINEAR:GX2_TEX_XY_FILTER_MODE_POINT));
-    assert(!sampler->mip_filter && !sampler->z_filter);
-    assert(sampler->lod[0]==0.0f && sampler->lod[1]==0.0f && sampler->lod[2]==0.0f);
+    assert(sampler->mag_filter==((source->params&2u)?GX2_TEX_XY_FILTER_MODE_LINEAR:GX2_TEX_XY_FILTER_MODE_POINT));
+    assert(sampler->min_filter==((source->params&4u)?GX2_TEX_XY_FILTER_MODE_LINEAR:GX2_TEX_XY_FILTER_MODE_POINT));
+    assert(!sampler->z_filter);
+    if(expected_mips && unit==0u) {
+        unsigned mode=source->params&UINT32_C(0x01000000)?GX2_TEX_MIP_FILTER_MODE_LINEAR:GX2_TEX_MIP_FILTER_MODE_POINT;
+        assert(sampler->mip_filter==mode && sampler->lod[0]==(float)expected_mips->min_level &&
+            sampler->lod[1]==(float)expected_mips->max_level && sampler->lod[2]==(float)expected_mips->bias_q8/256.0f);
+    } else assert(!sampler->mip_filter && !sampler->lod[0] && !sampler->lod[1] && !sampler->lod[2]);
     bound_sampler=sampler;unit_samplers[unit]=sampler;++sampler_binds;++unit_sampler_binds[unit];
 }
 void GX2SetAttribBuffer(unsigned index,unsigned size,unsigned stride,const void *bytes) {
@@ -503,7 +577,9 @@ void GX2SetPixelUniformReg(unsigned offset,unsigned count,const void *bytes) {
     }
 }
 void GX2SetCullOnlyControl(unsigned front,bool a,bool b) {
-    ++gx2_calls; assert(front==GX2_FRONT_FACE_CCW);cull_front=a;cull_back=b; }
+    ++gx2_calls;assert(front==(half_y<0?GX2_FRONT_FACE_CW:GX2_FRONT_FACE_CCW));
+    cull_front=a;cull_back=b;
+}
 void GX2SetColorControl(GX2LogicOp logic,uint8_t blend,bool multi_write,bool color_write) {
     ++gx2_calls;
     static const unsigned expected[16]={0x00,0x88,0x44,0xcc,0xff,0x33,0xaa,0x55,
@@ -622,8 +698,8 @@ static void reset(void) {
     invalid_compiled_record=0;
     wait_ok=true;compile_ok=true;layout_ok=true;active_context=&native_context;bound_target=NULL;
     gpu_draws=0;read_invalidates=0;uniform_uploads=0;rectangle_count=0;context_switches=0;
-    wait_calls=0;fail_wait_call=0;
-    gpu_pending=false;gpu_stopped=false;expected_uv=false;expected_texture=NULL;
+    wait_calls=0;fail_wait_call=0;timestamp_waits=0;special_surfaces=0;
+    gpu_pending=false;gpu_stopped=false;expected_uv=false;expected_texture=NULL;expected_mips=NULL;
     material_mode=false;material_mask=material_vertex_mask=0;material_textures=NULL;
     memset(texture_images,0,sizeof(texture_images));
     memset(texture_published,0,sizeof(texture_published));native_texture_cache_mode=false;gx2_calls=texture_image_size=0;
@@ -645,7 +721,7 @@ static void reset(void) {
     captured_logic=captured_write_mask=captured_alpha_function=0;
     captured_alpha_enabled=false;captured_alpha_reference=0.0f;
     bound_depth=NULL;expected_depth=NULL;depth_target_image=depth_linear_image=NULL;
-    depth_inits=depth_hiz_sets=depth_binds=depth_copies=depth_invalidates=depth_control_sets=0;
+    depth_inits=depth_hiz_sets=depth_binds=depth_copies=depth_invalidates=depth_control_sets=depth_clears=0;
     captured_depth_function=0;captured_depth_test=captured_depth_write=false;
     depth_scale=depth_offset=depth_min=depth_max=0.0f;
     captured_stencil_test=captured_stencil_backface=false;stencil_mask_sets=0;
@@ -716,6 +792,34 @@ static void baseline(void) {
     assert(scene.shader_instructions==3 && read_invalidates==1);
     unsigned switches=context_switches;backend.abort(backend.context);clean(&scene);
     assert(context_switches==switches);
+}
+static void cemu_readback(void) {
+    reset();ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+    scene.cemu_readback=true;wait_ok=false; /* DrawDone's return is unspecified in Cemu. */
+    ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+    uint8_t pixels[1024]={0};
+    ctr_scene_surface surface={pixels,sizeof(pixels),16,16,64};
+    uint8_t depth_bytes[1024]={0};
+    ctr_scene_depth_surface depth={depth_bytes,sizeof(depth_bytes),16,16,64,0x1000,CTR_SCENE_DEPTH_D24S8};
+    depth_bytes[sizeof(depth_bytes)-1u]=1;
+    assert(!backend.begin_depth(backend.context,&surface,&depth));
+    assert(scene.result==CTR_WIIU_GX2_SCENE_UNSUPPORTED_READBACK && scene.allocations==0);
+    depth=(ctr_scene_depth_surface){depth_bytes,sizeof(depth_bytes)/2u,16,16,32,0x1000,CTR_SCENE_DEPTH_D16};
+    assert(!backend.begin_depth(backend.context,&surface,&depth));
+    assert(scene.result==CTR_WIIU_GX2_SCENE_UNSUPPORTED_READBACK && scene.allocations==0);
+    ctr_scene_state state;ctr_vertex vertices[3];setup(&state,vertices);
+    state.registers[0x065u]=3u;
+    state.registers[0x066u]=12u<<16;
+    state.registers[0x067u]=(15u<<16)|15u;
+    pixels[64u]=41u;pixels[14u*64u]=73u;
+    assert(backend.begin(backend.context,&surface));
+    assert(backend.draw(backend.context,&state,vertices,3,NULL));
+    assert(half_y==-8 && offset_y==8 && scissor[1]==0u && scissor[3]==4u);
+    assert(backend.end(backend.context,&surface));
+    assert(special_surfaces==1 && timestamp_waits==wait_calls && timestamp_waits>0);
+    assert(scene.wait_failures==0 && scene.readbacks==1 && pixels[15u*64u]==17u);
+    assert(pixels[0]==0u && pixels[64u]==41u && pixels[14u*64u]==73u);
+    clean(&scene);
 }
 static void allocation_failures(void) {
     uint8_t bytes[1024]={0};ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
@@ -1148,6 +1252,41 @@ static void depth_bindings(void) {
     assert(backend.draw(backend.context,&state,vertices,3,NULL));
     assert(!captured_depth_test && !captured_depth_write && bound_pixel_metadata.regs.db_shader_control==16u);
     assert(backend.end(backend.context,&surface));clean(&scene);
+}
+static void resident_depth(void) {
+    reset();
+    uint8_t bytes[1024]={0},seed[1024]={0};
+    ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
+    ctr_scene_depth_surface depth={seed,sizeof(seed),16,16,64,0x18020000u,CTR_SCENE_DEPTH_D24S8};
+    ctr_scene_state state;ctr_vertex vertices[3];depth_setup(&state,vertices,&depth);
+    ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+    scene.cemu_readback=true;
+    ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+    assert(!ctr_wiiu_gx2_scene_resolve_color(&scene,&surface));
+    seed[sizeof(seed)-1u]=0x4a;
+    assert(!ctr_wiiu_gx2_scene_begin_resident(&scene,&surface,&depth));
+    assert(scene.result==CTR_WIIU_GX2_SCENE_UNSUPPORTED_READBACK && !alloc_attempts && !depth_clears);
+    for(unsigned at=0;at<sizeof(seed);at+=4u) {
+        seed[at]=seed[at+1u]=seed[at+2u]=255u;seed[at+3u]=0x4au;
+    }
+    assert(ctr_wiiu_gx2_scene_begin_resident(&scene,&surface,&depth));
+    unsigned allocations=alloc_attempts;
+    assert(!backend.end_depth(&scene,&surface,&depth));
+    assert(scene.private_state && !scene.readbacks);
+    for(unsigned i=0;i<2u;++i) {
+        rectangle_count=0;
+        assert(backend.draw(&scene,&state,vertices,3,NULL));
+        assert(ctr_wiiu_gx2_scene_resolve_color(&scene,&surface));
+        assert(!depth_copies && depth_clears==1u && depth_inits==1u && depth_binds==i+1u);
+        assert(alloc_attempts==allocations && scene.private_state && scene.readbacks==i+1u);
+        assert(bytes[15u*64u]==17u && seed[0]==255u && seed[3]==0x4au);
+    }
+    uint8_t packed[sizeof(seed)]={0};
+    ctr_scene_depth_surface output=depth;output.bytes=packed;
+    assert(ctr_wiiu_gx2_scene_resolve_targets(&scene,&surface,&output));
+    assert(packed[0]==0u && packed[1]==0u && packed[2]==128u && packed[3]==0x4au);
+    assert(scene.private_state && scene.draws==2u && scene.readbacks==3u);
+    backend.abort(&scene);clean(&scene);
 }
 static void depth_failures_format(unsigned format) {
     uint8_t bytes[1024]={0},zbytes[1024]={0};
@@ -2552,6 +2691,43 @@ static void uploaded_cache_idle_clear(ctr_wiiu_gx2_scene *scene) {
     assert(scene->texture_cache_stats.peak_bytes==peak && scene->texture_cache_stats.lookups==lookups);
     clean(scene);
 }
+static void mip_uploads(void) {
+    reset();
+    uint8_t base[32u*32u*4u],middle[16u*16u*4u],tail[8u*8u*4u],pixels[1024]={0};
+    texture_pixels(base,32,32);texture_pixels(middle,16,16);texture_pixels(tail,8,8);
+    uint32_t params=UINT32_C(0x01000004);
+    ctr_scene_sampler sources[3]={
+        {.levels={{base,32,32,0,0,params},{middle,16,16,0,0,params},{tail,8,8,0,0,params}},
+         .min_level=1,.max_level=2,.bias_q8=-64}
+    };
+    ctr_scene_surface surface={pixels,sizeof(pixels),16,16,64};
+    ctr_scene_state state;ctr_vertex vertices[3];textured_setup(&state,vertices);
+    expected_mips=&sources[0];expected_texture=&sources[0].levels[0];
+    ctr_wiiu_gx2_scene scene;default_scene_init(&scene);
+    scene.cemu_readback=true;
+    ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend(&scene);
+    assert(backend.begin(&scene,&surface));
+    assert(backend.draw_mips(&scene,&state,vertices,3,sources,1));
+    assert(scene.texture_uploads==1u && scene.texture_bytes==sizeof(base)+sizeof(middle)+sizeof(tail));
+    size_t footprint=scene.texture_cache_stats.bytes;
+    assert(footprint==bound_texture->surface.mipLevelOffset[0]+bound_texture->surface.mipmapSize);
+    const void *image=bound_texture->surface.image;
+    const void *vertex_program=bound_vertex_program,*pixel_program=bound_pixel_program;
+    sources[0].min_level=0;sources[0].bias_q8=128;rectangle_count=0;
+    for(unsigned level=0;level<=2u;++level)sources[0].levels[level].params=2u;
+    assert(backend.draw_mips(&scene,&state,vertices,3,sources,1));
+    assert(scene.texture_uploads==1u && scene.texture_cache_stats.hits==1u && bound_texture->surface.image==image);
+    assert(bound_vertex_program!=vertex_program && bound_pixel_program!=pixel_program);
+    sources[0].levels[1].width=8u;
+    assert(!backend.draw_mips(&scene,&state,vertices,3,sources,1));
+    assert(scene.result==CTR_WIIU_GX2_SCENE_ARGUMENT && scene.draws==2u && scene.texture_uploads==1u);
+    sources[0].levels[1].width=16u;tail[0]^=1u;rectangle_count=0;
+    assert(backend.draw_mips(&scene,&state,vertices,3,sources,1));
+    assert(scene.texture_uploads==2u && scene.texture_cache_stats.bytes==footprint*2u);
+    assert(bound_vertex_program==vertex_program && bound_pixel_program==pixel_program);
+    assert(backend.end(&scene,&surface));uploaded_cache_idle_clear(&scene);
+    expected_mips=NULL;expected_texture=NULL;
+}
 static void uploaded_cache_reuse(void) {
     reset();uint8_t pixels[512],copy[512],bytes[1024]={0};texture_pixels(pixels,8,16);
     memcpy(copy,pixels,sizeof(copy));
@@ -2972,10 +3148,10 @@ int main(int argc,char **argv) {
         dump_materials=!strcmp(argv[1],"--fragment-programs");textured_bindings(true);return 0;
     }
     assert(argc==1);
-    baseline();allocation_failures();scissor_modes();failures();readback_observer();
+    baseline();cemu_readback();allocation_failures();scissor_modes();failures();readback_observer();
     fragment_bindings();alpha_comparison_vectors();fragment_failures();
     blend_bindings();blend_constant_lists();blend_failures();
-    depth_bindings();
+    depth_bindings();resident_depth();
     for(unsigned format=0;format<2;++format) {
         depth_failures_format(format?3u:0u);depth_readback_observer_format(format?3u:0u);
     }
@@ -2987,7 +3163,7 @@ int main(int argc,char **argv) {
     material_programs(false);
     material_sparse_exports();material_cache_transitions();material_rejections();
     material_allocation_failures();material_replacements();material_pending_reuse();material_pending_retirement();
-    uploaded_cache_reuse();uploaded_cache_identity();uploaded_cache_pins();uploaded_cache_cold_duplicates();
+    mip_uploads();uploaded_cache_reuse();uploaded_cache_identity();uploaded_cache_pins();uploaded_cache_cold_duplicates();
     uploaded_cache_bounds();uploaded_cache_image_budget();
     uploaded_cache_allocation_failures();uploaded_cache_disabled_transition();uploaded_cache_cross_unit_alias();
     uploaded_cache_current_validation();uploaded_cache_source_alias();

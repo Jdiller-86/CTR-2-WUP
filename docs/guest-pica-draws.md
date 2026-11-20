@@ -53,10 +53,12 @@ python3 tools/validate-libctru.py --application draw --wiiu --gx2 --sanitize \
 The native adapter receives decoded original vertex inputs, index order, uniforms
 and retained PICA state. It compiles MOV/ADD/MUL/NOP/END into Latte vertex code,
 then uses GX2 fetch, shader and triangle draw commands. The original `draw`
-application binds an untextured primary-color pixel shader; `textured` uses the
-bounded sampler/TEV path below. CPU-transformed positions, colors and UV are never
-substituted for shader inputs. The [shader ABI](software-scenes.md#gx2-shader-and-backend-contract)
-defines the supported translation.
+application binds an untextured primary-color pixel shader. The `textured` profile
+uses the bounded sampler/TEV path below. The
+[shader ABI](software-scenes.md#gx2-shader-and-backend-contract) defines the
+supported translation. A separate rounded float24 diagnostic can execute the
+vertex shader on the CPU and send its clipped triangle batches to GX2, then use
+the same readback comparison.
 
 A complete software preflight validates the list and computes reference pixels
 before any native submission. The GPU target starts with the original target
@@ -103,18 +105,24 @@ reuse/free. Physical sampling parity and performance remain unverified.
 
 - Commands arrive through the existing standard GSP/GX command-list operation;
   configuration-only lists retain the previous behavior.
-- Vertex/index resources and targets resolve only to tracked owned Old-family
-  linear allocations: guest VA `0x14000000` maps to PA `0x20000000`. Static guest
-  mappings, VRAM and unowned physical addresses are rejected.
+- Vertex/index resources and targets resolve to owned Old-family linear
+  allocations at guest VA `0x14000000` and PA `0x20000000`, or to the
+  game path's dedicated VRAM backing. Unowned physical addresses fail.
 - Permission splits must retain allocation identity. Source spans need read
   permission; tiled targets need read/write permission. Geometry snapshots are
   bounded to 4 MiB. Texture data must fit wholly in geometry or one of at most
-  32 separate snapshots with 4 MiB total additional source bytes. Separate spans
-  cannot overlap geometry or each other; partial geometry aliases fail. Relay
+  32 separate snapshots with 4 MiB total additional source bytes. The game
+  path allows 96 spans within that budget, including checked vertex and index
+  pages when draws reach linear RAM through an offset or rebind from VRAM to
+  linear RAM. VRAM offsets outside the anchor snapshot use checked source pages
+  clipped at the anchor boundary. Separate spans cannot overlap geometry or each other. Partial
+  geometry aliases fail. Relay
   memory, command-list/target aliases and source/target feedback fail.
-- One resource base and one stable color/depth pair are supported per command list.
-  Changing either between draws fails transactionally. State writes after the
-  last draw may prepare the next list; shader/configuration-only uploads persist.
+- The color/depth pair stays fixed across a command list. The game path can
+  change vertex bases if each actual read still fits in a checked resource span.
+  Full-width zero trigger writes leave array drawing idle.
+  State writes after the last draw may prepare the next list.
+  Shader and configuration uploads persist.
   Each unit's texture bindings may change between draws within the checked snapshots.
 - Targets are 8×8 Morton tiled RGBA8/ABGR storage, with dimensions that are multiples
   of eight and no larger than 512. The adapter converts to the renderer's linear
@@ -154,10 +162,11 @@ The [scene contract](software-scenes.md) defines the bounded loader, fixed
 attribute, uniform and MOV/ADD/MUL/NOP/END shader subset. ADD/MUL
 accept only exact normal float24/signed-zero results with integer evaluation and
 transactional numeric rejection; [original arithmetic checks](software-scenes.md#exact-add-and-mul)
-validate the exact numeric subset separately from this MOV fixture. Broader
-arithmetic, mixed min/mag filters, mipmaps, perspective, DOT3, clipping and
-broader depth remains unsupported. Native fractional blend parity remains unverified;
-every target byte must match the explicit software contract before publication.
+validate the exact numeric subset separately from this MOV fixture. The native
+adapter extends the base-level sampler to bounded mip chains and mixed filters.
+Perspective, DOT3, clipping and broader depth remain outside this diagnostic
+profile. Native fractional blend parity remains unverified. Every target byte
+must match the explicit software contract before publication.
 A raw VFP push/pop guard fix supports exact bit transfers
 under CRT FPSCR controls; it does not enable unsupported arithmetic modes.
 

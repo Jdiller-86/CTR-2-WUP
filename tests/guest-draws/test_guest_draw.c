@@ -80,9 +80,31 @@ static void golden(ctr_guest *g,bool complete) {
         for(unsigned lane=0;lane<4;++lane)CHECK(pixels[(y*64u+x)*4u+lane]==expected[lane]);
     }
 }
+static void chained_commands(void) {
+    ctr_guest g;list root={0},continuation={0},draws;ctr_gx_completion c;
+    open(&g,&draws,false);
+    add(&continuation,0x23d,1);
+    CHECK(ctr_memory_write_bytes(&g.memory,BASE+0x6800u,continuation.bytes,(uint32_t)continuation.size)==CTR_MEM_OK);
+    CHECK(ctr_memory_write_bytes(&g.memory,BASE+0x8000u,draws.bytes,(uint32_t)draws.size)==CTR_MEM_OK);
+    add(&root,0x065,0);add(&root,0x068,0);
+    uint8_t *link=root.bytes+root.size;
+    put32(link,(uint32_t)continuation.size/8u);put32(link+4u,UINT32_C(0x804f0238));
+    put32(link+8u,(uint32_t)draws.size/8u);
+    put32(link+12u,(PHYSICAL+0x6800u)/8u);put32(link+16u,(PHYSICAL+0x8000u)/8u);
+    put32(link+20u,1);root.size+=24u;
+    /* The jump skips this suffix. The concatenated scene has 8-byte alignment. */
+    add(&root,CTR_PICA_FINALIZE,CTR_PICA_FINALIZE_VALUE);
+    CHECK(execute(&g,&root,BASE,&c)==CTR_GX_OK && c.signal && g.gsp.pica_draws==2);
+    golden(&g,true);
+    put32(link+8u,(uint32_t)continuation.size/8u);put32(link+16u,(PHYSICAL+0x6800u)/8u);
+    CHECK(execute(&g,&root,BASE,&c)==CTR_GX_UNSUPPORTED && !c.signal);
+    CHECK(g.gsp.pica.committed_lists==1 && g.gsp.pica_draws==2);
+    golden(&g,true);ctr_guest_close(&g);
+}
 static void successful(void) {
     for(unsigned shorts=0;shorts<2;++shorts) {
         ctr_guest g;list l;ctr_gx_completion c;open(&g,&l,shorts!=0);
+        if(shorts)set(&l,0x117,2u); /* 32-bit pixel size, RGBA8 format. */
         uint8_t *target=backing(&g)+0x2000u;
         CHECK(ctr_memory_map(&g.memory,0x30000000u,BYTES,CTR_MEM_READ|CTR_MEM_EXEC,target,BYTES)==CTR_MEM_OK);
         CHECK(ctr_memory_write_bytes(&g.memory,BASE,l.bytes,(uint32_t)l.size)==CTR_MEM_OK);
@@ -106,6 +128,74 @@ static void successful(void) {
           g.gsp.pica_draws==2 && g.gsp.pica_shader_instructions==18);golden(&g,true);
     ctr_guest_close(&g);
 }
+static void configuration_only(void) {
+    ctr_guest g;list draw,setup={0};ctr_gx_completion c;open(&g,&draw,false);
+    add(&setup,0x08c,UINT32_C(0xff0000));add(&setup,0x047,1);
+    add(&setup,0x29b,4095);add(&setup,0x29c,0);finish(&setup);
+    CHECK(execute(&g,&setup,BASE,&c)==CTR_GX_OK && c.signal && !g.gsp.pica_draws);
+    CHECK(g.gsp.pica_scene->registers[0x08c]==UINT32_C(0xff0000));
+    CHECK(g.gsp.pica_scene->registers[0x29b]==4096u);
+    ctr_scene_state before=*g.gsp.pica_scene;
+    /* Assigning new state and then overrunning an upload leaves the old state. */
+    setup.size=0;add(&setup,0x047,0);add(&setup,0x29c,0);finish(&setup);
+    CHECK(execute(&g,&setup,BASE,&c)==CTR_GX_UNSUPPORTED && !c.signal);
+    CHECK(g.gsp.last_scene_result==CTR_SCENE_LIMIT && g.gsp.last_pica_register==0x29c);
+    CHECK(!memcmp(&before,g.gsp.pica_scene,sizeof(before)));
+    /* An enabled clip plane cannot be ignored when real geometry uses it. */
+    CHECK(execute(&g,&draw,BASE,&c)==CTR_GX_UNSUPPORTED && !c.signal && !g.gsp.pica_draws);
+    CHECK(!memcmp(&before,g.gsp.pica_scene,sizeof(before)));
+    setup.size=0;add(&setup,0x047,0);add(&setup,0x06e,UINT32_C(0x0103f020));finish(&setup);
+    CHECK(execute(&g,&setup,BASE,&c)==CTR_GX_OK && c.signal);
+    CHECK(execute(&g,&draw,BASE,&c)==CTR_GX_UNSUPPORTED && !c.signal && !g.gsp.pica_draws);
+    CHECK(g.gsp.last_scene_result==CTR_SCENE_LAYOUT);
+    set(&setup,0x06e,UINT32_C(0x0103f040));
+    CHECK(execute(&g,&setup,BASE,&c)==CTR_GX_OK && c.signal);
+    CHECK(execute(&g,&draw,BASE,&c)==CTR_GX_OK && c.signal && g.gsp.pica_draws==2u);
+    golden(&g,true);
+    g.gsp.pica_round_f24=true;
+    setup.size=0;add(&setup,0x22f,0);finish(&setup);
+    CHECK(execute(&g,&setup,BASE,&c)==CTR_GX_OK && c.signal && g.gsp.pica_draws==2u);
+    ctr_guest_close(&g);
+}
+static void rgb5a1_vram(void) {
+    ctr_guest g;list draw;ctr_gx_completion completion;open(&g,&draw,false);
+    CHECK(ctr_gsp_open_vram(&g));
+    g.gsp.pica_round_f24=true;
+    /* This positive-W vertex projects past the left side of the viewport. */
+    const uint32_t clip[]={0xbf200000u,0xbec00000u,0xbe800000u,0x3f000000u};
+    for(unsigned lane=0;lane<4u;++lane)CHECK(ctr_memory_write(&g.memory,RESOURCE+lane*4u,4,clip[lane])==CTR_MEM_OK);
+    set(&draw,0x117,CTR_SCENE_COLOR_RGB5A1<<16);
+    set(&draw,0x11d,CTR_VRAM_PHYSICAL_BASE/8u);
+    CHECK(ctr_memory_write(&g.memory,CTR_VRAM_BASE,2,0xffff)==CTR_MEM_PERMISSION);
+    CHECK(execute(&g,&draw,BASE,&completion)==CTR_GX_OK && completion.signal && g.gsp.pica_draws==2u);
+    uint8_t encoded[BYTES/2u],pixels[BYTES];
+    CHECK(ctr_memory_read_bytes(&g.memory,CTR_VRAM_BASE,encoded,sizeof(encoded))==CTR_MEM_OK);
+    CHECK(ctr_texture_decode(encoded,sizeof(encoded),2,64,64,pixels,sizeof(pixels))==CTR_TEXTURE_OK);
+    const uint8_t red[]={255,0,0,255},green[]={0,255,0,255},clear[]={0,0,0,0};
+    CHECK(!memcmp(pixels+((63u-16u)*64u+16u)*4u,red,4));
+    CHECK(!memcmp(pixels+((63u-48u)*64u+48u)*4u,green,4));
+    CHECK(!memcmp(pixels+(63u-10u)*64u*4u,red,4));
+    CHECK(!memcmp(pixels,clear,4));
+    ctr_guest_close(&g);
+}
+static void late_vram_indices(void) {
+    const uint32_t index_offset=CTR_VERTEX_MAX_SOURCE_BYTES+CTR_GUEST_PAGE;
+    ctr_guest g;list draw;ctr_gx_completion c;open(&g,&draw,false);
+    CHECK(ctr_gsp_open_vram(&g));
+    g.gsp.pica_round_f24=true;
+    ctr_scene_fixture f;ctr_scene_fixture_make(&f,false);
+    CHECK(ctr_gx_check_range(&g,CTR_VRAM_BASE,64u,CTR_MEM_WRITE,&c)==CTR_GX_OK);
+    CHECK(ctr_gx_check_range(&g,CTR_VRAM_BASE+index_offset,6u,CTR_MEM_WRITE,&c)==CTR_GX_OK);
+    ctr_gx_write_target(&g,CTR_VRAM_BASE,f.resources,64u);
+    ctr_gx_write_target(&g,CTR_VRAM_BASE+index_offset,f.resources+64u,6u);
+    set(&draw,0x200,CTR_VRAM_PHYSICAL_BASE/8u);
+    set(&draw,0x227,index_offset);
+    put32(draw.bytes+find(&draw,0x227,1),index_offset+3u);
+    CHECK(execute(&g,&draw,BASE,&c)==CTR_GX_OK && c.signal);
+    CHECK(g.gsp.pica_draws==2u && g.gsp.pica_fragments==2304u);
+    ctr_guest_close(&g);
+}
+
 static void rollback(void) {
     for(unsigned kind=0;kind<17;++kind) {
         ctr_guest g;list l;ctr_gx_completion c;open(&g,&l,false);ctr_gx_result expected=CTR_GX_UNSUPPORTED;
@@ -292,7 +382,7 @@ static bool backend_end(void *context,const ctr_scene_surface *readback) {
 }
 static void backend_abort(void *context) { backend_mock *m=context;++m->aborts;m->active=false; }
 static ctr_scene_backend mock_backend(backend_mock *m) {
-    ctr_scene_backend backend={m,backend_begin,backend_draw,backend_end,backend_abort,NULL,NULL,NULL};return backend;
+    ctr_scene_backend backend={m,backend_begin,backend_draw,backend_end,backend_abort,NULL,NULL,NULL,NULL,0,NULL};return backend;
 }
 static void native_backend_success(void) {
     for(unsigned kind=0;kind<4;++kind) {
@@ -564,7 +654,7 @@ static void guest_texture_snapshots(void) {
     ctr_guest g;list l;ctr_gx_completion c;textured_open(&g,&l,false);
     insert_at(&l,find(&l,0x22f,1),0x085,(TEXTURE_PA+1024u)/8u);trim(&l);finish(&l);
     guest_texture_backend m={0};m.guest=&g;
-    ctr_scene_backend backend={&m,guest_texture_begin,guest_texture_draw,guest_texture_end,guest_texture_abort,NULL,NULL,NULL};
+    ctr_scene_backend backend={&m,guest_texture_begin,guest_texture_draw,guest_texture_end,guest_texture_abort,NULL,NULL,NULL,NULL,0,NULL};
     ctr_guest_set_scene_backend(&g,&backend);
     CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK && c.signal && c.irq==5);
     CHECK(m.begins==1 && m.draws==2 && m.ends==1 && !m.aborts);texture_golden(&g,true,false,true);
@@ -719,7 +809,7 @@ static void guest_material_snapshots(void) {
     ctr_guest g;list l;ctr_gx_completion c;textured_open(&g,&l,false);material_setup(&g,&l);
     insert_at(&l,find(&l,0x22f,1),0x095,(TEXTURE_PA+3072u)/8u);trim(&l);finish(&l);
     guest_texture_backend m={0};m.guest=&g;
-    ctr_scene_backend backend={&m,guest_texture_begin,NULL,guest_texture_end,guest_texture_abort,NULL,NULL,guest_material_draw};
+    ctr_scene_backend backend={&m,guest_texture_begin,NULL,guest_texture_end,guest_texture_abort,NULL,NULL,guest_material_draw,NULL,0,NULL};
     ctr_guest_set_scene_backend(&g,&backend);
     CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK && c.signal && c.irq==5);
     CHECK(m.begins==1u && m.draws==2u && m.ends==1u && !m.aborts);
@@ -764,7 +854,7 @@ static void guest_material_rollback(void) {
             if(kind==8u) { trim(&l);add(&l,parameters[slot],2u); }
             if(kind==9u)second=UINT32_C(0x80000000);
             if(kind==10u)put32(l.bytes+find(&l,formats[slot],0)+4u,UINT32_C(0xe0000)|formats[slot]);
-            if(kind==11u)insert_at(&l,find(&l,0x22f,1),0x080,0x1007u);
+            if(kind==11u)insert_at(&l,find(&l,0x22f,1),0x080,0x0407u);
             if(kind==12u) { set(&l,0x11d,PHYSICAL/8u);expected=CTR_GX_MEMORY; }
             if(kind==13u) {
                 second=TEXTURE_PA+0x20000u;expected=CTR_GX_MEMORY;
@@ -1383,7 +1473,8 @@ static void guest_render_to_texture(void) {
     cache_unpinned(&g);ctr_guest_close(&g);
 }
 int main(void) {
-    successful();rollback();shader_capacity();arithmetic_draws();queues();native_backend_success();native_backend_rollback();
+    successful();chained_commands();configuration_only();rgb5a1_vram();late_vram_indices();rollback();shader_capacity();arithmetic_draws();queues();
+    native_backend_success();native_backend_rollback();
     guest_texture_success();guest_linear_texture();guest_texture_snapshots();guest_texture_rollback();guest_texture_queues();
     guest_material_success();guest_material_snapshots();guest_material_rollback();guest_material_queues();guest_material_limits();
     guest_fragment_output();guest_blending();guest_depth_success();guest_depth_rollback();guest_depth_queues();

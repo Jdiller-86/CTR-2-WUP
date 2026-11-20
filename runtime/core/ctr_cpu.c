@@ -23,9 +23,9 @@ ctr_cpu_result ctr_cpu_stop(ctr_cpu *cpu, ctr_cpu_result result, uint32_t detail
     return result;
 }
 
-bool ctr_cpu_condition(const ctr_cpu *cpu, unsigned condition) {
-    bool n = (cpu->cpsr & CTR_FLAG_N) != 0u, z = (cpu->cpsr & CTR_FLAG_Z) != 0u;
-    bool c = (cpu->cpsr & CTR_FLAG_C) != 0u, v = (cpu->cpsr & CTR_FLAG_V) != 0u;
+bool ctr_cpu_condition_cpsr(uint32_t cpsr, unsigned condition) {
+    bool n = (cpsr & CTR_FLAG_N) != 0u, z = (cpsr & CTR_FLAG_Z) != 0u;
+    bool c = (cpsr & CTR_FLAG_C) != 0u, v = (cpsr & CTR_FLAG_V) != 0u;
     switch (condition) {
         case 0: return z; case 1: return !z; case 2: return c; case 3: return !c;
         case 4: return n; case 5: return !n; case 6: return v; case 7: return !v;
@@ -33,6 +33,10 @@ bool ctr_cpu_condition(const ctr_cpu *cpu, unsigned condition) {
         case 11: return n != v; case 12: return !z && n == v; case 13: return z || n != v;
         case 14: return true; default: return false;
     }
+}
+
+bool ctr_cpu_condition(const ctr_cpu *cpu, unsigned condition) {
+    return ctr_cpu_condition_cpsr(cpu->cpsr, condition);
 }
 
 void ctr_cpu_logic_flags(ctr_cpu *cpu, uint32_t value, unsigned carry) {
@@ -488,6 +492,13 @@ static ctr_cpu_result arm_step(ctr_cpu *cpu, uint32_t insn) {
         unsigned rd=(insn>>16)&15,rn=(insn>>12)&15,rs=(insn>>8)&15,rm=insn&15;
         if(rd==15 || rn==15 || rs==15 || rm==15)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
         cpu->r[rd]=ctr_cpu_half_accumulate(cpu,cpu->r[rm],cpu->r[rs],cpu->r[rn],(insn>>5)&1,(insn>>6)&1);
+        cpu->r[15]=next;return CTR_CPU_OK;
+    }
+    if((insn&0x0ff0f090u)==0x01600080u) { /* SMULxy, signed halves, flags preserved. */
+        unsigned rd=(insn>>16)&15,rs=(insn>>8)&15,rm=insn&15;
+        if(rd==15 || rs==15 || rm==15)return ctr_cpu_stop(cpu,CTR_CPU_UNSUPPORTED,insn);
+        cpu->r[rd]=(uint32_t)(ctr_cpu_signed_half(cpu->r[rm],(insn>>5)&1u)*
+                              ctr_cpu_signed_half(cpu->r[rs],(insn>>6)&1u));
         cpu->r[15]=next;return CTR_CPU_OK;
     }
     if(media==0x06500f90u || media==0x06500ff0u || media==0x06800fb0u) {

@@ -18,7 +18,7 @@ typedef enum {
     CTR_WIIU_GX2_SCENE_OK, CTR_WIIU_GX2_SCENE_ARGUMENT,
     CTR_WIIU_GX2_SCENE_ALLOCATION, CTR_WIIU_GX2_SCENE_LAYOUT,
     CTR_WIIU_GX2_SCENE_SHADER, CTR_WIIU_GX2_SCENE_WAIT,
-    CTR_WIIU_GX2_SCENE_BUSY
+    CTR_WIIU_GX2_SCENE_BUSY, CTR_WIIU_GX2_SCENE_UNSUPPORTED_READBACK
 } ctr_wiiu_gx2_scene_result;
 
 typedef struct {
@@ -38,6 +38,14 @@ typedef struct {
     uint64_t vertex_translation_failures,pixel_translation_failures;
     uint64_t cache_allocation_failures;
     bool cache_disabled; /* Use the same checked compilers without lookup/store. */
+    /* Select before the first transaction for Cemu-specific readback and
+     * shader upload handling. */
+    bool cemu_readback;
+    /* Queue transformed draws in bounded, immutable GX2 upload slots.
+     * Choose before opening a transaction. Use the scene as the exclusive GX2
+     * owner during a batch. Resolve or abort before resuming presentation. */
+    bool batch_transformed;
+    uintptr_t cemu_last_vertex_program,cemu_last_pixel_program;
     /* Retired, GPU-read-only pitched RGBA images, separate from CPU records.
      * Exact decoded bytes and dimensions identify an image; sampler state is
      * rebound from the current descriptor. Pins count unit leases, including
@@ -57,20 +65,20 @@ typedef struct {
     void *readback_context;
 } ctr_wiiu_gx2_scene;
 
-/* The caller supplies the native renderer's active WHB context. This backend
- * restores it before returning from every callback. Inputs remain PICA shader
- * inputs: the CPU reference never supplies transformed positions, colors or UV.
+/* The caller supplies the native renderer's active WHB context. Synchronous
+ * callbacks restore it before returning. Legacy callbacks receive original
+ * shader inputs. The rounded callback receives clipped triangles.
  * Texture callbacks borrow checked decoded RGBA storage only for the call; the
  * backend owns its pitched GPU upload until all references have retired.
- * The draw_textures extension binds units 0..2 independently, including unit 2's
- * optional UV1 routing. Each pitched image is bounded by 8 MiB and their combined
- * storage by 24 MiB. Disabled units cannot occur in the current pixel program;
- * every enabled unit's texture and sampler bind on every draw.
+ * The native texture callbacks bind units 0..2 independently, including unit
+ * 2's optional UV1 routing. Mip chains include each decoded level in one
+ * pitched upload. Each image with its tail is bounded by 8 MiB and combined
+ * storage by 24 MiB. Every enabled unit's texture and sampler bind on every draw.
  * Paired callbacks additionally own a D16 or packed D24S8 target and pitched
  * staging image. Depth/stencil bytes stay little-endian; HiZ is disabled and
- * canonical depth=-Z/W uses endpoint incoming depths under shared preflight.
- * D24S8 stencil controls, masks and reference bind explicitly for both faces
- * on every draw; disabled stencil state resets to inert masks and actions.
+ * canonical depth=-Z/W uses endpoint incoming depths in the legacy preflight.
+ * The rounded callback admits independent D24S8 depth and stencil gates.
+ * D24S8 controls bind explicitly for both faces, including inert disabled state.
  * TEV combiner-buffer programs initialize separate visible/pending byte state
  * per fragment and publish the delayed RGB/alpha updates after every stage.
  * Both target copies retire before readback; full pair parity remains the
@@ -78,6 +86,18 @@ typedef struct {
  * whose transaction and both caches have been cleared. */
 void ctr_wiiu_gx2_scene_init(ctr_wiiu_gx2_scene *scene,GX2ContextState *restore_context);
 ctr_scene_backend ctr_wiiu_gx2_scene_backend(ctr_wiiu_gx2_scene *scene);
+/* Begin a paired target that stays on GX2 across draws and color resolves.
+ * Only initialization reads the caller's depth bytes. Cemu accepts uniform
+ * endpoint depth and stencil seeds through a GX2 clear. Subsequent draws
+ * observe the GPU's depth/stencil state. A color resolve does not synchronize
+ * any CPU depth/stencil copy. Use the paired resolve at guest visibility
+ * boundaries that require both planes. Both resolves keep the targets owned
+ * by this scene. End the owner with scene_abort. */
+bool ctr_wiiu_gx2_scene_begin_resident(ctr_wiiu_gx2_scene *scene,const ctr_scene_surface *initial,
+                                      const ctr_scene_depth_surface *depth);
+bool ctr_wiiu_gx2_scene_resolve_color(ctr_wiiu_gx2_scene *scene,const ctr_scene_surface *readback);
+bool ctr_wiiu_gx2_scene_resolve_targets(ctr_wiiu_gx2_scene *scene,const ctr_scene_surface *readback,
+                                        const ctr_scene_depth_surface *depth);
 /* Retire an active transaction before freeing every uploaded image. An idle
  * abort frees already-retired images without calling GX2, including after
  * foreground release. A failed wait preserves all ownership for retry. */

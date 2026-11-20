@@ -19,8 +19,9 @@ path, 12-byte all-zero binary current-process file selector and read-only flags.
 It validates static descriptors and guest buffers. FSFILE supports Read, GetSize,
 Flush and Close. Writes/resizes are denied. Handles retain ownership across
 copies; whole-buffer permissions, IPC physical aliases, EOF and overflowing
-64-bit offsets are checked. Requests are bounded to 1 MiB, while the provider's
-file size may exceed 4 GiB. Unmounted/unknown archives fail visibly.
+64-bit offsets are checked. Reads are bounded by the guest's 64 MiB memory
+budget. The provider's file size may exceed 4 GiB. Unmounted/unknown archives
+fail visibly.
 
 Unmodified libctru resolves directories, filenames and Unicode **inside guest
 code** by reading Level-3 metadata. This is not a new implementation of generic

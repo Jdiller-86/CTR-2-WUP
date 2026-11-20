@@ -190,6 +190,10 @@ def _ncch(reader, base, available, *, partition):
         result["codeset_name"] = _ascii(exheader[:8], "codeset name")
         result["stack_size"] = u32(exheader, 0x1C)
         result["bss_size"] = u32(exheader, 0x3C)
+        kernel_caps = struct.unpack_from("<28I", exheader, 0x370)
+        result["readonly_vram"] = any(
+            (start, end) == (0xFF91F000, 0xFF91F600) for start, end in zip(kernel_caps, kernel_caps[1:])
+        )
         # Declared service access is an allowlist, not evidence of executed IPC
         # commands or successful service emulation. Includes the two extra slots.
         services=[]

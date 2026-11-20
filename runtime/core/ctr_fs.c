@@ -1,6 +1,7 @@
 /* Original bounded virtual filesystem; interface facts from pinned libctru. */
 #include "ctr_fs.h"
 #include "ctr_guest.h"
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -86,15 +87,22 @@ bool ctr_fs_romfs_close(ctr_fs_romfs *view) {
     if(!view || view->mounts || view->references)return false;
     memset(view,0,sizeof(*view));return true;
 }
+static bool mount_romfs(ctr_guest *g,ctr_fs_romfs **slot,ctr_fs_romfs *view) {
+    if(!view || !view->read || *slot || view->mounts==UINT_MAX ||
+       g->state!=CTR_GUEST_READY || g->svc_count || g->cpu.instructions)return false;
+    *slot=view;++view->mounts;return true;
+}
 bool ctr_fs_mount_romfs(ctr_guest *g,ctr_fs_romfs *view) {
-    if(!g || !view || !view->read || g->fs_romfs || g->state!=CTR_GUEST_READY || g->svc_count || g->cpu.instructions)return false;
-    g->fs_romfs=view;++view->mounts;return true;
+    return g && mount_romfs(g,&g->fs_romfs,view);
+}
+bool ctr_fs_mount_mii_romfs(ctr_guest *g,ctr_fs_romfs *view) {
+    return g && mount_romfs(g,&g->fs_mii_romfs,view);
 }
 void ctr_fs_session_closed(ctr_guest *g,unsigned slot) {
     ctr_guest_session *s=&g->sessions[slot];
     if(s->service==CTR_SERVICE_FILE && !s->fs_closed) {
-        if(s->fs_romfs) {
-            if(g->fs_romfs && g->fs_romfs->references)--g->fs_romfs->references;
+        if(s->fs_view) {
+            if(s->fs_view->references)--s->fs_view->references;
         } else {
             ctr_fs_volume *v=g->fs_volumes[s->fs_volume];
             if(v && v->files[s->fs_file].references)--v->files[s->fs_file].references;
@@ -130,17 +138,18 @@ bool ctr_fs_buffer(ctr_guest *g,uint32_t at,uint32_t size,unsigned permissions,u
     return !aliases(g,at,size,base);
 }
 static bool copy_in(ctr_guest *g,uint32_t at,uint8_t *p,uint32_t n) {
-    for(uint32_t i=0;i<n;++i) { uint32_t byte;if(!memory(g,ctr_memory_read(&g->memory,at+i,1,CTR_MEM_READ,&byte),at+i))return false;p[i]=(uint8_t)byte; }return true;
+    return !n || memory(g,ctr_memory_read_bytes(&g->memory,at,p,n),at);
 }
 static bool copy_out(ctr_guest *g,uint32_t at,const uint8_t *p,uint32_t n) {
-    for(uint32_t i=0;i<n;++i)
-        if(!memory(g,ctr_memory_write(&g->memory,at+i,1,p[i]),at+i))return false;
-    return true;
+    return !n || memory(g,ctr_memory_write_bytes(&g->memory,at,p,n),at);
 }
-static bool decode_path(ctr_guest *g,uint32_t type,uint32_t size,uint32_t descriptor,uint32_t at,uint32_t base,char *path,bool empty) {
+static bool root_path(ctr_guest *g,const uint32_t *words,uint32_t base) {
+    /* PATH_EMPTY carries one backing byte and no path data. */
+    return words[2]==1 && words[3]==1 && words[4]==0x4002 && ctr_fs_buffer(g,words[5],1,CTR_MEM_READ,base);
+}
+static bool decode_path(ctr_guest *g,uint32_t type,uint32_t size,uint32_t descriptor,uint32_t at,uint32_t base,char *path) {
     if(size>512 || descriptor!=((size<<14)|2u) || !ctr_fs_buffer(g,at,size,CTR_MEM_READ,base))return false;
     uint8_t raw[512];if(!copy_in(g,at,raw,size))return false;
-    if(empty)return type==1 && size==1 && !raw[0];
     unsigned n=0;
     if(type==3) {
         if(size<2 || size>CTR_FS_PATH_BYTES || raw[size-1] || memchr(raw,0,size-1))return false;
@@ -171,15 +180,30 @@ static uint32_t commit(ctr_fs_volume *v) {
     if(!v->persist || !v->persist(v->persist_context,v))return CTR_FS_DENIED;
     v->dirty=false;++v->commits;return 0;
 }
+/* Early SDKs sent 0x00010001 for the same write-and-flush request. */
+static bool write_flags_valid(uint32_t flags) {
+    return flags<=1u || flags==0x00010001u;
+}
+static bool open_romfs(ctr_guest *g,ctr_fs_romfs *view,uint32_t *out,unsigned *count) {
+    if(!view) { out[1]=CTR_FS_NOT_FOUND;return true; }
+    if(view->references==UINT_MAX) { out[1]=CTR_FS_FULL;return true; }
+    uint32_t handle=ctr_guest_session_open(g,CTR_SERVICE_FILE);
+    if(!handle) { out[1]=CTR_FS_FULL;return true; }
+    ctr_guest_session *file=ctr_guest_session_for(g,handle);
+    file->fs_view=view;file->fs_flags=1;file->fs_closed=false;++view->references;
+    out[0]=0x08030042;out[2]=0x10;out[3]=handle;*count=4;
+    return true;
+}
 static bool romfs_file_request(ctr_guest *g,unsigned slot,const uint32_t *w,uint32_t base,
                                uint32_t *o,unsigned *count) {
-    ctr_guest_session *session=&g->sessions[slot];ctr_fs_romfs *view=g->fs_romfs;
-    if(!view || !view->read) { o[1]=CTR_FS_INVALID;return true; }
+    ctr_guest_session *session=&g->sessions[slot];ctr_fs_romfs *view=session->fs_view;
+    if(!view->read) { o[1]=CTR_FS_INVALID;return true; }
     uint64_t offset=(uint64_t)w[1]|(uint64_t)w[2]<<32;
     switch(w[0]) {
         case 0x080200c2: case 0x08030102: {
             bool write=w[0]==0x08030102;unsigned d=write?5:4;uint32_t size=w[3];
-            if(size>CTR_FS_MAX_FILE_BYTES || w[d]!=(size<<4|(write?0xau:0xcu)) || (write && (w[4]&~1u)))return false;
+            uint32_t limit=write?CTR_FS_MAX_FILE_BYTES:CTR_GUEST_MAX_BYTES;
+            if(size>limit || w[d]!=(size<<4|(write?0xau:0xcu)) || (write && !write_flags_valid(w[4])))return false;
             if(!ctr_fs_buffer(g,w[d+1],size,write?CTR_MEM_READ:CTR_MEM_WRITE,base))return false;
             o[0]=(w[0]&0xffff0000u)|0x82u;*count=5;o[3]=w[d];o[4]=w[d+1];
             if(write) { o[1]=CTR_FS_DENIED;return true; }
@@ -203,13 +227,13 @@ bool ctr_fs_request(ctr_guest *g,unsigned slot,const uint32_t *w,uint32_t base,u
     ctr_guest_session *s=&g->sessions[slot];o[0]=(w[0]&0xffff0000u)|0x40u;*count=2;
     if(s->service==CTR_SERVICE_FILE) {
         if(s->fs_closed) { o[1]=CTR_FS_INVALID;return true; }
-        if(s->fs_romfs)return romfs_file_request(g,slot,w,base,o,count);
+        if(s->fs_view)return romfs_file_request(g,slot,w,base,o,count);
         ctr_fs_volume *v=g->fs_volumes[s->fs_volume];ctr_fs_file *f=&v->files[s->fs_file];
         uint64_t offset=(uint64_t)w[1]|(uint64_t)w[2]<<32;
         switch(w[0]) {
             case 0x080200c2: case 0x08030102: {
                 bool write=w[0]==0x08030102;unsigned d=write?5:4;uint32_t size=w[3];
-                if(size>CTR_FS_MAX_FILE_BYTES || w[d]!=(size<<4|(write?0xau:0xcu)) || (write && (w[4]&~1u)))return false;
+                if(size>CTR_FS_MAX_FILE_BYTES || w[d]!=(size<<4|(write?0xau:0xcu)) || (write && !write_flags_valid(w[4])))return false;
                 if(!ctr_fs_buffer(g,w[d+1],size,write?CTR_MEM_READ:CTR_MEM_WRITE,base))return false;
                 o[0]=(w[0]&0xffff0000u)|0x82u;*count=5;o[3]=w[d];o[4]=w[d+1];
                 if(!(s->fs_flags&(write?2u:1u))) { o[1]=CTR_FS_DENIED;return true; }
@@ -243,25 +267,51 @@ bool ctr_fs_request(ctr_guest *g,unsigned slot,const uint32_t *w,uint32_t base,u
     }
     if(!s->registered) { o[1]=CTR_FS_INVALID;return true; }
     char path[CTR_FS_PATH_BYTES];
+    if(w[0]==0x084500c2) { /* Format information for the mounted private savedata. */
+        if(!root_path(g,w,base))return false;
+        o[0]=0x08450140;*count=6;
+        if(w[1]!=4 || !g->fs_volumes[0]) { o[1]=CTR_FS_NOT_FOUND;return true; }
+        o[2]=CTR_FS_MAX_VOLUME_BYTES;o[4]=CTR_FS_MAX_FILES;
+        return true;
+    }
     if(w[0]==0x08030204) {
+        if(w[2]==UINT32_C(0x2345678a)) {
+            if(w[1] || w[3]!=2 || w[4]!=16 || w[5]!=2 || w[6]!=20 || w[7]!=1 ||
+               w[8] || w[9]!=0x40802 || w[11]!=0x50002) return false;
+            uint8_t title[16],file[20];
+            if(!ctr_fs_buffer(g,w[10],sizeof(title),CTR_MEM_READ,base) ||
+               !ctr_fs_buffer(g,w[12],sizeof(file),CTR_MEM_READ,base) ||
+               !copy_in(g,w[10],title,sizeof(title)) || !copy_in(g,w[12],file,sizeof(file)))return false;
+            /* The media selector is the low byte. */
+            if(title[8]>2 || get32(file) || get32(file+8)>2)return false;
+            bool mii=title[8]==0 && get32(title)==0x00010202 && get32(title+4)==0x0004009b &&
+                     get32(file+4)==0 && get32(file+8)==0;
+            o[0]=0x08030042;o[2]=0x10;*count=4;
+            return open_romfs(g,mii?g->fs_mii_romfs:NULL,o,count);
+        }
         /* Current-process RomFS: empty archive path in static slot 2 and a
            12-byte all-zero binary file path in slot 0, per pinned libctru. */
         if(w[1] || w[3]!=1 || w[4]!=1 || w[5]!=2 || w[6]!=12 || w[8] ||
            w[9]!=0x4802 || w[11]!=0x30002 || !(w[7]&3) || (w[7]&~7u))return false;
         if(!ctr_fs_buffer(g,w[10],1,CTR_MEM_READ,base) || !ctr_fs_buffer(g,w[12],12,CTR_MEM_READ,base))return false;
-        uint8_t empty,raw[12];if(!copy_in(g,w[10],&empty,1) || !copy_in(g,w[12],raw,12))return false;
-        if(empty)return false;
+        /* The type marks the archive path empty. Its one backing byte has
+           no path data, but the IPC buffer above must still be valid. */
+        uint8_t raw[12];if(!copy_in(g,w[12],raw,12))return false;
         for(unsigned i=0;i<12;++i)if(raw[i])return false;
         if(w[2]!=3 || !g->fs_romfs) { o[1]=CTR_FS_NOT_FOUND;return true; }
         if(w[7]!=1) { o[1]=CTR_FS_DENIED;return true; }
-        uint32_t handle=ctr_guest_session_open(g,CTR_SERVICE_FILE);
-        if(!handle) { o[1]=CTR_FS_FULL;return true; }
-        ctr_guest_session *file=ctr_guest_session_for(g,handle);
-        file->fs_romfs=true;file->fs_flags=1;file->fs_closed=false;++g->fs_romfs->references;
-        o[0]=0x08030042;o[2]=0x10;o[3]=handle;*count=4;return true;
+        return open_romfs(g,g->fs_romfs,o,count);
     }
     if(w[0]==0x080c00c2) {
-        if(!decode_path(g,w[2],w[3],w[4],w[5],base,path,true))return false;
+        if(w[1]==7) {
+            /* Shared extdata uses a binary NAND/media and save ID path. */
+            if(w[2]!=2 || w[3]!=12 || w[4]!=0x30002 || !ctr_fs_buffer(g,w[5],12,CTR_MEM_READ,base))return false;
+            uint8_t raw[12];
+            if(!copy_in(g,w[5],raw,sizeof(raw)) || get32(raw)!=0)return false;
+            o[0]=0x080c00c0;o[1]=CTR_FS_NOT_FORMATTED;*count=4;
+            return true;
+        }
+        if(!root_path(g,w,base))return false;
         if(w[1]!=4 && w[1]!=9) { o[1]=CTR_FS_NOT_FOUND;return true; }
         unsigned volume=w[1]==4?0:1;if(!g->fs_volumes[volume]) { o[1]=CTR_FS_NOT_FOUND;return true; }
         unsigned i;for(i=0;i<8 && g->fs_archives[i].active;++i){}
@@ -269,10 +319,15 @@ bool ctr_fs_request(ctr_guest *g,unsigned slot,const uint32_t *w,uint32_t base,u
         g->fs_archives[i].generation=++g->fs_generation;g->fs_archives[i].active=true;g->fs_archives[i].owner=slot;g->fs_archives[i].volume=volume;
         o[0]=0x080c00c0;o[2]=(g->fs_generation<<8)|(i+1);*count=4;return true;
     }
+    if(w[0]==0x080b0102) { /* The private volume currently has root-level files. */
+        if(!decode_path(g,w[3],w[4],w[5],w[6],base,path))return false;
+        o[1]=archive(g,slot,w[1],w[2])==8?CTR_FS_INVALID:UINT32_C(0xc8804471);
+        return true;
+    }
     bool file=w[0]==0x080201c2,create=w[0]==0x08080202,remove=w[0]==0x08040142;
     if(file || create || remove) {
         unsigned d=file?8:create?9:6;
-        if(w[1] || !decode_path(g,w[4],w[5],w[d],w[d+1],base,path,false))return false;
+        if(w[1] || !decode_path(g,w[4],w[5],w[d],w[d+1],base,path))return false;
         if((file && (!(w[6]&3) || (w[6]&~7u) || w[7])) || (create && w[6]))return false;
         unsigned a=archive(g,slot,w[2],w[3]);if(a==8) { o[1]=CTR_FS_INVALID;return true; }
         unsigned vi=g->fs_archives[a].volume;ctr_fs_volume *v=g->fs_volumes[vi];unsigned i=find(v,path);
@@ -305,7 +360,14 @@ bool ctr_fs_request(ctr_guest *g,unsigned slot,const uint32_t *w,uint32_t base,u
         ctr_fs_volume *v=g->fs_volumes[g->fs_archives[a].volume];
         if(w[0]==0x080e0080)g->fs_archives[a].active=false;
         else if(w[0]==0x08120080) { o[0]=0x081200c0;o[2]=CTR_FS_MAX_VOLUME_BYTES-used(v);*count=4; }
-        else { if(w[3] || w[4] || w[5] || w[6]!=0xa || w[8]!=0xc)return false;o[1]=commit(v); }
+        else {
+            /* Some SDKs supply one-byte placeholders for the parameterless commit. */
+            if(w[3] || w[4]>1u || w[5]!=w[4] ||
+               w[6]!=((w[4]<<4)|0xau) || w[8]!=((w[5]<<4)|0xcu))return false;
+            if(w[4] && (!ctr_fs_buffer(g,w[7],w[4],CTR_MEM_READ,base) ||
+                        !ctr_fs_buffer(g,w[9],w[5],CTR_MEM_WRITE,base)))return false;
+            o[1]=commit(v);
+        }
         return true;
     }
     return false;

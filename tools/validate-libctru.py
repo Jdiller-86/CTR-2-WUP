@@ -188,7 +188,7 @@ def main():
             if name=='romfs':flags+=['-DCTR_ROMFS_HOMEBREW']
             if name in ('draw','textured'):flags+=['-DCTR_DRAW_HOMEBREW']
             if name=='textured':flags+=['-DCTR_TEXTURED_HOMEBREW']
-            sources=runtime_sources(ROOT) + [core / n for n in ('ctr_fs_snapshot.c', 'ctr_sha256.c', 'ctr_romfs_file.c')]+[ROOT/'runtime/recomp/ctr_recomp.c',ROOT/'tests/homebrew/runner.c']+[folder/'aot'/n for n in generation['sources']]
+            sources=runtime_sources(ROOT) + [core / n for n in ('ctr_fs_snapshot.c', 'ctr_romfs_file.c')]+[ROOT/'runtime/recomp/ctr_recomp.c',ROOT/'tests/homebrew/runner.c']+[folder/'aot'/n for n in generation['sources']]
             run(name+'-host-compile',shlex.split(a.cc_prefix)+[a.cc,*flags,*map(str,sources),'-lm','-o',str(binary)])
             extra=['--trace-ipc'] if a.trace_startup else [str(folder)] if name in ('graphics','interactive','transfer','draw','textured') else ['--filesystem',str(folder/'save.snapshot')] if name=='filesystem' else []
             output=run(name+'-execute',shlex.split(a.run_prefix)+[str(binary)]+extra)

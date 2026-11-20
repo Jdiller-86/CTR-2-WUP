@@ -3,7 +3,7 @@ ROOT := ../..
 include $(ROOT)/runtime/core/sources.mk
 FLAGS := -std=c11 -O2 -g -Wall -Wextra -Wpedantic -Werror -I../../runtime/core
 OUT := ../../artifacts/asset-tests
-CORE := ctr_sha256 ctr_romfs_file
+CORE := ctr_romfs_file
 SOURCES := $(CTR_RUNTIME_SOURCES) test_assets.c $(addprefix ../../runtime/core/,$(addsuffix .c,$(CORE)))
 .PHONY: check sanitize
 $(OUT):

@@ -62,8 +62,11 @@ static void timing_and_frames(void) {
     CHECK(read_word(&g,0x10002000)==0x200 && g.shared[g.gsp.relay_shared].storage[0xc]==2 && g.shared[g.gsp.relay_shared].storage[0xd]==3);
     CHECK(ctr_gsp_poll(&g,due) && g.gsp.vblanks==1); /* Same instant cannot double signal. */
     write_word(&g,0x10002000,0);submit(&g,0,0,1);
+    write_word(&g,0x1000220c,0x08001008); /* Separate, mapped right eye. */
+    write_word(&g,0x10002214,0x122);
     CHECK(ctr_gsp_poll(&g,due+5*CTR_GSP_FRAME_NS) && g.gsp.vblanks==2 && g.gsp.coalesced_vblanks==4);
     CHECK(g.gsp.swaps[0]==2 && g.gsp.swaps[1]==1 && g.gsp.info[0][0]==1);
+    CHECK(g.gsp.info[0][2]==0x08001008 && g.gsp.info[0][4]==0x122);
     CHECK(g.gsp.next_vblank_ns==due+6*CTR_GSP_FRAME_NS && read_word(&g,0x10002000)==0x200);
     ctr_guest_close(&g);
 }

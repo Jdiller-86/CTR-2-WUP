@@ -7,8 +7,12 @@
 #define CTR_PICA_REGISTER_COUNT 0x400u
 #define CTR_PICA_MAX_BYTES (4u*1024u*1024u)
 #define CTR_PICA_MAX_WRITES 65536u
+#define CTR_PICA_MAX_CHAIN_WRITES 262144u
 #define CTR_PICA_FINALIZE 0x0010u
 #define CTR_PICA_FINALIZE_VALUE UINT32_C(0x12345678)
+#define CTR_PICA_CLEAR_TEXTURE_CACHE UINT32_C(0x10000)
+/* Texture0-2 enables, fixed bit 12, and the Texture2 coordinate selector. */
+#define CTR_PICA_TEXTURE_CONFIG_MASK UINT32_C(0x3007)
 
 typedef enum {
     CTR_PICA_OK, CTR_PICA_ARGUMENT, CTR_PICA_ALIGNMENT, CTR_PICA_HEADER,
@@ -45,6 +49,9 @@ typedef struct {
 ctr_pica_result ctr_pica_inspect(const void *bytes,size_t size,size_t max_writes,
                                ctr_pica_write *writes,size_t capacity,
                                ctr_pica_report *report);
+/* Inspection of a guest adapter stream assembled from checked segments. */
+ctr_pica_result ctr_pica_inspect_expanded(const void *bytes,size_t size,size_t max_writes,
+                                        ctr_pica_write *writes,size_t capacity,ctr_pica_report *report);
 
 /* This reset initializes the software snapshot, not physical PICA reset state.
  * Ordinary supported registers are viewport 0x041..0x044,0x068 and scissor

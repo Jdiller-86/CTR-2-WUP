@@ -458,9 +458,9 @@ ctr_module_result ctr_modules_load(ctr_guest *g,uint32_t source,uint32_t address
         ctr_memory_read_bytes(&g->memory,source,s.file,size)!=CTR_MEM_OK) { result=CTR_MODULE_MEMORY;goto done; }
     if(memcmp(s.file,image->bytes,size)) { result=CTR_MODULE_IDENTITY;goto done; }
     uint64_t bytes=size+ctr_modules_bytes(g);
-    for(unsigned i=0;i<CTR_GUEST_STORAGE_COUNT;++i)bytes+=g->storage_size[i];
+    for(unsigned i=0;i<CTR_DSP_STORAGE_INDEX;++i)bytes+=g->storage_size[i];
     for(unsigned i=0;i<CTR_GUEST_MAX_ALLOCATIONS;++i)if(g->allocations[i].storage)bytes+=g->allocations[i].size;
-    for(unsigned i=0;i<8;++i)if(g->shared[i].owned)bytes+=g->shared[i].size;
+    for(unsigned i=0;i<8;++i)if(g->shared[i].owned && !g->shared[i].service_page)bytes+=g->shared[i].size;
     if(bytes>CTR_GUEST_MAX_BYTES) { result=CTR_MODULE_CAPACITY;goto done; }
     if(is_static) {
         if(data_size || bss_size || data || bss) { result=CTR_MODULE_UNSUPPORTED;goto done; }

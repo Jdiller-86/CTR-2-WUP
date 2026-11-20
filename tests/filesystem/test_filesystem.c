@@ -27,7 +27,7 @@ static uint32_t fs(ctr_guest *g) {
     const uint32_t w[]={0x08010002,0x20,0};send(g,h,w,3);CHECK(word(g,1)==0);return h;
 }
 static uint32_t mount(ctr_guest *g,uint32_t h,uint32_t id) {
-    CHECK(ctr_memory_write(&g->memory,DATA+100,1,0)==CTR_MEM_OK);
+    CHECK(ctr_memory_write(&g->memory,DATA+100,1,0xa5)==CTR_MEM_OK);
     const uint32_t w[]={0x080c00c2,id,1,1,0x4002,DATA+100};send(g,h,w,6);
     CHECK(g->state==CTR_GUEST_READY && word(g,1)==0 && word(g,0)==0x080c00c0 && word(g,3)==0);return word(g,2);
 }
@@ -39,7 +39,14 @@ static bool persist(void *context,const ctr_fs_volume *v) { CHECK(v->dirty);++*(
 static void lifecycle(void) {
     ctr_guest g;ctr_fs_volume v;CHECK(ctr_service_fixture_open(&g));CHECK(ctr_fs_volume_init(&v,4,true));CHECK(ctr_fs_mount(&g,&v));CHECK(!ctr_fs_mount(&g,&v));
     unsigned commits=0;v.persist=persist;v.persist_context=&commits;
-    uint32_t h=fs(&g),ar=mount(&g,h,4);path(&g,"/save.dat");uint32_t file=open_file(&g,h,ar,7);CHECK(v.files[0].references==1 && !ctr_fs_volume_close(&v));
+    uint32_t h=fs(&g),ar=mount(&g,h,4);
+    const uint32_t format[]={0x084500c2,4,1,1,0x4002,DATA+100};
+    send(&g,h,format,6);CHECK(word(&g,0)==0x08450140 && word(&g,1)==0);
+    CHECK(word(&g,2)==CTR_FS_MAX_VOLUME_BYTES && word(&g,3)==0 && word(&g,4)==CTR_FS_MAX_FILES && word(&g,5)==0);
+    const uint32_t shared[]={0x080c00c2,7,2,12,0x30002,DATA+112};
+    send(&g,h,shared,6);CHECK(word(&g,0)==0x080c00c0 && word(&g,1)==CTR_FS_NOT_FORMATTED);
+    CHECK(word(&g,2)==0 && word(&g,3)==0);
+    path(&g,"/save.dat");uint32_t file=open_file(&g,h,ar,7);CHECK(v.files[0].references==1 && !ctr_fs_volume_close(&v));
     const uint32_t size0[]={0x08040000};send(&g,file,size0,1);CHECK(word(&g,0)==0x080400c0 && word(&g,2)==0);
     CHECK(ctr_memory_write(&g.memory,DATA+256,4,0x44332211)==CTR_MEM_OK);
     uint32_t write[]={0x08030102,3,0,4,0,0x4a,DATA+256};send(&g,file,write,7);CHECK(word(&g,1)==0 && word(&g,2)==4);
@@ -56,6 +63,9 @@ static void lifecycle(void) {
     for(unsigned i=0;i<6;++i)CHECK(!v.files[0].bytes[i]);
     const uint32_t huge[]={0x08050080,0,1};send(&g,file,huge,3);CHECK(word(&g,1)==CTR_FS_FULL && v.files[0].size==6);
     const uint32_t commit[]={0x080d0144,next,0,0,0,0,0xa,0,0xc,0};send(&g,h,commit,10);CHECK(word(&g,1)==0 && commits==1 && v.commits==1 && !v.dirty);
+    send(&g,file,shrink,3);CHECK(word(&g,1)==0 && v.dirty);
+    const uint32_t legacy_commit[]={0x080d0144,next,0,0,1,1,0x1a,DATA+308,0x1c,DATA+309};
+    send(&g,h,legacy_commit,10);CHECK(word(&g,1)==0 && commits==2 && v.commits==2 && !v.dirty);
     g.cpu.r[1]=file;ctr_guest_svc(&g,0x27);uint32_t duplicate=g.cpu.r[1];CHECK(g.cpu.r[0]==0 && duplicate!=file && v.files[0].references==1);
     const uint32_t close_file[]={0x08080000};send(&g,file,close_file,1);CHECK(word(&g,1)==0 && !v.files[0].references);
     send(&g,duplicate,size0,1);CHECK(word(&g,1)==CTR_FS_INVALID);CHECK(ctr_guest_handle_close(&g,file));CHECK(ctr_guest_handle_close(&g,duplicate));
@@ -191,19 +201,27 @@ static bool read_asset(void *context,uint64_t offset,void *output,uint32_t size)
     return !r->fail;
 }
 static void romfs_transport(void) {
-    ctr_guest g;ctr_fs_romfs view={0};asset_reader reader={0};
+    ctr_guest g;ctr_fs_romfs view={0},mii={0};asset_reader reader={0},mii_reader={0};
     CHECK(ctr_service_fixture_open(&g));
     CHECK(ctr_fs_romfs_init(&view,UINT64_C(0x100000010),read_asset,&reader));
     CHECK(!ctr_fs_romfs_init(&view,10,read_asset,&reader));
     CHECK(ctr_fs_mount_romfs(&g,&view) && view.mounts==1);
     CHECK(!ctr_fs_mount_romfs(&g,&view) && !ctr_fs_romfs_close(&view));
+    CHECK(ctr_fs_romfs_init(&mii,32,read_asset,&mii_reader) && ctr_fs_mount_mii_romfs(&g,&mii));
     uint32_t service=fs(&g);
     for(unsigned i=0;i<13;++i)CHECK(ctr_memory_write(&g.memory,DATA+100+i,1,0)==CTR_MEM_OK);
+    CHECK(ctr_memory_write(&g.memory,DATA+100,1,0xa5)==CTR_MEM_OK); /* Empty path's backing byte is unused. */
     uint32_t opening[]={0x08030204,0,3,1,1,2,12,1,0,0x4802,DATA+100,0x30002,DATA+101};
     send(&g,service,opening,13);CHECK(word(&g,0)==0x08030042 && word(&g,1)==0 && word(&g,2)==0x10);
     uint32_t file=word(&g,3);CHECK(view.references==1);
     const uint32_t getsize[]={0x08040000};send(&g,file,getsize,1);
     CHECK(word(&g,2)==16 && word(&g,3)==1);
+    CHECK(ctr_memory_write(&g.memory,DATA+512,4,0x00010202)==CTR_MEM_OK);
+    CHECK(ctr_memory_write(&g.memory,DATA+516,4,0x0004009b)==CTR_MEM_OK);
+    const uint32_t mii_open[]={0x08030204,0,0x2345678a,2,16,2,20,1,0,0x40802,DATA+512,0x50002,DATA+544};
+    send(&g,service,mii_open,13);CHECK(word(&g,1)==0 && mii.references==1 && view.references==1);
+    uint32_t mii_file=word(&g,3);send(&g,mii_file,getsize,1);CHECK(word(&g,2)==32 && word(&g,3)==0);
+    CHECK(ctr_guest_handle_close(&g,mii_file) && mii.references==0 && view.references==1);
     uint32_t reading[]={0x080200c2,5,1,16,0x10c,DATA+256};send(&g,file,reading,6);
     CHECK(word(&g,1)==0 && word(&g,2)==11 && reader.calls==1 && reader.last_offset==UINT64_C(0x100000005) && reader.last_size==11);
     for(unsigned i=0;i<11;++i) { uint32_t n;CHECK(ctr_memory_read(&g.memory,DATA+256+i,1,CTR_MEM_READ,&n)==CTR_MEM_OK && n==i+5); }
@@ -222,6 +240,7 @@ static void romfs_transport(void) {
     send(&g,duplicate,getsize,1);CHECK(word(&g,1)==CTR_FS_INVALID);
     CHECK(ctr_guest_handle_close(&g,file) && ctr_guest_handle_close(&g,duplicate));
     ctr_guest_close(&g);CHECK(!view.mounts && ctr_fs_romfs_close(&view));
+    CHECK(!mii.mounts && ctr_fs_romfs_close(&mii));
     for(unsigned kind=0;kind<8;++kind) {
         view=(ctr_fs_romfs){0};reader=(asset_reader){0};CHECK(ctr_service_fixture_open(&g));
         CHECK(ctr_fs_romfs_init(&view,16,read_asset,&reader) && ctr_fs_mount_romfs(&g,&view));service=fs(&g);
@@ -239,7 +258,7 @@ static void romfs_transport(void) {
             if(kind==4)reading[5]=g.cpu.tls_address+0x80;
             if(kind==5)reading[5]=DATA+4094;
             if(kind==6)reading[4]=0x10a;
-            if(kind==7) { reading[3]=CTR_FS_MAX_FILE_BYTES+1;reading[4]=(reading[3]<<4)|0xc; }
+            if(kind==7) { reading[3]=CTR_GUEST_MAX_BYTES+1;reading[4]=(reading[3]<<4)|0xc; }
             send(&g,file,reading,6);CHECK(g.state==CTR_GUEST_FAULTED && !reader.calls);
         }
         ctr_guest_close(&g);CHECK(!view.references && !view.mounts && ctr_fs_romfs_close(&view));

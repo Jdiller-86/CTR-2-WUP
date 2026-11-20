@@ -2,9 +2,12 @@
 #define CTR_GSP_H
 #include "ctr_guest.h"
 #define CTR_GSP_FRAME_NS UINT64_C(16666667)
-/* Direct/shared framebuffer service and scoped CPU-backed GX queue operations.
- * Finalized PICA viewport/scissor configuration lists are supported;
- * PICA draws and native GX2 render translation remain absent. */
+#define CTR_VRAM_BASE UINT32_C(0x1f000000)
+#define CTR_VRAM_BYTES UINT32_C(0x00600000)
+#define CTR_VRAM_PHYSICAL_BASE UINT32_C(0x18000000)
+/* Install the read-only CPU view declared by the supported title. */
+bool ctr_gsp_open_vram(ctr_guest *guest);
+/* Direct/shared framebuffer service, checked GX queue operations and PICA lists. */
 bool ctr_gsp_request(ctr_guest *guest,unsigned session,const uint32_t *words,uint32_t *reply,unsigned *count);
 void ctr_gsp_session_closed(ctr_guest *guest,unsigned session);
 /* Host-time poll at a guest execution boundary; late display ticks are coalesced. */

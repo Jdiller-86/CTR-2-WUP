@@ -25,8 +25,9 @@ typedef struct {
     uint16_t uniform_count;
 } ctr_gx2_shader;
 
-/* Compile MOV/ADD/MUL/NOP/END, including masks, independent source swizzles,
- * negation and temporary dependencies. Geometry/relative addressing fail.
+/* Compile MOV/ADD/MUL/DP4/MAX/MAD/NOP/END and bounded CALL/IFU. The game
+ * profile also admits DP3 and JMPU. Branches on boolean uniforms specialize
+ * at compile time. Geometry, vertex predicates and relative addressing fail.
  * output_maps is the packed PICA semantic register table (up to seven words):
  * output_mask selects output registers; output_count must match its popcount.
  * Position xyzw and primary-color rgba must be defined and mapped. UV pairs

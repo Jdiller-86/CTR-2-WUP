@@ -63,12 +63,16 @@ def verify_menu_profile(files, *, require_startup=False):
     entry=_field(cos,'argstr','string',4096)
     if not re.fullmatch(r'[A-Za-z0-9_-]+\.rpx',entry) or 'code/'+entry not in files:
         fail('invalid_menu_profile','COS must select a staged native RPX')
-    if require_startup:
-        from .rpx_startup import rpx_sdk
-        if int(app.findtext('sdk_version'))!=rpx_sdk(files['code/'+entry]):
-            fail('invalid_native_startup','App SDK must match the selected RPX startup record')
     for name in ('avail_size','codegen_size','codegen_core','max_size','max_codesize'):
         _field(cos,name,'hexBinary',4)
+    if require_startup:
+        from .rpx_startup import rpx_startup
+        startup=rpx_startup(files['code/'+entry])
+        if int(app.findtext('sdk_version'))!=startup['sdk']:
+            fail('invalid_native_startup','App SDK must match the selected RPX startup record')
+        code_size=int(cos.findtext('max_codesize'),16)
+        if not startup['code_reservation']<=code_size<=0x0e000000 or code_size>=int(cos.findtext('max_size'),16):
+            fail('invalid_native_startup','COS code reservation must cover uncompressed RPX code and loader headroom')
     if int(cos.findtext('codegen_core'),16) not in (1,2,4):
         fail('invalid_menu_profile','COS codegen core must select a platform core')
     for core in range(3):

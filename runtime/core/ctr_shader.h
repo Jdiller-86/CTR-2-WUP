@@ -7,17 +7,23 @@
 #define CTR_SHADER_MAX_CODE 512u
 #define CTR_SHADER_MAX_DESCRIPTORS 128u
 #define CTR_SHADER_UNIFORMS 96u
+#define CTR_SHADER_MAX_STEPS 4096u
 typedef enum {
     CTR_SHADER_OK, CTR_SHADER_ARGUMENT, CTR_SHADER_OVERFLOW, CTR_SHADER_ALIAS,
     CTR_SHADER_RANGE, CTR_SHADER_UNSUPPORTED, CTR_SHADER_UNDEFINED,
-    CTR_SHADER_NUMERIC, CTR_SHADER_NO_END
+    CTR_SHADER_NUMERIC, CTR_SHADER_NO_END, CTR_SHADER_LIMIT
 } ctr_shader_result;
 typedef struct {
     uint32_t code[CTR_SHADER_MAX_CODE], descriptors[CTR_SHADER_MAX_DESCRIPTORS];
     uint32_t uniforms[CTR_SHADER_UNIFORMS][4]; /* IEEE binary32 bits, not casts. */
     uint8_t code_defined[CTR_SHADER_MAX_CODE], descriptor_defined[CTR_SHADER_MAX_DESCRIPTORS];
     uint8_t uniform_defined[CTR_SHADER_UNIFORMS]; /* One bit per defined lane. */
+    uint32_t integer_uniforms[4];
+    uint8_t integer_defined;
+    uint16_t boolean_uniforms;
+    bool boolean_defined;
     unsigned entry;
+    bool round_f24; /* Game software model. Zero selects exact diagnostic arithmetic. */
 } ctr_shader_program;
 typedef struct {
     float values[16][4];
@@ -31,17 +37,19 @@ typedef struct {
 bool ctr_shader_f24_decode(uint32_t raw, uint32_t *float32_bits);
 bool ctr_shader_f24_exact(uint32_t float32_bits, uint32_t *raw);
 
-/* Original bounded PICA MOV/ADD/MUL/NOP/END execution. The first source selects
- * inputs/temporaries/float uniforms; ADD/MUL's second selects inputs/temporaries.
- * Both use independent swizzles/negation and destination masks. All operands
- * are captured before temporary writes. ADD/MUL require exact normal float24 or
- * signed-zero results; rounding, underflow/overflow and special values fail.
+/* Bounded PICA vertex execution with independent swizzles/negation and write
+ * masks. All operands are captured before temporary writes. Arithmetic uses
+ * finite float24 values with either exact diagnostic or rounded game mode.
  * Exact cancellation is +0, -0 + -0 is -0, and MUL uses the XOR of signs.
- * Relative addressing, other arithmetic, branches and geometry fail.
+ * MOVA and LOOP supply bounded relative addressing. CALL, CMP/IFC, IFU and
+ * a single active LOOP have checked targets. Arithmetic includes ADD, MUL,
+ * DP4, MAX, RCP and MAD with a separately computed product. The game path
+ * also supports conditional calls, JMPC/JMPU, DP3, DPH/DPHI and positive RSQ.
  * Read-before-write fails for temporary/uniform/input lanes; an actual END is
  * required within code words 0..511; execution never wraps past word 511.
- * Input values used must have exact finite normal float24/zero
- * representation. Full output is published only after successful termination.
+ * Exact mode requires finite, exactly representable float24 operands. The game
+ * mode rounds to nearest-even and flushes underflow. Full output is published
+ * only after successful termination.
  * Caller-owned typed objects must be aligned and stable during the call. */
 ctr_shader_result ctr_shader_execute(const ctr_shader_program *program,
                                      const ctr_vertex *input,

@@ -77,38 +77,54 @@ objects need valid lifetime/alignment; immutable sources cannot be mutated concu
 
 `dsp::DSP` supports the standard load/unload, address conversion, pipe handshake,
 interrupt registration, semaphore event and cache-maintenance commands used by
-an original ARM probe. Load accepts only the exact original `CTR2WUP-PCM-HLE`
-version-1 token with masks `ff/ff`; it selects HLE and executes no DSP firmware.
-Other components, commands, descriptors and processing states fail explicitly.
+an original ARM probe. Load accepts the exact original `CTR2WUP-PCM-HLE`
+version-1 token with masks `ff/ff`. The Mario build can also bind the checked
+embedded DSP1 component to this HLE. The builder validates the segment ranges
+and hashes, and the runtime checks the complete guest buffer against that
+component's SHA-256 before admitting it. The embedded component profile also
+publishes the two-bank DSP debug block with zeroed hardware counters. It
+accepts stereo startup controls for disabled effects and saturates the final
+samples for both clip settings. Other components, commands, descriptors and
+processing states fail explicitly.
 The shared DRAM mapping is `1ff40000..1ff80000`; DSP word addresses select two
 `20000`-byte banks. All wire values are explicitly little-endian, including
 NDSP's halfword-rotated physical addresses/counts/positions. Commands and their
 consumed counter use the current bank; status/captured PCM use the opposite bank
 read by NDSP after its frame-ID advance. The ARM probe validates this round trip.
 
-The profile supports 24 mono PCM16 or DSP ADPCM voices, one current buffer
-and four circular queued buffers each, nonzero sequence IDs, pause/resume and
+The profile supports 24 mono PCM16 or DSP ADPCM voices. The verified component
+also accepts signed mono PCM8 with either state of the history bit. Voices have
+one current buffer, four circular queued buffers, nonzero sequence IDs, pause/resume and
 whole-buffer looping. Sources must remain readable in the same live owned linear
-allocation; each is at most 65,536 samples. Imported current/queued buffers pin
+allocation; each has at most 1,048,576 samples for the verified DSP component or
+65,536 for the original probe. Imported current/queued buffers pin
 their allocations until completion, replacement or session teardown; freeing or
 reprotecting a pinned allocation is rejected. Stereo mix gains and master volume
 are bounded binary32 values converted deterministically to signed Q15. Mixing
-rounds ties positive and hard-clips once. Source-rate ratios from 1/8 through 4
-use exact binary32-to-Q32 phase accumulation with direct sampling or linear
-interpolation. Fractional phase survives frames, pause/resume, rate changes and
+rounds ties positive and hard-clips once. Source-rate ratios use exact
+binary32-to-Q32 phase accumulation with direct sampling or linear interpolation.
+The verified component accepts ratios from 1/512 through 4. The original probe
+accepts ratios from 1/8 through 4. Fractional phase survives frames, pause/resume, rate changes and
 queued/looping boundaries; explicit buffer replacement or synchronization resets
 it. Linear interpolation crosses queued buffers and loop seams, holds the last
-sample for its fractional tail and rounds ties positive. Polyphase is accepted
-only at unity rate with integer phase; other filter states fail explicitly.
-DSP ADPCM uses the shared decoder at unity rate. Each buffer starts at an encoded
-frame header and supplies an explicit predictor/scale matching that header plus
-two signed starting histories. Queued buffers supply their own histories; whole
+sample for its fractional tail and rounds ties positive. The original probe
+accepts polyphase only at unity rate. The verified component profile uses linear
+resampling for the polyphase setting. Its mono Q15 first-order and Q14 biquad
+filters can operate in sequence.
+DSP ADPCM uses the shared decoder with sequential history. Each buffer starts
+at an encoded frame header and supplies a matching predictor/scale plus two
+signed starting histories. Non-looping queued buffers in the verified component
+may continue with the preceding buffer's final two decoded samples. Whole
 buffer loops restore the starting checkpoint. Coefficients use the channel's
 little-endian 16-entry table and may change only while no ADPCM buffer is active
 or together with reset/synchronization. Partial final frames need only their
-used bytes. Variable-rate ADPCM, implicit history carry between buffers, effects,
-auxiliary routing and surround remain unsupported. This is a deterministic HLE
-profile, not a firmware-fidelity claim.
+used bytes. The verified component profile supports fractional-rate ADPCM and
+the observed mono ADPCM buffer flags `0x09` and `0x19`.
+The verified component supports both auxiliary buses without front bypass.
+It publishes four planar signed PCM32 sends in the opposite bank and reads the
+guest's processed return from the consumed bank. Front and rear returns fold
+into stereo at the configured auxiliary volume. The inactive bus mixes its send
+directly. Additional buses, DSP effects and surround remain unsupported.
 
 A signaled retained semaphore schedules one 160-sample frame at the exact
 `16756991/512` Hz DSP rate. Host polling never completes it early. Both banks,

@@ -46,6 +46,7 @@ typedef struct {
 } ctr_program;
 
 void ctr_cpu_init(ctr_cpu *cpu, ctr_memory *memory);
+bool ctr_cpu_condition_cpsr(uint32_t cpsr, unsigned condition);
 bool ctr_cpu_condition(const ctr_cpu *cpu, unsigned condition);
 uint32_t ctr_cpu_add(ctr_cpu *cpu, uint32_t left, uint32_t right, unsigned carry, bool flags);
 uint32_t ctr_cpu_byte_parallel(ctr_cpu *cpu,uint32_t left,uint32_t right,bool subtract);

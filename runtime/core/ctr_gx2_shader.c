@@ -10,6 +10,8 @@
 #define LATTE_MOV 25u
 #define LATTE_ADD 0u
 #define LATTE_MUL_IEEE 2u
+#define LATTE_MAX 3u
+#define LATTE_ZERO 248u
 #define LATTE_ALU_CLAUSE_WORDS 128u
 
 static bool span(const void *p,size_t n) {
@@ -88,41 +90,107 @@ static ctr_gx2_shader_result exports(ctr_gx2_shader *out,uint16_t mask,
 static ctr_gx2_shader_result compile(const ctr_shader_program *p,uint16_t mask,
                                      const uint32_t *maps,unsigned total,
                                      ctr_gx2_shader *out) {
-    uint8_t defined[16]={0},written[16]={0};bool ended=false;
-    for(unsigned pc=p->entry;pc<CTR_SHADER_MAX_CODE;++pc) {
+    uint8_t defined[16]={0},written[16]={0};
+    struct { unsigned first,end,resume,branches; } calls[8];
+    struct { unsigned alternate,join; } branches[8];
+    unsigned call_count=0,branch_count=0,pc=p->entry;
+    for(;;) {
+        for(;;) {
+            unsigned enclosing=call_count?calls[call_count-1u].branches:0u;
+            if(branch_count>enclosing && pc==branches[branch_count-1u].alternate)
+                pc=branches[--branch_count].join;
+            if(!call_count)break;
+            if(pc!=calls[call_count-1u].end) {
+                if(pc<calls[call_count-1u].first || pc>calls[call_count-1u].end)
+                    return CTR_GX2_SHADER_RANGE;
+                break;
+            }
+            if(branch_count!=enclosing)return CTR_GX2_SHADER_RANGE;
+            pc=calls[--call_count].resume;
+        }
+        if(pc>=CTR_SHADER_MAX_CODE)return CTR_GX2_SHADER_NO_END;
         if(!p->code_defined[pc])return CTR_GX2_SHADER_UNDEFINED;
-        uint32_t word=p->code[pc];unsigned op=word>>26;++out->pica_instructions;
+        uint32_t word=p->code[pc++];unsigned op=word>>26;
+        if(++out->pica_instructions>CTR_SHADER_MAX_STEPS)return CTR_GX2_SHADER_LIMIT;
         if(op==0x21u || op==0x22u) {
             if(word&UINT32_C(0x03ffffff))return CTR_GX2_SHADER_UNSUPPORTED;
-            if(op==0x22u) { ended=true;break; }continue;
+            if(op==0x22u)break;
+            continue;
         }
-        if((op!=0x13u && op!=0u && op!=8u) || ((word>>19)&3u))return CTR_GX2_SHADER_UNSUPPORTED;
-        unsigned descriptor=word&127u,dest=(word>>21)&31u,a=(word>>12)&127u,b=(word>>7)&31u;
+        if(op==0x24u) {
+            unsigned first=(word>>10)&4095u,length=word&255u;
+            if(first>=CTR_SHADER_MAX_CODE || length>CTR_SHADER_MAX_CODE-first)
+                return CTR_GX2_SHADER_RANGE;
+            if(!length)continue;
+            if(call_count==sizeof(calls)/sizeof(*calls))return CTR_GX2_SHADER_LIMIT;
+            calls[call_count].first=first;
+            calls[call_count].end=first+length;
+            calls[call_count].resume=pc;
+            calls[call_count++].branches=branch_count;
+            pc=first;
+            continue;
+        }
+        if(op==0x27u || (op==0x2du && p->round_f24)) {
+            unsigned target=(word>>10)&4095u;
+            if(target>=CTR_SHADER_MAX_CODE)return CTR_GX2_SHADER_RANGE;
+            if(!p->boolean_defined)return CTR_GX2_SHADER_UNDEFINED;
+            bool enabled=(p->boolean_uniforms&(1u<<((word>>22)&15u)))!=0;
+            if(op==0x2du) {
+                if(enabled!=((word&1u)!=0))pc=target;
+            } else {
+                unsigned join=target+(word&255u);
+                if(target<pc || join>CTR_SHADER_MAX_CODE)return CTR_GX2_SHADER_RANGE;
+                if(!enabled)pc=target;
+                else if(join!=target) {
+                    if(branch_count==sizeof(branches)/sizeof(*branches))return CTR_GX2_SHADER_LIMIT;
+                    branches[branch_count].alternate=target;
+                    branches[branch_count++].join=join;
+                }
+            }
+            continue;
+        }
+        bool dot=op==2u || (op==1u && p->round_f24),mad=op>=0x38u;
+        unsigned relative=(word>>(mad?22u:19u))&3u;
+        if((op!=0x13u && op!=0u && op!=8u && op!=0x0cu && !dot && !mad) || relative)
+            return CTR_GX2_SHADER_UNSUPPORTED;
+        unsigned descriptor=word&(mad?31u:127u),dest=(word>>(mad?24u:21u))&31u;
+        unsigned sources[]={(word>>(mad?17u:12u))&(mad?31u:127u),
+            (word>>(mad?10u:7u))&(mad?127u:31u),(word>>5)&31u};
         if(!p->descriptor_defined[descriptor])return CTR_GX2_SHADER_UNDEFINED;
         uint32_t pattern=p->descriptors[descriptor];
         if(pattern&UINT32_C(0x80000000))return CTR_GX2_SHADER_UNSUPPORTED;
-        unsigned lanes=pattern&15u;
+        unsigned lanes=pattern&15u,read_lanes=dot && lanes?(op==1u?14u:15u):lanes;
         /* Source snapshots are deliberately distinct from destination storage.
          * The separate groups also avoid depending on a VLIW bank scheduler. */
-        for(unsigned operand=0;operand<(op==0x13u?1u:2u);++operand)
-            for(unsigned lane=0;lane<4;++lane)if(lanes&(8u>>lane)) {
-                unsigned selected=(pattern>>((operand?20u:11u)-2u*lane))&3u,selector;
-                ctr_gx2_shader_result result=source(p,out,defined,operand?b:a,selected,&selector);
+        for(unsigned operand=0;operand<(mad?3u:op==0x13u?1u:2u);++operand)
+            for(unsigned lane=0;lane<4;++lane)if(read_lanes&(8u>>lane)) {
+                unsigned selected=(pattern>>(11u+9u*operand-2u*lane))&3u,selector;
+                ctr_gx2_shader_result result=source(p,out,defined,sources[operand],selected,&selector);
                 if(result!=CTR_GX2_SHADER_OK)return result;
                 if(!alu(out,LATTE_MOV,selector,selected,
-                        (pattern&(operand?1u<<13:1u<<4))!=0,0,0,49u+operand,lane))return CTR_GX2_SHADER_LIMIT;
+                        (pattern&(1u<<(4u+9u*operand)))!=0,0,0,49u+operand,lane))return CTR_GX2_SHADER_LIMIT;
             }
+        if(dot && lanes) {
+            /* Keep each product and add separate, in the guest's lane order.
+             * R50.x is reusable once all products have consumed R50. */
+            unsigned terms=op==1u?3u:4u;
+            for(unsigned lane=0;lane<terms;++lane)
+                if(!alu(out,LATTE_MUL_IEEE,49u,lane,false,50u,lane,49u,lane))return CTR_GX2_SHADER_LIMIT;
+            for(unsigned lane=0;lane<terms;++lane)
+                if(!alu(out,LATTE_ADD,lane?50u:LATTE_ZERO,0,false,49u,lane,50u,0))return CTR_GX2_SHADER_LIMIT;
+        }
         for(unsigned lane=0;lane<4;++lane)if(lanes&(8u>>lane)) {
-            unsigned opcode=op==0x13u?LATTE_MOV:op==8u?LATTE_MUL_IEEE:LATTE_ADD;
+            unsigned opcode=(op==0x13u || dot)?LATTE_MOV:op==8u?LATTE_MUL_IEEE:op==0x0cu?LATTE_MAX:LATTE_ADD;
             unsigned target=dest<16u?dest+33u:dest+1u;
-            if(!alu(out,opcode,49u,lane,false,50u,lane,target,lane))return CTR_GX2_SHADER_LIMIT;
+            if(mad && !alu(out,LATTE_MUL_IEEE,49u,lane,false,50u,lane,49u,lane))return CTR_GX2_SHADER_LIMIT;
+            if(!alu(out,opcode,dot?50u:49u,dot?0u:lane,false,mad?51u:50u,lane,target,lane))
+                return CTR_GX2_SHADER_LIMIT;
         }
         for(unsigned lane=0;lane<4;++lane)if(lanes&(8u>>lane)) {
             if(dest<16u)written[dest]|=(uint8_t)(1u<<lane);
             else defined[dest-16u]|=(uint8_t)(1u<<lane);
         }
     }
-    if(!ended)return CTR_GX2_SHADER_NO_END;
     ctr_gx2_shader_result result=exports(out,mask,maps,total,written);
     if(result!=CTR_GX2_SHADER_OK)return result;
     unsigned clauses=(out->alu_instructions+LATTE_ALU_CLAUSE_WORDS-1u)/LATTE_ALU_CLAUSE_WORDS;

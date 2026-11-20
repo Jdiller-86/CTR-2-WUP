@@ -1,12 +1,25 @@
 /* Original single-process GSP direct/shared framebuffer bridge from wire facts. */
 #include "ctr_gsp.h"
+#include "ctr_apt.h"
 #include "ctr_kernel.h"
 #include "ctr_gx.h"
+#include <stdlib.h>
 #include <string.h>
 #define BAD_HANDLE UINT32_C(0xd8e007f7)
 #define BAD_STATE UINT32_C(0xe0a01bf5)
 #define NO_MEMORY UINT32_C(0xd86007f3)
 static bool execute_queue(ctr_guest *g);
+bool ctr_gsp_open_vram(ctr_guest *g) {
+    if(g->storage[CTR_VRAM_STORAGE_INDEX])return true;
+    uint8_t *bytes=calloc(1,CTR_VRAM_BYTES);
+    if(!bytes)return false;
+    if(ctr_memory_map(&g->memory,CTR_VRAM_BASE,CTR_VRAM_BYTES,CTR_MEM_READ,bytes,CTR_VRAM_BYTES)!=CTR_MEM_OK) {
+        free(bytes);return false;
+    }
+    g->storage[CTR_VRAM_STORAGE_INDEX]=bytes;
+    g->storage_size[CTR_VRAM_STORAGE_INDEX]=CTR_VRAM_BYTES;
+    return true;
+}
 static void unregister(ctr_guest *g) {
     ctr_guest_gsp *s=&g->gsp;
     if(!s->registered)return;
@@ -21,14 +34,21 @@ void ctr_gsp_session_closed(ctr_guest *g,unsigned session) {
 static unsigned pixel_bytes(unsigned format) { return format==0?4:format==1?3:2; }
 static bool supported(unsigned screen,const uint32_t *info) {
     unsigned format=info[4]&7u;
+    unsigned display_mode=info[4]&0x60u;
+    bool stereo=screen==0u && display_mode==0x20u;
     return screen<2 && info[0]<=1 && info[5]==info[0] && !info[6] && format<=4 &&
-        !(info[4]&~0x147u) && (info[4]&0x100u) && ((info[4]&0x40u)!=0)==(screen==0) &&
-        (!info[2] || info[2]==info[1]) && info[3]>=240*pixel_bytes(format) && info[3]<=4096;
+        !(info[4]&~0x167u) && (info[4]&0x100u) &&
+        (stereo || display_mode==(screen==0u?0x40u:0u)) &&
+        (stereo?info[2]!=0u:(!info[2] || info[2]==info[1])) &&
+        info[3]>=240*pixel_bytes(format) && info[3]<=4096;
 }
 static ctr_mem_result source_ok(const ctr_guest *g,unsigned screen,const uint32_t *info) {
     unsigned width=screen?320:400;
     uint32_t size=(width-1)*info[3]+240*pixel_bytes(info[4]&7u);
-    return ctr_memory_check_range(&g->memory,info[1],size,CTR_MEM_READ);
+    ctr_mem_result result=ctr_memory_check_range(&g->memory,info[1],size,CTR_MEM_READ);
+    if(result==CTR_MEM_OK && info[2] && info[2]!=info[1])
+        result=ctr_memory_check_range(&g->memory,info[2],size,CTR_MEM_READ);
+    return result;
 }
 bool ctr_gsp_request(ctr_guest *g,unsigned session,const uint32_t *words,uint32_t *out,unsigned *count) {
     *count=2;out[0]=(words[0]&0xffff0000u)|0x40u;out[1]=0;
@@ -39,6 +59,25 @@ bool ctr_gsp_request(ctr_guest *g,unsigned session,const uint32_t *words,uint32_
         case 0x00170000:
             if(!g->gsp.right)return false;
             g->gsp.right=false;return true;
+        case 0x00180000: /* ImportDisplayCaptureInfo. */
+            if(!g->gsp.right || !ctr_apt_mii_capture_ready(g))return false;
+            for(unsigned screen=0;screen<2;++screen) {
+                const uint32_t *info=g->gsp.info[screen];
+                if(!g->gsp.active[screen] || source_ok(g,screen,info)!=CTR_MEM_OK) { out[1]=BAD_STATE;return true; }
+                unsigned at=2u+4u*screen;
+                out[at]=info[1];out[at+1]=info[2]?info[2]:info[1];
+                out[at+2]=info[4];out[at+3]=info[3];
+            }
+            out[0]=0x00180240;*count=10;return true;
+        case 0x00190000: /* SaveVramSysArea. */
+            if(!g->gsp.right || !ctr_apt_mii_capture_ready(g) || g->apt.mii_vram_saved)return false;
+            /* The headless selector leaves local VRAM intact while guest GPU rights are released. */
+            g->apt.mii_vram_saved=true;return true;
+        case 0x001a0000: /* RestoreVramSysArea. */
+            if(!g->gsp.right || !g->apt.mii_vram_saved)return false;
+            g->apt.mii_vram_saved=false;return true;
+        case 0x001e0080: /* SetInternalPriorities; this GSP executes inline with the guest. */
+            return words[1]>=0x10u && words[1]<=0x3fu && words[2]>=0x11u && words[2]<=0x3fu;
         case 0x00080082: /* FlushDataCache: coherent CPU framebuffer backing. */
         case 0x00090082: { /* InvalidateDataCache: same checked local backing. */
             if(!g->gsp.right || words[3] || words[4]!=0xffff8001u)return false;
@@ -58,7 +97,7 @@ bool ctr_gsp_request(ctr_guest *g,unsigned session,const uint32_t *words,uint32_
             if(g->gsp.registered || UINT64_MAX-g->now_ns<CTR_GSP_FRAME_NS) { out[1]=BAD_STATE;return true; }
             ctr_guest_handle *event=ctr_guest_handle_for(g,words[3]);
             if(!event || event->type!=CTR_HANDLE_EVENT) { out[1]=BAD_HANDLE;return true; }
-            unsigned event_object=event->object;uint32_t handle=ctr_shared_create(g,4096,3);
+            unsigned event_object=event->object;uint32_t handle=ctr_shared_create_service_page(g,3);
             if(!handle) { out[1]=NO_MEMORY;return true; }
             unsigned shared=ctr_guest_handle_for(g,handle)->object;
             ctr_guest_object_retain(g,CTR_HANDLE_EVENT,event_object);
@@ -115,9 +154,20 @@ static bool execute_queue(ctr_guest *g) {
         uint32_t command[8];unsigned at=0x820+page[0x800]*32;
         for(unsigned i=0;i<8;++i)command[i]=word_at(page+at+i*4);
         ctr_gx_completion completion;s->last_gx_header=command[0];
+        unsigned id=command[0]&255u;
+#ifdef CTR_GAME_CEMU_TEST
+        uint64_t started=s->clock_us?s->clock_us(NULL):0u;
+#endif
         ctr_gx_result r=ctr_gx_execute(g,command,&completion);s->last_gx_detail=completion.detail;
+#ifdef CTR_GAME_CEMU_TEST
+        if(s->clock_us) {
+            uint64_t elapsed=s->clock_us(NULL)-started;
+            s->gx_us+=elapsed;
+            if(id==1u)s->pica_us+=elapsed;
+        }
+#endif
         if(r!=CTR_GX_OK)return device_fault(g,r==CTR_GX_MEMORY?completion.memory:r==CTR_GX_NO_MEMORY?CTR_MEM_CAPACITY:CTR_MEM_OK,completion.detail);
-        ++s->gx_commands;unsigned id=command[0]&255;
+        ++s->gx_commands;
         if(id==0)++s->gx_dma;else if(id==2)++s->gx_fills;else if(id==3)++s->gx_transfers;
         else if(id==4)++s->gx_copies;else if(id==5)++s->gx_cache;
         else if(id==1)++s->gx_pica;
@@ -171,20 +221,21 @@ ctr_mem_result ctr_gsp_pixels(const ctr_guest *g,unsigned screen,uint32_t *rgba,
     const uint32_t *info=g->gsp.info[screen];ctr_mem_result result=source_ok(g,screen,info);
     if(result!=CTR_MEM_OK)return result;
     unsigned format=info[4]&7u,bpp=pixel_bytes(format),width=screen?320:400;
-    for(unsigned x=0;x<width;++x)for(unsigned y=0;y<240;++y) {
-        uint32_t address=info[1]+x*info[3]+(239-y)*bpp,raw=0,byte;
-        for(unsigned i=0;i<bpp;++i) {
-            result=ctr_memory_read(&g->memory,address+i,1,CTR_MEM_READ,&byte);
-            if(result!=CTR_MEM_OK)return result;
-            raw|=byte<<(8*i);
+    uint8_t column[240u*4u];
+    for(unsigned x=0;x<width;++x) {
+        result=ctr_memory_read_bytes(&g->memory,info[1]+x*info[3],column,240u*bpp);
+        if(result!=CTR_MEM_OK)return result;
+        for(unsigned y=0;y<240;++y) {
+            const uint8_t *pixel=column+(239u-y)*bpp;uint32_t raw=0;
+            for(unsigned i=0;i<bpp;++i)raw|=(uint32_t)pixel[i]<<(8*i);
+            unsigned r,gc,b,a=255;
+            if(format==0) { r=raw>>24;gc=(raw>>16)&255;b=(raw>>8)&255;a=raw&255; }
+            else if(format==1) { r=(raw>>16)&255;gc=(raw>>8)&255;b=raw&255; }
+            else if(format==2) { r=expand(raw>>11,5);gc=expand((raw>>5)&63,6);b=expand(raw&31,5); }
+            else if(format==3) { r=expand(raw>>11,5);gc=expand((raw>>6)&31,5);b=expand((raw>>1)&31,5);a=(raw&1)?255:0; }
+            else { r=expand(raw>>12,4);gc=expand((raw>>8)&15,4);b=expand((raw>>4)&15,4);a=expand(raw&15,4); }
+            rgba[y*width+x]=(r<<24)|(gc<<16)|(b<<8)|a;
         }
-        unsigned r,gc,b,a=255;
-        if(format==0) { r=raw>>24;gc=(raw>>16)&255;b=(raw>>8)&255;a=raw&255; }
-        else if(format==1) { r=(raw>>16)&255;gc=(raw>>8)&255;b=raw&255; }
-        else if(format==2) { r=expand(raw>>11,5);gc=expand((raw>>5)&63,6);b=expand(raw&31,5); }
-        else if(format==3) { r=expand(raw>>11,5);gc=expand((raw>>6)&31,5);b=expand((raw>>1)&31,5);a=(raw&1)?255:0; }
-        else { r=expand(raw>>12,4);gc=expand((raw>>8)&15,4);b=expand((raw>>4)&15,4);a=expand(raw&15,4); }
-        rgba[y*width+x]=(r<<24)|(gc<<16)|(b<<8)|a;
     }
     return CTR_MEM_OK;
 }

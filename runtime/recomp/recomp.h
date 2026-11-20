@@ -110,6 +110,25 @@ static inline uint32_t media_parallel(Context *c,unsigned operation,unsigned lan
 static inline uint32_t media_select(Context *c,uint32_t left,uint32_t right) {
     ctr_cpu flags={0};flags.cpsr=(uint32_t)c->ge<<16;return ctr_cpu_byte_select(&flags,left,right);
 }
+static inline uint32_t add_halves(uint32_t left,uint32_t right) {
+    return ((left+right)&0xffffu)|((((left>>16)+(right>>16))&0xffffu)<<16);
+}
+static inline uint32_t media_saturate(Context *c,int64_t value,unsigned bits,unsigned is_unsigned) {
+    if(is_unsigned>1 || bits>(is_unsigned?31u:32u) || (!is_unsigned && !bits) ||
+       value<INT32_MIN || value>INT32_MAX)
+        ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,c->r[15]);
+    ctr_cpu flags={0};
+    uint32_t result=ctr_cpu_saturate(&flags,(uint32_t)value,bits,is_unsigned!=0);
+    if(flags.cpsr&0x08000000u)c->q=1;
+    return result;
+}
+static inline uint32_t media_saturate16(Context *c,uint32_t value,unsigned bits,unsigned is_unsigned) {
+    if(is_unsigned>1 || bits>(is_unsigned?15u:16u) || (!is_unsigned && !bits))
+        ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,c->r[15]);
+    uint32_t low=media_saturate(c,ctr_cpu_signed_half(value,0),bits,is_unsigned);
+    uint32_t high=media_saturate(c,ctr_cpu_signed_half(value,1),bits,is_unsigned);
+    return (low&0xffffu)|((high&0xffffu)<<16);
+}
 
 /* Scalar IEEE bit transport is independent of the host's byte order. Full
  * FPSCR exception/NaN/denormal semantics are outside the current profile. */
@@ -119,6 +138,14 @@ static inline uint32_t vfp_to_s_in(uint32_t f,float v) { uint32_t n;(void)f;memc
 static inline uint64_t vfp_to_d_in(uint32_t f,double v) { uint64_t n;(void)f;memcpy(&n,&v,8);return n; }
 #define vfp_to_s(c,v) vfp_to_s_in(FPSCR(c),(v))
 #define vfp_to_d(c,v) vfp_to_d_in(FPSCR(c),(v))
+/* Integer conversion semantics belong to the checked scalar interpreter.
+ * Recovery dispatches before these emitted expressions. Strict execution must
+ * stop before a host float-to-integer cast (NaNs/range/rounding differ). */
+static inline uint32_t ctr_recomp_integer_conversion(Context *c,double value) {
+    (void)value;ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,c->r[15]);
+}
+#define vfp_to_u32(value) ctr_recomp_integer_conversion(ctx,(value))
+#define vfp_to_s32(value) ctr_recomp_integer_conversion(ctx,(value))
 #define VFP_SET_D(lo,hi,value) do { uint64_t ctr_bits_=vfp_to_d(ctx,(value));(lo)=(uint32_t)ctr_bits_;(hi)=(uint32_t)(ctr_bits_>>32); } while (0)
 static inline float vfp_s(Context *c,int r) { return vfp_from_s(c->vfp[r]); }
 static inline double vfp_d(Context *c,int r) { return vfp_from_d(c->vfp[2*r],c->vfp[2*r+1]); }

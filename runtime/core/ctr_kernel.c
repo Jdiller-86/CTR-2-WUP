@@ -16,20 +16,33 @@ static unsigned free_shared(ctr_guest *g) {
     for (unsigned i=0;i<8;++i) if (!g->shared[i].active) return i;
     return 8;
 }
-uint32_t ctr_shared_create(ctr_guest *g,uint32_t size,unsigned permissions) {
-    unsigned slot=free_shared(g);uint64_t bytes=(uint64_t)size+ctr_modules_bytes(g);
+static uint32_t shared_create(ctr_guest *g,uint32_t size,unsigned permissions,bool service_page) {
+    unsigned slot=free_shared(g);
     if (!size || size%CTR_GUEST_PAGE || permissions&~3u || slot==8) return 0;
-    for (unsigned i=0;i<CTR_GUEST_STORAGE_COUNT;++i) bytes+=g->storage_size[i];
-    for (unsigned i=0;i<CTR_GUEST_MAX_ALLOCATIONS;++i) if (g->allocations[i].storage) bytes+=g->allocations[i].size;
-    for (unsigned i=0;i<8;++i) if (g->shared[i].owned) bytes+=g->shared[i].size;
-    if (bytes>CTR_GUEST_MAX_BYTES) return 0;
+    if (!service_page) {
+        uint64_t bytes=(uint64_t)size+ctr_modules_bytes(g);
+        for (unsigned i=0;i<CTR_DSP_STORAGE_INDEX;++i) bytes+=g->storage_size[i];
+        for (unsigned i=0;i<CTR_GUEST_MAX_ALLOCATIONS;++i) if (g->allocations[i].storage) bytes+=g->allocations[i].size;
+        for (unsigned i=0;i<8;++i) if (g->shared[i].owned && !g->shared[i].service_page) bytes+=g->shared[i].size;
+        if (bytes>CTR_GUEST_MAX_BYTES) return 0;
+    }
     uint8_t *storage=calloc(1,size);if (!storage) return 0;
     ctr_guest_shared *s=&g->shared[slot];
-    *s=(ctr_guest_shared){.active=true,.owned=true,.storage=storage,.size=size,
+    *s=(ctr_guest_shared){.active=true,.owned=true,.service_page=service_page,.storage=storage,.size=size,
                          .own_permissions=permissions,.other_permissions=permissions};
     uint32_t handle=ctr_guest_handle_new(g,CTR_HANDLE_SHARED,slot);
     if (!handle) { free(storage);memset(s,0,sizeof(*s)); }
     return handle;
+}
+uint32_t ctr_shared_create(ctr_guest *g,uint32_t size,unsigned permissions) {
+    return shared_create(g,size,permissions,false);
+}
+uint32_t ctr_shared_create_service_page(ctr_guest *g,unsigned permissions) {
+    return shared_create(g,CTR_GUEST_PAGE,permissions,true);
+}
+uint32_t ctr_shared_create_capture_buffer(ctr_guest *g,uint32_t size) {
+    if(size>2u*1024u*1024u)return 0;
+    return shared_create(g,size,CTR_MEM_READ|CTR_MEM_WRITE,true);
 }
 void ctr_shared_publish(ctr_guest *g,unsigned object,const uint8_t *bytes) {
     ctr_guest_shared *s=&g->shared[object];memcpy(s->storage,bytes,s->size);
@@ -44,6 +57,16 @@ const ctr_guest_shared *ctr_shared_mapping(const ctr_guest *g,const ctr_mapping 
     }
     return NULL;
 }
+static bool shared_backing(const ctr_memory *memory,uint32_t address,uint32_t size,const uint8_t *storage) {
+    uint64_t end=(uint64_t)address+size;
+    for(size_t i=0;i<memory->count;++i) {
+        const ctr_mapping *m=&memory->maps[i];
+        uint64_t start=address>m->base?address:m->base;
+        if(start<end && start<(uint64_t)m->base+m->size &&
+           m->storage+(size_t)(start-m->base)!=storage+(size_t)(start-address))return false;
+    }
+    return true;
+}
 void ctr_shared_svc(ctr_guest *g,uint32_t number) {
     uint32_t *r=g->cpu.r,result=0,handle=r[0],address=r[1];
     ++g->memory_requests;g->memory_operation=number;g->memory_address=address;
@@ -57,21 +80,32 @@ void ctr_shared_svc(ctr_guest *g,uint32_t number) {
             if (handle) g->shared[ctr_guest_handle_for(g,handle)->object].other_permissions=other;
         } else {
             unsigned slot=free_shared(g),allocation=CTR_GUEST_MAX_ALLOCATIONS;
+            uint8_t *storage=NULL;
             for (unsigned i=0;i<CTR_GUEST_MAX_ALLOCATIONS;++i) {
                 const ctr_guest_allocation *a=&g->allocations[i];
-                if (a->storage && address>=a->base && (uint64_t)address+size<=(uint64_t)a->base+a->size) { allocation=i;break; }
+                if(a->storage && address>=a->base && (uint64_t)address+size<=(uint64_t)a->base+a->size) {
+                    uint8_t *candidate=a->storage+(address-a->base);
+                    if(shared_backing(&g->memory,address,size,candidate)) { storage=candidate;allocation=i;break; }
+                }
             }
-            if (allocation==CTR_GUEST_MAX_ALLOCATIONS ||
+            /* The image's writable data/BSS has process lifetime and needs no allocation pin. */
+            if(!storage)for(size_t i=0;i<g->memory.count;++i) {
+                const ctr_mapping *m=&g->memory.maps[i];
+                if(m->storage==g->storage[2] && address>=m->base &&
+                   (uint64_t)address+size<=(uint64_t)m->base+m->size) {
+                    storage=m->storage+(address-m->base);break;
+                }
+            }
+            if (!storage ||
                 ctr_memory_check_range(&g->memory,address,size,3)!=CTR_MEM_OK) result=BAD_STATE;
             else if (slot==8) result=NO_MEMORY;
             else {
-                ctr_guest_allocation *a=&g->allocations[allocation];
                 ctr_guest_shared *s=&g->shared[slot];
-                *s=(ctr_guest_shared){.active=true,.allocation=allocation,.storage=a->storage+(address-a->base),
+                *s=(ctr_guest_shared){.active=true,.allocation=allocation,.storage=storage,
                                      .size=size,.own_permissions=own,.other_permissions=other};
                 handle=ctr_guest_handle_new(g,CTR_HANDLE_SHARED,slot);
-                if (handle) ++a->pins;
-                else { memset(s,0,sizeof(*s));result=NO_MEMORY; }
+                if(!handle) { memset(s,0,sizeof(*s));result=NO_MEMORY; }
+                else if(allocation<CTR_GUEST_MAX_ALLOCATIONS)++g->allocations[allocation].pins;
             }
         }
         r[1]=handle;
@@ -141,24 +175,35 @@ void ctr_sync_poll(ctr_guest *g) {
     }
     if (!g->infinite_wait && g->now_ns>=g->deadline_ns) finish(g,TIMEOUT,UINT32_MAX);
 }
+uint32_t ctr_sync_create_semaphore(ctr_guest *g,uint32_t count,uint32_t maximum) {
+    if(!maximum || maximum>INT32_MAX || count>maximum)return 0;
+    for(unsigned slot=0;slot<sizeof(g->semaphores)/sizeof(g->semaphores[0]);++slot) {
+        if(g->semaphores[slot].active)continue;
+        g->semaphores[slot]=(ctr_guest_semaphore){true,0,count,maximum};
+        uint32_t handle=ctr_guest_handle_new(g,CTR_HANDLE_SEMAPHORE,slot);
+        if(!handle)memset(&g->semaphores[slot],0,sizeof(g->semaphores[slot]));
+        return handle;
+    }
+    return 0;
+}
 void ctr_sync_svc(ctr_guest *g,uint32_t number) {
     uint32_t *r=g->cpu.r;
-    if (number==0x13 || number==0x15) {
+    if (number==0x15) {
+        if(!r[2] || r[2]>INT32_MAX || r[1]>r[2]) { r[0]=BAD_COMBINATION;r[1]=0;return; }
+        uint32_t handle=ctr_sync_create_semaphore(g,r[1],r[2]);
+        r[0]=handle?0:NO_MEMORY;r[1]=handle;return;
+    }
+    if (number==0x13) {
         unsigned slot=16;uint32_t handle=0;
-        bool mutex=number==0x13;
-        if ((mutex && r[1]>1) || (!mutex && (!r[2] || r[2]>INT32_MAX || r[1]>r[2]))) {
+        if (r[1]>1) {
             r[0]=BAD_COMBINATION;r[1]=0;return;
         }
-        for (unsigned i=0;i<16;++i) if (mutex?!g->mutexes[i].active:!g->semaphores[i].active) { slot=i;break; }
+        for (unsigned i=0;i<16;++i) if (!g->mutexes[i].active) { slot=i;break; }
         if (slot<16) {
-            if (mutex) g->mutexes[slot]=(ctr_guest_mutex){.active=true};
-            else g->semaphores[slot]=(ctr_guest_semaphore){true,0,r[1],r[2]};
-            handle=ctr_guest_handle_new(g,mutex?CTR_HANDLE_MUTEX:CTR_HANDLE_SEMAPHORE,slot);
-            if(handle && mutex && r[1])acquire(g,CTR_HANDLE_MUTEX,slot);
-            if (!handle) {
-                if (mutex) memset(&g->mutexes[slot],0,sizeof(g->mutexes[slot]));
-                else memset(&g->semaphores[slot],0,sizeof(g->semaphores[slot]));
-            }
+            g->mutexes[slot]=(ctr_guest_mutex){.active=true};
+            handle=ctr_guest_handle_new(g,CTR_HANDLE_MUTEX,slot);
+            if(handle && r[1])acquire(g,CTR_HANDLE_MUTEX,slot);
+            if(!handle)memset(&g->mutexes[slot],0,sizeof(g->mutexes[slot]));
         }
         r[0]=handle?0:NO_MEMORY;r[1]=handle;return;
     }
@@ -390,15 +435,18 @@ void ctr_thread_svc(ctr_guest *g,uint32_t number) {
     uint32_t handle=0;
     if(!result) {
         ctr_guest_thread *t=&g->threads[slot];
+        size_t tls_offset=slot*CTR_GUEST_TLS_SLOT_BYTES;
         *t=(ctr_guest_thread){.active=true,.references=1,.id=g->next_thread_id,.priority=(int)priority,
-            .stack_allocation=CTR_GUEST_MAX_ALLOCATIONS,.state=CTR_GUEST_READY,.tls_address=0x1ff82000u+slot*512u,
+            .stack_allocation=CTR_GUEST_MAX_ALLOCATIONS,.state=CTR_GUEST_READY,
+            .tls_address=CTR_GUEST_TLS_BASE+(uint32_t)tls_offset,
             .cpsr=0x10u|((entry&1u)?CTR_FLAG_T:0)};
         t->r[0]=argument;t->r[13]=stack;t->r[15]=entry&~1u;
         handle=ctr_guest_handle_new(g,CTR_HANDLE_THREAD,slot);
         if(!handle) { memset(t,0,sizeof(*t));result=NO_MEMORY; }
         else {
-            ++g->next_thread_id;memset(g->storage[4]+slot*512u,0,512);
-            (void)ctr_memory_backing_changed(&g->memory,g->storage[4]+slot*512u,512u);
+            ++g->next_thread_id;
+            memset(g->storage[4]+tls_offset,0,CTR_GUEST_TLS_SLOT_BYTES);
+            (void)ctr_memory_backing_changed(&g->memory,g->storage[4]+tls_offset,CTR_GUEST_TLS_SLOT_BYTES);
             for(unsigned i=0;i<CTR_GUEST_MAX_ALLOCATIONS;++i) {
                 ctr_guest_allocation *a=&g->allocations[i];
                 if(a->storage && stack-8>=a->base && (uint64_t)stack<=(uint64_t)a->base+a->size) {

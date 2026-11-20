@@ -63,6 +63,8 @@ def parser():
     compile_command.add_argument("--title-id",help="Wii U application ID; default is stable per input program ID")
     compile_command.add_argument("--title-version",type=int,default=1,help="Wii U title version, 1..65535 (default: 1)")
     compile_command.add_argument("--jobs",type=int,default=3,help="Native compilation jobs, 1..8 (default: 3)")
+    compile_command.add_argument("--cemu",action="store_true",help="Build the private ROM test for Cemu's virtual SD filesystem")
+    compile_command.add_argument("--mii-romfs",help="Local pinned open-source Mii compatibility archive")
     package = commands.add_parser("validate-package", help="Validate a WUP directory; reports structural limits")
     package.add_argument("path")
     package.add_argument("--registry")
@@ -121,6 +123,10 @@ def execute(args):
         from .rom_key_import import import_keys
         return import_keys(args.output,aeskeydb=args.aeskeydb,seeddb=args.seeddb,decrypted_titlekeys=args.decrypted_titlekeys)
     if args.command == "build":
+        if args.cemu and args.target not in ("mario-test", "commercial"):
+            raise HostError("usage", "The Cemu profile requires the Mario ROM build", stage="arguments")
+        if args.mii_romfs and args.target not in ("mario-test", "commercial"):
+            raise HostError("usage", "The Mii RomFS option requires the Mario ROM build", stage="arguments")
         if args.target in ("prototype", "guest-audio", "guest-audio-stream", "audio-check", "audio-stream-check", "m1-check", "install-check", "scene-check"):
             if args.path:
                 raise HostError("usage", "A native prototype build does not take a ROM", stage="arguments")
@@ -133,7 +139,8 @@ def execute(args):
             raise HostError("usage", "ROM build requires an input .3ds, .cxi or .cia", stage="arguments")
         progress=(lambda stage:print(stage+'...',file=sys.stderr,flush=True)) if sys.stderr.isatty() else None
         return build.commercial(args.path,args.output,keys_config=args.keys_config,title_id=args.title_id,
-                                title_version=args.title_version,jobs=args.jobs,progress=progress)
+                                title_version=args.title_version,jobs=args.jobs,progress=progress,cemu=args.cemu,
+                                mii_romfs=args.mii_romfs)
     if args.command == "validate-package":
         try:
             from .package_validator import validate_package

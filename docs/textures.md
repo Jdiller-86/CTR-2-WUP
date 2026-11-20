@@ -19,10 +19,20 @@ The [scene renderer](software-scenes.md) and optional native GX2 backend accept:
 | Fragment policy | Binary opaque primary color; final-alpha tests, logic/blend operations, RGBA masks and bounded D16/D24S8 depth/stencil; no lighting |
 
 PICA wrap IDs are 0/2/3 for clamp/repeat/mirror; parameters store T at bits 8–10,
-S at 12–14, with bit 5 set only for ETC1/ETC1A4. Filter bits 1/2 must both be
-clear (nearest) or set (linear), following pinned
+S at 12–14, with bit 5 set for ETC1 and clear for ETC1A4 in the game path, as in the
+[citro3d texture producer](https://github.com/devkitPro/citro3d/blob/master/source/texture.c).
+Diagnostic ETC1A4 descriptors also accept the older set marker.
+Filter bits 1 and 2 select nearest or linear magnification and minification, following pinned
 [libctru parameters](https://github.com/devkitPro/libctru/blob/9b55eda44cf80b971503991e0c78f9bc8fe50425/libctru/include/3ds/gpu/enums.h#L8).
-Mixed min/mag, border wrap, mip filters and other sampler modes fail.
+The base-level diagnostic contract requires matching filters.
+The game software renderer and mip-capable native adapter accept consecutive
+tiled mip levels down to 8×8 and separate minification and magnification
+filters. The software renderer computes LOD from screen-space UV gradients
+and the signed Q8 bias. Positive
+LOD selects the minification filter. The mip level is clamped to the requested
+minimum and maximum. Bit 24 selects linear blending
+between adjacent levels. Each active level uses the same checked decoder and
+all levels must fit in the source snapshot. Border wrap remains unsupported.
 Nearest sampling floors the interpolated coordinate times the texture extent,
 then wraps or clamps. PICA V=0 addresses the last raw storage row. This origin
 follows pinned [tex3ds image/UV packing](https://github.com/devkitPro/tex3ds/blob/6d5e8681027d59a13fba95b8ee223e324125704e/source/tex3ds.cpp#L350)
@@ -61,15 +71,18 @@ A/R/G/B with optional complement. Each stage snapshots its inputs before writing
 any output channel, including cross-channel Previous operands.
 
 The byte-domain contract truncates product/interpolation division by 255.
-Signed add subtracts 128. Clamp the operation result to 0..255, multiply by the
+Signed add subtracts 128. Game software DOT3 RGB maps the two RGB operands to
+signed normalized values, sums their component products, and replicates the
+scalar across RGB. The independently selected alpha operation still applies.
+Clamp the operation result to 0..255, multiply by the
 selected 1/2/4 scale, then saturate to 255 before the next stage. Add-multiply
 also clamps its sum before multiplication. These explicit software rules do not
 establish physical PICA rounding. Register/operand facts follow pinned
 [libctru enums](https://github.com/devkitPro/libctru/blob/9b55eda44cf80b971503991e0c78f9bc8fe50425/libctru/include/3ds/gpu/enums.h#L313)
 and [PICA register fields](https://github.com/azahar-emu/azahar/blob/987f18405073960622e1043bb44005989135c6e1/src/video_core/pica/regs_texturing.h#L288).
-DOT3, lighting sources, Texture3 and stage-zero
-Previous reject explicitly. Active constant sources require a completely defined
-constant register; reserved operand/function/scale fields reject even after a draw.
+Game software also accepts fragment lighting sources and stage-zero Previous.
+Active constant sources require a completely defined constant register. Reserved
+operand, function and scale fields reject even after a draw.
 
 ### Combiner buffer
 
@@ -100,7 +113,7 @@ to 8 MiB per unit and 24 MiB combined.
 
 ## Decoded-image cache
 
-An optional guest-owned CPU cache retains eight decoded images within 24 MiB,
+An optional guest-owned CPU cache retains up to 32 decoded images within 24 MiB,
 including owned encoded keys and RGBA payloads. Decoder profile, format,
 dimensions and exact encoded bytes identify a record. Sampling, address and
 coordinate routing remain current draw state. All active Texture0/1/2 images
@@ -198,6 +211,10 @@ color. Both stencil registers must be completely defined, including valid
 inactive configuration. D24S8 storage is limited to 1 MiB, alongside a 1 MiB
 color target; D16 retains its separate 512 KiB limit.
 
+Game software lists use the independent access bits in `0x114/0x115`. Bit 0
+gates stencil and bit 1 gates depth. A test requires its corresponding read bit,
+and each write preserves bytes covered by the other bit.
+
 Alpha rejection preserves both targets. Stencil compares masked reference against
 masked stored stencil with the eight comparison functions. Stencil-fail,
 depth-fail and pass each select KEEP, ZERO, REPLACE, saturating increment/decrement,
@@ -214,9 +231,12 @@ These interface facts do not establish physical Wii U parity.
 
 ## Native GX2 path
 
-The native adapter binds each unit's decoded RGBA through an owned pitched GX2 texture,
-reversing rows on upload so guest UV needs no CPU rewrite. Its Latte pixel program uses
-base-level normalized sampling and the selected point/linear sampler. An original
+The native adapter binds each unit's decoded RGBA through an owned pitched GX2 texture
+and reverses rows at each level. A mip chain uses the GX2-reported pitches and offsets
+for the base image and tail. The Latte pixel program uses derivative-based sampling
+for mip and mixed-filter materials. GX2 receives the current filters, LOD limits
+and bias. Exact readback still checks the result against the software renderer.
+An original
 scalar Latte encoder implements the admitted combiner chain using nine GPRs,
 or eleven with separate visible/pending buffers for the legacy Texture0 route.
 Materials using Texture1/2 use fifteen GPRs with separate sampled values and
@@ -225,6 +245,8 @@ Texture2's coordinate route is independent of its sampler binding. Shader storag
 remains bounded.
 Pixel uniforms carry stage constants and initial buffer bytes; explicit byte
 quantization and floor division preserve the software stage boundaries.
+The fog-enabled program reads the current depth fog table via indexed pixel
+uniforms and blends only RGB before the fixed-function color merge.
 The [native program cache](software-scenes.md#native-program-cache) reuses compiled
 topology while validating current TEV state and uploading current constants.
 Immutable snapshots, decoded CPU images and retired native uploads have separate
@@ -249,13 +271,16 @@ The adapter disables HiZ, sets the explicit Z scale/offset and uses late depth
 testing so alpha rejection precedes writes. With testing disabled but writes
 requested, ALWAYS implements the write path. Both complete readbacks must match,
 including packed stencil, padding and trailing bytes, before either target commits.
+On Cemu, the paired D24S8 adapter seeds uniform endpoints with a GX2 clear and uses
+separate readback passes for normalized depth and modified stencil bits.
 Stencil reference, input/write masks and named actions bind on every draw with
 matching front/back controls; disabled stencil resets these controls.
 Surface/copy facts follow the
 pinned [GX2 implementation reference](https://github.com/decaf-emu/decaf-emu/blob/e6c528a20a41c34e0f9eb91dd3da40f119db2dee/src/libdecaf/src/cafe/libraries/gx2/gx2_surface.cpp#L430).
 
-Mipmaps, mixed min/mag filters, projective/perspective coordinates, DOT3,
-native target pooling and broader depth remain unsupported. Physical sampling/blending/depth/stencil parity
+The original vertex-translation profile uses W=1. The rounded CPU-transformed
+diagnostic also accepts perspective varyings, directional lighting, RGB DOT3
+and independent D24S8 gates. Physical sampling/blending/depth/stencil parity
 and useful GPU performance remain unverified. The full-target byte comparison
 stays exact, including for bilinear draws; differing hardware rounding rejects
 the list without guest publication or software fallback.
@@ -263,8 +288,11 @@ the list without guest publication or software fallback.
 ### Native upload reuse
 
 Six native records retain at most 24 MiB of pitched RGBA8 images, with an 8 MiB
-per-image limit. After prior draw/context references retire, exact reversed-row
-pixel comparisons and dimensions identify reusable read-only images. Source
+per-image limit including the mip tail. The Cemu diagnostic allows 48 records
+under the same byte limits. It keeps uploaded addresses immutable until the idle
+owner's texture cache is cleared at a video frame boundary. After prior draw/context references retire,
+exact reversed-row pixel comparisons, dimensions and level count identify reusable
+read-only images. Source
 address, sampler and UV route remain current state. Source spans overlapping
 retained images or cache metadata reject; all active units pin their images
 before another lookup can evict them. Unpinned records evict in bounded

@@ -36,6 +36,29 @@ L_00100000:
                        '    /* 00100000 E1A00000 */\nvfp33_ = 0;'):
             with self.assertRaises(ValueError):adapt_source(source)
 
+    def test_thumb_unary_preserves_reads_without_unused_snapshot(self):
+        for operation in ('0 - b', '~b'):
+            source=('    /* 00100000 4240 */\n'
+                    '    { uint32_t a = reg0_, b = reg1_, r; r = '+operation+'; reg0_ = r; }')
+            adapted,count=adapt_source(source)
+            self.assertEqual(count,1)
+            self.assertIn('a = ctx->r[0], b = ctx->r[1], r; (void)a;',adapted)
+            self.assertIn('r = '+operation+'; ctx->r[0] = r;',adapted)
+
+    def test_dispatch_compacts_aligned_labels_without_aliasing(self):
+        for mode, mask, shift, label in (('!ctx->thumb', 3, 2, 0x100004),
+                                          ('ctx->thumb', 1, 1, 0x100002)):
+            source=(f'    if ({mode}) switch (target) {{\n'
+                    f'    case 0x{label:08X}u: goto L_{label:08X};\n'
+                    '    }\n    /* 00100000 E1A00000 */')
+            adapted, count=adapt_source(source)
+            self.assertEqual(count,1)
+            self.assertIn(f'if ({mode} && !((target) & {mask}u)) switch ((target) >> {shift})',adapted)
+            self.assertIn(f'case 0x{label >> shift:08X}u: goto L_{label:08X};',adapted)
+            unaligned=source.replace(f'{label:08X}',f'{label-1:08X}')
+            with self.assertRaises(ValueError):
+                adapt_source(unaligned)
+
     def test_unverified_driver_does_not_run_or_publish(self):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary);binary=root/'unknown-generator';binary.write_bytes(b'not an installed driver')
