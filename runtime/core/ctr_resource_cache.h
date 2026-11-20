@@ -6,7 +6,7 @@
  * resetting/freeing its memory owner; it contains no GPU resource or pointer
  * into guest backing. Live mapping/permission checks and exact source-byte
  * comparisons precede reuse even when a resource version remains current. */
-#define CTR_RESOURCE_CACHE_SLOTS 40u
+#define CTR_RESOURCE_CACHE_SLOTS 128u
 #define CTR_RESOURCE_CACHE_MAX_BYTES (12u*1024u*1024u)
 typedef enum {
     CTR_RESOURCE_COMMAND, CTR_RESOURCE_VERTEX, CTR_RESOURCE_TEXTURE,

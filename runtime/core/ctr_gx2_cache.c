@@ -134,7 +134,7 @@ static void prefix(key_writer *writer,ctr_gx2_cache_kind kind) {
     word(writer,2u); /* Position/color/Texture0..2, bounded TEV/depth renderer ABI. */
     word(writer,CTR_SOURCE_DIRTY?1u:0u);
     byte(writer,(uint8_t)kind);word(writer,(uint32_t)(sizeof(namespace)-1u));
-    for(size_t i=0;i<sizeof(namespace)-1u;++i)byte(writer,(uint8_t)namespace[i]);
+    for(size_t i=0;i+1u<sizeof(namespace);++i)byte(writer,(uint8_t)namespace[i]);
 }
 static bool key_outputs(const void *input,size_t input_size,const void *maps,size_t map_size,
                          uint8_t *key,size_t capacity,size_t *out_size) {

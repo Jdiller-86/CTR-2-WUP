@@ -36,6 +36,12 @@ extern void GX2ConvertDepthBufferToTextureSurface(GX2DepthBuffer *depth,GX2Surfa
 #define MAX_TEXTURE_BYTES CTR_WIIU_GX2_TEXTURE_CACHE_MAX_IMAGE_BYTES
 #define MAX_TEXTURE_TOTAL_BYTES CTR_WIIU_GX2_TEXTURE_CACHE_MAX_BYTES
 #define CEMU_TEXTURE_SLOTS 48u
+#define DIRECT_TEXTURE_SLOTS 256u
+#define DIRECT_VS_SLOTS 32u
+#define DIRECT_PS_SLOTS 256u
+#define DIRECT_PS_ARENA_BYTES (1024u*1024u)
+#define DIRECT_VERTEX_STRIDE (7u*4u*sizeof(float))
+#define DIRECT_VERTEX_RING_BYTES (8u*1024u*1024u)
 #define VERTEX_STRIDE (16u*4u*sizeof(float))
 #define VERTEX_UPLOAD_BYTES (CTR_SCENE_MAX_VERTICES*VERTEX_STRIDE)
 #define MAX_FETCH_BYTES 4096u
@@ -72,6 +78,8 @@ typedef struct {
 } texture_image;
 typedef struct {
     texture_image upload;
+    uint64_t hash;
+    const uint8_t *last_rgba;
     unsigned pins;
     bool submitted;
 } texture_cache_entry;
@@ -79,6 +87,40 @@ struct ctr_wiiu_gx2_texture_cache {
     unsigned next,slots;
     texture_cache_entry entries[];
 };
+typedef struct {
+    uint64_t hash;
+    size_t key_size;
+    uint8_t key[CTR_GX2_CACHE_PIXEL_KEY_MAX];
+    GX2PixelShader shader;
+} direct_ps_entry;
+typedef struct {
+    GX2ContextState *context;
+    ctr_gx2_shader *compiled;
+    GX2FetchShader fetch;
+    void *fetch_program;
+    uint32_t fetch_size;
+    void *vertex_ring;
+    size_t vertex_cursor;
+    GX2ColorBuffer target;
+    GX2Surface linear;
+    GX2DepthBuffer depth_target;
+    unsigned width,height,depth_format;
+    bool has_depth;
+    void *vs_arena;
+    GX2VertexShader vs[DIRECT_VS_SLOTS];
+    bool vs_valid[DIRECT_VS_SLOTS];
+    void *ps_arena;
+    size_t ps_arena_used;
+    unsigned ps_count;
+    direct_ps_entry ps_entries[DIRECT_PS_SLOTS];
+    uint8_t scratch_ps[PIXEL_BYTES];
+    bool resident_depth_valid;
+    uint32_t resident_depth_address;
+    unsigned resident_depth_width,resident_depth_height,resident_depth_format;
+    const GX2VertexShader *bound_vs;
+    const GX2PixelShader *bound_ps;
+    bool list_bound;
+} direct_pool_state;
 
 typedef struct {
     GX2ContextState *context;
@@ -248,6 +290,14 @@ static void release(ctr_wiiu_gx2_scene *s,scene_private *p) {
     texture_leases_release(s,p);
     for(unsigned unit=0;unit<3u;++unit)dispose(s,p->texture[unit].texture.surface.image);
     dispose(s,p->vertices);dispose(s,p->draw_uploads);dispose(s,p->fetch_program);
+    if(s->direct_pool) {
+        direct_pool_state *pool=s->direct_pool;
+        if(p->context==pool->context)p->context=NULL;
+        if(p->compiled==pool->compiled)p->compiled=NULL;
+        if(p->target.surface.image==pool->target.surface.image)p->target.surface.image=NULL;
+        if(p->linear.image==pool->linear.image)p->linear.image=NULL;
+        if(p->depth_target.surface.image==pool->depth_target.surface.image)p->depth_target.surface.image=NULL;
+    }
     dispose(s,p->pixel_storage);dispose(s,p->vertex_storage);
     dispose(s,p->compiled);dispose(s,p->linear.image);
     dispose(s,p->depth_linear.image);dispose(s,p->depth_target.surface.image);
@@ -257,6 +307,21 @@ static void release(ctr_wiiu_gx2_scene *s,scene_private *p) {
     dispose(s,p->target.surface.image);dispose(s,p->context);dispose(s,p);
     s->private_state=NULL;s->quarantined=false;
 }
+static void direct_pool_destroy(ctr_wiiu_gx2_scene *s) {
+    direct_pool_state *pool=s?s->direct_pool:NULL;
+    if(!pool)return;
+    dispose(s,pool->ps_arena);
+    dispose(s,pool->vs_arena);
+    dispose(s,pool->depth_target.surface.image);
+    dispose(s,pool->linear.image);
+    dispose(s,pool->target.surface.image);
+    dispose(s,pool->vertex_ring);
+    dispose(s,pool->fetch_program);
+    dispose(s,pool->compiled);
+    dispose(s,pool->context);
+    dispose(s,pool);
+    s->direct_pool=NULL;
+}
 void ctr_wiiu_gx2_scene_abort(ctr_wiiu_gx2_scene *s) {
     if(!s)return;
     scene_private *p=s->private_state;
@@ -265,12 +330,13 @@ void ctr_wiiu_gx2_scene_abort(ctr_wiiu_gx2_scene *s) {
     if(p) {
         if(!restore(s) || !retire(s,p))return;
         release(s,p);
-    }
+    } else direct_pool_destroy(s);
     texture_cache_destroy(s);
 }
 void ctr_wiiu_gx2_scene_after_shutdown(ctr_wiiu_gx2_scene *s) {
     if(!s)return;
     if(s->private_state)release(s,s->private_state);
+    direct_pool_destroy(s);
     texture_cache_destroy(s);
     ctr_wiiu_gx2_scene_cache_clear(s);
     s->restore_context=NULL;
@@ -998,7 +1064,7 @@ static bool pixel_shader(scene_private *p,const ctr_tev_program *tev,unsigned ma
 static bool vertex_program(ctr_wiiu_gx2_scene *s,scene_private *p,
                             const ctr_scene_state *state,unsigned coordinates) {
     uint8_t key[CTR_GX2_CACHE_VERTEX_KEY_MAX];size_t key_size=0,record_size=0;
-    bool enabled=!s->cache_disabled && s->program_cache;
+    bool enabled=!s->cache_disabled && (s->program_cache || s->direct_hardware);
     bool keyed=enabled && ctr_gx2_cache_vertex_key(&state->shader,
         (uint16_t)state->registers[0x2bdu],&state->registers[0x050u],
         state->registers[0x04fu],key,&key_size);
@@ -1079,7 +1145,7 @@ static bool pixel_program(ctr_wiiu_gx2_scene *s,scene_private *p,
         constants[3]=bits(FLT_MIN);
         p->pixel_uniform_vectors=MIP_DIMENSIONS+unit+1u;
     }
-    bool enabled=!s->cache_disabled && s->program_cache;
+    bool enabled=!s->cache_disabled && (s->program_cache || s->direct_hardware);
     if(filter_mask) {
         p->pixel_constants[FILTER_SCALE][0]=bits(65536.0f);
         p->pixel_constants[FILTER_SCALE][1]=bits(1.0f/65536.0f);
@@ -1114,6 +1180,34 @@ static bool pixel_program(ctr_wiiu_gx2_scene *s,scene_private *p,
     if(keyed && variant_size<=sizeof(key)-key_size) {
         memcpy(key+key_size,variant,variant_size);key_size+=variant_size;
     } else keyed=false;
+    if(s->direct_hardware && s->direct_pool && keyed) {
+        direct_pool_state *pool=s->direct_pool;
+        uint64_t h=UINT64_C(14695981039346656037);
+        for(size_t i=0;i<key_size;++i)h=(h^key[i])*UINT64_C(1099511628211);
+        for(unsigned i=0;i<pool->ps_count;++i) {
+            direct_ps_entry *e=&pool->ps_entries[i];
+            if(e->hash==h && e->key_size==key_size && !memcmp(e->key,key,key_size)) {
+                p->pixel=e->shader;++s->direct_shader_hits;return true;
+            }
+        }
+        p->pixel_program=pool->scratch_ps;
+        if(!pixel_shader(p,tev,mask,texture2_coord1,implicit_lod,explicit_lod,filter_mask,mixed_filters,fog,transformed,light,depth_plane,blend)) {
+            cache_add(s,&s->pixel_translation_failures,1u);return false;
+        }
+        size_t sz=p->pixel.size,aligned_sz=(sz+255u)&~(size_t)255u;
+        if(pool->ps_count<DIRECT_PS_SLOTS && aligned_sz<=DIRECT_PS_ARENA_BYTES-pool->ps_arena_used) {
+            void *dest=(uint8_t *)pool->ps_arena+pool->ps_arena_used;
+            memcpy(dest,pool->scratch_ps,sz);
+            DCFlushRange(dest,(unsigned)sz);
+            GX2Invalidate(GX2_INVALIDATE_MODE_CPU_SHADER,dest,(unsigned)sz);
+            direct_ps_entry *e=&pool->ps_entries[pool->ps_count++];
+            e->hash=h;e->key_size=key_size;memcpy(e->key,key,key_size);
+            e->shader=p->pixel;e->shader.program=dest;
+            p->pixel=e->shader;pool->ps_arena_used+=aligned_sz;
+            ++s->direct_shader_compiles;
+        }
+        return true;
+    }
     bool hit=keyed && cache_lookup(s,CTR_GX2_CACHE_PIXEL,key,key_size,
         &record,sizeof(record),&record_size);
     if(!keyed)cache_add(s,&s->cache_stats.bypasses[CTR_GX2_CACHE_PIXEL],1u);
@@ -1330,11 +1424,33 @@ static bool texture_matches(const texture_image *image,const ctr_scene_sampler *
     }
     return true;
 }
+static uint64_t texture_sampler_hash(const ctr_scene_sampler *source) {
+    uint64_t h=UINT64_C(14695981039346656037)^(uint64_t)source->levels[0].width^
+        ((uint64_t)source->levels[0].height<<16)^((uint64_t)source->max_level<<32);
+    for(unsigned i=0;i<=source->max_level;++i) {
+        const ctr_scene_texture *lv=&source->levels[i];
+        size_t bytes=(size_t)lv->width*lv->height*4u;
+        const uint8_t *p=lv->rgba;
+        for(size_t k=0;k+8u<=bytes;k+=8u) {
+            uint64_t w;memcpy(&w,p+k,8u);
+            h=(h^w)*UINT64_C(1099511628211);
+        }
+    }
+    return h;
+}
 static texture_cache_entry *texture_find(ctr_wiiu_gx2_texture_cache *cache,
-                                         const ctr_scene_sampler *source) {
+                                         const ctr_scene_sampler *source,uint64_t h,bool direct) {
     for(unsigned i=0;i<cache->slots;++i) {
         texture_cache_entry *entry=&cache->entries[i];
-        if(texture_matches(&entry->upload,source))return entry;
+        const GX2Surface *surface=&entry->upload.texture.surface;
+        if(!surface->image || entry->hash!=h ||
+           surface->width!=source->levels[0].width || surface->height!=source->levels[0].height ||
+           surface->mipLevels!=source->max_level+1u)continue;
+        if((direct && entry->last_rgba==source->levels[0].rgba) ||
+           texture_matches(&entry->upload,source)) {
+            entry->last_rgba=source->levels[0].rgba;
+            return entry;
+        }
     }
     return NULL;
 }
@@ -1350,7 +1466,7 @@ static texture_cache_entry *texture_slot(ctr_wiiu_gx2_scene *s,size_t bytes) {
         if(entry->upload.texture.surface.image) {
             /* Cemu can reuse the old image of an address within the same
              * video frame, even when its GPU command has retired. */
-            if(s->cemu_readback)continue;
+            if(s->cemu_readback && !s->direct_hardware)continue;
             s->texture_cache_stats.bytes-=entry->upload.bytes;
             dispose(s,entry->upload.texture.surface.image);memset(entry,0,sizeof(*entry));
             texture_cache_add(s,&s->texture_cache_stats.evictions,1u);
@@ -1366,7 +1482,8 @@ static bool upload_textures(ctr_wiiu_gx2_scene *s,scene_private *p,
     if(s->cemu_readback && s->texture_cache_disabled)return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
     if(s->texture_cache_disabled)texture_cache_destroy(s);
     else if(!s->texture_cache) {
-        unsigned slots=s->cemu_readback?CEMU_TEXTURE_SLOTS:CTR_WIIU_GX2_TEXTURE_CACHE_SLOTS;
+        unsigned slots=s->direct_hardware?DIRECT_TEXTURE_SLOTS:
+            s->cemu_readback?CEMU_TEXTURE_SLOTS:CTR_WIIU_GX2_TEXTURE_CACHE_SLOTS;
         s->texture_cache=allocate(s,256,sizeof(*s->texture_cache)+slots*sizeof(texture_cache_entry));
         if(s->texture_cache)s->texture_cache->slots=slots;
         else texture_cache_add(s,&s->texture_cache_stats.allocation_failures,1u);
@@ -1384,10 +1501,12 @@ static bool upload_textures(ctr_wiiu_gx2_scene *s,scene_private *p,
     for(unsigned unit=0;unit<3u;++unit) {
         dispose(s,p->texture[unit].texture.surface.image);memset(&p->texture[unit],0,sizeof(p->texture[unit]));
     }
+    uint64_t hashes[3]={0};
     /* Protect all current-draw resident hits before any miss can evict one,
      * including hits on units later than the first missing descriptor. */
     for(unsigned unit=0;unit<3u;++unit)if(mask&(1u<<unit)) {
-        texture_cache_entry *entry=texture_find(s->texture_cache,&sources[unit]);
+        hashes[unit]=texture_sampler_hash(&sources[unit]);
+        texture_cache_entry *entry=texture_find(s->texture_cache,&sources[unit],hashes[unit],s->direct_hardware);
         if(entry) {
             texture_cache_add(s,&s->texture_cache_stats.lookups,1u);
             texture_cache_add(s,&s->texture_cache_stats.hits,1u);texture_pin(s,p,unit,entry);
@@ -1397,14 +1516,14 @@ static bool upload_textures(ctr_wiiu_gx2_scene *s,scene_private *p,
         if(!p->texture_lease[unit]) {
             /* A preceding new unit can have uploaded the same decoded image. */
             texture_cache_add(s,&s->texture_cache_stats.lookups,1u);
-            texture_cache_entry *entry=texture_find(s->texture_cache,&sources[unit]);
+            texture_cache_entry *entry=texture_find(s->texture_cache,&sources[unit],hashes[unit],s->direct_hardware);
             if(entry)texture_cache_add(s,&s->texture_cache_stats.hits,1u);
             else {
                 texture_cache_add(s,&s->texture_cache_stats.misses,1u);
                 texture_image next;
                 if(!texture_layout(&next,&sources[unit]))return fail(s,CTR_WIIU_GX2_SCENE_LAYOUT);
                 entry=texture_slot(s,next.bytes);
-                if(!entry && !s->cemu_readback && p->used_uploads) {
+                if(!entry && (!s->cemu_readback || s->direct_hardware) && p->used_uploads) {
                     if(!retire(s,p))return false;
                     entry=texture_slot(s,next.bytes);
                 }
@@ -1414,7 +1533,7 @@ static bool upload_textures(ctr_wiiu_gx2_scene *s,scene_private *p,
                     return fail(s,CTR_WIIU_GX2_SCENE_ALLOCATION);
                 }
                 texture_upload(s,&next,&sources[unit]);
-                entry->upload=next;
+                entry->upload=next;entry->hash=hashes[unit];entry->last_rgba=sources[unit].levels[0].rgba;
                 s->texture_cache_stats.bytes+=next.bytes;
                 if(s->texture_cache_stats.bytes>s->texture_cache_stats.peak_bytes)
                     s->texture_cache_stats.peak_bytes=s->texture_cache_stats.bytes;
@@ -1440,6 +1559,99 @@ static bool depth_clear_seed(const ctr_scene_depth_surface *depth,float *value,u
     *stencil=bytes==4u?seed[3]:0u;
     return true;
 }
+static bool color_clear_seed(const ctr_scene_surface *initial,float rgba[4]) {
+    const uint8_t *first=initial->bytes;
+    uint32_t word;memcpy(&word,first,4u);
+    size_t row_bytes=(size_t)initial->width*4u;
+    for(size_t x=4u;x<row_bytes;x+=4u) {
+        uint32_t w;memcpy(&w,first+x,4u);
+        if(w!=word)return false;
+    }
+    for(unsigned y=1u;y<initial->height;++y)
+        if(memcmp(first,first+(size_t)y*initial->stride,row_bytes))return false;
+    rgba[0]=(float)first[0]*(1.0f/255.0f);
+    rgba[1]=(float)first[1]*(1.0f/255.0f);
+    rgba[2]=(float)first[2]*(1.0f/255.0f);
+    rgba[3]=(float)first[3]*(1.0f/255.0f);
+    return true;
+}
+static direct_pool_state *direct_pool_ensure(ctr_wiiu_gx2_scene *s,unsigned width,unsigned height,
+                                             bool has_depth,unsigned depth_format) {
+    direct_pool_state *pool=s->direct_pool;
+    if(!pool) {
+        pool=allocate(s,256,sizeof(*pool));
+        if(!pool) { fail(s,CTR_WIIU_GX2_SCENE_ALLOCATION);return NULL; }
+        pool->context=allocate(s,256,sizeof(*pool->context));
+        pool->compiled=allocate(s,256,sizeof(*pool->compiled));
+        uint32_t fsize=GX2CalcFetchShaderSizeEx(7,GX2_FETCH_SHADER_TESSELLATION_NONE,GX2_TESSELLATION_MODE_DISCRETE);
+        if(!fsize || fsize>MAX_FETCH_BYTES) {
+            s->direct_pool=pool;direct_pool_destroy(s);fail(s,CTR_WIIU_GX2_SCENE_LAYOUT);return NULL;
+        }
+        pool->fetch_size=fsize;
+        pool->fetch_program=allocate(s,256,fsize);
+        pool->vertex_ring=allocate(s,256,DIRECT_VERTEX_RING_BYTES);
+        pool->vs_arena=allocate(s,256,DIRECT_VS_SLOTS*TRANSFORMED_PROGRAM_BYTES);
+        pool->ps_arena=allocate(s,256,DIRECT_PS_ARENA_BYTES);
+        if(!pool->context || !pool->compiled || !pool->fetch_program ||
+           !pool->vertex_ring || !pool->vs_arena || !pool->ps_arena) {
+            s->direct_pool=pool;direct_pool_destroy(s);fail(s,CTR_WIIU_GX2_SCENE_ALLOCATION);return NULL;
+        }
+        GX2AttribStream attributes[7];memset(attributes,0,sizeof(attributes));
+        for(unsigned input=0;input<7u;++input) {
+            attributes[input].location=input;attributes[input].buffer=0;
+            attributes[input].offset=input*4u*sizeof(float);
+            attributes[input].format=GX2_ATTRIB_FORMAT_FLOAT_32_32_32_32;
+            attributes[input].type=GX2_ATTRIB_INDEX_PER_VERTEX;
+            attributes[input].mask=GX2_SEL_MASK(GX2_SQ_SEL_X,GX2_SQ_SEL_Y,GX2_SQ_SEL_Z,GX2_SQ_SEL_W);
+            attributes[input].endianSwap=GX2_ENDIAN_SWAP_8_IN_32;
+        }
+        GX2InitFetchShaderEx(&pool->fetch,pool->fetch_program,7,attributes,
+                            GX2_FETCH_SHADER_TESSELLATION_NONE,GX2_TESSELLATION_MODE_DISCRETE);
+        DCFlushRange(pool->fetch_program,fsize);
+        GX2Invalidate(GX2_INVALIDATE_MODE_CPU_SHADER,pool->fetch_program,fsize);
+        GX2SetupContextStateEx(pool->context,true);
+        s->direct_pool=pool;
+    }
+    unsigned color_format=GX2_SURFACE_FORMAT_UNORM_R8_G8_B8_A8;
+    if(!pool->target.surface.image || pool->width!=width || pool->height!=height) {
+        dispose(s,pool->target.surface.image);pool->target.surface.image=NULL;
+        dispose(s,pool->linear.image);pool->linear.image=NULL;
+        dispose(s,pool->depth_target.surface.image);pool->depth_target.surface.image=NULL;
+        pool->has_depth=false;pool->resident_depth_valid=false;
+        memset(&pool->target,0,sizeof(pool->target));
+        memset(&pool->linear,0,sizeof(pool->linear));
+        memset(&pool->depth_target,0,sizeof(pool->depth_target));
+        if(!layout(&pool->target.surface,width,height,GX2_TILE_MODE_TILED_2D_THIN1,color_format) ||
+           !layout(&pool->linear,width,height,GX2_TILE_MODE_LINEAR_SPECIAL,color_format) ||
+           (uint64_t)pool->linear.pitch*height*4u>pool->linear.imageSize) {
+            fail(s,CTR_WIIU_GX2_SCENE_LAYOUT);return NULL;
+        }
+        pool->target.surface.image=allocate(s,pool->target.surface.alignment,pool->target.surface.imageSize);
+        pool->linear.image=allocate(s,pool->linear.alignment,pool->linear.imageSize);
+        if(!pool->target.surface.image || !pool->linear.image) {
+            fail(s,CTR_WIIU_GX2_SCENE_ALLOCATION);return NULL;
+        }
+        DCFlushRange(pool->target.surface.image,pool->target.surface.imageSize);
+        DCFlushRange(pool->linear.image,pool->linear.imageSize);
+        pool->target.viewNumSlices=1;GX2InitColorBufferRegs(&pool->target);
+        pool->width=width;pool->height=height;
+    }
+    if(has_depth && (!pool->depth_target.surface.image || !pool->has_depth || pool->depth_format!=depth_format)) {
+        dispose(s,pool->depth_target.surface.image);pool->depth_target.surface.image=NULL;
+        pool->resident_depth_valid=false;
+        memset(&pool->depth_target,0,sizeof(pool->depth_target));
+        if(!depth_layout(&pool->depth_target.surface,width,height,GX2_TILE_MODE_TILED_2D_THIN1,depth_format)) {
+            fail(s,CTR_WIIU_GX2_SCENE_LAYOUT);return NULL;
+        }
+        pool->depth_target.surface.image=allocate(s,pool->depth_target.surface.alignment,pool->depth_target.surface.imageSize);
+        if(!pool->depth_target.surface.image) { fail(s,CTR_WIIU_GX2_SCENE_ALLOCATION);return NULL; }
+        DCFlushRange(pool->depth_target.surface.image,pool->depth_target.surface.imageSize);
+        pool->depth_target.viewNumSlices=1;GX2InitDepthBufferRegs(&pool->depth_target);
+        GX2InitDepthBufferHiZEnable(&pool->depth_target,false);
+        pool->depth_format=depth_format;pool->has_depth=true;
+    }
+    return pool;
+}
 static unsigned target_row(const scene_private *p,unsigned y) {
     return p->flip_y?p->height-y-1u:y;
 }
@@ -1449,6 +1661,60 @@ static bool begin_targets(void *context,const ctr_scene_surface *initial,
     if(!s || !s->restore_context || !dimensions(initial) ||
        (depth && !depth_dimensions(depth,initial)))return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
     if(s->private_state)return fail(s,CTR_WIIU_GX2_SCENE_BUSY);
+    if(s->direct_hardware && !resident) {
+        direct_pool_state *pool=direct_pool_ensure(s,initial->width,initial->height,
+                                                   depth!=NULL,depth?depth->format:0u);
+        if(!pool)return false;
+        bool skip_depth_clear=depth && s->direct_keep_depth && pool->resident_depth_valid &&
+            pool->has_depth && pool->resident_depth_address==depth->address &&
+            pool->resident_depth_width==initial->width && pool->resident_depth_height==initial->height &&
+            pool->resident_depth_format==depth->format;
+        float clear_value=0.0f;uint8_t clear_stencil=0;
+        if(depth && !skip_depth_clear && !depth_clear_seed(depth,&clear_value,&clear_stencil))
+            return fail(s,CTR_WIIU_GX2_SCENE_UNSUPPORTED_READBACK);
+        s->result=CTR_WIIU_GX2_SCENE_OK;
+        scene_private *p=allocate(s,256,sizeof(*p));
+        if(!p)return fail(s,CTR_WIIU_GX2_SCENE_ALLOCATION);
+        s->private_state=p;p->width=initial->width;p->height=initial->height;
+        p->stride=initial->stride;p->size=initial->size;
+        p->flip_y=s->cemu_readback;p->depth_enabled=depth!=NULL;p->resident=false;
+        p->context=pool->context;p->target=pool->target;p->linear=pool->linear;
+        p->compiled=pool->compiled;p->shader_slots=1u;
+        if(depth) {
+            p->depth_stride=depth->stride;p->depth_size=depth->size;p->depth_address=depth->address;
+            p->depth_format=depth->format;p->depth_bytes=depth->format==3u?4u:2u;
+            p->seed_far=clear_value!=0.0f;p->seed_stencil=clear_stencil;
+            p->depth_target=pool->depth_target;
+        }
+        pool->bound_vs=NULL;pool->bound_ps=NULL;pool->list_bound=false;
+        GX2SetContextState(p->context);
+        float clear_rgba[4];
+        if(color_clear_seed(initial,clear_rgba)) {
+            GX2ClearColor(&p->target,clear_rgba[0],clear_rgba[1],clear_rgba[2],clear_rgba[3]);
+        } else {
+            for(unsigned y=0;y<p->height;++y)
+                memcpy((uint8_t *)p->linear.image+(size_t)y*p->linear.pitch*4u,
+                       (const uint8_t *)initial->bytes+(size_t)target_row(p,y)*initial->stride,p->width*4u);
+            DCFlushRange(p->linear.image,p->linear.imageSize);
+            GX2Invalidate(GX2_INVALIDATE_MODE_CPU_TEXTURE,p->linear.image,p->linear.imageSize);
+            GX2CopySurface(&p->linear,0,0,&p->target.surface,0,0);
+        }
+        p->pending=true;
+        if(depth && !skip_depth_clear) {
+            GX2ClearDepthStencilEx(&p->depth_target,clear_value,clear_stencil,
+                p->depth_format==CTR_SCENE_DEPTH_D24S8?GX2_CLEAR_FLAGS_BOTH:GX2_CLEAR_FLAGS_DEPTH);
+            pool->resident_depth_valid=true;
+            pool->resident_depth_address=depth->address;
+            pool->resident_depth_width=p->width;pool->resident_depth_height=p->height;
+            pool->resident_depth_format=p->depth_format;
+        } else if(skip_depth_clear) {
+            ++s->direct_depth_skips;
+        }
+        GX2Invalidate(GX2_INVALIDATE_MODE_COLOR_BUFFER,p->target.surface.image,p->target.surface.imageSize);
+        if(depth)GX2Invalidate(GX2_INVALIDATE_MODE_DEPTH_BUFFER,p->depth_target.surface.image,p->depth_target.surface.imageSize);
+        if(!restore(s)) { release(s,p);return false; }
+        ++s->begins;return true;
+    }
     bool clear_depth=depth && s->cemu_readback;
     float clear_value=0.0f;uint8_t clear_stencil=0;
     /* Cemu's depth copy does not reliably initialize the renderer's texture
@@ -1940,8 +2206,10 @@ static bool draw_samples(void *context,const ctr_scene_state *state,const ctr_ve
                          const ctr_scene_transformed_vertex *transformed,unsigned count,
                          const ctr_scene_sampler sources[3],unsigned mask,bool mipmaps,const ctr_scene_light *light) {
     ctr_wiiu_gx2_scene *s=context;scene_private *p=s?s->private_state:NULL;
-    if(!p || !state || (!vertices && !transformed) || !count || count>CTR_SCENE_MAX_VERTICES || count%3u ||
-       mask>7u || (mask && !sources))
+    bool direct=s && s->direct_hardware && s->direct_pool!=NULL;
+    unsigned max_vertices=direct?CTR_SCENE_MAX_GAME_DRAW_VERTICES:CTR_SCENE_MAX_VERTICES;
+    if(!p || !state || (!vertices && !transformed) || (direct && !transformed) ||
+       !count || count>max_vertices || count%3u || mask>7u || (mask && !sources))
         return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
     if(s->quarantined)return fail(s,CTR_WIIU_GX2_SCENE_WAIT);
     ctr_fragment_state fragment;ctr_stencil_state stencil;
@@ -1957,14 +2225,20 @@ static bool draw_samples(void *context,const ctr_scene_state *state,const ctr_ve
     for(unsigned unit=0;unit<3u;++unit)if((mask&(1u<<unit)) &&
         !texture_chain_valid(s,p,&sources[unit],mipmaps,aliases_only))
         return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
-    bool batched=s->batch_transformed && transformed && !s->texture_cache_disabled && prepare_draw_uploads(s,p);
+    direct_pool_state *pool=direct?(direct_pool_state *)s->direct_pool:NULL;
+    bool batched=!direct && s->batch_transformed && transformed && !s->texture_cache_disabled && prepare_draw_uploads(s,p);
     /* A fresh slot has never been written by a draw since the last fence.
      * The ordinary path continues to retire before writing its shared slot. */
-    if((!batched || p->used_uploads==DRAW_UPLOAD_SLOTS) && !retire(s,p))return false;
+    if(!direct && (!batched || p->used_uploads==DRAW_UPLOAD_SLOTS) && !retire(s,p))return false;
     texture_leases_release(s,p);
-    void *vertex_upload=p->vertices;
+    size_t vbytes=direct?(size_t)count*DIRECT_VERTEX_STRIDE:(size_t)count*VERTEX_STRIDE;
+    if(direct && pool->vertex_cursor+vbytes>DIRECT_VERTEX_RING_BYTES) {
+        if(!retire(s,p))return false;
+        pool->vertex_cursor=0;
+    }
+    void *vertex_upload=direct?(void *)((uint8_t *)pool->vertex_ring+pool->vertex_cursor):p->vertices;
     if(batched)vertex_upload=select_draw_upload(s,p);
-    else select_shader_storage(s,p);
+    else if(!direct)select_shader_storage(s,p);
     cache_prepare(s);
     bool texture2_coord1=(mask&4u) && (state->registers[0x080u]&(1u<<13));
     unsigned implicit_lod=0,explicit_lod=0,filter_mask=0,mixed_filters=0;
@@ -1972,10 +2246,10 @@ static bool draw_samples(void *context,const ctr_scene_state *state,const ctr_ve
         unsigned filters=sources[unit].levels[0].params&6u;
         if(sources[unit].max_level || sources[unit].bias_q8 || (filters!=0u && filters!=6u))
             implicit_lod|=1u<<unit;
-        if(transformed && s->cemu_readback && sources[unit].max_level>sources[unit].min_level &&
+        if(!direct && transformed && s->cemu_readback && sources[unit].max_level>sources[unit].min_level &&
            (filters==0u || filters==6u) && !(sources[unit].levels[0].params&UINT32_C(0x01000000)))
             explicit_lod|=1u<<unit;
-        if(transformed && s->cemu_readback && filters &&
+        if(!direct && transformed && s->cemu_readback && filters &&
            !(sources[unit].levels[0].params&UINT32_C(0x01000000))) {
             filter_mask|=1u<<unit;
             explicit_lod|=1u<<unit;
@@ -1984,14 +2258,27 @@ static bool draw_samples(void *context,const ctr_scene_state *state,const ctr_ve
     }
     unsigned coordinates=coordinate_mask(mask,texture2_coord1);
     unsigned mip_coordinates=coordinate_mask(explicit_lod,texture2_coord1);
-    bool depth_plane=transformed && s->cemu_readback && p->depth_enabled &&
+    bool depth_plane=!direct && transformed && s->cemu_readback && p->depth_enabled &&
                      p->depth_format==CTR_SCENE_DEPTH_D24S8;
-    if(transformed)transformed_program(p->compiled,coordinates,light,depth_plane,mip_coordinates);
+    unsigned direct_vs_id=coordinates|(light?(8u|(light->needs_view?16u:0u)):0u);
+    if(direct) {
+        if(!pool->vs_valid[direct_vs_id]) {
+            p->compiled=pool->compiled;
+            p->vertex_program=(uint8_t *)pool->vs_arena+(size_t)direct_vs_id*TRANSFORMED_PROGRAM_BYTES;
+            transformed_program(p->compiled,coordinates,light,false,0u);
+            upload_vertex_program(p,light,false,0u);
+            p->vertex.regs.sq_vtx_semantic_clear=UINT32_C(0xffffff80);
+            p->vertex.regs.num_sq_vtx_semantic=7u;
+            DCFlushRange(p->vertex_program,p->vertex.size);
+            pool->vs[direct_vs_id]=p->vertex;
+            pool->vs_valid[direct_vs_id]=true;
+        }
+    } else if(transformed)transformed_program(p->compiled,coordinates,light,depth_plane,mip_coordinates);
     else if(!vertex_program(s,p,state,coordinates))return fail(s,CTR_WIIU_GX2_SCENE_SHADER);
     ctr_tev_program tev;
     bool fog=(state->registers[0x0e0u]&7u)==5u;
     pixel_blend_mode blend=BLEND_FIXED;
-    if(transformed && s->cemu_readback && fragment.blend_enabled &&
+    if(!direct && transformed && s->cemu_readback && fragment.blend_enabled &&
        (!fragment.alpha_enabled || fragment.alpha_function==1u) &&
        fragment.blend_equation[0]==0u && fragment.blend_equation[1]==0u) {
         if(fragment.blend_source[0]==6u && fragment.blend_source[1]==6u &&
@@ -2020,17 +2307,18 @@ static bool draw_samples(void *context,const ctr_scene_state *state,const ctr_ve
     /* Transaction-owned fallback textures share allocations between draws. */
     if(mask && !s->texture_cache)batched=false;
     float coefficients[8],gradients[4][4];
+    unsigned stride=direct?DIRECT_VERTEX_STRIDE:VERTEX_STRIDE;
     for(unsigned vertex=0;vertex<count;++vertex) {
-        uint8_t *target=(uint8_t *)vertex_upload+(size_t)vertex*VERTEX_STRIDE;
+        uint8_t *target=(uint8_t *)vertex_upload+(size_t)vertex*stride;
         if(transformed) {
             const ctr_scene_transformed_vertex *source=&transformed[vertex];
             for(unsigned lane=0;lane<4u;++lane)
                 if(!isfinite(source->position[lane]) || !isfinite(source->color[lane]))
                     return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
             if(source->position[3]<=0.0f)return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
-            memset(target,0,VERTEX_STRIDE);
+            if(!direct)memset(target,0,stride);
             memcpy(target,source->position,sizeof(source->position));
-            if(vertex%3u==0u && (depth_plane || mip_coordinates)) {
+            if(!direct && vertex%3u==0u && (depth_plane || mip_coordinates)) {
                 const ctr_scene_transformed_vertex *triangle=&transformed[vertex];
                 double x[3],y[3],inverse_w[3];
                 if(!triangle_grid(triangle,half,offset,x,y,inverse_w))
@@ -2049,8 +2337,13 @@ static bool draw_samples(void *context,const ctr_scene_state *state,const ctr_ve
                 if(!isfinite(source->uv[unit][0]) || !isfinite(source->uv[unit][1]))
                     return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
                 uint8_t *attribute=target+(unit+2u)*4u*sizeof(float);
-                memcpy(attribute,source->uv[unit],sizeof(source->uv[unit]));
-                if(explicit_lod)memcpy(attribute+2u*sizeof(float),&source->position[3],sizeof(float));
+                if(direct) {
+                    float uv4[4]={source->uv[unit][0],source->uv[unit][1],0.0f,1.0f};
+                    memcpy(attribute,uv4,sizeof(uv4));
+                } else {
+                    memcpy(attribute,source->uv[unit],sizeof(source->uv[unit]));
+                    if(explicit_lod)memcpy(attribute+2u*sizeof(float),&source->position[3],sizeof(float));
+                }
             }
             if(light) {
                 for(unsigned lane=0;lane<4u;++lane)
@@ -2059,7 +2352,10 @@ static bool draw_samples(void *context,const ctr_scene_state *state,const ctr_ve
                 if(light->needs_view) {
                     for(unsigned lane=0;lane<3u;++lane)
                         if(!isfinite(source->view[lane]))return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
-                    memcpy(target+6u*4u*sizeof(float),source->view,sizeof(source->view));
+                    if(direct) {
+                        float vw4[4]={source->view[0],source->view[1],source->view[2],0.0f};
+                        memcpy(target+6u*4u*sizeof(float),vw4,sizeof(vw4));
+                    } else memcpy(target+6u*4u*sizeof(float),source->view,sizeof(source->view));
                 }
             }
             continue;
@@ -2068,17 +2364,47 @@ static bool draw_samples(void *context,const ctr_scene_state *state,const ctr_ve
             return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
         memcpy(target,vertices[vertex].input,VERTEX_STRIDE);
     }
-    GX2Invalidate(GX2_INVALIDATE_MODE_CPU_ATTRIBUTE_BUFFER,vertex_upload,count*VERTEX_STRIDE);
-    upload_vertex_program(p,light,depth_plane,mip_coordinates);
+    if(direct) {
+        pool->vertex_cursor+=vbytes;
+        DCFlushRange(vertex_upload,(unsigned)vbytes);
+        GX2Invalidate(GX2_INVALIDATE_MODE_CPU_ATTRIBUTE_BUFFER,vertex_upload,(unsigned)vbytes);
+    } else {
+        GX2Invalidate(GX2_INVALIDATE_MODE_CPU_ATTRIBUTE_BUFFER,vertex_upload,count*VERTEX_STRIDE);
+        upload_vertex_program(p,light,depth_plane,mip_coordinates);
+    }
     if(!p->draw_context_active) {
         GX2SetContextState(p->context);p->draw_context_active=true;
     }
     if(reads_destination && !prepare_blend_snapshot(s,p))return false;
     viewport(p,half,offset,fog);
-    GX2SetColorBuffer(&p->target,GX2_RENDER_TARGET_0);
-    if(p->depth_enabled)GX2SetDepthBuffer(&p->depth_target);
-    GX2SetShaderModeEx(GX2_SHADER_MODE_UNIFORM_REGISTER,64,64,0,0,184,192);
-    GX2SetFetchShader(&p->fetch);GX2SetVertexShader(&p->vertex);GX2SetPixelShader(&p->pixel);
+    if(direct) {
+        if(!pool->list_bound) {
+            GX2SetColorBuffer(&p->target,GX2_RENDER_TARGET_0);
+            if(p->depth_enabled)GX2SetDepthBuffer(&p->depth_target);
+            GX2SetShaderModeEx(GX2_SHADER_MODE_UNIFORM_REGISTER,64,64,0,0,184,192);
+            GX2SetFetchShader(&pool->fetch);
+            GX2SetAlphaToMask(false,GX2_ALPHA_TO_MASK_MODE_NON_DITHERED);
+            GX2SetStreamOutEnable(false);
+            GX2SetCullOnlyControl(p->flip_y?GX2_FRONT_FACE_CW:GX2_FRONT_FACE_CCW,false,false);
+            pool->list_bound=true;pool->bound_vs=NULL;pool->bound_ps=NULL;
+        }
+        const GX2VertexShader *vs_ptr=&pool->vs[direct_vs_id];
+        if(pool->bound_vs!=vs_ptr) { GX2SetVertexShader(vs_ptr);pool->bound_vs=vs_ptr; }
+        if(!pool->bound_ps || pool->bound_ps->program!=p->pixel.program ||
+           p->pixel.program==pool->scratch_ps) {
+            GX2SetPixelShader(&p->pixel);
+            pool->bound_ps=NULL;
+            if(p->pixel.program!=pool->scratch_ps)
+                for(unsigned i=0;i<pool->ps_count;++i)if(pool->ps_entries[i].shader.program==p->pixel.program) {
+                    pool->bound_ps=&pool->ps_entries[i].shader;break;
+                }
+        }
+    } else {
+        GX2SetColorBuffer(&p->target,GX2_RENDER_TARGET_0);
+        if(p->depth_enabled)GX2SetDepthBuffer(&p->depth_target);
+        GX2SetShaderModeEx(GX2_SHADER_MODE_UNIFORM_REGISTER,64,64,0,0,184,192);
+        GX2SetFetchShader(&p->fetch);GX2SetVertexShader(&p->vertex);GX2SetPixelShader(&p->pixel);
+    }
     /* Inactive descriptors may remain in shadow state, but only the explicit
      * mask's unit IDs can occur in this fully rebound program. No inactive
      * texture image is sampled or freed before the common retirement gate. */
@@ -2094,7 +2420,7 @@ static bool draw_samples(void *context,const ctr_scene_state *state,const ctr_ve
         fragment.blend_source[0]=fragment.blend_source[1]=1u;
     }
     GX2SetPixelUniformReg(0,p->pixel_uniform_vectors*4u,p->pixel_constants);
-    GX2SetAttribBuffer(0,count*VERTEX_STRIDE,VERTEX_STRIDE,vertex_upload);
+    GX2SetAttribBuffer(0,(unsigned)vbytes,stride,vertex_upload);
     if(!transformed)for(unsigned uniform=0;uniform<CTR_SHADER_UNIFORMS;++uniform)if(p->compiled->uniform_used[uniform])
         GX2SetVertexUniformReg(uniform*4u,4,state->shader.uniforms[uniform]);
     if(s->cemu_readback && !fragment.blend_enabled && fragment.logic_op==6u) {
@@ -2105,18 +2431,20 @@ static bool draw_samples(void *context,const ctr_scene_state *state,const ctr_ve
     }
     fragment_state(&fragment);
     depth_state(p,state,&stencil);
-    if(s->cemu_readback && p->depth_enabled) {
+    if(!direct && s->cemu_readback && p->depth_enabled) {
         unsigned gate=state->registers[0x115u];
         p->depth_written|=(gate&2u) && (state->registers[0x107u]&0x1000u);
         if((gate&1u) && stencil.enabled && (stencil.action[0] || stencil.action[1] || stencil.action[2]))
             p->stencil_written|=stencil.write_mask;
     }
-    GX2SetAlphaToMask(false,GX2_ALPHA_TO_MASK_MODE_NON_DITHERED);
-    GX2SetStreamOutEnable(false);
-    /* Transformed triangles have already been culled using the PICA screen
-     * grid. Only original-vertex submission delegates culling to GX2. */
-    unsigned cull=transformed?0u:state->registers[0x040u]&3u;
-    GX2SetCullOnlyControl(p->flip_y?GX2_FRONT_FACE_CW:GX2_FRONT_FACE_CCW,cull==1u,cull==2u);
+    if(!direct) {
+        GX2SetAlphaToMask(false,GX2_ALPHA_TO_MASK_MODE_NON_DITHERED);
+        GX2SetStreamOutEnable(false);
+        /* Transformed triangles have already been culled using the PICA screen
+         * grid. Only original-vertex submission delegates culling to GX2. */
+        unsigned cull=transformed?0u:state->registers[0x040u]&3u;
+        GX2SetCullOnlyControl(p->flip_y?GX2_FRONT_FACE_CW:GX2_FRONT_FACE_CCW,cull==1u,cull==2u);
+    }
     unsigned mode=state->registers[0x065u]&3u;
     unsigned x1=state->registers[0x066u]&1023u,y1=(state->registers[0x066u]>>16)&1023u;
     unsigned x2=state->registers[0x067u]&1023u,y2=(state->registers[0x067u]>>16)&1023u;
@@ -2151,10 +2479,10 @@ static bool draw_samples(void *context,const ctr_scene_state *state,const ctr_ve
             first+=run;
         }
     }
-    if(batched) {
+    if(batched || direct) {
         for(unsigned unit=0;unit<3u;++unit)
             if(p->texture_lease[unit])p->texture_lease[unit]->submitted=true;
-        ++p->used_uploads;p->next_upload=(p->next_upload+1u)%DRAW_UPLOAD_SLOTS;
+        if(batched) { ++p->used_uploads;p->next_upload=(p->next_upload+1u)%DRAW_UPLOAD_SLOTS; }
         /* Keep the draw context active until the caller resolves or aborts.
          * All queued uploads remain owned across intermediate fences. */
         p->pending=true;
@@ -2304,14 +2632,17 @@ static bool resolve_targets(void *context,const ctr_scene_surface *readback,
                   overlaps(readback->bytes,readback->size,depth->bytes,depth->size))))
         return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
     if(s->quarantined)return fail(s,CTR_WIIU_GX2_SCENE_WAIT);
-    bool cemu_depth=depth && s->cemu_readback;
+    bool direct_skip=s->direct_hardware && !resident;
+    bool cemu_depth=depth && s->cemu_readback && !direct_skip;
     /* Cemu's tested conversion route can return packed D24S8. */
     if(cemu_depth && p->depth_format!=CTR_SCENE_DEPTH_D24S8)
         return fail(s,CTR_WIIU_GX2_SCENE_UNSUPPORTED_READBACK);
     GX2SetContextState(p->context);
     GX2Invalidate(GX2_INVALIDATE_MODE_COLOR_BUFFER,p->target.surface.image,p->target.surface.imageSize);
     GX2CopySurface(&p->target.surface,0,0,&p->linear,0,0);p->pending=true;
-    if(cemu_depth) {
+    if(direct_skip) {
+        if(depth)++s->direct_depth_skips;
+    } else if(cemu_depth) {
         if(!queue_cemu_depth(s,p))return false;
     } else if(depth) {
         GX2Invalidate(GX2_INVALIDATE_MODE_DEPTH_BUFFER,p->depth_target.surface.image,p->depth_target.surface.imageSize);
@@ -2320,19 +2651,19 @@ static bool resolve_targets(void *context,const ctr_scene_surface *readback,
     if(!retire(s,p))return fail(s,CTR_WIIU_GX2_SCENE_WAIT);
     /* A resident caller can publish this surface directly. Restore the
      * presentation context successfully before modifying its output. */
-    if((resident || cemu_depth) && !restore(s))return false;
+    if((resident || cemu_depth || direct_skip) && !restore(s))return false;
     if(cemu_depth && !publish_cemu_depth(p,depth))return fail(s,CTR_WIIU_GX2_SCENE_LAYOUT);
     DCInvalidateRange(p->linear.image,p->linear.imageSize);
-    if(depth && !cemu_depth)DCInvalidateRange(p->depth_linear.image,p->depth_linear.imageSize);
+    if(depth && !cemu_depth && !direct_skip)DCInvalidateRange(p->depth_linear.image,p->depth_linear.imageSize);
     for(unsigned y=0;y<p->height;++y)
         memcpy((uint8_t *)readback->bytes+(size_t)y*readback->stride,
                (const uint8_t *)p->linear.image+(size_t)target_row(p,y)*p->linear.pitch*4u,p->width*4u);
-    if(depth && !cemu_depth)for(unsigned y=0;y<p->height;++y)
+    if(depth && !cemu_depth && !direct_skip)for(unsigned y=0;y<p->height;++y)
         memcpy((uint8_t *)depth->bytes+(size_t)y*depth->stride,
                (const uint8_t *)p->depth_linear.image+(size_t)y*p->depth_linear.pitch*p->depth_bytes,(size_t)p->width*p->depth_bytes);
     if(s->observe_readback)s->observe_readback(s->readback_context,readback);
-    if(depth && s->observe_depth_readback)s->observe_depth_readback(s->readback_context,depth);
-    if(!resident && !cemu_depth && !restore(s))return false;
+    if(depth && !direct_skip && s->observe_depth_readback)s->observe_depth_readback(s->readback_context,depth);
+    if(!resident && !cemu_depth && !direct_skip && !restore(s))return false;
     ++s->readbacks;s->result=CTR_WIIU_GX2_SCENE_OK;
     if(!resident)release(s,p);
     return true;
@@ -2360,6 +2691,15 @@ static void abort_callback(void *context) { ctr_wiiu_gx2_scene_abort(context); }
 ctr_scene_backend ctr_wiiu_gx2_scene_backend(ctr_wiiu_gx2_scene *s) {
     return (ctr_scene_backend){s,begin,draw,end,abort_callback,begin_depth,end_depth,draw_textures,draw_mips,
                                CTR_SCENE_BACKEND_DEPTH_FOG,draw_transformed};
+}
+ctr_scene_backend ctr_wiiu_gx2_scene_backend_direct(ctr_wiiu_gx2_scene *s) {
+    if(s)s->direct_hardware=true;
+    return (ctr_scene_backend){s,begin,draw,end,abort_callback,begin_depth,end_depth,draw_textures,draw_mips,
+                               CTR_SCENE_BACKEND_DEPTH_FOG|CTR_SCENE_BACKEND_DIRECT,draw_transformed};
+}
+void ctr_wiiu_gx2_scene_set_depth_keep(void *context,bool keep) {
+    ctr_wiiu_gx2_scene *s=context;
+    if(s)s->direct_keep_depth=keep;
 }
 const char *ctr_wiiu_gx2_scene_result_name(ctr_wiiu_gx2_scene_result result) {
     static const char *const names[]={"ok","argument","allocation","layout","shader","wait","busy","unsupported-readback"};

@@ -70,7 +70,19 @@ static ctr_gx_result fill(ctr_guest *g,const uint32_t *w,ctr_gx_completion *c) {
         if(sizes[i]%widths[i]) { result=CTR_GX_UNSUPPORTED;break; }
         result=checked(g,begin,sizes[i],CTR_MEM_WRITE,c);if(result!=CTR_GX_OK)break;
         bytes[i]=malloc(sizes[i]);if(!bytes[i]) { result=CTR_GX_NO_MEMORY;break; }
-        for(uint32_t k=0;k<sizes[i];++k)bytes[i][k]=(uint8_t)(w[2+i*3]>>((k%widths[i])*8));
+        if(widths[i]==4u) {
+            uint8_t b0=(uint8_t)w[2+i*3],b1=(uint8_t)(w[2+i*3]>>8),
+                b2=(uint8_t)(w[2+i*3]>>16),b3=(uint8_t)(w[2+i*3]>>24);
+            for(uint32_t k=0;k<sizes[i];k+=4u) {
+                bytes[i][k]=b0;bytes[i][k+1]=b1;bytes[i][k+2]=b2;bytes[i][k+3]=b3;
+            }
+        } else if(widths[i]==2u) {
+            uint8_t b0=(uint8_t)w[2+i*3],b1=(uint8_t)(w[2+i*3]>>8);
+            for(uint32_t k=0;k<sizes[i];k+=2u) { bytes[i][k]=b0;bytes[i][k+1]=b1; }
+        } else {
+            uint8_t b0=(uint8_t)w[2+i*3],b1=(uint8_t)(w[2+i*3]>>8),b2=(uint8_t)(w[2+i*3]>>16);
+            for(uint32_t k=0;k<sizes[i];k+=3u) { bytes[i][k]=b0;bytes[i][k+1]=b1;bytes[i][k+2]=b2; }
+        }
     }
     if(result==CTR_GX_OK)for(unsigned i=0;i<2;++i)if(bytes[i])ctr_gx_write_target(g,w[1+i*3],bytes[i],sizes[i]);
     /* GSP dispatches one PSC0 for both banks; bank 1 alone dispatches PSC1. */

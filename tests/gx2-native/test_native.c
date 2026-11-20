@@ -239,13 +239,13 @@ void GX2Invalidate(unsigned mode,void *bytes,unsigned size) {
 }
 unsigned GX2CalcFetchShaderSizeEx(unsigned count,unsigned type,unsigned tess) {
     ++gx2_calls;
-    assert(count==16 && !type && !tess);return fetch_bytes;
+    assert((count==16 || count==7) && !type && !tess);return fetch_bytes;
 }
 void GX2InitFetchShaderEx(GX2FetchShader *fetch,void *bytes,unsigned count,const GX2AttribStream *attributes,unsigned type,unsigned tess) {
     ++gx2_calls;
-    assert(fetch && bytes && count==16 && !type && !tess);
+    assert(fetch && bytes && (count==16 || count==7) && !type && !tess);
     assert(((uintptr_t)bytes&255u)==0u);
-    for(unsigned i=0;i<16;++i) {
+    for(unsigned i=0;i<count;++i) {
         assert(attributes[i].location==i && attributes[i].buffer==0 && attributes[i].offset==i*16u);
         assert(attributes[i].format==GX2_ATTRIB_FORMAT_FLOAT_32_32_32_32);
         assert(attributes[i].endianSwap==GX2_ENDIAN_SWAP_8_IN_32);
@@ -3143,6 +3143,29 @@ static void uploaded_cache_counter_saturation(void) {
     assert(scene.texture_cache_stats.allocation_failures==UINT64_MAX && scene.texture_cache_stats.bypasses==UINT64_MAX);
     assert(backend.end(backend.context,&surface));clean(&scene);
 }
+static void direct_backend_lifecycle(void) {
+    reset();
+    uint8_t bytes[1024]={0},seed[1024]={0};
+    ctr_scene_surface surface={bytes,sizeof(bytes),16,16,64};
+    ctr_scene_depth_surface depth={seed,sizeof(seed),16,16,64,0x18020000u,CTR_SCENE_DEPTH_D24S8};
+    expected_depth=&depth;
+    ctr_wiiu_gx2_scene scene;ctr_wiiu_gx2_scene_init(&scene,&native_context);
+    scene.cemu_readback=true;
+    ctr_scene_backend backend=ctr_wiiu_gx2_scene_backend_direct(&scene);
+    assert(scene.direct_hardware);
+    assert(backend.features==(CTR_SCENE_BACKEND_DEPTH_FOG|CTR_SCENE_BACKEND_DIRECT));
+    assert(backend.draw_transformed!=NULL);
+    ctr_wiiu_gx2_scene_set_depth_keep(&scene,true);
+    assert(scene.direct_keep_depth);
+    ctr_wiiu_gx2_scene_set_depth_keep(&scene,false);
+    assert(!scene.direct_keep_depth);
+    assert(backend.begin_depth(&scene,&surface,&depth));
+    assert(backend.end_depth(&scene,&surface,&depth));
+    assert(scene.direct_depth_skips==1u && scene.readbacks==1u);
+    backend.abort(&scene);
+    ctr_wiiu_gx2_scene_after_shutdown(&scene);
+    clean(&scene);
+}
 int main(int argc,char **argv) {
     if(argc==2 && (!strcmp(argv[1],"--fragment-programs") || !strcmp(argv[1],"--legacy-fragment-programs"))) {
         dump_materials=!strcmp(argv[1],"--fragment-programs");textured_bindings(true);return 0;
@@ -3168,6 +3191,7 @@ int main(int argc,char **argv) {
     uploaded_cache_allocation_failures();uploaded_cache_disabled_transition();uploaded_cache_cross_unit_alias();
     uploaded_cache_current_validation();uploaded_cache_source_alias();
     uploaded_cache_pending_retirement();uploaded_cache_idle_abort();uploaded_cache_counter_saturation();
+    direct_backend_lifecycle();
     puts("GX2 uploaded texture cache API model: exact pitched images, within/cross-list hits, dynamic samplers/UVs, three-unit pins, slot/byte bounds, allocation bypass, current-state/alias rejection, quarantine, idle cleanup and saturating counters passed");
     puts("GX2 material API model: independent Texture0/1/2 uploads, samplers, sparse masks, UV routing, warm and uncached programs passed");
     puts("GX2 CPU program cache API model: cold/warm and cross-list reuse, dynamic constants, bounded FIFO eviction, current-state rejection, uncached/failure parity, sampler/depth profiles, CPU/GPU ownership and quarantine passed");

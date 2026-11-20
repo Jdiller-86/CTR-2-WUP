@@ -66,6 +66,12 @@ typedef struct {
     uint64_t (*clock_us)(void *);
     uint64_t gx_us,pica_us;
 #endif
+    uint64_t pica_fallback_lists;
+    void (*pica_depth_hint)(void *context,bool keep_depth);
+    bool gpu_depth_valid;
+    uint32_t gpu_depth_address;
+    unsigned gpu_depth_width,gpu_depth_height,gpu_depth_format;
+    ctr_memory_resource_key gpu_depth_key;
     uint32_t last_gx_header,last_gx_detail;
     ctr_pica_state pica;
     struct ctr_scene_state *pica_scene;

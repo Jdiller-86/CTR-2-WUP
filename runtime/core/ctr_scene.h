@@ -107,7 +107,7 @@ typedef struct {
     unsigned input[3],flags,alpha,bump_unit;
     bool active,needs_view,absolute[3],clamp_highlights,reconstruct_normal;
 } ctr_scene_light;
-enum { CTR_SCENE_BACKEND_DEPTH_FOG=1u };
+enum { CTR_SCENE_BACKEND_DEPTH_FOG=1u, CTR_SCENE_BACKEND_DIRECT=2u };
 /* Optional synchronous renderer. All commands, resources and software pixels
  * are validated before begin. begin initializes private scratch from initial;
  * draw receives original inputs, complete current PICA/shader state and an
@@ -161,6 +161,7 @@ typedef struct {
     ctr_vertex_result vertex_result;
     ctr_shader_result shader_result;
     ctr_scene_backend_stage backend_stage;
+    bool backend_fallback;
 } ctr_scene_report;
 
 void ctr_scene_init(ctr_scene_state *state);

@@ -54,5 +54,29 @@ bool ctr_shader_f24_exact(uint32_t float32_bits, uint32_t *raw);
 ctr_shader_result ctr_shader_execute(const ctr_shader_program *program,
                                      const ctr_vertex *input,
                                      ctr_shader_output *output);
+typedef struct {
+    uint8_t op,dest,src[3],mask,read_mask,rel_index;
+    uint8_t flags,wmask,reg_idx,err,cmp_op[2],src_mask[3],safe_srcs;
+    uint8_t swiz[3][4];
+    uint16_t target,extra;
+} ctr_shader_fast_insn;
+typedef struct {
+    ctr_shader_fast_insn insns[CTR_SHADER_MAX_CODE];
+    float uniforms[CTR_SHADER_UNIFORMS][4];
+    uint8_t uniform_defined[CTR_SHADER_UNIFORMS];
+    uint8_t uniform_numeric[CTR_SHADER_UNIFORMS];
+    uint32_t integer_uniforms[4];
+    uint8_t integer_defined;
+    uint16_t boolean_uniforms;
+    bool boolean_defined;
+    unsigned entry;
+} ctr_shader_fast;
+/* Pre-decoded rounded vertex shader fast path for real-time game rendering.
+ * Requires program->round_f24 == true. Preserves operand checking, undefined
+ * lane propagation, control flow and relative addressing in native float32. */
+bool ctr_shader_prepare_fast(const ctr_shader_program *program,ctr_shader_fast *out);
+ctr_shader_result ctr_shader_execute_fast(const ctr_shader_fast *fast,
+                                          const ctr_vertex *input,
+                                          ctr_shader_output *output);
 const char *ctr_shader_result_name(ctr_shader_result result);
 #endif

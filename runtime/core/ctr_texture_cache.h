@@ -5,7 +5,7 @@
 
 /* Process-local CPU storage; never guest or GX2 pointers. The bound includes
  * retained encoded keys and RGBA payloads, separately from the fixed owner. */
-#define CTR_TEXTURE_CACHE_SLOTS 32u
+#define CTR_TEXTURE_CACHE_SLOTS 256u
 #define CTR_TEXTURE_CACHE_MAX_BYTES (24u*1024u*1024u)
 typedef struct ctr_texture_cache ctr_texture_cache;
 typedef enum {

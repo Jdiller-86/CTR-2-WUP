@@ -161,6 +161,9 @@ CFLAGS += -DCTR_GAME_CEMU_TEST
 endif
 APP_NAME := CTR2WUP Mario Test
 SOURCES := game_main.c diagnostic_display.c diagnostic_font.c diagnostic_audio.c native_audio_stream.c viewport.c image_scale.c guest_slice.c test_lifecycle.c test_report.c report_storage.c
+ifeq ($(GAME_CEMU_TEST),1)
+SOURCES += gx2_scene.c
+endif
 endif
 OBJECTS := $(addprefix $(BUILD)/,$(SOURCES:.c=.o))
 CORE_SOURCES := $(CTR_RUNTIME_SOURCES) ../core/ctr_cpu_selftest.c \

@@ -63,6 +63,10 @@ typedef struct {
      * depth/stencil copies retire, before a possible context-restore failure. */
     void (*observe_depth_readback)(void *context,const ctr_scene_depth_surface *readback);
     void *readback_context;
+    bool direct_hardware;
+    bool direct_keep_depth;
+    void *direct_pool;
+    uint64_t direct_shader_hits,direct_shader_compiles,direct_depth_skips;
 } ctr_wiiu_gx2_scene;
 
 /* The caller supplies the native renderer's active WHB context. Synchronous
@@ -86,6 +90,8 @@ typedef struct {
  * whose transaction and both caches have been cleared. */
 void ctr_wiiu_gx2_scene_init(ctr_wiiu_gx2_scene *scene,GX2ContextState *restore_context);
 ctr_scene_backend ctr_wiiu_gx2_scene_backend(ctr_wiiu_gx2_scene *scene);
+ctr_scene_backend ctr_wiiu_gx2_scene_backend_direct(ctr_wiiu_gx2_scene *scene);
+void ctr_wiiu_gx2_scene_set_depth_keep(void *context,bool keep);
 /* Begin a paired target that stays on GX2 across draws and color resolves.
  * Only initialization reads the caller's depth bytes. Cemu accepts uniform
  * endpoint depth and stencil seeds through a GX2 clear. Subsequent draws
