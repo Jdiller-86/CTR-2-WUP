@@ -26,6 +26,12 @@ def publish_directory(staging, output):
             error = ctypes.get_errno()
             if error in (errno.EEXIST, errno.ENOTEMPTY):
                 raise HostError("output_exists", "Output already exists; it was preserved", stage="publish")
+            if error in (errno.EINVAL, errno.ENOSYS, getattr(errno, "ENOTSUP", errno.EOPNOTSUPP)):
+                # Some filesystems (e.g. WSL2 9P/DrvFs) reject RENAME_NOREPLACE.
+                if os.path.lexists(output):
+                    raise HostError("output_exists", "Output already exists; it was preserved", stage="publish")
+                os.rename(staging, output)
+                return
             raise OSError(error, os.strerror(error))
         return
     raise HostError("atomic_publish_unavailable", "Prototype publication has only been implemented for Linux and Windows", stage="publish")

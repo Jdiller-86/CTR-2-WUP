@@ -169,6 +169,31 @@ class CliTests(unittest.TestCase):
         self.assertFalse(staging.exists())
         self.assertEqual((output / "complete").read_text(), "finished")
 
+    def test_atomic_publish_linux_einval_fallback(self):
+        import errno as errno_mod
+        from unittest import mock
+
+        class FakeLib:
+            renameat2 = mock.Mock(return_value=-1)
+
+        staging = self.root / "staging-einval"
+        output = self.root / "dest-einval"
+        existing = self.root / "existing-einval"
+        staging.mkdir()
+        (staging / "ok").write_text("1")
+        existing.mkdir()
+        with mock.patch("host.atomic.os.name", "posix"), \
+             mock.patch("host.atomic.sys.platform", "linux"), \
+             mock.patch("host.atomic.ctypes.CDLL", return_value=FakeLib()), \
+             mock.patch("host.atomic.ctypes.get_errno", return_value=errno_mod.EINVAL):
+            with self.assertRaises(HostError) as ctx:
+                publish_directory(staging, existing)
+            self.assertEqual(ctx.exception.code, "output_exists")
+            self.assertTrue((staging / "ok").exists())
+            publish_directory(staging, output)
+        self.assertFalse(staging.exists())
+        self.assertEqual((output / "ok").read_text(), "1")
+
 
 if __name__ == "__main__":
     unittest.main()

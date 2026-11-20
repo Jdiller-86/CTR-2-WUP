@@ -149,7 +149,7 @@ SOURCES := guest_audio_stream.c native_audio_stream.c diagnostic_display.c diagn
 endif
 endif
 ifeq ($(GX2_GUEST),1)
-SOURCES += gx2_scene.c
+SOURCES += gx2_scene.c gx2_direct.c
 endif
 ifeq ($(GAME_TEST),1)
 ifneq ($(EXTERNAL_AOT),1)
@@ -162,7 +162,7 @@ endif
 APP_NAME := CTR2WUP Mario Test
 SOURCES := game_main.c diagnostic_display.c diagnostic_font.c diagnostic_audio.c native_audio_stream.c viewport.c image_scale.c guest_slice.c test_lifecycle.c test_report.c report_storage.c
 ifeq ($(GAME_CEMU_TEST),1)
-SOURCES += gx2_scene.c
+SOURCES += gx2_scene.c gx2_direct.c
 endif
 endif
 OBJECTS := $(addprefix $(BUILD)/,$(SOURCES:.c=.o))

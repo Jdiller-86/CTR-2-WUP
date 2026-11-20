@@ -5,6 +5,18 @@ do not establish commercial-game compatibility or installable WUP acceptance.
 
 ## 0.27.0 — unreleased
 
+- Harden and modularize direct GX2, shader, CPU, and host tooling:
+  - Split `runtime/wiiu/gx2_direct.c` (with `gx2_scene_internal.h`) out of
+    `gx2_scene.c`, fix direct PS arena/slot exhaustion to return `false` for
+    clean software fallback (with mock test coverage in `tests/gx2-native`), and
+    switch direct PS binding to O(1) pointer comparison.
+  - Speed up `ctr_shader_execute_fast()` by zeroing only `written[]` +
+    `instructions` and fast-pathing finite normal F24-exact inputs, and cache
+    active RX/RW mappings on `ctr_cpu` keyed by `resource_mapping_version`.
+  - Add WSL2/9P `os.rename` fallback in `host/atomic.py` when `renameat2`
+    returns `EINVAL`/`ENOSYS`/`ENOTSUP`, report `'gx2-direct'` in Cemu
+    `build-report.json`, and add the portable `tests/cemu-display` mock-WUT
+    suite for `diagnostic_display.c`.
 - Add direct hardware GX2 scene execution (`CTR_SCENE_BACKEND_DIRECT`,
   `ctr_wiiu_gx2_scene_backend_direct`), vectorized `ctr_shader_execute_fast`
   (no `-lm`), expanded 256-slot texture cache and 128-slot resource cache,
