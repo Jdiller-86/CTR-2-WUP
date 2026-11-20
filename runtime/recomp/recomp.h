@@ -61,15 +61,132 @@ typedef struct Origins {
 #define FPSCR(c) (*(c)->fpscr)
 #define FPSCR_LEN (7u<<16)
 
+typedef struct RecompFast {
+    Context context;
+    uint32_t vfp[32],fpscr;
+    ctr_cpu *cpu;
+    uint64_t code_generation;
+    const uint64_t *mem_code_generation;
+    const uint64_t *mem_resource_map_version;
+    uint64_t *cpu_instructions;
+    uint64_t *mem_generation;
+    uint64_t *mem_resource_clock;
+    uint64_t *mem_resource_versions;
+    uint32_t rx_base,rx_end,rd_base,rd_end,rw_base,rw_end;
+    const uint8_t *rx_storage,*rd_storage;
+    uint8_t *rw_storage;
+    uint64_t rx_map_version,rd_map_version,rw_map_version;
+    unsigned maximum_depth;
+    bool single_data;
+    bool rollback_base;
+    bool rw_aliases_exec;
+} RecompFast;
+
 _Noreturn void ctr_recomp_abort(Context *ctx,ctr_cpu_result result,uint32_t detail);
 int ctr_recomp_instruction(Context *ctx,uint32_t address,uint32_t opcode);
-#define CTR_INSTRUCTION(address,opcode) do { if (!ctr_recomp_instruction(ctx,(address),(opcode))) return; } while (0)
-#define mem_read8(c,a) ((c)->host->read8((c),(a)))
-#define mem_read16(c,a) ((c)->host->read16((c),(a)))
-#define mem_read32(c,a) ((c)->host->read32((c),(a)))
-#define mem_write8(c,a,v) ((c)->host->write8((c),(a),(v)))
-#define mem_write16(c,a,v) ((c)->host->write16((c),(a),(v)))
-#define mem_write32(c,a,v) ((c)->host->write32((c),(a),(v)))
+static inline int ctr_recomp_instruction_fast(Context *c,uint32_t address,uint32_t opcode) {
+    int maybe_special=((opcode&0x0c000000u)==0x0c000000u) ||
+        ((opcode&0x0f900090u)==0x01000080u) ||
+        ((opcode&0x0ff00ff0u)==0x06500f90u) || ((opcode&0x0ff00ff0u)==0x06500ff0u) ||
+        ((opcode&0x0ff00ff0u)==0x06800fb0u) || ((opcode&0x0e000000u)==0x08000000u) ||
+        ((opcode&0x0fffffffu)==0x012fff3fu) || ((opcode&0xfffffff0u)==0xf57ff040u) ||
+        ((opcode&0xfffffff0u)==0xf57ff050u) || ((opcode&0xfffffff0u)==0xf57ff060u) ||
+        (opcode<=0xffffu && (((opcode&0xf600u)==0xb400u) || ((opcode&0xf000u)==0xc000u) || opcode==0x47f8u));
+    if(maybe_special || !c->budget)return ctr_recomp_instruction(c,address,opcode);
+    RecompFast *f=(RecompFast *)c->user;
+    f->rollback_base=false;
+    f->single_data=c->thumb?
+        ((opcode&0xf000u)==0x5000u || (opcode&0xe000u)==0x6000u ||
+         (opcode&0xf000u)==0x8000u || (opcode&0xf000u)==0x9000u || (opcode&0xf800u)==0x4800u):
+        (((opcode&0x0c000000u)==0x04000000u && !((opcode&0x100000u) && ((opcode>>12)&15u)==15u)) ||
+         ((opcode&0x0e000090u)==0x00000090u && ((opcode>>5)&3u) && (((opcode>>5)&3u)==1u || (opcode&0x100000u))));
+    c->r[15]=address;
+    if(f->rx_storage && f->rx_map_version==*f->mem_resource_map_version &&
+       *f->mem_code_generation==f->code_generation &&
+       address>=f->rx_base && address<f->rx_end) {
+        --c->budget;++(*f->cpu_instructions);
+        return 1;
+    }
+    return ctr_recomp_instruction(c,address,opcode);
+}
+#define CTR_INSTRUCTION(address,opcode) do { if (!ctr_recomp_instruction_fast(ctx,(address),(opcode))) return; } while (0)
+static inline uint8_t ctr_recomp_read8(Context *c,uint32_t a) {
+    RecompFast *f=(RecompFast *)c->user;
+    if(f->rd_storage && f->rd_map_version==*f->mem_resource_map_version && a>=f->rd_base && a<f->rd_end)
+        return f->rd_storage[a-f->rd_base];
+    return c->host->read8(c,a);
+}
+static inline uint16_t ctr_recomp_read16(Context *c,uint32_t a) {
+    RecompFast *f=(RecompFast *)c->user;
+    if(f->rd_storage && f->rd_map_version==*f->mem_resource_map_version &&
+       a>=f->rd_base && (uint64_t)a+2u<=f->rd_end && (!(a&1u) || f->single_data)) {
+        const uint8_t *p=f->rd_storage+(a-f->rd_base);
+        return (uint16_t)((uint32_t)p[0]|((uint32_t)p[1]<<8));
+    }
+    return c->host->read16(c,a);
+}
+static inline uint32_t ctr_recomp_read32(Context *c,uint32_t a) {
+    RecompFast *f=(RecompFast *)c->user;
+    if(f->rd_storage && f->rd_map_version==*f->mem_resource_map_version &&
+       a>=f->rd_base && (uint64_t)a+4u<=f->rd_end && (!(a&3u) || f->single_data)) {
+        const uint8_t *p=f->rd_storage+(a-f->rd_base);
+        return (uint32_t)p[0]|((uint32_t)p[1]<<8)|((uint32_t)p[2]<<16)|((uint32_t)p[3]<<24);
+    }
+    return c->host->read32(c,a);
+}
+static inline void ctr_recomp_write8(Context *c,uint32_t a,uint8_t n) {
+    RecompFast *f=(RecompFast *)c->user;
+    if(f->rw_storage && !f->rw_aliases_exec && f->rw_map_version==*f->mem_resource_map_version &&
+       a>=f->rw_base && a<f->rw_end) {
+        uint8_t *p=f->rw_storage+(a-f->rw_base);
+        *p=n;
+        ++(*f->mem_generation);
+        uint64_t ver=*f->mem_resource_clock!=UINT64_MAX?++(*f->mem_resource_clock):*f->mem_resource_clock;
+        uintptr_t begin=(uintptr_t)p>>12u;
+        f->mem_resource_versions[(begin^(begin>>10u))&(CTR_MEMORY_RESOURCE_SLOTS-1u)]=ver;
+        c->exclusive=0;
+        return;
+    }
+    c->host->write8(c,a,n);
+}
+static inline void ctr_recomp_write16(Context *c,uint32_t a,uint16_t n) {
+    RecompFast *f=(RecompFast *)c->user;
+    if(f->rw_storage && !f->rw_aliases_exec && f->rw_map_version==*f->mem_resource_map_version &&
+       a>=f->rw_base && (uint64_t)a+2u<=f->rw_end && (!(a&1u) || f->single_data)) {
+        uint8_t *p=f->rw_storage+(a-f->rw_base);
+        p[0]=(uint8_t)n;p[1]=(uint8_t)(n>>8);
+        ++(*f->mem_generation);
+        uint64_t ver=*f->mem_resource_clock!=UINT64_MAX?++(*f->mem_resource_clock):*f->mem_resource_clock;
+        uintptr_t first=(uintptr_t)p,begin=first>>12u,last=(first+1u)>>12u;
+        f->mem_resource_versions[(begin^(begin>>10u))&(CTR_MEMORY_RESOURCE_SLOTS-1u)]=ver;
+        if(last!=begin)f->mem_resource_versions[(last^(last>>10u))&(CTR_MEMORY_RESOURCE_SLOTS-1u)]=ver;
+        c->exclusive=0;
+        return;
+    }
+    c->host->write16(c,a,n);
+}
+static inline void ctr_recomp_write32(Context *c,uint32_t a,uint32_t n) {
+    RecompFast *f=(RecompFast *)c->user;
+    if(f->rw_storage && !f->rw_aliases_exec && f->rw_map_version==*f->mem_resource_map_version &&
+       a>=f->rw_base && (uint64_t)a+4u<=f->rw_end && (!(a&3u) || f->single_data)) {
+        uint8_t *p=f->rw_storage+(a-f->rw_base);
+        p[0]=(uint8_t)n;p[1]=(uint8_t)(n>>8);p[2]=(uint8_t)(n>>16);p[3]=(uint8_t)(n>>24);
+        ++(*f->mem_generation);
+        uint64_t ver=*f->mem_resource_clock!=UINT64_MAX?++(*f->mem_resource_clock):*f->mem_resource_clock;
+        uintptr_t first=(uintptr_t)p,begin=first>>12u,last=(first+3u)>>12u;
+        f->mem_resource_versions[(begin^(begin>>10u))&(CTR_MEMORY_RESOURCE_SLOTS-1u)]=ver;
+        if(last!=begin)f->mem_resource_versions[(last^(last>>10u))&(CTR_MEMORY_RESOURCE_SLOTS-1u)]=ver;
+        c->exclusive=0;
+        return;
+    }
+    c->host->write32(c,a,n);
+}
+#define mem_read8(c,a) ctr_recomp_read8((c),(a))
+#define mem_read16(c,a) ctr_recomp_read16((c),(a))
+#define mem_read32(c,a) ctr_recomp_read32((c),(a))
+#define mem_write8(c,a,v) ctr_recomp_write8((c),(a),(v))
+#define mem_write16(c,a,v) ctr_recomp_write16((c),(a),(v))
+#define mem_write32(c,a,v) ctr_recomp_write32((c),(a),(v))
 /* Span bypasses would skip permissions, invalidation and exclusive monitors. */
 static inline const uint8_t *mem_read_span(Context *c,uint32_t a,uint32_t n) { (void)c;(void)a;(void)n;return NULL; }
 static inline uint8_t *mem_write_span(Context *c,uint32_t a,uint32_t n) { (void)c;(void)a;(void)n;return NULL; }
@@ -165,7 +282,7 @@ static inline void vfp_vector(Context *c,int op,int wide,int d,int n,int m) { (v
 #if CTR_RECOMP_CALL_LIMIT < 1 || CTR_RECOMP_CALL_LIMIT > 64
 #error "CTR_RECOMP_CALL_LIMIT must be between 1 and 64"
 #endif
-#define CALL(code) do { if (ctx->depth>=CTR_RECOMP_CALL_LIMIT) {ctx->exit=EXIT_UNWIND;return;} ++ctx->depth;code(ctx);--ctx->depth;if(ctx->exit)return; } while (0)
+#define CALL(code) do { if (ctx->depth>=CTR_RECOMP_CALL_LIMIT) {ctx->exit=EXIT_UNWIND;return;} ++ctx->depth;if(ctx->depth>((RecompFast *)ctx->user)->maximum_depth)((RecompFast *)ctx->user)->maximum_depth=ctx->depth;code(ctx);--ctx->depth;if(ctx->exit)return; } while (0)
 static inline void recomp_call(Context *c) { Code f=c->host->lookup(c,c->r[15]|c->thumb);if(f)f(c);else c->exit=EXIT_UNWIND; }
 #define RETURNED(address) do { if(ctx->r[15]!=(address)||ctx->thumb){target=ctx->r[15];goto dispatch;} } while (0)
 #define RETURNED_T(address) do { if(ctx->r[15]!=(address)||!ctx->thumb){target=ctx->r[15];goto dispatch;} } while (0)

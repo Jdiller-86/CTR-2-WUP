@@ -10,34 +10,26 @@ extern const uint32_t recomp_abi,recomp_generation,recomp_entry_count,recomp_mod
 extern const Entry recomp_entries[];
 extern const Origins recomp_origins[];
 typedef struct {
-    Context context;
-    uint32_t vfp[32],fpscr;
-    ctr_cpu *cpu;
+    RecompFast fast;
     ctr_guest *guest;
-    uint64_t code_generation;
     bool fallback;
-    bool single_data;
-    unsigned maximum_depth;
     uint64_t unwinds;
     /* The emitter writes an ARM LDM base before reads. Preserve the checked
        profile's original base on an abort while retaining earlier loaded words. */
-    bool rollback_base;
     unsigned base_register;
     uint32_t base_value;
     jmp_buf escape;
     ctr_cpu_result fault;
-    uint32_t rx_base,rx_end;
-    const uint8_t *rx_storage;
-    uint64_t rx_map_version;
     struct { uint32_t addr; Code code; } lookup_cache[4096];
 } Engine;
 _Static_assert(sizeof(float)==4 && sizeof(double)==8,"IEEE scalar sizes required");
 _Static_assert(offsetof(Context,budget)==72 && offsetof(Context,read_pages)==96,"ABI 4 fixed-width prefix");
+_Static_assert(offsetof(Engine,fast)==0 && offsetof(RecompFast,context)==0,"Fast state prefix");
 
 static void import_cpu(Engine *e) {
-    Context *c=&e->context;ctr_cpu *p=e->cpu;
+    Context *c=&e->fast.context;ctr_cpu *p=e->fast.cpu;
     memcpy(c->r,p->r,sizeof(c->r));
-    memcpy(e->vfp,p->vfp,sizeof(e->vfp));e->fpscr=p->fpscr;
+    memcpy(e->fast.vfp,p->vfp,sizeof(e->fast.vfp));e->fast.fpscr=p->fpscr;
     c->n=p->cpsr>>31;c->z=(p->cpsr>>30)&1;c->c=(p->cpsr>>29)&1;c->v=(p->cpsr>>28)&1;
     c->q=(p->cpsr>>27)&1;c->ge=(p->cpsr>>16)&15;c->thumb=(p->cpsr&CTR_FLAG_T)!=0;
     c->exclusive=p->exclusive_valid && p->exclusive_size==4 && p->exclusive_generation==p->memory->generation;
@@ -45,9 +37,9 @@ static void import_cpu(Engine *e) {
     c->tls=p->tls_address;
 }
 static void export_cpu(Engine *e) {
-    Context *c=&e->context;ctr_cpu *p=e->cpu;
+    Context *c=&e->fast.context;ctr_cpu *p=e->fast.cpu;
     memcpy(p->r,c->r,sizeof(p->r));
-    memcpy(p->vfp,e->vfp,sizeof(p->vfp));p->fpscr=e->fpscr;
+    memcpy(p->vfp,e->fast.vfp,sizeof(e->fast.vfp));p->fpscr=e->fast.fpscr;
     p->cpsr=(p->cpsr&~0xf80f0020u)|((uint32_t)c->n<<31)|((uint32_t)c->z<<30)|
         ((uint32_t)c->c<<29)|((uint32_t)c->v<<28)|((uint32_t)c->q<<27)|((uint32_t)c->ge<<16)|
         (c->thumb?CTR_FLAG_T:0);
@@ -57,48 +49,48 @@ static void export_cpu(Engine *e) {
 }
 _Noreturn void ctr_recomp_abort(Context *c,ctr_cpu_result result,uint32_t detail) {
     Engine *e=c->user;e->fault=result;
-    if(result==CTR_CPU_MEMORY_FAULT && e->rollback_base)c->r[e->base_register]=e->base_value;
-    export_cpu(e);ctr_cpu_stop(e->cpu,result,detail);
+    if(result==CTR_CPU_MEMORY_FAULT && e->fast.rollback_base)c->r[e->base_register]=e->base_value;
+    export_cpu(e);ctr_cpu_stop(e->fast.cpu,result,detail);
     longjmp(e->escape,1);
 }
 int ctr_recomp_instruction(Context *c,uint32_t address,uint32_t opcode) {
     Engine *e=c->user;
-    e->cpu->module_hash=e->guest->program.module_hash;
-    if(c->depth>e->maximum_depth)e->maximum_depth=c->depth;
-    e->rollback_base=false;
-    if(c->thumb)e->single_data=(opcode&0xf000u)==0x5000u || (opcode&0xe000u)==0x6000u ||
+    e->fast.cpu->module_hash=e->guest->program.module_hash;
+    if(c->depth>e->fast.maximum_depth)e->fast.maximum_depth=c->depth;
+    e->fast.rollback_base=false;
+    if(c->thumb)e->fast.single_data=(opcode&0xf000u)==0x5000u || (opcode&0xe000u)==0x6000u ||
         (opcode&0xf000u)==0x8000u || (opcode&0xf000u)==0x9000u || (opcode&0xf800u)==0x4800u;
     else {
         unsigned kind=(opcode>>5)&3u;
-        e->single_data=((opcode&0x0c000000u)==0x04000000u && !((opcode&0x100000u) && ((opcode>>12)&15u)==15u)) ||
+        e->fast.single_data=((opcode&0x0c000000u)==0x04000000u && !((opcode&0x100000u) && ((opcode>>12)&15u)==15u)) ||
             ((opcode&0x0e000090u)==0x00000090u && kind && (kind==1 || (opcode&0x100000u)));
     }
     c->r[15]=address;
     if (!c->budget) { c->exit=EXIT_BUDGET;return 0; }
-    const ctr_memory *mem=e->cpu->memory;
-    if (mem->code_generation!=e->code_generation)
+    const ctr_memory *mem=e->fast.cpu->memory;
+    if (mem->code_generation!=e->fast.code_generation)
         ctr_recomp_abort(c,CTR_CPU_CODE_INVALIDATED,address);
     uint32_t actual;
     unsigned sz=c->thumb?2u:4u;
-    if (e->rx_storage && e->rx_map_version==mem->resource_mapping_version &&
-        address>=e->rx_base && (uint64_t)address+sz<=e->rx_end && !(address&(sz-1u))) {
-        const uint8_t *p=e->rx_storage+(address-e->rx_base);
+    if (e->fast.rx_storage && e->fast.rx_map_version==mem->resource_mapping_version &&
+        address>=e->fast.rx_base && (uint64_t)address+sz<=e->fast.rx_end && !(address&(sz-1u))) {
+        const uint8_t *p=e->fast.rx_storage+(address-e->fast.rx_base);
         actual=sz==2u?((uint32_t)p[0]|((uint32_t)p[1]<<8)):
             ((uint32_t)p[0]|((uint32_t)p[1]<<8)|((uint32_t)p[2]<<16)|((uint32_t)p[3]<<24));
     } else {
         ctr_mem_result r=ctr_memory_read(mem,address,sz,CTR_MEM_EXEC,&actual);
-        if (r!=CTR_MEM_OK) { e->cpu->memory_fault=r;ctr_recomp_abort(c,CTR_CPU_MEMORY_FAULT,address); }
+        if (r!=CTR_MEM_OK) { e->fast.cpu->memory_fault=r;ctr_recomp_abort(c,CTR_CPU_MEMORY_FAULT,address); }
         for(size_t i=0;i<mem->count;++i) {
             const ctr_mapping *m=&mem->maps[i];
             if((m->permissions&CTR_MEM_EXEC) && address>=m->base && (uint64_t)address+sz<=(uint64_t)m->base+m->size) {
-                e->rx_base=m->base;e->rx_end=m->base+m->size;
-                e->rx_storage=m->storage;e->rx_map_version=mem->resource_mapping_version;
+                e->fast.rx_base=m->base;e->fast.rx_end=m->base+m->size;
+                e->fast.rx_storage=m->storage;e->fast.rx_map_version=mem->resource_mapping_version;
                 break;
             }
         }
     }
     if (actual!=opcode) ctr_recomp_abort(c,CTR_CPU_CODE_INVALIDATED,address);
-    --c->budget;++e->cpu->instructions;
+    --c->budget;++e->fast.cpu->instructions;
     uint32_t flags=((uint32_t)c->n<<31)|((uint32_t)c->z<<30)|
         ((uint32_t)c->c<<29)|((uint32_t)c->v<<28);
     bool fpscr_transfer=(opcode&0x0fff0fffu)==0x0ee10a10u || (opcode&0x0fff0fffu)==0x0ef10a10u;
@@ -113,12 +105,15 @@ int ctr_recomp_instruction(Context *c,uint32_t address,uint32_t opcode) {
     bool fp=!c->thumb && ((opcode&0x0e000000u)==0x0c000000u || (opcode&0x0f000000u)==0x0e000000u) &&
         (((opcode>>8)&15u)==10u || ((opcode>>8)&15u)==11u);
     if(fp && opcode>>28==15u)ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
-    /* Explicit recovery mode uses shared scalar VFP under CRT controls. */
-    if(fp && e->fallback && !fpscr_transfer && !fp_memory && ctr_cpu_condition_cpsr(flags,opcode>>28)) {
+    /* Explicit recovery mode uses shared scalar VFP for float-to-int conversions
+       and non-default FPSCR modes; scalar IEEE VFP ops run natively in AOT. */
+    bool fp_to_int=fp && (opcode&0x0fbe0e50u)==0x0ebc0a40u;
+    if(fp && e->fallback && !fpscr_transfer && !fp_memory &&
+       (fp_to_int || (*c->fpscr&0x07ff9f00u)) && ctr_cpu_condition_cpsr(flags,opcode>>28)) {
         export_cpu(e);
-        ctr_cpu_result result=ctr_cpu_vfp_arm(e->cpu,opcode);
+        ctr_cpu_result result=ctr_cpu_vfp_arm(e->fast.cpu,opcode);
         if(result!=CTR_CPU_OK) { import_cpu(e);ctr_recomp_abort(c,result,opcode); }
-        e->cpu->r[15]=address+4u;++e->cpu->fallback_instructions;
+        e->fast.cpu->r[15]=address+4u;++e->fast.cpu->fallback_instructions;
         import_cpu(e);c->exit=EXIT_UNWIND;return 0;
     }
     if(fp && ctr_cpu_condition_cpsr(flags,opcode>>28)) {
@@ -154,7 +149,7 @@ int ctr_recomp_instruction(Context *c,uint32_t address,uint32_t opcode) {
         if(opcode>>28==15u || (opcode&0x400000u) ||
             !ctr_cpu_multiple_supported(rn,(uint16_t)opcode,writeback,load,false))
             ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
-        if(load && writeback) { e->rollback_base=true;e->base_register=rn;e->base_value=c->r[rn]; }
+        if(load && writeback) { e->fast.rollback_base=true;e->base_register=rn;e->base_value=c->r[rn]; }
     }
     if(c->thumb && ((opcode&0xf600u)==0xb400u || (opcode&0xf000u)==0xc000u)) {
         bool stack=(opcode&0xf600u)==0xb400u,load=(opcode&0x800u)!=0;
@@ -184,17 +179,68 @@ int ctr_recomp_instruction(Context *c,uint32_t address,uint32_t opcode) {
     return 1;
 }
 static uint32_t read_value(Context *c,uint32_t a,unsigned width) {
-    Engine *e=c->user;uint32_t n;
-    ctr_mem_result r=e->single_data?ctr_memory_read_data(e->cpu->memory,a,width,&n):ctr_memory_read(e->cpu->memory,a,width,CTR_MEM_READ,&n);
-    if (r!=CTR_MEM_OK) { e->cpu->memory_fault=r;ctr_recomp_abort(c,CTR_CPU_MEMORY_FAULT,a); }
+    Engine *e=c->user;ctr_memory *mem=e->fast.cpu->memory;
+    if(e->fast.rd_storage && e->fast.rd_map_version==mem->resource_mapping_version &&
+       a>=e->fast.rd_base && (uint64_t)a+width<=e->fast.rd_end && (!(a&(width-1u)) || e->fast.single_data)) {
+        const uint8_t *p=e->fast.rd_storage+(a-e->fast.rd_base);
+        if(width==4u)return (uint32_t)p[0]|((uint32_t)p[1]<<8)|((uint32_t)p[2]<<16)|((uint32_t)p[3]<<24);
+        if(width==2u)return (uint32_t)p[0]|((uint32_t)p[1]<<8);
+        return p[0];
+    }
+    uint32_t n;
+    ctr_mem_result r=e->fast.single_data?ctr_memory_read_data(mem,a,width,&n):ctr_memory_read(mem,a,width,CTR_MEM_READ,&n);
+    if (r!=CTR_MEM_OK) { e->fast.cpu->memory_fault=r;ctr_recomp_abort(c,CTR_CPU_MEMORY_FAULT,a); }
+    for(size_t i=0;i<mem->count;++i) {
+        const ctr_mapping *m=&mem->maps[i];
+        if((m->permissions&CTR_MEM_READ) && a>=m->base && (uint64_t)a+width<=(uint64_t)m->base+m->size) {
+            e->fast.rd_base=m->base;e->fast.rd_end=m->base+m->size;
+            e->fast.rd_storage=m->storage;e->fast.rd_map_version=mem->resource_mapping_version;
+            break;
+        }
+    }
     return n;
 }
 static void write_value(Context *c,uint32_t a,unsigned width,uint32_t n) {
-    Engine *e=c->user;
-    ctr_mem_result r=e->single_data?ctr_memory_write_data(e->cpu->memory,a,width,n):ctr_memory_write(e->cpu->memory,a,width,n);
-    if (r!=CTR_MEM_OK) { e->cpu->memory_fault=r;ctr_recomp_abort(c,CTR_CPU_MEMORY_FAULT,a); }
+    Engine *e=c->user;ctr_memory *mem=e->fast.cpu->memory;
+    if(e->fast.rw_storage && !e->fast.rw_aliases_exec && e->fast.rw_map_version==mem->resource_mapping_version &&
+       a>=e->fast.rw_base && (uint64_t)a+width<=e->fast.rw_end && (!(a&(width-1u)) || e->fast.single_data)) {
+        uint8_t *p=e->fast.rw_storage+(a-e->fast.rw_base);
+        if(width==4u) {
+            p[0]=(uint8_t)n;p[1]=(uint8_t)(n>>8);p[2]=(uint8_t)(n>>16);p[3]=(uint8_t)(n>>24);
+        } else if(width==2u) {
+            p[0]=(uint8_t)n;p[1]=(uint8_t)(n>>8);
+        } else {
+            p[0]=(uint8_t)n;
+        }
+        ++mem->generation;
+        uint64_t ver=mem->resource_clock!=UINT64_MAX?++mem->resource_clock:mem->resource_clock;
+        uintptr_t first=(uintptr_t)p,begin=first>>12u,last=(first+width-1u)>>12u;
+        mem->resource_versions[(begin^(begin>>10u))&(CTR_MEMORY_RESOURCE_SLOTS-1u)]=ver;
+        if(last!=begin)mem->resource_versions[(last^(last>>10u))&(CTR_MEMORY_RESOURCE_SLOTS-1u)]=ver;
+        c->exclusive=0;
+        return;
+    }
+    ctr_mem_result r=e->fast.single_data?ctr_memory_write_data(mem,a,width,n):ctr_memory_write(mem,a,width,n);
+    if (r!=CTR_MEM_OK) { e->fast.cpu->memory_fault=r;ctr_recomp_abort(c,CTR_CPU_MEMORY_FAULT,a); }
+    for(size_t i=0;i<mem->count;++i) {
+        const ctr_mapping *m=&mem->maps[i];
+        if((m->permissions&CTR_MEM_WRITE) && a>=m->base && (uint64_t)a+width<=(uint64_t)m->base+m->size) {
+            bool aliases=false;
+            uintptr_t m_start=(uintptr_t)m->storage,m_end=m_start+m->size;
+            for(size_t j=0;j<mem->count;++j) {
+                const ctr_mapping *o=&mem->maps[j];
+                if((o->permissions&CTR_MEM_EXEC) && m_start<(uintptr_t)o->storage+o->size && (uintptr_t)o->storage<m_end) {
+                    aliases=true;break;
+                }
+            }
+            e->fast.rw_base=m->base;e->fast.rw_end=m->base+m->size;
+            e->fast.rw_storage=m->storage;e->fast.rw_map_version=mem->resource_mapping_version;
+            e->fast.rw_aliases_exec=aliases;
+            break;
+        }
+    }
     c->exclusive=0;
-    if (e->cpu->memory->code_generation!=e->code_generation)
+    if (mem->code_generation!=e->fast.code_generation)
         ctr_recomp_abort(c,CTR_CPU_CODE_INVALIDATED,a);
 }
 static uint8_t read8(Context *c,uint32_t a) { return (uint8_t)read_value(c,a,1); }
@@ -220,23 +266,30 @@ static void interpret(Context *c,uint32_t a,uint32_t opcode) {
     Engine *e=c->user;
     if (!e->fallback) ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
     c->r[15]=a;export_cpu(e);
-    uint64_t count=e->cpu->instructions;
-    ctr_cpu_result r=ctr_cpu_step(e->cpu);
-    e->cpu->instructions=count; /* Already charged by CTR_INSTRUCTION. */
-    ++e->cpu->fallback_instructions;
+    uint64_t count=e->fast.cpu->instructions;
+    ctr_cpu_result r=ctr_cpu_step(e->fast.cpu);
+    e->fast.cpu->instructions=count; /* Already charged by CTR_INSTRUCTION. */
+    ++e->fast.cpu->fallback_instructions;
     import_cpu(e);
-    if(r==CTR_CPU_SVC){c->svc=e->cpu->svc_number;c->exit=EXIT_SVC;}
+    if(r==CTR_CPU_SVC){c->svc=e->fast.cpu->svc_number;c->exit=EXIT_SVC;}
     else if(r!=CTR_CPU_OK) ctr_recomp_abort(c,r,opcode);
 }
 static const Host callbacks={read8,read16,read32,write8,write16,write32,interpret,lookup};
 static ctr_cpu_result execute(ctr_cpu *p,void *user,uint64_t budget) {
-    Engine *e=user;Context *c=&e->context;e->cpu=p;
+    Engine *e=user;Context *c=&e->fast.context;e->fast.cpu=p;
+    e->fast.mem_code_generation=&p->memory->code_generation;
+    e->fast.mem_resource_map_version=&p->memory->resource_mapping_version;
+    e->fast.cpu_instructions=&p->instructions;
+    e->fast.mem_generation=&p->memory->generation;
+    e->fast.mem_resource_clock=&p->memory->resource_clock;
+    e->fast.mem_resource_versions=p->memory->resource_versions;
+    p->module_hash=e->guest->program.module_hash;
     /* Only the checked loader may refresh unchanged main-code ownership after
        adding/removing a packaged module. Foreign executable writes stay stale. */
-    if(e->code_generation!=p->memory->code_generation && ctr_modules_generation_current(e->guest))
-        e->code_generation=p->memory->code_generation;
+    if(e->fast.code_generation!=p->memory->code_generation && ctr_modules_generation_current(e->guest))
+        e->fast.code_generation=p->memory->code_generation;
     import_cpu(e);c->budget=(int32_t)(budget>INT32_MAX?INT32_MAX:budget);c->exit=EXIT_NONE;c->depth=0;
-    e->rollback_base=false;
+    e->fast.rollback_base=false;
     if (setjmp(e->escape)) return e->fault;
     unsigned idle_dispatches=0;
     while(c->budget>0) {
@@ -244,13 +297,14 @@ static ctr_cpu_result execute(ctr_cpu *p,void *user,uint64_t budget) {
         if(ctr_modules_has_code(e->guest,c->r[15])) {
             export_cpu(e);
             ctr_cpu_result result=ctr_modules_dispatch(e->guest,1);
+            p->module_hash=e->guest->program.module_hash;
             c->budget-=(int32_t)(p->instructions-before);import_cpu(e);
             if(result!=CTR_CPU_LIMIT)return result;
             continue;
         }
         Code code=lookup(c,c->r[15]|c->thumb);
         if(!code) {
-            e->rollback_base=false;
+            e->fast.rollback_base=false;
             if(!e->fallback) ctr_recomp_abort(c,CTR_CPU_MISSING_BLOCK,c->r[15]);
             uint32_t op;ctr_mem_result r=ctr_memory_read(p->memory,c->r[15],c->thumb?2:4,CTR_MEM_EXEC,&op);
             if(r!=CTR_MEM_OK){p->memory_fault=r;ctr_recomp_abort(c,CTR_CPU_MEMORY_FAULT,c->r[15]);}
@@ -287,8 +341,15 @@ bool ctr_recomp_attach(ctr_guest *g,bool fallback) {
         recomp_module_count || !recomp_entry_count || recomp_entry_count>10000000u || !matches(g))return false;
     for(uint32_t i=1;i<recomp_entry_count;++i)if(recomp_entries[i-1].address>=recomp_entries[i].address)return false;
     Engine *e=calloc(1,sizeof(*e));if(!e)return false;
-    e->cpu=&g->cpu;e->guest=g;e->fallback=fallback;e->code_generation=g->memory.code_generation;
-    e->context.vfp=e->vfp;e->context.fpscr=&e->fpscr;e->context.host=&callbacks;e->context.user=e;
+    e->fast.cpu=&g->cpu;e->guest=g;e->fallback=fallback;e->fast.code_generation=g->memory.code_generation;
+    e->fast.mem_code_generation=&g->memory.code_generation;
+    e->fast.mem_resource_map_version=&g->memory.resource_mapping_version;
+    e->fast.cpu_instructions=&g->cpu.instructions;
+    e->fast.mem_generation=&g->memory.generation;
+    e->fast.mem_resource_clock=&g->memory.resource_clock;
+    e->fast.mem_resource_versions=g->memory.resource_versions;
+    e->fast.context.vfp=e->fast.vfp;e->fast.context.fpscr=&e->fast.fpscr;
+    e->fast.context.host=&callbacks;e->fast.context.user=e;
     g->executor=execute;g->executor_context=e;g->executor_close=free;return true;
 }
 bool ctr_recomp_vfp(const ctr_guest *g,unsigned word,uint32_t *value) {
@@ -297,5 +358,5 @@ bool ctr_recomp_vfp(const ctr_guest *g,unsigned word,uint32_t *value) {
 }
 bool ctr_recomp_depth_stats(const ctr_guest *g,unsigned *maximum,uint64_t *unwinds) {
     if(!g || g->executor!=execute || !maximum || !unwinds)return false;
-    const Engine *e=g->executor_context;*maximum=e->maximum_depth;*unwinds=e->unwinds;return true;
+    const Engine *e=g->executor_context;*maximum=e->fast.maximum_depth;*unwinds=e->unwinds;return true;
 }

@@ -5,6 +5,18 @@ do not establish commercial-game compatibility or installable WUP acceptance.
 
 ## 0.27.0 — unreleased
 
+- Optimize ROM conversion speed and AOT runtime execution:
+  - Precompile/guard per-line regexes in `translator/portable.py` and
+    parallelize `code*.c` adaptation in `translator/upstream.py` (`Translate ARM
+    code` 22.6s -> 6.5s); schedule `code*.c` largest-first with `-g0`,
+    CPU-scaled `--jobs` (1..64), and RPX-only `make` targets (`Compile Wii U
+    title` 161.4s -> 87.2s, total Mario 3D Land build 192.8s -> 102.1s).
+  - Inline `CTR_INSTRUCTION` fast path and `mem_read*`/`mem_write*` mapping
+    caches in `runtime/recomp/recomp.h` and `ctr_recomp.c`, execute scalar IEEE
+    VFP natively in AOT without `EXIT_UNWIND` when `FPSCR` is default, and
+    reuse `direct->transformed_batch` with lazy indexed vertex decoding in
+    `runtime/core/ctr_scene.c` (measured up to 42.18 FPS and +40.6% frames in
+    70s Cemu 2.6 Mario 3D Land runs).
 - Harden and modularize direct GX2, shader, CPU, and host tooling:
   - Split `runtime/wiiu/gx2_direct.c` (with `gx2_scene_internal.h`) out of
     `gx2_scene.c`, fix direct PS arena/slot exhaustion to return `false` for

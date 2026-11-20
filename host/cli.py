@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 
 from . import __version__
@@ -62,7 +63,7 @@ def parser():
     compile_command.add_argument("--keys-config",help="Optional local 3DS keys configuration for encrypted ROMs")
     compile_command.add_argument("--title-id",help="Wii U application ID; default is stable per input program ID")
     compile_command.add_argument("--title-version",type=int,default=1,help="Wii U title version, 1..65535 (default: 1)")
-    compile_command.add_argument("--jobs",type=int,default=3,help="Native compilation jobs, 1..8 (default: 3)")
+    compile_command.add_argument("--jobs",type=int,default=min(64,os.cpu_count() or 3),help="Native compilation jobs, 1..64 (default: CPU count)")
     compile_command.add_argument("--cemu",action="store_true",help="Build the private ROM test for Cemu's virtual SD filesystem")
     compile_command.add_argument("--mii-romfs",help="Local pinned open-source Mii compatibility archive")
     package = commands.add_parser("validate-package", help="Validate a WUP directory; reports structural limits")
