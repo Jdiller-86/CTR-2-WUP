@@ -128,8 +128,8 @@ def build_test_title(path,output,*,keys_config=None,title_id=None,title_version=
         raise HostError('missing_build_sources','Run from a source checkout or set CTR2WUP_PROJECT_ROOT to it',stage='prepare')
     if not path.is_file() or path.is_symlink():raise HostError('unsafe_input','Select a regular owned ROM file',stage='prepare')
     if output.exists() or output.is_symlink():raise HostError('output_exists','Existing output was preserved; choose a new destination',stage='prepare')
-    if type(title_version) is not int or not 1<=title_version<=65535 or type(jobs) is not int or not 1<=jobs<=8:
-        raise HostError('invalid_build_settings','Use title version 1..65535 and 1..8 build jobs',stage='arguments')
+    if type(title_version) is not int or not 1<=title_version<=65535 or type(jobs) is not int or not 1<=jobs<=64:
+        raise HostError('invalid_build_settings','Use title version 1..65535 and 1..64 build jobs',stage='arguments')
     _private_output(repo,output)
     output.parent.mkdir(parents=True,exist_ok=True)
     private=repo/'private';private.mkdir(exist_ok=True)
@@ -173,6 +173,7 @@ def build_test_title(path,output,*,keys_config=None,title_id=None,title_version=
             'OUTPUT='+relative+'/native','WUT_SPECS='+relative+'/wut-startup.specs',
             'TARGET=ctr2wup-mario-test','CALL_LIMIT=16','-j'+str(jobs)]
         if cemu:command.append('GAME_CEMU_TEST=1')
+        command.append(relative+'/native/ctr2wup-mario-test.rpx')
         step('Compile Wii U title',lambda:_run_build(command,build_env,work/'compile.log',repo))
         rpx=work/'native/ctr2wup-mario-test.rpx';_validate_rpx(rpx)
         step('Stage title',lambda:stage_title(rpx,work/'title',title_id=title_id,name=profile['name'],version=title_version))

@@ -7,6 +7,7 @@ before distributing the external tool or its generated ABI support header.
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ProcessPoolExecutor
 import hashlib
 import json
 import os
@@ -19,8 +20,16 @@ import time
 
 from host.containers import inspect
 from host.errors import HostError
+from .portable import adapt_source
 
 SOURCE_COMMIT = "f78cd3777a676a7c02538ab993ca574a6d843416"
+
+
+def _adapt_file(path_str):
+    p = Path(path_str)
+    adapted, count = adapt_source(p.read_text(encoding="utf-8"))
+    p.write_text(adapted, encoding="utf-8")
+    return count
 
 
 def checked_source(source=None):
@@ -67,15 +76,21 @@ def generate_into(path, output, *, source=None, generator=None):
         if (metadata["abi"] != 4 or metadata["source_commit"] != SOURCE_COMMIT
                 or metadata["program_id"] != inspection["identity"]["program_id"]):
             raise ValueError("Generation identity/ABI mismatch")
-        instructions = 0
+        code_files = []
         for name in metadata["sources"]:
             if not name.endswith(".c") or Path(name).name != name:
                 raise ValueError("Invalid generated source name")
             if name.startswith("code"):
-                p = output / name
-                adapted, count = adapt_source(p.read_text())
-                p.write_text(adapted, encoding="utf-8")
-                instructions += count
+                code_files.append(str(output / name))
+        workers = min(os.cpu_count() or 1, len(code_files))
+        if workers > 1:
+            try:
+                with ProcessPoolExecutor(max_workers=workers) as pool:
+                    instructions = sum(pool.map(_adapt_file, code_files))
+            except (OSError, PermissionError):
+                instructions = sum(_adapt_file(p) for p in code_files)
+        else:
+            instructions = sum(_adapt_file(p) for p in code_files)
         if not instructions: raise ValueError("No executable instructions generated")
     except (OSError, ValueError, KeyError) as exc:
         raise HostError("invalid_generated_code", str(exc), stage="translate") from exc

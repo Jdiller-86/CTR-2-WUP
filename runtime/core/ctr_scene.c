@@ -545,10 +545,17 @@ static ctr_scene_result setup_write(ctr_scene_state *s,unsigned reg,uint32_t val
     } else return upload(s,reg,value,mask);
     return CTR_SCENE_OK;
 }
-static ctr_scene_result vertices(const ctr_scene_state *s,const ctr_scene_resources *resources,
-                                 bool indexed,unsigned start,unsigned count,ctr_vertex *output,
-                                 ctr_scene_report *report,const scene_target_range targets[2],bool software_game,
-                                 ctr_vertex_indices *resolved_indices) {
+typedef struct {
+    unsigned total,fixed,slots[12];
+    ctr_vertex_attribute attributes[12];
+    ctr_vertex_stream streams[12];
+    size_t attribute_count,stream_count;
+    ctr_vertex_indices indices;
+    float fixed_values[12][4];
+} scene_vertex_layout;
+static ctr_scene_result vertices_prepare(const ctr_scene_state *s,const ctr_scene_resources *resources,
+                                         bool indexed,const scene_target_range targets[2],bool software_game,
+                                         scene_vertex_layout *layout) {
     uint32_t high=s->registers[0x202u],low=s->registers[0x201u];
     unsigned total=(high>>28)+1u,fixed=(high>>16)&4095u;
     uint32_t config=s->registers[0x2b9u];
@@ -558,14 +565,17 @@ static ctr_scene_result vertices(const ctr_scene_state *s,const ctr_scene_resour
     if(base>UINT32_MAX)return CTR_SCENE_OVERFLOW;
     if(!software_game && base!=resources->base_address)return CTR_SCENE_LAYOUT;
     uint64_t permutation=(uint64_t)s->registers[0x2bbu]|(uint64_t)s->registers[0x2bcu]<<32;
-    uint16_t inputs=0,loaded=0;unsigned slots[12];
+    uint16_t inputs=0,loaded=0;
+    layout->total=total;layout->fixed=fixed;
     for(unsigned a=0;a<total;++a) {
-        slots[a]=(unsigned)((permutation>>(a*4u))&15u);
-        if(inputs&(1u<<slots[a]))return CTR_SCENE_LAYOUT;
-        inputs|=(uint16_t)(1u<<slots[a]);
-        if((fixed&(1u<<a)) && !(s->fixed_defined&(1u<<a)))return CTR_SCENE_LAYOUT;
+        layout->slots[a]=(unsigned)((permutation>>(a*4u))&15u);
+        if(inputs&(1u<<layout->slots[a]))return CTR_SCENE_LAYOUT;
+        inputs|=(uint16_t)(1u<<layout->slots[a]);
+        if(fixed&(1u<<a)) {
+            if(!(s->fixed_defined&(1u<<a)))return CTR_SCENE_LAYOUT;
+            for(unsigned lane=0;lane<4;++lane)layout->fixed_values[a][lane]=number(s->fixed[a][lane]);
+        }
     }
-    ctr_vertex_attribute attributes[12];ctr_vertex_stream streams[12];
     size_t attribute_count=0,stream_count=0;
     for(unsigned bank=0;bank<12;++bank) {
         unsigned reg=0x203u+bank*3u;
@@ -585,8 +595,8 @@ static ctr_scene_result vertices(const ctr_scene_state *s,const ctr_scene_resour
                 unsigned width=type==3u?4u:type==2u?2u:1u;
                 at=(at+width-1u)&~(width-1u);
                 if(!(fixed&(1u<<id))) {
-                    attributes[attribute_count++]=(ctr_vertex_attribute){
-                        (unsigned)stream_count,slots[id],type,components,at};used=true;
+                    layout->attributes[attribute_count++]=(ctr_vertex_attribute){
+                        (unsigned)stream_count,layout->slots[id],type,components,at};used=true;
                 }
                 at+=width*components;
             }
@@ -596,45 +606,52 @@ static ctr_scene_result vertices(const ctr_scene_state *s,const ctr_scene_resour
             ctr_scene_resource_span source;
             ctr_scene_result result=geometry_window(resources,targets,base+offset,software_game,&source);
             if(result!=CTR_SCENE_OK)return result;
-            streams[stream_count++]=(ctr_vertex_stream){source.bytes,source.size,
+            layout->streams[stream_count++]=(ctr_vertex_stream){source.bytes,source.size,
                 (size_t)(base+offset-source.base_address),stride};
         }
     }
     if(((loaded|fixed)&((1u<<total)-1u))!=((1u<<total)-1u))return CTR_SCENE_LAYOUT;
-    ctr_vertex_indices indices={0};
+    layout->attribute_count=attribute_count;layout->stream_count=stream_count;
+    layout->indices=(ctr_vertex_indices){0};
     if(indexed) {
         uint32_t raw=s->registers[0x227u],offset=raw&UINT32_C(0x0fffffff);
         if(raw&UINT32_C(0x70000000))return CTR_SCENE_UNSUPPORTED;
         ctr_scene_resource_span source;
         ctr_scene_result result=geometry_window(resources,targets,base+offset,software_game,&source);
         if(result!=CTR_SCENE_OK)return result;
-        indices=(ctr_vertex_indices){source.bytes,source.size,(size_t)(base+offset-source.base_address),raw>>31};
+        layout->indices=(ctr_vertex_indices){source.bytes,source.size,(size_t)(base+offset-source.base_address),raw>>31};
     }
-    if(attribute_count) {
+    return CTR_SCENE_OK;
+}
+static ctr_scene_result vertices_decode(const ctr_scene_state *s,const scene_vertex_layout *layout,
+                                        bool indexed,unsigned start,unsigned count,ctr_vertex *output,
+                                        ctr_scene_report *report) {
+    if(layout->attribute_count) {
         ctr_vertex_result result;
-        if(indexed)result=ctr_vertex_decode_indexed(attributes,attribute_count,streams,stream_count,&indices,start,count,output,count);
+        if(indexed)result=ctr_vertex_decode_indexed(layout->attributes,layout->attribute_count,
+            layout->streams,layout->stream_count,&layout->indices,start,count,output,count);
         else {
             uint32_t offset=s->registers[0x22au];
             if(start>UINT32_MAX-offset)return CTR_SCENE_OVERFLOW;
-            result=ctr_vertex_decode(attributes,attribute_count,streams,stream_count,offset+start,count,output,count);
+            result=ctr_vertex_decode(layout->attributes,layout->attribute_count,
+                layout->streams,layout->stream_count,offset+start,count,output,count);
         }
         report->vertex_result=result;
         if(result!=CTR_VERTEX_OK)return CTR_SCENE_VERTEX;
     } else {
         /* Fixed-only shaders still validate an indexed draw's entire index span. */
         if(indexed) {
-            uint64_t last=(uint64_t)indices.offset+(uint64_t)(start+count)*(indices.format+1u);
-            if(last>indices.size)return CTR_SCENE_LAYOUT;
+            uint64_t last=(uint64_t)layout->indices.offset+(uint64_t)(start+count)*(layout->indices.format+1u);
+            if(last>layout->indices.size)return CTR_SCENE_LAYOUT;
         }
         memset(output,0,count*sizeof(*output));
         for(unsigned vertex=0;vertex<count;++vertex)
             for(unsigned input=0;input<16;++input)output[vertex].input[input][3]=1.0f;
     }
-    for(unsigned vertex=0;vertex<count;++vertex)for(unsigned a=0;a<total;++a)if(fixed&(1u<<a)) {
-        for(unsigned lane=0;lane<4;++lane)output[vertex].input[slots[a]][lane]=number(s->fixed[a][lane]);
-        output[vertex].enabled|=(uint16_t)(1u<<slots[a]);
+    for(unsigned vertex=0;vertex<count;++vertex)for(unsigned a=0;a<layout->total;++a)if(layout->fixed&(1u<<a)) {
+        for(unsigned lane=0;lane<4;++lane)output[vertex].input[layout->slots[a]][lane]=layout->fixed_values[a][lane];
+        output[vertex].enabled|=(uint16_t)(1u<<layout->slots[a]);
     }
-    *resolved_indices=indices;
     return CTR_SCENE_OK;
 }
 typedef struct {
@@ -1373,6 +1390,8 @@ typedef struct {
     ctr_shader_fast *fast_vs;
     unsigned *cache_id,*cache_steps,cache_slots;
     scene_vertex *cache_vertex;
+    ctr_scene_transformed_vertex *transformed_batch;
+    unsigned transformed_cap;
 } scene_direct_ctx;
 static ctr_scene_result draw(ctr_scene_state *s,const ctr_scene_resources *resources,
                              const ctr_scene_surface *surface,bool indexed,unsigned immediate_count,
@@ -1436,10 +1455,24 @@ static ctr_scene_result draw(ctr_scene_state *s,const ctr_scene_resources *resou
     }
     unsigned capacity=CTR_SCENE_MAX_VERTICES/3u*3u;
     unsigned batch=count<capacity?count:capacity;
-    ctr_vertex_indices indices={0};
-    ctr_scene_result result=immediate_count?CTR_SCENE_OK:
-        vertices(s,resources,indexed,0,batch,decoded,report,targets,software_game,&indices);
+    scene_vertex_layout vertex_layout={0};
+    bool lazy_indexed=software_game && indexed;
+    ctr_scene_result result=CTR_SCENE_OK;
+    if(immediate_count) {
+        result=CTR_SCENE_OK;
+    } else if(lazy_indexed) {
+        result=vertices_prepare(s,resources,true,targets,true,&vertex_layout);
+        if(result==CTR_SCENE_OK) {
+            uint64_t last=(uint64_t)vertex_layout.indices.offset+(uint64_t)count*(vertex_layout.indices.format+1u);
+            if(last>vertex_layout.indices.size)result=CTR_SCENE_LAYOUT;
+        }
+    } else {
+        result=vertices_prepare(s,resources,indexed,targets,software_game,&vertex_layout);
+        if(result==CTR_SCENE_OK)
+            result=vertices_decode(s,&vertex_layout,indexed,0,batch,decoded,report);
+    }
     if(result!=CTR_SCENE_OK)return result;
+    ctr_vertex_indices indices=vertex_layout.indices;
     ctr_scene_sampler samplers[CTR_SCENE_TEXTURE_UNITS]={0};
     ctr_texture_cache_lease texture_allocations[CTR_SCENE_TEXTURE_UNITS][CTR_SCENE_MAX_MIP_LEVELS]={0};
     ctr_tev_program combiner;
@@ -1470,6 +1503,7 @@ static ctr_scene_result draw(ctr_scene_state *s,const ctr_scene_resources *resou
     }
     ctr_scene_transformed_vertex *transformed_batch=NULL;
     unsigned transformed_count=0,transformed_cap=capacity;
+    bool owns_transformed=true;
     if(backend) {
         if(direct && direct->active) {
             if(!direct->began) {
@@ -1484,9 +1518,19 @@ static ctr_scene_result draw(ctr_scene_state *s,const ctr_scene_resources *resou
             if(need<capacity)need=capacity;
             if(need>CTR_SCENE_MAX_GAME_DRAW_VERTICES)need=CTR_SCENE_MAX_GAME_DRAW_VERTICES;
             transformed_cap=(unsigned)need;
+            if(direct->transformed_cap<transformed_cap) {
+                ctr_scene_transformed_vertex *grown=realloc(direct->transformed_batch,
+                    (size_t)transformed_cap*sizeof(*grown));
+                if(!grown) { free_textures(texture_allocations);return CTR_SCENE_NO_MEMORY; }
+                direct->transformed_batch=grown;
+                direct->transformed_cap=transformed_cap;
+            }
+            transformed_batch=direct->transformed_batch;
+            owns_transformed=false;
+        } else {
+            transformed_batch=malloc(transformed_cap*sizeof(*transformed_batch));
+            if(!transformed_batch) { free_textures(texture_allocations);return CTR_SCENE_NO_MEMORY; }
         }
-        transformed_batch=malloc(transformed_cap*sizeof(*transformed_batch));
-        if(!transformed_batch) { free_textures(texture_allocations);return CTR_SCENE_NO_MEMORY; }
         report->backend_stage=CTR_SCENE_BACKEND_DRAW;
     }
     ctr_tev_plan tev;
@@ -1523,9 +1567,9 @@ static ctr_scene_result draw(ctr_scene_state *s,const ctr_scene_resources *resou
     }
     for(unsigned vertex=0;vertex<count;++vertex) {
         unsigned in_batch=immediate_count?vertex:vertex%capacity;
-        if(!immediate_count && vertex && !in_batch) {
+        if(!immediate_count && !lazy_indexed && vertex && !in_batch) {
             batch=count-vertex<capacity?count-vertex:capacity;
-            result=vertices(s,resources,indexed,vertex,batch,decoded,report,targets,software_game,&indices);
+            result=vertices_decode(s,&vertex_layout,indexed,vertex,batch,decoded,report);
             if(result!=CTR_SCENE_OK)break;
         }
         scene_vertex *transformed=&primitive[vertex%3u];
@@ -1540,10 +1584,16 @@ static ctr_scene_result draw(ctr_scene_state *s,const ctr_scene_resources *resou
             *transformed=cached_vertex[slot];
             report->shader_instructions+=cached_steps[slot];
         } else {
+            const ctr_vertex *vtx=&decoded[in_batch];
+            if(lazy_indexed) {
+                result=vertices_decode(s,&vertex_layout,true,vertex,1u,&decoded[0],report);
+                if(result!=CTR_SCENE_OK)break;
+                vtx=&decoded[0];
+            }
             ctr_shader_output out;
             report->shader_result=use_fast?
-                ctr_shader_execute_fast(direct->fast_vs,&decoded[in_batch],&out):
-                ctr_shader_execute(&s->shader,&decoded[in_batch],&out);
+                ctr_shader_execute_fast(direct->fast_vs,vtx,&out):
+                ctr_shader_execute(&s->shader,vtx,&out);
             if(report->shader_result!=CTR_SHADER_OK) { result=CTR_SCENE_SHADER;break; }
             report->shader_instructions+=out.instructions;
             if(key)*transformed=(scene_vertex){0};
@@ -1676,7 +1726,7 @@ static ctr_scene_result draw(ctr_scene_state *s,const ctr_scene_resources *resou
     if(result==CTR_SCENE_OK && transformed_count &&
        !backend->draw_transformed(backend->context,s,transformed_batch,transformed_count,samplers,texture_mask,&light))
         result=CTR_SCENE_BACKEND;
-    free(transformed_batch);
+    if(owns_transformed)free(transformed_batch);
     free_textures(texture_allocations);
     if(result==CTR_SCENE_OK)++report->draws;
     return result;
@@ -1963,10 +2013,11 @@ static ctr_scene_result execute(ctr_scene_state *state,const void *commands,size
     bool commit_color=true,commit_depth=depth!=NULL;
     if(direct_backend) {
         scene_direct_ctx direct={surface,depth,true,false,direct_fast,
-            direct_cache_id,direct_cache_steps,DIRECT_CACHE_SLOTS,direct_cache_vertex};
+            direct_cache_id,direct_cache_steps,DIRECT_CACHE_SLOTS,direct_cache_vertex,NULL,0u};
         result=replay(trial,commands,writes,wire.writes,resources,surface,
                       decoded,NULL,&report,false,bound,color_address,color_format,depth,NULL,true,
                       backend->draw_textures || native_mips,software_game,features,backend,cache,&direct);
+        free(direct.transformed_batch);
         if(result==CTR_SCENE_OK && (trial->lists==UINT64_MAX || report.draws>UINT64_MAX-trial->draws ||
            report.triangles>UINT64_MAX-trial->triangles || report.fragments>UINT64_MAX-trial->fragments ||
            report.shader_instructions>UINT64_MAX-trial->shader_instructions))result=CTR_SCENE_OVERFLOW;

@@ -203,10 +203,13 @@ CORE_SOURCES += ../core/ctr_dsp_fixture.c ../../tests/fixtures/dsp/dsp.generated
 CORE_OBJECTS += $(BUILD)/ctr_dsp_fixture.o $(BUILD)/dsp.generated.o $(BUILD)/dsp-image.generated.o
 endif
 ifeq ($(GAME_TEST),1)
-CORE_SOURCES := $(CTR_RUNTIME_SOURCES) ../core/ctr_fs_snapshot.c ../core/ctr_romfs_file.c ../recomp/ctr_recomp.c $(GAME_DIR)/game_image.generated.c $(UPSTREAM_DIR)/entries.c $(wildcard $(UPSTREAM_DIR)/code*.c)
+CODE_SOURCES := $(or $(shell ls -S $(UPSTREAM_DIR)/code*.c 2>/dev/null),$(wildcard $(UPSTREAM_DIR)/code*.c))
+CORE_SOURCES := $(CODE_SOURCES) $(UPSTREAM_DIR)/entries.c $(CTR_RUNTIME_SOURCES) ../core/ctr_fs_snapshot.c ../core/ctr_romfs_file.c ../recomp/ctr_recomp.c $(GAME_DIR)/game_image.generated.c
 CORE_OBJECTS := $(addprefix $(BUILD)/,$(notdir $(CORE_SOURCES:.c=.o)))
-endif
+OBJECTS := $(CORE_OBJECTS) $(OBJECTS)
+else
 OBJECTS += $(CORE_OBJECTS)
+endif
 vpath %.c ../../tests/fixtures/dsp ../core ../recomp ../../tests/fixtures/cpu ../../tests/fixtures/guest ../../tests/fixtures/services ../../tests/fixtures/heap ../../tests/fixtures/kernel ../../tests/fixtures/hid ../../tests/fixtures/gsp ../../tests/fixtures/relay ../../tests/fixtures/stack ../../tests/fixtures/threads $(UPSTREAM_DIR) $(GAME_DIR)
 .PHONY: all clean identity-force
 all: $(OUTPUT)/$(TARGET).rpx $(OUTPUT)/$(TARGET).wuhb
@@ -215,6 +218,7 @@ $(BUILD):
 $(BUILD)/identity: identity-force | $(BUILD)
 	@printf '%s\n' '$(CTR_BUILD_SHA):$(CTR_BUILD_DIRTY):$(APP_VERSION)' > "$@.tmp"
 	@if ! cmp -s "$@.tmp" "$@"; then mv "$@.tmp" "$@"; else rm "$@.tmp"; fi
+$(BUILD)/code%.o $(BUILD)/entries.o: CFLAGS += -g0
 $(BUILD)/%.o: %.c $(CTR_RUNTIME_MANIFEST) Makefile $(BUILD)/identity | $(BUILD)
 	"$(CC)" $(CFLAGS) -MMD -MP -c "$<" -o "$@"
 $(OUTPUT)/$(TARGET).elf: $(OBJECTS) $(WUT_SPECS)
