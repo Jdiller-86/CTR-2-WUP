@@ -62,7 +62,7 @@ class DocsSiteTests(unittest.TestCase):
         endpoints = self.project_endpoints({
             'schema_version': 2, 'repository': 'Jdiller-86/CTR-2-WUP',
             'project_url': 'https://github.com/users/Jdiller-86/projects/2',
-            'source_commit': 'a' * 40, 'state': 'unavailable', 'stale_after_seconds': 7200,
+            'source_commit': 'a' * 40, 'state': 'unavailable', 'stale_after_seconds': 43200,
             'generated_at': datetime.now(timezone.utc).isoformat()})
         result = site.verify('a' * 40, endpoints.__getitem__, with_project=True)
         self.assertTrue(result['ok'])
@@ -73,8 +73,8 @@ class DocsSiteTests(unittest.TestCase):
     def test_online_graph_reports_stale_data_and_rejects_wrong_source(self):
         snapshot = {'schema_version': 2, 'repository': 'Jdiller-86/CTR-2-WUP',
                     'project_url': 'https://github.com/users/Jdiller-86/projects/2',
-                    'source_commit': 'a' * 40, 'state': 'available', 'stale_after_seconds': 7200,
-                    'generated_at': (datetime.now(timezone.utc) - timedelta(hours=3)).isoformat()}
+                    'source_commit': 'a' * 40, 'state': 'available', 'stale_after_seconds': 43200,
+                    'generated_at': (datetime.now(timezone.utc) - timedelta(hours=13)).isoformat()}
         endpoints = self.project_endpoints(snapshot)
         self.assertTrue(site.verify('a' * 40, endpoints.__getitem__, with_project=True)['project_snapshot_stale'])
         snapshot['source_commit'] = 'b' * 40
@@ -87,7 +87,7 @@ class DocsSiteTests(unittest.TestCase):
     def test_readme_graph_requires_svg_matching_source_timestamp_and_state(self):
         snapshot = {'schema_version': 2, 'repository': 'Jdiller-86/CTR-2-WUP',
                     'project_url': 'https://github.com/users/Jdiller-86/projects/2',
-                    'source_commit': 'a' * 40, 'state': 'available', 'stale_after_seconds': 7200,
+                    'source_commit': 'a' * 40, 'state': 'available', 'stale_after_seconds': 43200,
                     'generated_at': datetime.now(timezone.utc).isoformat()}
         url = site.CANONICAL + 'progress/gates.svg'
         for case in ('missing', 'html', 'source', 'timestamp', 'state'):

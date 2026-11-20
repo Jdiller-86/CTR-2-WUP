@@ -1,0 +1,3 @@
+name: CTR2WUP CodeQL configuration
+paths-ignore:
+  - tests

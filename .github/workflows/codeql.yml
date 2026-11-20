@@ -1,27 +1,25 @@
-name: Optional CodeQL analysis
+name: CodeQL analysis
 
 # The public repository is eligible for CodeQL without Advanced Security billing.
-# Run only after independently confirming existing CodeQL scanning eligibility.
 on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '17 6 * * 1'
   workflow_dispatch:
-    inputs:
-      confirm_eligible:
-        description: 'Existing repository CodeQL eligibility has been confirmed (no purchase or enablement)'
-        type: boolean
-        required: true
-        default: false
 
 permissions:
   contents: read
 
 concurrency:
   group: codeql-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   analyze:
     name: CodeQL ${{ matrix.language }}
-    if: inputs.confirm_eligible
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -46,6 +44,7 @@ jobs:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build_mode }}
           queries: security-and-quality
+          config-file: ./.github/codeql/codeql-config.yml
       - name: Compile original portable C fixtures for extraction
         if: matrix.build_mode == 'manual'
         shell: bash

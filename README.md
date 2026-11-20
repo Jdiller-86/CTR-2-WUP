@@ -22,7 +22,7 @@ cover the implemented runtime foundations.
 
 [![Project progress](https://jdiller-86.github.io/CTR-2-WUP/progress/gates.svg)](https://jdiller-86.github.io/CTR-2-WUP/progress/)
 
-Updated hourly from the [Project](https://github.com/users/Jdiller-86/projects/2).
+Updated periodically from the [Project](https://github.com/users/Jdiller-86/projects/2).
 Open the graph for interactive task details and dependencies.
 
 ## Capabilities

@@ -62,6 +62,10 @@ class PublicSnapshotTests(unittest.TestCase):
         self.assertFalse(any(gate['accepted'] for gate in output['milestones']))
         self.assertEqual(output['generated_at'], '2026-10-16T00:00:00Z')
 
+    def test_body_details_preserves_underscores_in_identifiers(self):
+        summary, _, _ = project.body_details('Reached `main_return` and _ok_.')
+        self.assertEqual(summary, 'Reached main_return and ok.')
+
     def test_known_duplicate_is_excluded_without_discarding_other_history(self):
         data = fixture()
         duplicate = issue(121, 'Closed', state='CLOSED', archived=True)

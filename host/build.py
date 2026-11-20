@@ -16,7 +16,6 @@ import tempfile
 
 from . import __version__
 from .build_support import MIN_BUILD_FREE, _run_build, _sha256
-from .containers import inspect
 from .doctor import doctor, repository_root, tool_environment
 from .errors import HostError
 from .atomic import publish_directory

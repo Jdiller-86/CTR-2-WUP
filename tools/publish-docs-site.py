@@ -82,7 +82,7 @@ def bundle(folder, commit):
 def public_project_snapshot(path, commit):
     """Keep only the public issue snapshot contract; unavailable data is explicit."""
     base = {'schema_version': 2, 'project_url': 'https://github.com/users/Jdiller-86/projects/2',
-            'repository': SOURCE, 'source_commit': commit, 'stale_after_seconds': 7200,
+            'repository': SOURCE, 'source_commit': commit, 'stale_after_seconds': 43200,
             'generated_at': datetime.now(timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z')}
     unavailable = {**base, 'state': 'unavailable', 'error_code': 'project_unavailable',
                    'milestones': [], 'items': []}
