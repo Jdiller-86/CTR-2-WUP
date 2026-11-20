@@ -110,7 +110,8 @@ def check(kit, output, emit_previews=False):
         card = root / "SD card"
         (card / "wiiu/environments/aroma").mkdir(parents=True)
         copied = actions.copy_sd(backend, installed, actions.sd_plan(backend, installed, card))
-        assert copied["copied"] == 11
+        expected_sd = sum(1 for name in json.loads((kit / "manifest.json").read_text())["files"] if name.startswith("sd-card/"))
+        assert expected_sd == 12 and copied["copied"] == expected_sd, (expected_sd, copied)
         env = dict(os.environ)
         env.pop("PYTHONPATH", None)
         env.pop("PYTHONHOME", None)
@@ -122,7 +123,7 @@ def check(kit, output, emit_previews=False):
                     async with ClientSession(read, write, read_timeout_seconds=30) as session:
                         await session.initialize()
                         tools = await session.list_tools()
-                        assert len(tools.tools) == 12
+                        assert len(tools.tools) == 17, [tool.name for tool in tools.tools]
                         capabilities = await session.call_tool("wiiu_capabilities", {})
                         assert not capabilities.is_error
                         status = await session.call_tool("wiiu_status", {})
