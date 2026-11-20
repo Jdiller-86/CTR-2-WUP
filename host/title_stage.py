@@ -14,7 +14,7 @@ from .atomic import publish_directory
 from .build import _validate_rpx,_sha256,MIN_BUILD_FREE
 from .errors import HostError
 from .package_validator import _title_id,ValidatorError
-from .rpx_startup import MAX_RPX_SIZE,rpx_sdk
+from .rpx_startup import MAX_RPX_SIZE,rpx_startup
 
 
 def _xml(root,fields):
@@ -51,7 +51,8 @@ def stage_title(rpx,output,*,title_id,name='CTR2WUP Prototype',version=0):
     if rpx.stat().st_size>MAX_RPX_SIZE:
         raise HostError('invalid_native_startup','Native RPX exceeds the 64 MiB startup profile',stage='packaging')
     with rpx.open('rb') as handle:
-        sdk=rpx_sdk(handle.read(MAX_RPX_SIZE+1))
+        startup=rpx_startup(handle.read(MAX_RPX_SIZE+1))
+        sdk=startup['sdk']
     output=Path(output).absolute()
     if output.exists():raise HostError('output_exists','Title staging output already exists',stage='prepare')
     output.parent.mkdir(parents=True,exist_ok=True)
@@ -72,7 +73,8 @@ def stage_title(rpx,output,*,title_id,name='CTR2WUP Prototype',version=0):
         cos=[('version','unsignedInt',4,18),('cmdFlags','unsignedInt',4,0),
              ('argstr','string',4096,'ctr2wup.rpx'),('avail_size','hexBinary',4,'00000000'),
              ('codegen_size','hexBinary',4,'00000000'),('codegen_core','hexBinary',4,'00000001'),
-             ('max_size','hexBinary',4,'40000000'),('max_codesize','hexBinary',4,'03000000')]
+             ('max_size','hexBinary',4,'40000000'),
+             ('max_codesize','hexBinary',4,f'{startup["code_reservation"]:08x}')]
         for core in range(3):
             cos += [(f'default_stack{core}_size','hexBinary',4,'00100000'),(f'default_redzone{core}_size','hexBinary',4,'00000000'),
                     (f'exception_stack{core}_size','hexBinary',4,'00001000')]

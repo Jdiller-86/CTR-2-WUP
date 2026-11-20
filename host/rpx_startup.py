@@ -11,7 +11,7 @@ from .package_crypto import fail
 MAX_RPX_SIZE = 64*1024*1024
 
 
-def rpx_sdk(data):
+def rpx_startup(data):
     if (not 52 <= len(data) <= MAX_RPX_SIZE
             or data[:8] != b'\x7fELF\x01\x02\x01\xca'
             or data[16:20] != b'\xfe\x01\x00\x14'):
@@ -41,4 +41,22 @@ def rpx_sdk(data):
     sdk=struct.unpack_from('>I',raw,0x50)[0]
     if version!=0xcafe0402 or not flags&2 or not 0<minimum<=sdk:
         fail('invalid_native_startup','RPX must declare its native SDK compatibility')
-    return sdk
+    text_size=struct.unpack_from('>I',raw,4)[0]
+    load_size=struct.unpack_from('>I',raw,0x14)[0]
+    # Code heap contains uncompressed text, loader bookkeeping and imported
+    # modules. Small (<=16 MiB) diagnostics retain their accepted 48 MiB pool.
+    # Larger executables add their own allocation to that baseline: the native
+    # loader's retained allocation-failure report requests this extra capacity.
+    quantum=16*1024*1024
+    code_bytes=text_size+load_size
+    code_reservation=48*1024*1024
+    if code_bytes>quantum:
+        code_reservation=(code_bytes+code_reservation+quantum-1)//quantum*quantum
+    if code_reservation>0x0e000000:
+        fail('invalid_native_startup','RPX exceeds the bounded native code-heap profile')
+    return {'sdk':sdk,'text_size':text_size,'load_size':load_size,
+            'code_reservation':code_reservation}
+
+
+def rpx_sdk(data):
+    return rpx_startup(data)['sdk']

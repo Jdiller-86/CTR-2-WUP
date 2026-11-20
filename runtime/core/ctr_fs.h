@@ -9,6 +9,7 @@
 #define CTR_FS_MAX_FILE_BYTES (1024u*1024u)
 #define CTR_FS_MAX_VOLUME_BYTES (4u*1024u*1024u)
 #define CTR_FS_NOT_FOUND UINT32_C(0xc8804478)
+#define CTR_FS_NOT_FORMATTED UINT32_C(0xc8a04554)
 #define CTR_FS_EXISTS UINT32_C(0xc82044be)
 #define CTR_FS_INVALID UINT32_C(0xe0e046be)
 #define CTR_FS_DENIED UINT32_C(0xc8a044dc)
@@ -48,6 +49,8 @@ bool ctr_fs_romfs_init(ctr_fs_romfs *view,uint64_t size,
                        bool (*read)(void *,uint64_t,void *,uint32_t),void *context);
 bool ctr_fs_romfs_close(ctr_fs_romfs *view);
 bool ctr_fs_mount_romfs(struct ctr_guest *guest,ctr_fs_romfs *view);
+/* Explicit read-only replacement for the standalone profile's Mii data. */
+bool ctr_fs_mount_mii_romfs(struct ctr_guest *guest,ctr_fs_romfs *view);
 
 /* Explicit configured private volumes: savedata(4) or virtual SDMC(9).
    No default SD-card exposure, cartridge data, directories or ROMFS claims. */

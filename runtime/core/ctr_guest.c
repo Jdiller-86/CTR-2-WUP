@@ -16,7 +16,6 @@
 #define RESULT_TIMEOUT UINT32_C(0x09401bfe)
 #define RESULT_NO_MEMORY UINT32_C(0xd86007f3)
 #define STACK_TOP UINT32_C(0x10000000)
-#define TLS_ADDRESS UINT32_C(0x1ff82000)
 
 const char *ctr_guest_state_name(ctr_guest_state state) {
     static const char *const names[]={"ready","yielded","sleeping","waiting","exited","faulted"};
@@ -33,6 +32,7 @@ void ctr_guest_close(ctr_guest *guest) {
     free(guest->gsp.pica_scene);
     for(unsigned i=0;i<2;++i)if(guest->fs_volumes[i] && guest->fs_volumes[i]->mounts)--guest->fs_volumes[i]->mounts;
     if(guest->fs_romfs && guest->fs_romfs->mounts)--guest->fs_romfs->mounts;
+    if(guest->fs_mii_romfs && guest->fs_mii_romfs->mounts)--guest->fs_mii_romfs->mounts;
     for (unsigned i=0;i<CTR_GUEST_STORAGE_COUNT;++i) free(guest->storage[i]);
     for (unsigned i=0;i<CTR_GUEST_MAX_ALLOCATIONS;++i) free(guest->allocations[i].storage);
     for (unsigned i=0;i<8;++i) if (guest->shared[i].owned) free(guest->shared[i].storage);
@@ -67,7 +67,7 @@ bool ctr_guest_open(ctr_guest *g,const ctr_guest_image *image,const ctr_block *b
     if (!image || !image->code || !image->module_hash || !image->text.size || image->text.size%4 || !image->stack_size ||
         image->stack_size%CTR_GUEST_PAGE || image->stack_size>STACK_TOP || (!blocks && block_count)) return false;
     ctr_guest_segment segments[]={image->text,image->rodata,image->data};
-    uint64_t total=(uint64_t)image->stack_size+3u*CTR_GUEST_PAGE, code_pages=0;
+    uint64_t total=(uint64_t)image->stack_size+2u*CTR_GUEST_PAGE+CTR_GUEST_TLS_BYTES, code_pages=0;
     for (unsigned i=0;i<3;++i) {
         const ctr_guest_segment *s=&segments[i];
         uint64_t bytes=(uint64_t)s->pages*CTR_GUEST_PAGE;
@@ -97,7 +97,7 @@ bool ctr_guest_open(ctr_guest *g,const ctr_guest_image *image,const ctr_block *b
         offset+=size;
     }
     if (!region(g,3,STACK_TOP-image->stack_size,image->stack_size,CTR_MEM_READ|CTR_MEM_WRITE,NULL,0) ||
-        !region(g,4,TLS_ADDRESS,CTR_GUEST_PAGE,CTR_MEM_READ|CTR_MEM_WRITE,NULL,0) ||
+        !region(g,4,CTR_GUEST_TLS_BASE,CTR_GUEST_TLS_BYTES,CTR_MEM_READ|CTR_MEM_WRITE,NULL,0) ||
         !region(g,5,0x1ff80000u,CTR_GUEST_PAGE,CTR_MEM_READ,NULL,0) ||
         !region(g,6,0x1ff81000u,CTR_GUEST_PAGE,CTR_MEM_READ,NULL,0)) goto failure;
     /* Public userspace ABI selection and this runtime's application budget;
@@ -110,12 +110,13 @@ bool ctr_guest_open(ctr_guest *g,const ctr_guest_image *image,const ctr_block *b
     ctr_cpu_init(&g->cpu,&g->memory); g->cpu.module_hash=image->module_hash;
     g->cpu.r[13]=STACK_TOP; g->cpu.r[15]=image->text.address; g->cpu.cpsr=0x10; /* User ARM mode. */
     g->program=(ctr_program){blocks,block_count,image->module_hash,g->memory.code_generation};
-    g->tls_address=TLS_ADDRESS; g->state=CTR_GUEST_READY; g->fault=CTR_CPU_OK;
-    g->cpu.tls_address=TLS_ADDRESS;
+    g->tls_address=CTR_GUEST_TLS_BASE; g->state=CTR_GUEST_READY; g->fault=CTR_CPU_OK;
+    g->cpu.tls_address=CTR_GUEST_TLS_BASE;
     g->threads[0]=(ctr_guest_thread){.active=true,.references=1,.id=1,.priority=0x30,
-        .stack_allocation=CTR_GUEST_MAX_ALLOCATIONS,.state=CTR_GUEST_READY,.tls_address=TLS_ADDRESS};
+        .stack_allocation=CTR_GUEST_MAX_ALLOCATIONS,.state=CTR_GUEST_READY,.tls_address=CTR_GUEST_TLS_BASE};
     g->next_thread_id=2;g->quantum_left=CTR_GUEST_THREAD_QUANTUM;
     g->configuration=(ctr_guest_configuration){1,1,0}; /* Explicit diagnostic defaults: USA, English, Old 3DS. */
+    g->ndm.default_mask=9u; /* CEC and Friends are the default daemon selection. */
     return true;
 failure:
     ctr_guest_close(g); g->state=CTR_GUEST_FAULTED; g->fault=CTR_CPU_MEMORY_FAULT; return false;
@@ -167,7 +168,8 @@ void ctr_guest_object_release(ctr_guest *g,ctr_guest_handle_type type,unsigned o
         ctr_guest_shared *s=&g->shared[object];
         if (s->references && --s->references==0) {
             if (s->owned) free(s->storage);
-            else if (g->allocations[s->allocation].pins) --g->allocations[s->allocation].pins;
+            else if (s->allocation<CTR_GUEST_MAX_ALLOCATIONS && g->allocations[s->allocation].pins)
+                --g->allocations[s->allocation].pins;
             memset(s,0,sizeof(*s));
         }
         return;
@@ -187,6 +189,10 @@ void ctr_guest_object_release(ctr_guest *g,ctr_guest_handle_type type,unsigned o
         if (s->references && --s->references==0) {
             ctr_fs_session_closed(g,object);
             if(s->service==CTR_SERVICE_DSP)ctr_dsp_session_closed(g,object);
+            if(s->service==CTR_SERVICE_MIC && g->mic.owner==object) {
+                if(g->mic.mapped)ctr_guest_object_release(g,CTR_HANDLE_SHARED,g->mic.shared);
+                memset(&g->mic,0,sizeof(g->mic));
+            }
             bool gsp=s->service==CTR_SERVICE_GSP;memset(s,0,sizeof(*s));
             if(gsp) {
                 ctr_gsp_session_closed(g,object);
@@ -200,7 +206,7 @@ void ctr_guest_object_release(ctr_guest *g,ctr_guest_handle_type type,unsigned o
     if (e->references && --e->references==0) memset(e,0,sizeof(*e));
 }
 uint32_t ctr_guest_session_open(ctr_guest *g,ctr_guest_service service) {
-    if ((unsigned)service>CTR_SERVICE_RO) return 0;
+    if ((unsigned)service>=CTR_SERVICE_COUNT) return 0;
     for (unsigned i=0;i<16;++i) if (!g->sessions[i].active) {
         g->sessions[i]=(ctr_guest_session){.active=true,.service=service,.fs_closed=true};
         uint32_t handle=ctr_guest_handle_new(g,CTR_HANDLE_SESSION,i);
@@ -327,6 +333,7 @@ ctr_guest_state ctr_guest_run(ctr_guest *g,uint64_t budget,uint64_t now_ns,bool 
     shared_time_reference(g);
     if(!ctr_gsp_poll(g,now_ns))return g->state;
     if(!ctr_dsp_poll(g,now_ns))return g->state;
+    ctr_mic_poll(g);
     if(g->threads_enabled) {
         if(!ctr_thread_schedule(g,false))return g->state;
     } else {

@@ -6,7 +6,7 @@ FLAGS := -I../report/stubs -I../../artifacts/report-tests/sdk-stubs -I../../runt
 SOURCES := $(CTR_RUNTIME_SOURCES) test_frontend.c \
     $(ROOT)/runtime/core/ctr_dsp_fixture.c \
     $(ROOT)/tests/fixtures/dsp/dsp.generated.c $(ROOT)/tests/fixtures/dsp/dsp-image.generated.c
-SOURCES += ../../runtime/wiiu/test_report.c ../../runtime/wiiu/test_result.c ../../runtime/wiiu/test_lifecycle.c ../../runtime/core/ctr_sha256.c
+SOURCES += ../../runtime/wiiu/test_report.c ../../runtime/wiiu/test_result.c ../../runtime/wiiu/test_lifecycle.c
 HEADERS := ../../runtime/wiiu/guest_audio.c $(wildcard ../../runtime/wiiu/*.h)
 SDK := ../../artifacts/report-tests/sdk-stubs/ready
 $(SDK):

@@ -12,6 +12,7 @@ TARGET ?= $(if $(filter 1,$(TEXTURED_HOMEBREW)),ctr2wup-textured-guest,$(if $(fi
 GUEST_DEFAULT ?= 0
 EXTERNAL_AOT ?= 0
 GAME_TEST ?= 0
+GAME_CEMU_TEST ?= 0
 COMPILED_HOMEBREW ?= 0
 FILESYSTEM_HOMEBREW ?= 0
 ROMFS_HOMEBREW ?= 0
@@ -44,6 +45,8 @@ endif
 BUILD := $(OUTPUT)/objects$(if $(filter 1,$(GX2_GUEST)),-gx2,)$(if $(filter 1,$(TEXTURED_HOMEBREW)),-textured,)
 CC := $(DEVKITPPC)/bin/powerpc-eabi-gcc
 WUT := $(DEVKITPRO)/wut
+WUT_SPECS ?=
+WUT_LINK_SPECS := $(or $(WUT_SPECS),$(WUT)/share/wut.specs)
 CFLAGS := -std=c11 -O2 -g -Wall -Wextra -Werror -ffunction-sections -fdata-sections \
           -DCTR_APP_VERSION=\"$(APP_VERSION)\" \
           -DCTR_SOURCE_COMMIT=\"$(CTR_BUILD_SHA)\" -DCTR_SOURCE_DIRTY=$(CTR_BUILD_DIRTY) \
@@ -119,7 +122,7 @@ ifeq ($(M1_ONLY),1)
 CFLAGS += -DCTR_M1_ONLY
 APP_NAME := CTR2WUP M1 Check $(APP_VERSION)
 endif
-LDFLAGS := -mcpu=750 -meabi -mhard-float -specs="$(WUT)/share/wut.specs" \
+LDFLAGS := -mcpu=750 -meabi -mhard-float -specs="$(WUT_LINK_SPECS)" \
            -Wl,-Map,$(OUTPUT)/$(TARGET).map
 ifneq ($(filter 1,$(M1_ONLY) $(INSTALL_ONLY)),)
 M1_SOURCES := m1_storage_probe.c
@@ -153,6 +156,9 @@ ifneq ($(EXTERNAL_AOT),1)
 $(error GAME_TEST requires EXTERNAL_AOT=1)
 endif
 CFLAGS += -DCTR_GAME_TEST -I"$(GAME_DIR)"
+ifeq ($(GAME_CEMU_TEST),1)
+CFLAGS += -DCTR_GAME_CEMU_TEST
+endif
 APP_NAME := CTR2WUP Mario Test
 SOURCES := game_main.c diagnostic_display.c diagnostic_font.c diagnostic_audio.c native_audio_stream.c viewport.c image_scale.c guest_slice.c test_lifecycle.c test_report.c report_storage.c
 endif
@@ -165,7 +171,7 @@ CORE_SOURCES := $(CTR_RUNTIME_SOURCES) ../core/ctr_cpu_selftest.c \
     ../core/ctr_hid_fixture.c \
     ../core/ctr_gsp_fixture.c \
     ../core/ctr_relay_fixture.c \
-    ../core/ctr_stack_fixture.c ../core/ctr_thread_fixture.c ../core/ctr_sha256.c ../core/ctr_romfs_file.c \
+    ../core/ctr_stack_fixture.c ../core/ctr_thread_fixture.c ../core/ctr_romfs_file.c \
     ../../tests/fixtures/threads/thread.generated.c ../../tests/fixtures/threads/thread-image.generated.c \
     ../../tests/fixtures/stack/stack.generated.c ../../tests/fixtures/stack/stack-image.generated.c \
     ../../tests/fixtures/relay/relay.generated.c ../../tests/fixtures/relay/relay-image.generated.c \
@@ -186,7 +192,7 @@ ifeq ($(STREAM_AUDIO),1)
 CORE_SOURCES += ../core/ctr_audio_fixture.c
 endif
 ifeq ($(INSTALL_ONLY),1)
-CORE_SOURCES := $(CTR_RUNTIME_SOURCES) ../core/ctr_fs_snapshot.c ../core/ctr_sha256.c
+CORE_SOURCES := $(CTR_RUNTIME_SOURCES) ../core/ctr_fs_snapshot.c
 endif
 CORE_OBJECTS := $(addprefix $(BUILD)/,$(notdir $(CORE_SOURCES:.c=.o)))
 ifeq ($(GUEST_AUDIO),1)
@@ -194,7 +200,7 @@ CORE_SOURCES += ../core/ctr_dsp_fixture.c ../../tests/fixtures/dsp/dsp.generated
 CORE_OBJECTS += $(BUILD)/ctr_dsp_fixture.o $(BUILD)/dsp.generated.o $(BUILD)/dsp-image.generated.o
 endif
 ifeq ($(GAME_TEST),1)
-CORE_SOURCES := $(CTR_RUNTIME_SOURCES) ../core/ctr_fs_snapshot.c ../core/ctr_sha256.c ../core/ctr_romfs_file.c ../recomp/ctr_recomp.c $(GAME_DIR)/game_image.generated.c $(UPSTREAM_DIR)/entries.c $(wildcard $(UPSTREAM_DIR)/code*.c)
+CORE_SOURCES := $(CTR_RUNTIME_SOURCES) ../core/ctr_fs_snapshot.c ../core/ctr_romfs_file.c ../recomp/ctr_recomp.c $(GAME_DIR)/game_image.generated.c $(UPSTREAM_DIR)/entries.c $(wildcard $(UPSTREAM_DIR)/code*.c)
 CORE_OBJECTS := $(addprefix $(BUILD)/,$(notdir $(CORE_SOURCES:.c=.o)))
 endif
 OBJECTS += $(CORE_OBJECTS)
@@ -208,7 +214,7 @@ $(BUILD)/identity: identity-force | $(BUILD)
 	@if ! cmp -s "$@.tmp" "$@"; then mv "$@.tmp" "$@"; else rm "$@.tmp"; fi
 $(BUILD)/%.o: %.c $(CTR_RUNTIME_MANIFEST) Makefile $(BUILD)/identity | $(BUILD)
 	"$(CC)" $(CFLAGS) -MMD -MP -c "$<" -o "$@"
-$(OUTPUT)/$(TARGET).elf: $(OBJECTS)
+$(OUTPUT)/$(TARGET).elf: $(OBJECTS) $(WUT_SPECS)
 	"$(CC)" $(LDFLAGS) $(OBJECTS) -L"$(WUT)/lib" -lwut -lm -o "$@"
 $(OUTPUT)/$(TARGET).rpx: $(OUTPUT)/$(TARGET).elf
 	"$(DEVKITPRO)/tools/bin/elf2rpl" "$<" "$@"

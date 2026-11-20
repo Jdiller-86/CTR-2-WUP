@@ -128,6 +128,8 @@ static void transfers(void) {
     memset(source,0,256);for(unsigned i=0;i<64;++i) { source[i*4]=255;source[i*4+2]=255; }
     CHECK(ctr_transfer_convert(8|(8<<16),8|(8<<16),0x2000,source,256,out,128));
     for(unsigned i=0;i<128;i+=2)CHECK(out[i]==0xe0 && out[i+1]==7);
+    CHECK(ctr_transfer_convert(8|(16<<16),8|(8<<16),0x2004,source,sizeof(source),out,128));
+    CHECK(out[0]==0xe0 && out[1]==7 && out[126]==0xe0 && out[127]==7);
     memset(out,0xa5,512);
     const uint32_t invalid[]={8,0x1000000,0x10,0x80000000,0x500,0x5000};
     for(unsigned i=0;i<sizeof(invalid)/sizeof(*invalid);++i)CHECK(!ctr_transfer_convert(8|(8<<16),8|(8<<16),invalid[i],source,256,out,512));
@@ -145,11 +147,20 @@ static void operations(void) {
     fill[7]=1;CHECK(ctr_gx_execute(&g,fill,&c)==CTR_GX_OK);for(unsigned i=0;i<24;++i)CHECK(buffers[i]==(uint8_t)(fill[2]>>((i%2)*8)));
     uint32_t dma[]={0x01000100,0x30000000,0x30000008,24,0,0,0,0};uint8_t before[24];memcpy(before,buffers,24);
     CHECK(ctr_gx_execute(&g,dma,&c)==CTR_GX_OK && c.irq==6 && !memcmp(buffers+8,before,24));
+    CHECK(ctr_gsp_open_vram(&g));
+    dma[2]=CTR_VRAM_BASE+CTR_VRAM_BYTES-24;dma[7]=1;
+    CHECK(ctr_gx_execute(&g,dma,&c)==CTR_GX_OK && c.irq==6);
+    CHECK(ctr_memory_read_bytes(&g.memory,dma[2],before,24)==CTR_MEM_OK && !memcmp(before,buffers,24));
+    CHECK(ctr_memory_write(&g.memory,dma[2],4,0)==CTR_MEM_PERMISSION);
+    dma[3]=25;CHECK(ctr_gx_execute(&g,dma,&c)==CTR_GX_MEMORY);
     uint32_t copy[]={0x01000104,0x30000000,0x30001000,64,1|(1<<16),2|(1<<16),8,0};
     for(unsigned i=0;i<128;++i)buffers[i]=(uint8_t)i;
-    CHECK(ctr_gx_execute(&g,copy,&c)==CTR_GX_OK && c.irq==4);
-    for(unsigned k=0;k<64;++k)CHECK(buffers[4096+k+(k/32)*16]==k+(k/16)*16);
-    for(unsigned i=32;i<48;++i)CHECK(buffers[4096+i]==0xa5);
+    for(uint32_t flags=8;flags<=12;flags+=4) {
+        copy[6]=flags;memset(buffers+4096,0xa5,80);
+        CHECK(ctr_gx_execute(&g,copy,&c)==CTR_GX_OK && c.irq==4);
+        for(unsigned k=0;k<64;++k)CHECK(buffers[4096+k+(k/32)*16]==k+(k/16)*16);
+        for(unsigned i=32;i<48;++i)CHECK(buffers[4096+i]==0xa5);
+    }
     uint32_t cache[]={0x00000105,0x30000000,24,0,0,0,0,0};uint64_t generation=g.memory.generation;
     CHECK(ctr_gx_execute(&g,cache,&c)==CTR_GX_OK && !c.signal && g.memory.generation==generation);
     ctr_guest_close(&g);

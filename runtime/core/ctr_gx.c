@@ -1,14 +1,42 @@
 /* Original bounded synchronous GX operations; no emulator or hardware backend. */
 #include "ctr_gx.h"
+#include "ctr_gsp.h"
 #include "ctr_transfer.h"
 #include "ctr_guest_pica.h"
 #include "ctr_resource_cache.h"
 #include <stdlib.h>
 #include <string.h>
 #define LIMIT (4u*1024u*1024u)
+uint8_t *ctr_gx_vram_backing(const ctr_guest *g,uint32_t address,uint32_t size) {
+    uint8_t *base=g->storage[CTR_VRAM_STORAGE_INDEX];
+    if(!base || !size || address<CTR_VRAM_BASE || (uint64_t)address+size>CTR_VRAM_BASE+CTR_VRAM_BYTES)return NULL;
+    return base+(address-CTR_VRAM_BASE);
+}
+void ctr_gx_write_target(ctr_guest *g,uint32_t address,const uint8_t *bytes,uint32_t size) {
+    uint8_t *target=ctr_gx_vram_backing(g,address,size);
+    if(target) {
+        memcpy(target,bytes,size);
+        (void)ctr_memory_backing_changed(&g->memory,target,size);
+    } else {
+        (void)ctr_memory_write_bytes(&g->memory,address,bytes,size);
+    }
+}
 ctr_gx_result ctr_gx_check_range(ctr_guest *g,uint32_t address,uint32_t size,unsigned permissions,ctr_gx_completion *c) {
-    c->detail=address;c->memory=ctr_memory_check_range(&g->memory,address,size,permissions);
+    uint8_t *video=ctr_gx_vram_backing(g,address,size);
+    unsigned access=video?(permissions&~CTR_MEM_WRITE)|CTR_MEM_READ:permissions;
+    c->detail=address;c->memory=ctr_memory_check_range(&g->memory,address,size,access);
     if(c->memory!=CTR_MEM_OK)return CTR_GX_MEMORY;
+    if(video) {
+        uint64_t end=(uint64_t)address+size;
+        for(size_t i=0;i<g->memory.count;++i) {
+            const ctr_mapping *m=&g->memory.maps[i];uint64_t stop=(uint64_t)m->base+m->size;
+            if(address>=stop || m->base>=end)continue;
+            uint32_t first=address>m->base?address:m->base;
+            if(m->storage+(first-m->base)!=video+(first-address)) {
+                c->memory=CTR_MEM_OVERLAP;return CTR_GX_MEMORY;
+            }
+        }
+    }
     if((permissions&CTR_MEM_WRITE) && g->gsp.registered && size) {
         const ctr_guest_shared *relay=&g->shared[g->gsp.relay_shared];uintptr_t base=(uintptr_t)relay->storage;
         uint64_t end=(uint64_t)address+size;
@@ -28,7 +56,7 @@ static ctr_gx_result copied(ctr_guest *g,uint32_t source,uint32_t dest,uint32_t 
     ctr_gx_result r=checked(g,source,size,CTR_MEM_READ,c);if(r!=CTR_GX_OK)return r;
     r=checked(g,dest,size,CTR_MEM_WRITE,c);if(r!=CTR_GX_OK)return r;
     uint8_t *bytes=malloc(size);if(!bytes)return CTR_GX_NO_MEMORY;
-    ctr_memory_read_bytes(&g->memory,source,bytes,size);ctr_memory_write_bytes(&g->memory,dest,bytes,size);
+    ctr_memory_read_bytes(&g->memory,source,bytes,size);ctr_gx_write_target(g,dest,bytes,size);
     free(bytes);return CTR_GX_OK;
 }
 static ctr_gx_result fill(ctr_guest *g,const uint32_t *w,ctr_gx_completion *c) {
@@ -44,7 +72,7 @@ static ctr_gx_result fill(ctr_guest *g,const uint32_t *w,ctr_gx_completion *c) {
         bytes[i]=malloc(sizes[i]);if(!bytes[i]) { result=CTR_GX_NO_MEMORY;break; }
         for(uint32_t k=0;k<sizes[i];++k)bytes[i][k]=(uint8_t)(w[2+i*3]>>((k%widths[i])*8));
     }
-    if(result==CTR_GX_OK)for(unsigned i=0;i<2;++i)if(bytes[i])ctr_memory_write_bytes(&g->memory,w[1+i*3],bytes[i],sizes[i]);
+    if(result==CTR_GX_OK)for(unsigned i=0;i<2;++i)if(bytes[i])ctr_gx_write_target(g,w[1+i*3],bytes[i],sizes[i]);
     /* GSP dispatches one PSC0 for both banks; bank 1 alone dispatches PSC1. */
     c->signal=w[1]!=0 || w[4]!=0;c->irq=w[1]?0:1;
     free(bytes[0]);free(bytes[1]);return result;
@@ -57,7 +85,7 @@ static ctr_gx_result display(ctr_guest *g,const uint32_t *w,ctr_gx_completion *c
     if(!input || !output) { free(input);free(output);return CTR_GX_NO_MEMORY; }
     ctr_memory_read_bytes(&g->memory,w[1],input,(uint32_t)t.input_bytes);
     ctr_transfer_convert(w[3],w[4],w[5],input,t.input_bytes,output,t.output_bytes);
-    ctr_memory_write_bytes(&g->memory,w[2],output,(uint32_t)t.output_bytes);
+    ctr_gx_write_target(g,w[2],output,(uint32_t)t.output_bytes);
     free(input);free(output);return CTR_GX_OK;
 }
 static bool span(uint32_t dim,uint32_t size,uint32_t *extent) {
@@ -69,7 +97,9 @@ static bool span(uint32_t dim,uint32_t size,uint32_t *extent) {
 }
 static ctr_gx_result texture_copy(ctr_guest *g,const uint32_t *w,ctr_gx_completion *c) {
     uint32_t size=w[3],in_span,out_span;
-    if(!size || size>LIMIT || (size&15) || (w[1]&7) || (w[2]&7) || w[6]!=8 || w[7] ||
+    /* Bit 2 controls cropping in display-transfer mode. Raw copies use the
+       separate width and gap fields, even when the crop bit is set. */
+    if(!size || size>LIMIT || (size&15) || (w[1]&7) || (w[2]&7) || (w[6]&~4u)!=8u || w[7] ||
        !span(w[4],size,&in_span) || !span(w[5],size,&out_span))return CTR_GX_UNSUPPORTED;
     ctr_gx_result r=checked(g,w[1],in_span,CTR_MEM_READ,c);if(r!=CTR_GX_OK)return r;
     r=checked(g,w[2],out_span,CTR_MEM_WRITE,c);if(r!=CTR_GX_OK)return r;
@@ -81,7 +111,7 @@ static ctr_gx_result texture_copy(ctr_guest *g,const uint32_t *w,ctr_gx_completi
     uint32_t width=(w[5]&65535)*16,gap=(w[5]>>16)*16;
     for(uint32_t k=0;k<size;) {
         uint32_t count=width?width:size;if(count>size-k)count=size-k;
-        ctr_memory_write_bytes(&g->memory,w[2]+k+(width?(k/width)*gap:0),bytes+k,count);k+=count;
+        ctr_gx_write_target(g,w[2]+k+(width?(k/width)*gap:0),bytes+k,count);k+=count;
     }
     free(input);free(bytes);return CTR_GX_OK;
 }
@@ -135,7 +165,10 @@ ctr_gx_result ctr_gx_execute(ctr_guest *g,const uint32_t w[8],ctr_gx_completion 
     uint32_t header=w[0]&~UINT32_C(0x100ff); /* low ID and documented stop byte. */
     if((id==5?header!=0x00000100:header!=0x01000100) || ((w[0]>>16)&255)>1)return CTR_GX_UNSUPPORTED;
     ctr_gx_result result=CTR_GX_UNSUPPORTED;
-    if(id==0 && !w[4] && !w[5] && !w[6] && !w[7]) { c->irq=6;result=copied(g,w[1],w[2],w[3],c); }
+    if(id==0 && !w[4] && !w[5] && !w[6] && w[7]<=1u) {
+        if(w[7])ctr_cpu_barrier();
+        c->irq=6;result=copied(g,w[1],w[2],w[3],c);
+    }
     else if(id==1)result=pica_list(g,w,c);
     else if(id==2)result=fill(g,w,c);
     else if(id==3) { c->irq=4;result=display(g,w,c); }

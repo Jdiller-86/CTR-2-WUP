@@ -6,6 +6,10 @@
 #define CTR_DSP_RAM_BYTES UINT32_C(0x40000)
 #define CTR_DSP_CHANNELS 24u
 #define CTR_DSP_FRAME_SAMPLES 160u
+typedef struct ctr_dsp_firmware {
+    uint32_t size;
+    uint8_t sha256[32];
+} ctr_dsp_firmware;
 #define CTR_DSP_OUTPUT_FRAMES 8u
 /* Original explicit HLE selection token; never treats arbitrary firmware as
  * implemented. Standard DSP IPC and NDSP shared-buffer ABI follow libctru. */

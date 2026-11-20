@@ -366,8 +366,47 @@ static void bounds_and_failures(void) {
     CHECK(!strcmp(ctr_gx2_shader_result_name(CTR_GX2_SHADER_OK),"ok"));
     CHECK(!strcmp(ctr_gx2_shader_result_name((ctr_gx2_shader_result)999),"unknown"));
 }
+static void call_and_dot_product(void) {
+    init();
+    p.code[0]=UINT32_C(0x90001c01); /* CALL 7, one instruction. */
+    p.code[7]=binary(2u,0u,1u,0u,0u);p.code_defined[7]=1;
+    ctr_vertex vertex={.enabled=3};
+    for(unsigned lane=0;lane<4u;++lane) {
+        vertex.input[0][lane]=(float)(lane+1u);
+        vertex.input[1][lane]=1.0f;
+    }
+    ctr_shader_output expected;
+    CHECK(ctr_shader_execute(&p,&vertex,&expected)==CTR_SHADER_OK);
+    for(unsigned lane=0;lane<4u;++lane)CHECK(expected.values[0][lane]==10.0f);
+    CHECK(run()==CTR_GX2_SHADER_OK && out.pica_instructions==4 && out.alu_instructions==36);
+    /* Start the four separate adds at +0. No fused dot or MAD is emitted. */
+    const uint8_t *first_add=out.program+CTR_GX2_SHADER_ALU_OFFSET+12u*8u;
+    CHECK((get32(first_add)&511u)==248u && ((get32(first_add+4)>>7)&2047u)==0u);
+    p.code[7]=p.code[0];failure(CTR_GX2_SHADER_LIMIT);
+    CHECK(ctr_shader_execute(&p,&vertex,&expected)==CTR_SHADER_LIMIT);
+    p.code[0]=UINT32_C(0x9007fc02); /* Range crosses the end of code memory. */
+    failure(CTR_GX2_SHADER_RANGE);
+}
+static void boolean_branch(void) {
+    init();
+    p.code[0]=UINT32_C(0x9c000801); /* IFU b0, else at 2, join at 3. */
+    p.code[1]=mov(2,0,0);
+    p.code[2]=mov(3,0,0);
+    p.code[3]=mov(1,1,0);
+    p.code[4]=UINT32_C(0x88000000);
+    p.code_defined[3]=p.code_defined[4]=1;
+    failure(CTR_GX2_SHADER_UNDEFINED);
+    p.boolean_defined=true;
+    CHECK(run()==CTR_GX2_SHADER_OK && out.input_mask==10u && out.pica_instructions==4);
+    previous=out;
+    p.boolean_uniforms=1;
+    CHECK(run()==CTR_GX2_SHADER_OK && out.input_mask==6u && out.pica_instructions==4);
+    CHECK(memcmp(out.program,previous.program,out.size)!=0);
+}
 int main(void) {
     original_shader();inputs_uniforms_and_dependencies();swizzles_and_masks();semantic_maps();
     texture_coordinate_exports();texture_coordinate_sets();uniform_revalidation();bounds_and_failures();
+    call_and_dot_product();
+    boolean_branch();
     printf("gx2 shader PASS: %u assertions\n",assertions);return 0;
 }

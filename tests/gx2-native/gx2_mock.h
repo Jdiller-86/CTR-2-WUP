@@ -14,6 +14,8 @@ void ctr_gx2_test_cache_destroy(ctr_gx2_cache *cache);
  * shader, rasterizer, GX2 driver, cache coherency or physical Wii U execution. */
 typedef unsigned GX2TileMode;
 typedef unsigned GX2TexClampMode;
+typedef unsigned GX2TexXYFilterMode;
+typedef unsigned GX2TexMipFilterMode;
 typedef unsigned GX2LogicOp;
 typedef unsigned GX2CompareFunction;
 typedef unsigned GX2ChannelMask;
@@ -21,10 +23,12 @@ typedef unsigned GX2RenderTarget;
 typedef unsigned GX2BlendMode;
 typedef unsigned GX2StencilFunction;
 typedef unsigned GX2BlendCombineMode;
+typedef unsigned GX2ClearFlags;
+enum { GX2_CLEAR_FLAGS_DEPTH=1u, GX2_CLEAR_FLAGS_BOTH=3u };
 struct GX2ContextState { uint32_t marker; };
 typedef struct {
     unsigned dim,width,height,depth,mipLevels,format,aa,use,imageSize;
-    void *image;unsigned mipmapSize,tileMode,alignment,pitch;
+    void *image,*mipmaps;unsigned mipmapSize,tileMode,alignment,pitch,mipLevelOffset[13];
 } GX2Surface;
 typedef struct { GX2Surface surface;unsigned viewNumSlices; } GX2ColorBuffer;
 typedef struct {
@@ -36,7 +40,7 @@ typedef struct {
     GX2Surface surface;
     unsigned viewFirstMip,viewNumMips,viewFirstSlice,viewNumSlices,compMap,regs[5];
 } GX2Texture;
-typedef struct { unsigned clamp[3],filter,z_filter,mip_filter;float lod[3]; } GX2Sampler;
+typedef struct { unsigned clamp[3],mag_filter,min_filter,z_filter,mip_filter;float lod[3]; } GX2Sampler;
 typedef struct { unsigned unused; } GX2FetchShader;
 typedef struct {
     struct {
@@ -65,8 +69,9 @@ typedef struct {
 enum {
     GX2_SURFACE_DIM_TEXTURE_2D=1,GX2_SURFACE_FORMAT_UNORM_R8_G8_B8_A8=0x1a,
     GX2_SURFACE_FORMAT_UNORM_R16=5,GX2_SURFACE_FORMAT_UNORM_R24_X8=0x11,
+    GX2_SURFACE_FORMAT_FLOAT_R32=0x80e,
     GX2_AA_MODE1X=0,GX2_SURFACE_USE_TEXTURE=1,GX2_SURFACE_USE_COLOR_BUFFER=2,GX2_SURFACE_USE_DEPTH_BUFFER=4,
-    GX2_TILE_MODE_TILED_2D_THIN1=4,GX2_TILE_MODE_LINEAR_ALIGNED=1,
+    GX2_TILE_MODE_TILED_2D_THIN1=4,GX2_TILE_MODE_LINEAR_ALIGNED=1,GX2_TILE_MODE_LINEAR_SPECIAL=16,
     GX2_INVALIDATE_MODE_CPU_TEXTURE=66,GX2_INVALIDATE_MODE_COLOR_BUFFER=16,GX2_INVALIDATE_MODE_DEPTH_BUFFER=32,
     GX2_INVALIDATE_MODE_CPU_SHADER=72,GX2_INVALIDATE_MODE_CPU_ATTRIBUTE_BUFFER=65,
     GX2_FETCH_SHADER_TESSELLATION_NONE=0,GX2_TESSELLATION_MODE_DISCRETE=0,
@@ -94,15 +99,20 @@ enum {
     GX2_STENCIL_FUNCTION_ZERO=1,GX2_STENCIL_FUNCTION_REPLACE=2,
     GX2_STENCIL_FUNCTION_INCR_CLAMP=3,GX2_STENCIL_FUNCTION_DECR_CLAMP=4,
     GX2_STENCIL_FUNCTION_INV=5,GX2_STENCIL_FUNCTION_INCR_WRAP=6,GX2_STENCIL_FUNCTION_DECR_WRAP=7,
-    GX2_ALPHA_TO_MASK_MODE_NON_DITHERED=0,GX2_FRONT_FACE_CCW=0,
+    GX2_ALPHA_TO_MASK_MODE_NON_DITHERED=0,GX2_FRONT_FACE_CCW=0,GX2_FRONT_FACE_CW=1,
     GX2_TEX_CLAMP_MODE_WRAP=0,GX2_TEX_CLAMP_MODE_MIRROR=1,GX2_TEX_CLAMP_MODE_CLAMP=2,
-    GX2_TEX_XY_FILTER_MODE_POINT=0,GX2_TEX_XY_FILTER_MODE_LINEAR=1,GX2_TEX_Z_FILTER_MODE_NONE=0,GX2_TEX_MIP_FILTER_MODE_NONE=0
+    GX2_TEX_XY_FILTER_MODE_POINT=0,GX2_TEX_XY_FILTER_MODE_LINEAR=1,GX2_TEX_Z_FILTER_MODE_NONE=0,
+    GX2_TEX_MIP_FILTER_MODE_NONE=0,GX2_TEX_MIP_FILTER_MODE_POINT=1,GX2_TEX_MIP_FILTER_MODE_LINEAR=2,
+    GX2_TEX_ANISO_RATIO_NONE=0
 };
 #define GX2_SEL_MASK(x,y,z,w) (((x)<<24)|((y)<<16)|((z)<<8)|(w))
 #define GX2_COMP_MAP(x,y,z,w) GX2_SEL_MASK(x,y,z,w)
 void GX2SetContextState(GX2ContextState *context);
 bool GX2DrawDone(void);
+int64_t GX2GetLastSubmittedTimeStamp(void);
+bool GX2WaitTimeStamp(int64_t timestamp);
 void GX2CalcSurfaceSizeAndAlignment(GX2Surface *surface);
+uint32_t GX2GetSurfaceMipPitch(GX2Surface *surface,uint32_t level);
 void GX2CopySurface(const GX2Surface *src,unsigned a,unsigned b,GX2Surface *dst,unsigned c,unsigned d);
 void DCFlushRange(void *bytes,unsigned size);
 void DCInvalidateRange(void *bytes,unsigned size);
@@ -117,6 +127,9 @@ void GX2DrawEx(unsigned type,unsigned count,unsigned first,unsigned instances);
 void GX2SetColorBuffer(const GX2ColorBuffer *target,unsigned index);
 void GX2InitDepthBufferRegs(GX2DepthBuffer *target);
 void GX2InitDepthBufferHiZEnable(GX2DepthBuffer *target,bool enable);
+void GX2ClearDepthStencilEx(GX2DepthBuffer *target,float depth,uint8_t stencil,GX2ClearFlags mode);
+void GX2ClearColor(GX2ColorBuffer *target,float r,float g,float b,float a);
+void GX2ConvertDepthBufferToTextureSurface(GX2DepthBuffer *depth,GX2Surface *texture,uint32_t mip,uint32_t slice);
 void GX2SetDepthBuffer(const GX2DepthBuffer *target);
 void GX2SetDepthStencilControl(bool test,bool write,unsigned function,bool stencil,bool backface,
     unsigned front,unsigned front_pass,unsigned front_fail,unsigned front_stencil,
@@ -129,6 +142,7 @@ void GX2SetPixelShader(const GX2PixelShader *shader);
 void GX2InitTextureRegs(GX2Texture *texture);
 void GX2SetPixelTexture(const GX2Texture *texture,unsigned unit);
 void GX2InitSampler(GX2Sampler *sampler,GX2TexClampMode clamp,unsigned filter);
+void GX2InitSamplerXYFilter(GX2Sampler *sampler,unsigned mag,unsigned min,unsigned aniso);
 void GX2InitSamplerClamping(GX2Sampler *sampler,GX2TexClampMode x,GX2TexClampMode y,GX2TexClampMode z);
 void GX2InitSamplerLOD(GX2Sampler *sampler,float min,float max,float bias);
 void GX2InitSamplerZMFilter(GX2Sampler *sampler,unsigned z,unsigned mip);

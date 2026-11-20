@@ -35,7 +35,7 @@ Unknown commercial/homebrew profiles fail before publishing an output.
 The unsigned, decrypted NCCH v2 has program ID `000400000ff00f02`, 340 bytes of ARM
 text at `0x00100000`, one 4 KiB data page at `0x08000000`, and 691,200 bytes of BSS
 for framebuffers. Text is read/execute, rodata is read-only, data/BSS and stack/TLS
-are read/write. Padding/BSS, the 16 KiB stack below `0x10000000`, and the TLS page
+are read/write. Padding/BSS, the 16 KiB stack below `0x10000000`, and two TLS pages
 at `0x1ff82000` are zeroed. Initial SP is `0x10000000`; entry uses user ARM mode.
 No guest pointer becomes a host pointer. Allocation is bounded to 64 MiB; page
 alignment, descriptor sizes, permissions, overlaps and wraparound are checked.

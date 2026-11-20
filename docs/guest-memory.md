@@ -4,7 +4,7 @@ The loader places BSS directly after initialized DATA, including its last page's
 unused tail, and copies no ExeFS padding into BSS. A separate read-only synthetic
 kernel configuration page at 1ff80000 supplies documented HLE policy; it counts
 toward backing limits. Thread stacks pin owned allocations until their guest
-context exits, and eight 512-byte TLS slots share the original TLS page. See
+context exits. Two pages at `0x1ff82000` hold sixteen 512-byte TLS slots. See
 `cpu.md`; no retail firmware image or cross-process mapping is supplied.
 
 
@@ -66,7 +66,10 @@ counts and last operation/address/result remain in `ctr_guest` for diagnosis.
 ## Capacity, ownership and translation
 
 There are 16 owned allocations and 32 mapping fragments, with a combined 64 MiB
-retained-backing limit including image/BSS/stack/TLS. Partial free retains the
+application-backing limit including image/BSS/stack/TLS. Each built-in HID or
+GSP shared page uses one of the eight shared slots, with its 4 KiB backing
+charged separately from the application. The DSP has its own fixed 256 KiB
+backing outside the application budget. Partial free retains the
 original host allocation until its last mapped byte is removed; all its backing
 remains charged. Removed pages can be allocated again with new zeroed storage.
 Final free and guest close release ownership. Fragment exhaustion fails atomically.
@@ -80,7 +83,7 @@ AOT. Dynamic heap management therefore preserves normal translated execution.
 [Packaged CRO modules](modules.md) own their file/code mappings and pin supplied
 DATA/BSS heap allocations. QueryMemory reports module files as Code; the loader
 alone changes their mapping lifetime. Module backing counts toward the same
-retained-memory/resource-limit budget as image, heap, shared and DSP storage.
+retained-memory/resource-limit budget as image, heap and application-owned shared storage.
 
 Renderer resource keys bind a live memory owner, virtual range, permissions,
 mapping version and maximum backing-page write version. A fixed 1024-entry table
@@ -107,7 +110,8 @@ a late invalid range leaves all bytes and generations unchanged.
 
 Linear backing is contiguous for checked CPU accesses. The bounded guest-draw
 adapter and bounded DSP PCM service resolve owned Old-family linear allocations.
-DSP HLE owns a separate checked DRAM window; general FCRAM/VRAM/DSP mapping and asynchronous GPU coherency remain unsupported. MAP/UNMAP aliases, RESERVE, system/base regions, New-family linear
+DSP HLE owns a separate checked DRAM window. The title's declared read-only VRAM
+window also has separate backing and checked GPU writes. MAP/UNMAP aliases, RESERVE, system/base regions, New-family linear
 windows and unknown flags stop visibly as unsupported. Image reprotection, general physical accounting and broader kernel behavior
 remain unfinished. Thread stacks and shared objects retain their owned backing.
 

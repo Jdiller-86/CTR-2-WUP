@@ -66,7 +66,9 @@ bool ctr_fragment_register(unsigned reg) {
 }
 bool ctr_fragment_register_value(unsigned reg,uint32_t value) {
     switch(reg) {
-    case 0x100u:return value==0u || value==UINT32_C(0x100);
+    case 0x100u:
+        value&=~UINT32_C(0x100);
+        return value==0u || value==UINT32_C(0xe40000);
     case 0x101u:
         if(value&~UINT32_C(0xffff0707))return false;
         if((value&7u)>4u || ((value>>8)&7u)>4u)return false;
@@ -105,7 +107,7 @@ bool ctr_fragment_decode_depth(const uint32_t registers[],const uint8_t defined[
         trial.alpha_enabled=(registers[0x104u]&1u)!=0u;
         trial.alpha_function=(uint8_t)((registers[0x104u]>>4)&7u);
         trial.alpha_reference=(uint8_t)(registers[0x104u]>>8);
-        trial.blend_enabled=registers[0x100u]!=0u;
+        trial.blend_enabled=(registers[0x100u]&UINT32_C(0x100))!=0u;
         if(defined[0x103u]==15u)for(unsigned lane=0;lane<4;++lane)
             trial.blend_constant[lane]=(uint8_t)(registers[0x103u]>>(lane*8u));
         bool needs_read=false;

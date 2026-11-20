@@ -17,6 +17,58 @@ static void map(ctr_guest *g,uint32_t handle,unsigned rights) {
 static void wait(ctr_guest *g,uint32_t handle,uint64_t time) {
     g->cpu.r[0]=handle;g->cpu.r[2]=(uint32_t)time;g->cpu.r[3]=(uint32_t)(time>>32);ctr_guest_svc(g,0x24);
 }
+static void accelerometer(void) {
+    ctr_guest g;CHECK(ctr_hid_fixture_open(&g));
+    uint32_t session=ctr_guest_session_open(&g,CTR_SERVICE_HID),handles[6];
+    CHECK(session && ctr_hid_handles(&g,handles));
+    map(&g,handles[0],1);CHECK(!g.cpu.r[0]);
+    uint32_t tls=g.cpu.tls_address+0x80;
+    CHECK(ctr_memory_write(&g.memory,tls,4,0x00110000)==CTR_MEM_OK);
+    g.cpu.r[0]=session;ctr_guest_svc(&g,0x32);
+    CHECK(read_at(&g,tls)==0x00110040 && !read_at(&g,tls+4));
+    ctr_hid_acceleration(&g,32,-512,128);
+    CHECK(ctr_hid_update(&g,0,0,0,false,0,0,5000000));
+    wait(&g,handles[3],0);CHECK(g.cpu.r[0]==0x09401bfe);
+    CHECK(ctr_hid_update(&g,0,0,0,false,0,0,10000000));
+    wait(&g,handles[3],0);CHECK(!g.cpu.r[0]);
+    CHECK(read_at(&g,0x10001108)==2681118 && read_at(&g,0x10001128)==0xfe000020u);
+    CHECK(read_at(&g,0x1000112c)==128u);
+    CHECK(ctr_memory_write(&g.memory,tls,4,0x00120000)==CTR_MEM_OK);
+    g.cpu.r[0]=session;ctr_guest_svc(&g,0x32);
+    CHECK(read_at(&g,tls)==0x00120040 && !read_at(&g,tls+4));
+    CHECK(ctr_hid_update(&g,0,0,0,false,0,0,20000000));
+    wait(&g,handles[3],0);CHECK(g.cpu.r[0]==0x09401bfe && !read_at(&g,0x10001118));
+    ctr_guest_close(&g);
+}
+static void gyroscope(void) {
+    ctr_guest g;CHECK(ctr_hid_fixture_open(&g));
+    uint32_t session=ctr_guest_session_open(&g,CTR_SERVICE_HID),handles[6];
+    CHECK(session && ctr_hid_handles(&g,handles));
+    map(&g,handles[0],1);CHECK(!g.cpu.r[0]);
+    uint32_t tls=g.cpu.tls_address+0x80;
+    CHECK(ctr_memory_write(&g.memory,tls,4,0x00130000)==CTR_MEM_OK);
+    g.cpu.r[0]=session;ctr_guest_svc(&g,0x32);
+    CHECK(read_at(&g,tls)==0x00130040 && !read_at(&g,tls+4));
+    CHECK(ctr_memory_write(&g.memory,tls,4,0x00150000)==CTR_MEM_OK);
+    g.cpu.r[0]=session;ctr_guest_svc(&g,0x32);
+    CHECK(read_at(&g,tls)==0x00150080 && read_at(&g,tls+8)==0x41660000u);
+    CHECK(ctr_memory_write(&g.memory,tls,4,0x00160000)==CTR_MEM_OK);
+    g.cpu.r[0]=session;ctr_guest_svc(&g,0x32);
+    CHECK(read_at(&g,tls)==0x00160180 && read_at(&g,tls+8)==0x1a2c0000u);
+    ctr_hid_angular_velocity(&g,32,-20,64);
+    CHECK(ctr_hid_update(&g,0,0,0,false,0,0,5000000));
+    wait(&g,handles[4],0);CHECK(g.cpu.r[0]==0x09401bfe);
+    CHECK(ctr_hid_update(&g,0,0,0,false,0,0,10000000));
+    wait(&g,handles[4],0);CHECK(!g.cpu.r[0]);
+    CHECK(read_at(&g,0x10001158)==2681118 && read_at(&g,0x10001170)==0x00400020u);
+    CHECK(read_at(&g,0x10001178)==0xffec0020u && read_at(&g,0x1000117c)==64u);
+    CHECK(ctr_memory_write(&g.memory,tls,4,0x00140000)==CTR_MEM_OK);
+    g.cpu.r[0]=session;ctr_guest_svc(&g,0x32);
+    CHECK(read_at(&g,tls)==0x00140040 && !read_at(&g,tls+4));
+    CHECK(ctr_hid_update(&g,0,0,0,false,0,0,20000000));
+    wait(&g,handles[4],0);CHECK(g.cpu.r[0]==0x09401bfe && !read_at(&g,0x10001168));
+    ctr_guest_close(&g);
+}
 static void wire_and_ownership(void) {
     ctr_guest g;CHECK(ctr_hid_fixture_open(&g));uint32_t handle=ctr_guest_session_open(&g,CTR_SERVICE_HID),copies[6];CHECK(handle);
     uint32_t tls=g.cpu.tls_address+0x80;CHECK(ctr_memory_write(&g.memory,tls,4,0xa0000)==CTR_MEM_OK);
@@ -86,15 +138,15 @@ static void failures(void) {
     CHECK(!ctr_hid_update(&g,0,0,0,false,0,0,1) && !g.hid.initialized && active_handles(&g)==32);
     for(unsigned i=0;i<8;++i)CHECK(!g.shared[i].active);
     ctr_guest_close(&g);
-    for(unsigned i=0;i<3;++i) {
+    for(unsigned i=0;i<2;++i) {
         CHECK(ctr_hid_fixture_open(&g));uint32_t session=ctr_guest_session_open(&g,CTR_SERVICE_HID);CHECK(session);
-        CHECK(ctr_memory_write(&g.memory,g.cpu.tls_address+0x80,4,i==0?0x110000:i==1?0x130000:0xa0001)==CTR_MEM_OK);
+        CHECK(ctr_memory_write(&g.memory,g.cpu.tls_address+0x80,4,i==0?0x50000:0xa0001)==CTR_MEM_OK);
         g.cpu.r[0]=session;ctr_guest_svc(&g,0x32);
         CHECK(g.state==CTR_GUEST_FAULTED && g.fault==CTR_CPU_UNSUPPORTED && !g.hid.initialized && g.ipc_failures==1);
         ctr_guest_close(&g);
     }
 }
 int main(void) {
-    wire_and_ownership();failures();CHECK(!ctr_hid_selftest());
+    wire_and_ownership();accelerometer();gyroscope();failures();CHECK(!ctr_hid_selftest());
     printf("{\"ok\":true,\"assertions\":%u,\"original_arm_hid_consumer\":true,\"hid_shared_ring_events\":true,\"console_verified\":false}\n",assertions);return 0;
 }

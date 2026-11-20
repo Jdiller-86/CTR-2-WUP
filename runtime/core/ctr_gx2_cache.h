@@ -38,8 +38,9 @@ void ctr_gx2_cache_statistics_get(const ctr_gx2_cache *cache,
                                   ctr_gx2_cache_statistics *out);
 
 /* Versioned byte keys include the build namespace and encoder/numeric/renderer
- * profiles. Unused output-map words and dynamic uniform values/defined flags
- * are excluded. A vertex hit still requires current used-uniform validation.
+ * profiles. Vertex keys include boolean controls used for specialization.
+ * Unused output-map words and float uniforms are excluded; a vertex hit
+ * still requires current used-uniform validation.
  * Pixel input must be successfully decoded TEV; stage/initial buffer colors
  * are uniforms, except the computed buffered-program choice is part of its key.
  * Pixel keys include the complete unit mask (0..7), Texture2's UV1 routing and

@@ -1,6 +1,7 @@
 #ifndef CTR_IPC_H
 #define CTR_IPC_H
 #include "ctr_guest.h"
+void ctr_mic_poll(ctr_guest *guest);
 
 #define CTR_IPC_OFFSET 0x80u
 #define CTR_IPC_WORDS 64u

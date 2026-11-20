@@ -22,6 +22,7 @@
 #include <vpad/input.h>
 #include <errno.h>
 #include <math.h>
+#include <stddef.h>
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,6 +31,9 @@
 static ctr_guest guest;
 static ctr_fs_volume savedata,sdmc;
 static ctr_romfs_file romfs;
+#if CTR_GAME_HAS_MII_ROMFS
+static ctr_romfs_file mii_romfs;
+#endif
 static ctr_test_report report;
 static ctr_report_storage storage={.client=-1};
 static ctr_test_lifecycle lifecycle;
@@ -40,9 +44,17 @@ static uint32_t top[400u*240u],bottom[320u*240u];
 static int16_t dsp_pcm[CTR_DSP_FRAME_SAMPLES*2],pcm[CTR_NATIVE_STREAM_FRAMES*2];
 static size_t pcm_frames;
 static uint64_t session,clock_ns,last_status_us,frames;
+static uint64_t guest_exec_us,presentation_us;
 static bool opened,save_ready,sd_ready,foreground=true,closed_io,stream_started;
 static const char *failure;
 static atomic_bool exit_requested;
+static uint64_t slice_clock(void *unused);
+
+static void startup_checkpoint(const char *stage) {
+    int error=errno;
+    OSReport("CTR2WUP_STARTUP protocol=1 stage=%s errno=%d\n",stage,error);
+    errno=error;
+}
 
 static bool directory(const char *path) {
     struct stat info;
@@ -51,6 +63,14 @@ static bool directory(const char *path) {
 }
 static bool status_report(const char *stage) {
     if(closed_io || !report.file || report.failed)return false;
+#ifdef CTR_GAME_CEMU_TEST
+    if(frames) {
+        unsigned top_changes=0,bottom_changes=0;
+        for(unsigned i=257u;i<400u*240u;i+=257u)top_changes+=top[i]!=top[0];
+        for(unsigned i=257u;i<320u*240u;i+=257u)bottom_changes+=bottom[i]!=bottom[0];
+        OSReport("CTR2WUP_CEMU_SCREENS top_varied_samples=%u bottom_varied_samples=%u\n",top_changes,bottom_changes);
+    }
+#endif
     char line[1536],service[sizeof(guest.ipc_service)];
     for(size_t i=0;i<sizeof(service);++i) {
         unsigned char c=(unsigned char)guest.ipc_service[i];
@@ -61,13 +81,30 @@ static bool status_report(const char *stage) {
         "GAME_JSON {\"schema_version\":1,\"stage\":\"%s\",\"source\":\"%s\","
         "\"program_id\":\"%s\",\"revision\":\"%s\",\"state\":\"%s\","
         "\"instructions\":%llu,\"fallback_instructions\":%llu,\"frames\":%llu,"
+        "\"host_us\":%llu,\"guest_ns\":%llu,\"top_swaps\":%llu,"
+        "\"guest_exec_us\":%llu,\"presentation_us\":%llu,"
+#ifdef CTR_GAME_CEMU_TEST
+        "\"gx_us\":%llu,\"pica_us\":%llu,"
+#endif
+        "\"vblanks\":%llu,\"coalesced_vblanks\":%llu,\"dropped_gsp_irqs\":%llu,"
         "\"pc\":%u,\"fault\":%u,\"detail\":%u,\"svc\":%u,"
         "\"ipc_service\":\"%s\",\"ipc_header\":%u,\"ipc_result\":%u,"
-        "\"pica_result\":%u,\"scene_result\":%u,\"renderer\":\"software\",\"gameplay_verified\":false}",
+        "\"pica_result\":%u,\"pica_register\":%u,\"pica_offset\":%u,\"scene_result\":%u,"
+        "\"pica_draws\":%llu,\"gx_transfers\":%llu,\"renderer\":\"software\",\"gameplay_verified\":false}",
         stage,CTR_SOURCE_COMMIT,CTR_GAME_PROGRAM_ID,CTR_GAME_REVISION,ctr_guest_state_name(guest.state),
         (unsigned long long)guest.cpu.instructions,(unsigned long long)guest.cpu.fallback_instructions,
-        (unsigned long long)frames,guest.cpu.r[15],guest.fault,guest.fault_detail,guest.cpu.svc_number,
-        service,guest.ipc_header,guest.ipc_result,guest.gsp.last_pica_result,guest.gsp.last_scene_result);
+        (unsigned long long)frames,(unsigned long long)OSTicksToMicroseconds(OSGetTime()),
+        (unsigned long long)clock_ns,(unsigned long long)guest.gsp.swaps[0],
+        (unsigned long long)guest_exec_us,(unsigned long long)presentation_us,
+#ifdef CTR_GAME_CEMU_TEST
+        (unsigned long long)guest.gsp.gx_us,(unsigned long long)guest.gsp.pica_us,
+#endif
+        (unsigned long long)guest.gsp.vblanks,(unsigned long long)guest.gsp.coalesced_vblanks,
+        (unsigned long long)guest.gsp.dropped_interrupts,
+        guest.cpu.r[15],guest.fault,guest.fault_detail,guest.cpu.svc_number,
+        service,guest.ipc_header,guest.ipc_result,guest.gsp.last_pica_result,guest.gsp.last_pica_register,
+        guest.gsp.last_pica_offset,guest.gsp.last_scene_result,(unsigned long long)guest.gsp.pica_draws,
+        (unsigned long long)guest.gsp.gx_transfers);
     return ctr_test_report_line(&report,line) && ctr_test_report_commit(&report);
 }
 static void fail(const char *message) {
@@ -106,6 +143,12 @@ static bool start_guest(void) {
     ctr_guest_image image=ctr_game_image;image.code=code;
     opened=ctr_guest_open(&guest,&image,NULL,0);free(code);
     if(!opened || !ctr_recomp_attach(&guest,true))return false;
+#ifdef CTR_GAME_CEMU_TEST
+    guest.gsp.clock_us=slice_clock;
+#endif
+    if(CTR_GAME_READONLY_VRAM && !ctr_gsp_open_vram(&guest))return false;
+    guest.gsp.pica_round_f24=true;
+    guest.dsp_firmware=&ctr_game_dsp_firmware;
     guest.cpu.log=trace;guest.debug=debug;
     if(!ctr_apt_configure(&guest))return false;
     save_ready=ctr_fs_volume_init(&savedata,4,true);
@@ -117,6 +160,10 @@ static bool start_guest(void) {
     ctr_diagnostic_display_row(0,"Verifying installed RomFS...");ctr_diagnostic_display_draw();
     if(!ctr_romfs_file_open(&romfs,"fs:/vol/content/romfs.bin",ctr_game_romfs_sha256) ||
         !ctr_fs_mount_romfs(&guest,&romfs.view))return false;
+#endif
+#if CTR_GAME_HAS_MII_ROMFS
+    if(!ctr_romfs_file_open(&mii_romfs,"fs:/vol/content/mii.romfs",ctr_game_mii_sha256) ||
+        !ctr_fs_mount_mii_romfs(&guest,&mii_romfs.view))return false;
 #endif
     return true;
 }
@@ -154,6 +201,10 @@ static int axis(float value) {
     if(value< -1)value=-1;
     return (int)lroundf(value*156.0f);
 }
+static int16_t motion_axis(float value,float scale) {
+    if(!isfinite(value))return 0;
+    return (int16_t)lroundf(fmaxf(-32768.0f,fminf(32767.0f,value*scale)));
+}
 static bool update_input(const VPADStatus *pad) {
     static const uint32_t buttons[]={VPAD_BUTTON_A,VPAD_BUTTON_B,VPAD_BUTTON_MINUS,VPAD_BUTTON_PLUS,
         VPAD_BUTTON_RIGHT,VPAD_BUTTON_LEFT,VPAD_BUTTON_UP,VPAD_BUTTON_DOWN,VPAD_BUTTON_R,VPAD_BUTTON_L,VPAD_BUTTON_X,VPAD_BUTTON_Y};
@@ -161,6 +212,32 @@ static bool update_input(const VPADStatus *pad) {
     VPADTouchData touch={0};uint16_t x=0,y=0;
     VPADGetTPCalibratedPointEx(VPAD_CHAN_0,VPAD_TP_1280X720,&touch,&pad->tpNormal);
     bool inside=touch.touched && touch.validity==VPAD_VALID && ctr_diagnostic_display_touch(touch.x,touch.y,&x,&y);
+#ifdef CTR_GAME_CEMU_TEST
+    static uint32_t previous_buttons;
+    static bool previous_touch;
+    if(held!=previous_buttons || inside!=previous_touch) {
+        OSReport("CTR2WUP_CEMU_INPUT buttons=%03x touch=%u guest_ms=%u\n",held,(unsigned)inside,
+                 (unsigned)(clock_ns/UINT64_C(1000000)));
+        previous_buttons=held;previous_touch=inside;
+    }
+#endif
+    guest.dsp_headphones=pad->usingHeadphones!=0;
+    if(guest.hid.accelerometer_clients) {
+        VPADAccStatus motion;
+        /* WUT renamed this field. Its ABI slot is immediately before gyro. */
+        memcpy(&motion,(const uint8_t *)pad+offsetof(VPADStatus,gyro)-sizeof(motion),sizeof(motion));
+        const VPADVec3D *acc=&motion.acc;
+        /* A stationary upright controller supplies gravity when motion input is absent. */
+        if(motion.magnitude>0.0f)
+            ctr_hid_acceleration(&guest,motion_axis(acc->x,512.0f),motion_axis(acc->y,512.0f),motion_axis(acc->z,512.0f));
+        else
+            ctr_hid_acceleration(&guest,0,-512,0);
+    }
+    if(guest.hid.gyroscope_clients) {
+        const float scale=360.0f*CTR_HID_GYRO_COUNTS_PER_DPS;
+        ctr_hid_angular_velocity(&guest,motion_axis(pad->gyro.x,scale),motion_axis(pad->gyro.y,scale),
+                                motion_axis(pad->gyro.z,scale));
+    }
     return ctr_hid_update(&guest,held,axis(pad->leftStick.x),axis(pad->leftStick.y),inside,x,y,clock_ns);
 }
 static uint64_t slice_clock(void *unused) { (void)unused;return OSTicksToMicroseconds(OSGetTime()); }
@@ -194,6 +271,9 @@ static void cleanup(void *unused) {
         ctr_fs_volume_close(&savedata);
     }
     if(sd_ready)ctr_fs_volume_close(&sdmc);
+#if CTR_GAME_HAS_MII_ROMFS
+    ctr_romfs_file_close(&mii_romfs);
+#endif
     ctr_romfs_file_close(&romfs);ctr_diagnostic_display_close(foreground);
     ctr_test_report_close(&report);
 }
@@ -201,22 +281,57 @@ static const ctr_exit_ops exit_ops={cleanup,clear_callbacks,ctr_procui_request_m
     ctr_procui_release,ctr_procui_wait,ctr_procui_shutdown,ctr_procui_shutdown_whb,checkpoint,finalize};
 
 int main(void) {
-    WHBProcInit();session=OSGetTime();lifecycle.title_id=OSGetTitleID();
+    startup_checkpoint("main_enter");
+    WHBProcInit();startup_checkpoint("procui_initialized");
+    session=OSGetTime();lifecycle.title_id=OSGetTitleID();
+    startup_checkpoint("title_identity_ready");
     if(ctr_test_from_hbl(lifecycle.title_id))ProcUIRegisterCallback(PROCUI_CALLBACK_HOME_BUTTON_DENIED,home_callback,NULL,99);
     char path[512];
-    bool logging=directory("fs:/vol/external01/ctr2wup") && directory("fs:/vol/external01/ctr2wup/titles") &&
-        ctr_test_report_directory(CTR_GAME_DATA_ROOT,false,path,sizeof(path)) &&
-        ctr_test_report_open(&report,path,"game",CTR_APP_VERSION,session);
+    startup_checkpoint("sd_root_begin");
+    bool logging=directory("fs:/vol/external01/ctr2wup");
+    startup_checkpoint("sd_root_end");
+    if(logging) {
+        logging=directory("fs:/vol/external01/ctr2wup/titles");
+        startup_checkpoint("sd_titles_end");
+    }
+    if(logging) {
+        logging=ctr_test_report_directory(CTR_GAME_DATA_ROOT,false,path,sizeof(path));
+        startup_checkpoint("sd_results_end");
+    }
+    if(logging) {
+        startup_checkpoint("report_open_begin");
+        logging=ctr_test_report_open(&report,path,"game",CTR_APP_VERSION,session);
+        startup_checkpoint("report_open_end");
+    }
+#ifdef CTR_GAME_CEMU_TEST
+    /* Keep checked file sync and close on Cemu's virtual SD filesystem. */
+    startup_checkpoint("cemu_file_sync");
+#else
     ctr_test_report_set_volume_sync(&report,ctr_report_storage_sync,&storage);
+#endif
     if(!logging)fail("Unable to open private SD log");
     ctr_diagnostic_display_labels(CTR_GAME_NAME,"HOME OR L+R+MINUS: EXIT");
+    startup_checkpoint("audio_begin");
     if(!open_audio())fail("Audio initialization failed");
+    startup_checkpoint("audio_end");
+    startup_checkpoint("display_begin");
     if(!ctr_diagnostic_display_init())fail("Display initialization failed");
+    startup_checkpoint("display_end");
+    startup_checkpoint("initial_draw_begin");
     ctr_diagnostic_display_row(0,"Loading installed guest executable...");ctr_diagnostic_display_draw();
+    startup_checkpoint("initial_draw_end");
+    startup_checkpoint("guest_load_begin");
     if(!failure && !start_guest())fail("Guest executable, assets, save or AOT load failed");
+    startup_checkpoint("guest_load_end");
     if(!failure && !status_report("running"))fail("Private runtime log failed");
-    uint64_t previous_us=slice_clock(NULL);clock_ns=1;bool exit_observed=false;
+    uint64_t previous_us=slice_clock(NULL),last_status_draw_us=0;clock_ns=1;
+    uint64_t presented_vblank=0,presented_swaps[2]={0,0};
+    bool exit_observed=false,previous_picture=false;
+    const char *shown_failure=NULL;
     VPADStatus pad={0};
+#ifdef CTR_GAME_CEMU_TEST
+    uint32_t pending_buttons=0;
+#endif
     while(!exit_requested) {
         ctr_proc_status status=ctr_procui_messages(NULL);
         if(status==CTR_PROC_EXITING) { exit_observed=true;break; }
@@ -229,33 +344,74 @@ int main(void) {
         uint64_t now=slice_clock(NULL),delta=now-previous_us;previous_us=now;
         if(!foreground) { ctr_procui_wait(NULL);continue; }
         if(!previous_foreground) {
-            delta=0;ctr_diagnostic_display_invalidate();
+            delta=0;last_status_draw_us=0;previous_picture=false;ctr_diagnostic_display_invalidate();
             if(!failure && !open_audio())fail("Audio reacquisition failed");
         }
+#ifdef CTR_GAME_CEMU_TEST
+        /* Service each pending display deadline before crossing it. Limit
+         * catch-up after a host stall to one guest frame per pass. */
+        uint64_t elapsed_ns=delta>CTR_GSP_FRAME_NS/1000u?CTR_GSP_FRAME_NS:delta*1000u;
+        if(guest.gsp.registered && guest.gsp.right) {
+            uint64_t deadline=guest.gsp.next_vblank_ns;
+            uint64_t until=deadline>clock_ns?deadline-clock_ns:0u;
+            if(elapsed_ns>until)elapsed_ns=until;
+        }
+        clock_ns+=elapsed_ns;
+#else
         clock_ns+=delta*1000u;
+#endif
         VPADStatus sample={0};VPADReadError error;
         pad.trigger=pad.release=0;
         int count=VPADRead(VPAD_CHAN_0,&sample,1,&error);
         if(count>0 && error==VPAD_READ_SUCCESS)pad=sample;
-        else if(error!=VPAD_READ_NO_SAMPLES)memset(&pad,0,sizeof(pad));
+        /* Cemu can return a successful empty poll before the next sample. */
+        else if(error!=VPAD_READ_SUCCESS && error!=VPAD_READ_NO_SAMPLES)memset(&pad,0,sizeof(pad));
         if(count>0 && error==VPAD_READ_SUCCESS && (pad.trigger&VPAD_BUTTON_MINUS) &&
             (pad.hold&(VPAD_BUTTON_L|VPAD_BUTTON_R))==(VPAD_BUTTON_L|VPAD_BUTTON_R))break;
         if(!failure && guest.state!=CTR_GUEST_FAULTED && guest.state!=CTR_GUEST_EXITED) {
+#ifdef CTR_GAME_CEMU_TEST
+            /* Match the host replay's guest-time input cadence and retain
+             * short controller presses between those samples. */
+            pending_buttons|=pad.trigger;
+            if(!guest.hid.published || clock_ns-guest.hid.last_ns>=UINT64_C(17000000)) {
+                VPADStatus guest_pad=pad;
+                guest_pad.hold|=pending_buttons;
+                pending_buttons=0;
+                if(!update_input(&guest_pad))fail("Guest input publication failed");
+            }
+#else
             if(!update_input(&pad))fail("Guest input publication failed");
-            else {
+#endif
+            if(!failure) {
                 const ctr_slice_policy policy={10000,32,200000,12000};
-                ctr_guest_slice(&policy,slice_clock,execute,NULL);
-                if(guest.state==CTR_GUEST_FAULTED) { status_report("guest_fault");failure="Guest stopped - unsupported runtime behavior"; }
+                ctr_slice_report slice=ctr_guest_slice(&policy,slice_clock,execute,NULL);
+                guest_exec_us+=slice.elapsed_us;
+                if(guest.state==CTR_GUEST_FAULTED) {
+                    OSReport("CTR2WUP_GUEST_FAULT pc=%08x fault=%u detail=%08x svc=%02x ipc=%s header=%08x\n",
+                             guest.cpu.r[15],(unsigned)guest.fault,guest.fault_detail,
+                             guest.cpu.svc_number,guest.ipc_service,guest.ipc_header);
+                    status_report("guest_fault");failure="Guest stopped - unsupported runtime behavior";
+                }
                 else if(guest.state==CTR_GUEST_EXITED)status_report("guest_exit");
                 if(!failure && !pump_audio())fail("Guest audio delivery failed");
             }
         }
-        bool picture=!failure && opened && !guest.gsp.black && guest.gsp.active[0] && guest.gsp.active[1] &&
-            ctr_gsp_pixels(&guest,0,top,400u*240u)==CTR_MEM_OK && ctr_gsp_pixels(&guest,1,bottom,320u*240u)==CTR_MEM_OK;
-        if(picture) {
-            if(!ctr_diagnostic_display_guest(top,bottom))fail("Guest display presentation failed");
-            else ++frames;
-        } else {
+        bool picture=!failure && opened && !guest.gsp.black && guest.gsp.active[0] && guest.gsp.active[1];
+        if(picture && (!previous_picture || presented_vblank!=guest.gsp.vblanks ||
+           presented_swaps[0]!=guest.gsp.swaps[0] || presented_swaps[1]!=guest.gsp.swaps[1])) {
+            uint64_t presentation_start=slice_clock(NULL);
+            if(ctr_gsp_pixels(&guest,0,top,400u*240u)!=CTR_MEM_OK ||
+               ctr_gsp_pixels(&guest,1,bottom,320u*240u)!=CTR_MEM_OK ||
+               !ctr_diagnostic_display_guest(top,bottom)) {
+                fail("Guest display presentation failed");picture=false;
+            } else {
+                presented_vblank=guest.gsp.vblanks;
+                presented_swaps[0]=guest.gsp.swaps[0];presented_swaps[1]=guest.gsp.swaps[1];++frames;
+            }
+            presentation_us+=slice_clock(NULL)-presentation_start;
+        }
+        if(!picture && (previous_picture || failure!=shown_failure || now-last_status_draw_us>=250000u)) {
+            /* Startup telemetry shares CPU time with the running guest. */
             char line[128];ctr_diagnostic_display_row(0,failure?failure:guest.state==CTR_GUEST_EXITED?"Guest exited":"Executing guest - waiting for framebuffers");
             snprintf(line,sizeof(line),"ARM %llu / fallback %llu / PC %08x",(unsigned long long)guest.cpu.instructions,
                 (unsigned long long)guest.cpu.fallback_instructions,guest.cpu.r[15]);ctr_diagnostic_display_row(2,line);
@@ -263,7 +419,9 @@ int main(void) {
                 guest.ipc_header,ctr_cpu_result_name(guest.fault));ctr_diagnostic_display_row(3,line);
             ctr_diagnostic_display_row(5,"Private logs and saves:");ctr_diagnostic_display_row(6,CTR_GAME_SD_FOLDER);
             if(!ctr_diagnostic_display_draw()) { fail("Status display presentation failed");break; }
+            last_status_draw_us=now;shown_failure=failure;
         }
+        previous_picture=picture;
         if(now-last_status_us>=5000000u) {
             last_status_us=now;if(!status_report(failure?"stopped":"progress"))fail("Private runtime log failed");
         }

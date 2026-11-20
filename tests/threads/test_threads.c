@@ -49,6 +49,10 @@ static void creation_failures(void) {
         for(unsigned j=1;j<CTR_GUEST_MAX_THREADS;++j)CHECK(!g.threads[j].active);
     }
     for(unsigned i=1;i<CTR_GUEST_MAX_THREADS;++i)CHECK(create(&g,0x100300,0x0fffe000,0x30,0));
+    uint32_t tail=0, address=g.threads[CTR_GUEST_MAX_THREADS-1u].tls_address+508u;
+    CHECK(address==0x1ff83ffcu);
+    CHECK(ctr_memory_read(&g.memory,address,4,CTR_MEM_READ,&tail)==CTR_MEM_OK && tail==0);
+    CHECK(ctr_memory_write(&g.memory,address,4,0xabcdef01u)==CTR_MEM_OK);
     CHECK(!create(&g,0x100300,0x0fffe000,0x30,0) && g.cpu.r[0]==0xd86007f3);
     ctr_guest_close(&g);CHECK(ctr_thread_fixture_open(&g));
     uint32_t event=ctr_guest_event_create(&g,0);CHECK(event);
@@ -146,11 +150,11 @@ static void resource_limits(void) {
     uint32_t handle=g.cpu.r[1];CHECK(handle && !g.cpu.r[0] && g.resource_references==1);
     for(unsigned i=0;i<9;++i)CHECK(ctr_memory_write(&g.memory,0x08000200+i*4,4,i)==CTR_MEM_OK);
     g.cpu.r[0]=0x08000300;g.cpu.r[1]=handle;g.cpu.r[2]=0x08000200;g.cpu.r[3]=9;ctr_guest_svc(&g,0x39);CHECK(!g.cpu.r[0]);
-    const uint32_t limits[]={0x18,64*1024*1024,8,32,16,16,0,8,8};uint32_t value;
+    const uint32_t limits[]={0x18,64*1024*1024,16,32,16,16,0,8,8};uint32_t value;
     for(unsigned i=0;i<9;++i) { CHECK(ctr_memory_read(&g.memory,0x08000300+i*8,4,1,&value)==CTR_MEM_OK && value==limits[i]);CHECK(ctr_memory_read(&g.memory,0x08000304+i*8,4,1,&value)==CTR_MEM_OK && !value); }
     g.cpu.r[0]=0x08000300;g.cpu.r[1]=handle;g.cpu.r[2]=0x08000200;g.cpu.r[3]=9;ctr_guest_svc(&g,0x3a);CHECK(!g.cpu.r[0]);
-    /* The diagnostic shared-time page adds one 4 KiB mapping. */
-    CHECK(ctr_memory_read(&g.memory,0x08000308,4,1,&value)==CTR_MEM_OK && value==36864);
+    /* This fixture includes the shared-time page and both TLS pages. */
+    CHECK(ctr_memory_read(&g.memory,0x08000308,4,1,&value)==CTR_MEM_OK && value==40960);
     CHECK(ctr_memory_read(&g.memory,0x08000310,4,1,&value)==CTR_MEM_OK && value==1);
     /* Preflight the complete type list before any output, including aliases. */
     CHECK(ctr_memory_write(&g.memory,0x08000220,4,9)==CTR_MEM_OK);uint64_t generation=g.memory.generation;

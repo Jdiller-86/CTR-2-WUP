@@ -10,7 +10,7 @@ import zlib
 from host.errors import HostError
 from host.title_stage import stage_title
 from host.title_profile import verify_menu_profile
-from host.rpx_startup import rpx_sdk
+from host.rpx_startup import rpx_sdk,rpx_startup
 from tests.test_package_writer import original_inputs
 
 
@@ -62,6 +62,30 @@ class MenuProfileTests(unittest.TestCase):
             with self.assertRaises(HostError):
                 stage_title(rpx,root/'title',title_id='0005000043543257')
             self.assertFalse((root/'title').exists())
+
+    def test_large_uncompressed_code_sizes_drive_reservation_and_independent_check(self):
+        original=bytearray(self.files['code/ctr2wup.rpx'])
+        struct.pack_into('>I',original,176,64*1024*1024)
+        struct.pack_into('>I',original,192,1024*1024)
+        struct.pack_into('>I',original,272,zlib.crc32(original[172:268]))
+        self.assertEqual(rpx_startup(original)['code_reservation'],128*1024*1024)
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);rpx=root/'large.rpx';rpx.write_bytes(original)
+            stage_title(rpx,root/'title',title_id='0005000043543257')
+            files={p.relative_to(root/'title').as_posix():p.read_bytes()
+                   for p in (root/'title').rglob('*') if p.is_file()}
+            self.assertEqual(verify_menu_profile(files,require_startup=True),'wup-menu-v3')
+            cos=ET.fromstring(files['code/cos.xml'])
+            self.assertEqual(cos.findtext('max_codesize'),'08000000')
+            cos.find('max_codesize').text='03000000'
+            with self.assertRaises(HostError) as caught:
+                verify_menu_profile({**files,'code/cos.xml':ET.tostring(cos)},require_startup=True)
+            self.assertEqual(caught.exception.code,'invalid_native_startup')
+        # Small accepted diagnostics retain their original code reservation.
+        self.assertEqual(rpx_startup(self.files['code/ctr2wup.rpx'])['code_reservation'],48*1024*1024)
+        struct.pack_into('>I',original,176,0x0e000000)
+        struct.pack_into('>I',original,272,zlib.crc32(original[172:268]))
+        with self.assertRaises(HostError):rpx_startup(original)
 
     def test_movie_is_required_even_when_every_xml_and_image_is_valid(self):
         movie=self.files['meta/bootMovie.h264']

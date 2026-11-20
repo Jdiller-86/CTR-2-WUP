@@ -198,3 +198,12 @@ The optional CTR2WUP Control plugin links WiiUPluginSystem 0.9.1
 Ed25519 implementation from Monocypher 4.0.3 (BSD-2-Clause or CC0).
 The plugin artifact includes the library sources and license texts, matching
 application source, and build inputs for rebuilding or relinking the plugin.
+
+Optional Mii compatibility data
+-------------------------------
+Private Mario builds can accept an explicit local copy of the generated Mii
+RomFS from Azahar 2126.2, header blob f5ee83e6a880a5d08b61b2b2caacac2a82b03bf9.
+The header records generator source B3n30/citra_system_archives at
+5e6b5df2f58811b75f62a526f6602732e2ad26db. The replacement data retains the
+upstream license at https://github.com/B3n30/citra_system_archives/blob/5e6b5df2f58811b75f62a526f6602732e2ad26db/license.txt.
+The CTR2WUP source tree contains no copy of the archive.

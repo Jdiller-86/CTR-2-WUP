@@ -67,11 +67,11 @@ static void query_tests(void) {
     query(&g,0x100080,0x100000,0x1000,5,4);
     query(&g,0x08000000,0x08000000,0x1000,3,5);
     query(&g,0x0fffffff,0x0fffc000,0x4000,3,11);
-    query(&g,0x1ff820a0,0x1ff82000,0x1000,3,11);
-    query(&g,0x3fffffff,0x1ff83000,0x2007d000,0,0);
+    query(&g,0x1ff820a0,0x1ff82000,0x2000,3,11);
+    query(&g,0x3fffffff,0x1ff84000,0x2007c000,0,0);
     uint8_t backing[8192]={0};
     CHECK(ctr_memory_map(&g.memory,0xfffff000,0x1000,1,backing,sizeof(backing))==CTR_MEM_OK);
-    query(&g,0x3fffffff,0x1ff83000,0x2007d000,0,0);
+    query(&g,0x3fffffff,0x1ff84000,0x2007c000,0,0);
     CHECK(ctr_memory_map(&g.memory,0x3ffff000,0x2000,1,backing,sizeof(backing))==CTR_MEM_OK);
     query(&g,0x3fffffff,0x3ffff000,0x1000,1,3);
     g.cpu.r[2]=CTR_PROCESS_END;ctr_guest_svc(&g,2);CHECK(g.cpu.r[0]==BAD_ADDRESS);

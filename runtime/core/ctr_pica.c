@@ -29,8 +29,8 @@ static ctr_pica_result arguments(const void *bytes,size_t size,
 }
 /* Validate every record before inspection output or executable state changes. */
 static ctr_pica_result validate(const uint8_t *bytes,size_t size,size_t max_writes,
-                                ctr_pica_report *report) {
-    if(size>CTR_PICA_MAX_BYTES || max_writes>CTR_PICA_MAX_WRITES)return CTR_PICA_LIMIT;
+                                size_t limit,ctr_pica_report *report) {
+    if(size>CTR_PICA_MAX_BYTES || max_writes>limit)return CTR_PICA_LIMIT;
     if(size&7u)return CTR_PICA_ALIGNMENT;
     size_t offset=0;
     while(offset<size) {
@@ -58,15 +58,14 @@ uint32_t ctr_pica_merge(uint32_t previous,uint32_t value,unsigned byte_mask) {
     uint32_t mask=0;for(unsigned i=0;i<4;++i)if(byte_mask&(1u<<i))mask|=UINT32_C(255)<<(i*8u);
     return (previous&~mask)|(value&mask);
 }
-ctr_pica_result ctr_pica_inspect(const void *bytes,size_t size,size_t max_writes,
-                               ctr_pica_write *writes,size_t capacity,
-                               ctr_pica_report *report) {
+static ctr_pica_result inspect(const void *bytes,size_t size,size_t max_writes,size_t limit,
+                              ctr_pica_write *writes,size_t capacity,ctr_pica_report *report) {
     ctr_pica_result result=arguments(bytes,size,writes,capacity,report);
     /* Aliased/overflowed argument ranges cannot safely receive a report. */
     if(result==CTR_PICA_ALIAS || result==CTR_PICA_OVERFLOW)return result;
     ctr_pica_report checked={0};
     if(result!=CTR_PICA_OK)return publish(report,checked,result);
-    result=validate(bytes,size,max_writes,&checked);
+    result=validate(bytes,size,max_writes,limit,&checked);
     if(result!=CTR_PICA_OK)return publish(report,checked,result);
     if(writes && checked.writes>capacity)return publish(report,checked,CTR_PICA_CAPACITY);
     const uint8_t *data=bytes;size_t offset=0,index=0;
@@ -82,6 +81,14 @@ ctr_pica_result ctr_pica_inspect(const void *bytes,size_t size,size_t max_writes
         offset+=(((count+1u)*4u)+7u)&~(size_t)7u;
     }
     return publish(report,checked,CTR_PICA_OK);
+}
+ctr_pica_result ctr_pica_inspect(const void *bytes,size_t size,size_t max_writes,
+                               ctr_pica_write *writes,size_t capacity,ctr_pica_report *report) {
+    return inspect(bytes,size,max_writes,CTR_PICA_MAX_WRITES,writes,capacity,report);
+}
+ctr_pica_result ctr_pica_inspect_expanded(const void *bytes,size_t size,size_t max_writes,
+                                        ctr_pica_write *writes,size_t capacity,ctr_pica_report *report) {
+    return inspect(bytes,size,max_writes,CTR_PICA_MAX_CHAIN_WRITES,writes,capacity,report);
 }
 void ctr_pica_state_init(ctr_pica_state *state) { if(state)memset(state,0,sizeof(*state)); }
 bool ctr_pica_register_supported(unsigned reg) {
@@ -100,7 +107,7 @@ ctr_pica_result ctr_pica_execute(ctr_pica_state *state,const void *bytes,
     if(overlap(bytes,size,state,sizeof(*state)) ||
        (report && overlap(report,sizeof(*report),state,sizeof(*state))))return CTR_PICA_ALIAS;
     if(result!=CTR_PICA_OK)return publish(report,checked,result);
-    result=validate(bytes,size,max_writes,&checked);
+    result=validate(bytes,size,max_writes,CTR_PICA_MAX_WRITES,&checked);
     if(result!=CTR_PICA_OK)return publish(report,checked,result);
     if(size&15u)return publish(report,checked,CTR_PICA_ALIGNMENT);
     const uint8_t *data=bytes;size_t offset=0,finalizations=0;

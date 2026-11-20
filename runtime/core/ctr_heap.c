@@ -56,12 +56,12 @@ static uint32_t allocate(ctr_guest *g,uint32_t *address,uint32_t size,unsigned p
     if (!base) return OUT_OF_MEMORY;
     if (available(&g->memory,base,base+size,size)!=base) return INVALID_STATE;
     uint64_t bytes=(uint64_t)size+ctr_modules_bytes(g);unsigned slot=CTR_GUEST_MAX_ALLOCATIONS;
-    for (unsigned i=0;i<CTR_GUEST_STORAGE_COUNT;++i) bytes+=g->storage_size[i];
+    for (unsigned i=0;i<CTR_DSP_STORAGE_INDEX;++i) bytes+=g->storage_size[i];
     for (unsigned i=0;i<CTR_GUEST_MAX_ALLOCATIONS;++i) {
         if (g->allocations[i].storage) bytes+=g->allocations[i].size;
         else if (slot==CTR_GUEST_MAX_ALLOCATIONS) slot=i;
     }
-    for (unsigned i=0;i<8;++i) if (g->shared[i].owned) bytes+=g->shared[i].size;
+    for (unsigned i=0;i<8;++i) if (g->shared[i].owned && !g->shared[i].service_page) bytes+=g->shared[i].size;
     if (bytes>CTR_GUEST_MAX_BYTES || slot==CTR_GUEST_MAX_ALLOCATIONS ||
         g->memory.count==CTR_MEMORY_MAX_MAPS) return OUT_OF_MEMORY;
     uint8_t *storage=calloc(1,size);if (!storage) return OUT_OF_MEMORY;
@@ -176,7 +176,7 @@ void ctr_heap_resource_svc(ctr_guest *g,uint32_t number) {
     uint64_t current[9]={0};const uint64_t limits[]={0x18,CTR_GUEST_MAX_BYTES,CTR_GUEST_MAX_THREADS,32,16,16,0,8,8};
     current[0]=0x18;
     current[1]=ctr_modules_bytes(g);
-    for(unsigned i=0;i<CTR_GUEST_STORAGE_COUNT;++i)current[1]+=g->storage_size[i];
+    for(unsigned i=0;i<CTR_DSP_STORAGE_INDEX;++i)current[1]+=g->storage_size[i];
     for(unsigned i=0;i<CTR_GUEST_MAX_ALLOCATIONS;++i)if(g->allocations[i].storage)current[1]+=g->allocations[i].size;
     for(unsigned i=0;i<CTR_GUEST_MAX_THREADS;++i)current[2]+=g->threads[i].active && !g->threads[i].finished;
     for(unsigned i=0;i<32;++i)current[3]+=g->events[i].active;

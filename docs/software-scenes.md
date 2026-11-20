@@ -14,6 +14,14 @@ stages the state and entire color/depth targets before committing; late errors
 preserve previous registers, counters and both buffers. Failure reports describe an attempted
 staged prefix, not committed draws. Aliased reports are left untouched.
 
+The guest adapter can retain configuration-only lists without binding render
+targets. It applies byte masks to known registers and bounds upload cursors for
+lighting, geometry and fog. Vertex-only draws can preload finite float32
+geometry uniforms and the supported fragment tables. Draws still require a
+supported configuration and validated resources. Unsupported upload data and
+unresolved command jumps fail before the staged state can commit. The guest
+adapter resolves checked command links before scene execution.
+
 The optional `ctr_scene_execute_targets_cached` entry accepts a separate
 [decoded-image cache](textures.md#decoded-image-cache). Its owning pointers never
 enter copied scene state. Failed execution releases every borrowed image; only
@@ -24,46 +32,92 @@ The bounded path supports:
 - PICA byte masks and finalized command records through the existing inspector;
   array loader offsets, component formats, alignment, padding, stride and input
   permutations; fixed attributes; indexed and nonindexed complete triangle lists.
+  The game path accepts complete immediate-mode triangle strips with up to
+  256 vertices from packed attribute uploads. State stays fixed until the
+  batch closes, and partial vertices or strips fail the transaction.
 - Shader code/descriptor uploads, complete packed float24 or float32 uniform
   uploads, entry point, input mapping and compact output masks/semantic maps.
   MOV/ADD/MUL support independent source swizzles, negation, write masks,
-  initialized temporary registers and uniforms. ADD/MUL accept only exact
-  normal float24/signed-zero results; canonical NOP and END terminate a linear program.
+  initialized temporary registers and uniforms. MOVA supplies relative uniform
+  addressing through a0.x and a0.y. ADD, MUL, DP4 and MAD support exact diagnostic
+  arithmetic and a game software model with nearest-even float24 rounding and
+  underflow flush. Game float32 uploads retain the original bits even in unused
+  lanes. The shader validates each operand on read. The game path also supports
+  DP3, DPH/DPHI, nonnegative RSQ and
+  bounded CALL and CALLC subroutines. Game shaders carry reciprocal infinities and
+  convert overflowing float32 operands to signed infinity. Multiplying zero by
+  infinity yields zero. Geometry, color and lighting outputs require finite values.
+  IFC and IFU support conditional
+  blocks selected by CMP or a Boolean uniform. The game path also supports
+  JMPC and JMPU. LOOP supplies one active aL counter. Execution
+  requires END within a per-vertex instruction budget.
 - Position XYZW and color RGBA outputs; W exactly 1, clip XYZ in the accepted
   volume, exact 1/16-pixel coordinates, viewport origin/extent, winding cull,
   include/exclude scissor, degenerate triangles and integer edge evaluation.
   Each triangle has a constant opaque endpoint color: RGBA lanes are 0 or 1,
   alpha 1. Final TEV alpha can reject fragments; logic/blend operations and
   channel masks control color writes; the paired-target API adds bounded D16
-  depth and D24S8 stencil comparisons/actions.
+  depth and D24S8 stencil comparisons/actions. The guest software path also
+  supports RGB5A1, RGB565 and RGBA4 color targets and quantizes each fragment to
+  the target precision.
+  Coverage, depth and stencil processing continue when a draw preserves color.
+  Fragment shading is skipped when that draw's alpha test passes unconditionally.
+  The PICA color-target register carries separate pixel-size and format fields.
+  Game framebuffer tiles store rows top-down. Color and depth staging surfaces
+  use bottom-up rows for rasterization.
 - Optional UV0/1/2 outputs (semantics 12/13, 14/15 and 22/23), exact Q16 in −16..16 with W=1;
   affine nearest/bilinear sampling of all 14 base formats with independent clamp/repeat/
   mirror S/T per independently enabled Texture0/1/2. Texture2 can select UV1.
+  The game software path also selects and blends validated mip levels.
+  It models positive coordinate overflow at the repeat seam when every sampler
+  using that axis repeats at the base mip level.
   Six TEV stages combine the three textures, primary, constants, Previous and PreviousBuffer
   with independent RGB/alpha operations, component operands and 1/2/4 scale.
+  The game combiner resolves stage zero's Previous through its third source.
+  Its active operands determine which vertex colors, textures and lit colors it consumes.
+  A single unscaled replacement stage gathers its operands directly when the
+  combiner does not read PreviousBuffer.
+  A bounded directional light uses the vertex quaternion and view outputs,
+  optional normal maps, two specular distribution tables and a Fresnel table.
+  Disabled lighting supplies zero for both fragment colors.
   See [texture and combiner rules](textures.md).
+- The game software path clips triangles in homogeneous coordinates, projects
+  onto the 12.4 grid and interpolates vertex color and signed Q16 UVs with
+  perspective correction. Projected coordinates are bounded to ±1024 pixels.
+  Rasterization intersects the three exact edge intervals once per sample row,
+  retaining the same edge-inclusion rule and candidate sample budget.
+  Depth fog retains its 128-entry table across lists and blends RGB after TEV.
 - All eight final-alpha comparisons, all 16 bytewise logic operations and RGBA
   write masks with checked read/write gates; see [fragment output](textures.md#fragment-output).
 - Separate RGB/alpha blending with five equations, 15 factors, retained constants
   and one final division/clamp. Native admission and rounding limits are defined
   in the [blend contract](textures.md#blending).
 
-Limits are 256 vertices per draw, 32 draws per list, 512 vertex shader code words,
-128 descriptors, 96 float uniforms, 12 attributes/loaders, a 4 MiB geometry span,
-32 separate texture spans with 4 MiB total source bytes, a 1 MiB color target and
-a 512 KiB D16 or 1 MiB D24S8 target, with matching dimensions no larger than
-512×512. Separate texture spans cannot overlap geometry or each
-other. No primitive is carried across lists. Unknown state, inexact shader
-arithmetic, other opcodes, relative addressing, geometry, clipping, perspective,
-varying primary color, mixed min/mag filters, mipmaps, DOT3,
-broader depth
-fail visibly. This is not a general PICA renderer.
+Diagnostic lists allow 256 vertices per draw, 32 draws and 32 separate texture
+spans. Game software lists allow 12,288 vertices per draw, 512 draws, 65,536
+triangles, 96 texture spans and 16,777,216 candidate raster samples. They decode
+large draws in whole-triangle batches while preserving index order.
+Indexed game draws reuse vertex shader outputs within a draw after the input
+batch passes validation. Shader instruction totals count every logical vertex.
+Both paths allow 512 vertex shader code words, 128 descriptors, 96 float
+uniforms, 12 attributes/loaders, a 4 MiB geometry span, 4 MiB of additional
+texture source bytes, a 1 MiB color target and a 512 KiB D16 or 1 MiB D24S8
+target. Target dimensions match and are no larger than 512×512. Separate texture
+spans cannot overlap geometry or each other. No primitive is carried across
+lists. In the game VRAM aperture, vertex and index offsets may point past an
+intervening color or depth target. Each source read is bounded to its side of
+the target, and any actual source overlap with either target fails.
+Unknown state, inexact shader arithmetic, other opcodes, nested loops, geometry
+and broader depth behavior fail visibly. The game software path supports mixed
+minification and magnification filters and DOT3 RGB.
 
-`runtime/core/ctr_shader.c` accepts only finite normal values exactly
-representable as PICA float24, plus signed zero. NaN/infinity, denormals,
-out-of-range exponents and values requiring rounding fail. There is no float24
-rounding approximation. MOV/ADD/MUL capture source lanes before writing
-in-place swizzles and rejects undefined lanes or missing code/END.
+`runtime/core/ctr_shader.c` keeps exact float24 interchange for diagnostics.
+The game model accepts finite inputs and rounds operands and arithmetic using
+integer mantissas. Hardware rounding accuracy remains to be measured. The
+interpreter captures source lanes before in-place writes. Undefined values in
+the game path remain undefined through arithmetic. Addresses, predicates and
+active raster inputs require defined values. The interpreter requires valid code
+and END.
 
 ### Vertex code capacity
 
@@ -136,9 +190,10 @@ PICA shader into a Latte shader.
 
 ## GX2 shader and backend contract
 
-`runtime/core/ctr_gx2_shader.c` encodes the accepted linear MOV/ADD/MUL/NOP/END
-program as explicit little-endian Latte instruction bytes, preserving operand
-and output-map semantics. Source lanes are captured before writes. Storage is
+`runtime/core/ctr_gx2_shader.c` encodes MOV/ADD/MUL/dot/MAX/MAD/NOP/END and
+expands bounded unconditional calls and boolean-controlled branches into
+little-endian Latte instructions. Dot products sum in source lane order, and
+MAD computes a separate product. Source lanes are captured before writes. Storage is
 padded to 256 bytes; the native adapter uses aligned shader memory and reserves
 a vertex budget above the encoder's **53 GPRs**, rising to **54/55/56** when
 UV0/1/2 is the highest exported coordinate set.
@@ -167,14 +222,70 @@ Both readbacks must match, including padding and trailing bytes. The
 
 `runtime/wiiu/gx2_scene.c` implements GX2 surfaces, shaders, uniforms,
 viewport/cull/scissor and readback. Textured draws bind each unit's owned RGBA8
-texture and point/linear sampler; an original Latte pixel program samples base level zero
-and evaluates the six-stage byte-domain TEV chain with delayed RGB/alpha buffer
+texture and optional mip tail. An original Latte pixel program samples through
+the current GX2 sampler and evaluates the six-stage byte-domain TEV chain with delayed RGB/alpha buffer
 publication. Reversed rows preserve PICA V origin
 without changing guest UV. CPU flush/texture invalidation precede drawing.
-The adapter restores the presentation context after each callback and retires
-GPU references before reuse/free; failed retirement quarantines allocations
-until graphics shutdown. Physical parity remains unverified, with preflight and
-readback enabled; this path makes no performance claim.
+Synchronous callbacks restore the presentation context. A caller can batch
+transformed draws through eight immutable upload slots. A batch retains the draw
+context and protects submitted textures until a fence. Resolves and abort restore
+presentation. Failed retirement quarantines allocations until graphics shutdown.
+The checked path retains preflight and readback. Physical parity remains open.
+
+For rounded float24 scenes, the paired backend also accepts CPU-transformed
+triangle batches with lit TEV sources. The scene executor runs the vertex
+shader, clips the triangles to the PICA volume, snaps screen coordinates to
+the software raster grid and culls on that grid. The GX2 vertex shader exports clip-space position
+with the original W, primary color, active texture coordinates and any lighting
+quaternion and view inputs. The pixel shader handles the bounded directional
+light, normal maps, specular and Fresnel tables, RGB DOT3 and depth fog. Fog uses
+viewport Z and preserves alpha after blending RGB. The address register and
+packed uniform lanes resolve all four retained tables together. The rounded
+path still compares the complete color and depth targets before committing.
+Differences in native interpolation or quantization can reject the list.
+
+Cemu callers can select linear-special staging for color targets and confirm
+GPU retirement with the timestamp fence. The tiled-to-linear-special copy
+returns rendered color bytes. The Cemu viewport and scissor reverse the native
+target's Y axis for PICA shared-edge ownership. Depth and mip planes use native
+sample coordinates. Seeding and paired readback preserve the PICA row order.
+Cemu paired readback supports D24S8 and uses a native clear for a
+uniform endpoint depth and stencil seed. For transformed D24S8 draws, the
+pixel shader exports depth from a plane reconstructed on the PICA screen grid.
+It evaluates split gradients around the triangle's screen-space center and
+uses compensated sums to add them to the depth at that origin. Cemu resolves
+the depth attachment to an R32F texture and packs the returned normalized
+samples. Stencil tests read
+the changed bits into a separate RGBA8 target. Bits outside the active write
+masks retain the seed value. Full paired comparison still enforces exactness.
+The Cemu profile alternates between retired shader upload addresses so Cemu
+hashes the current program bytes on each draw.
+It masks color writes for the PICA destination-only logic operation. Depth,
+stencil and alpha tests still run on those draws.
+
+For transformed Cemu draws using nearest mip selection, the renderer computes
+the U/W, V/W and 1/W gradients from the snapped triangle and sends them as flat
+varyings. The fragment shader combines the gradients with interpolated U, V and
+W using the quotient rule. It chooses the minification or magnification filter
+from the signed biased footprint before selecting the whole mip level. The
+four-tap path uses bilinear weights for linear filtering or selects one tap
+for point filtering. It quantizes the resulting sample to bytes.
+
+For transformed Cemu draws using additive source-alpha and inverse-source-alpha
+factors for both RGB and alpha, the fragment shader blends against a separate
+GPU color snapshot and truncates the final byte-domain sum. The same snapshot
+path handles destination-only inverse constant RGB scaling with destination
+alpha preserved. Both modes require alpha testing to be disabled or
+unconditional. Consecutive triangles with disjoint screen-grid interiors share
+a snapshot. Potential overlap starts another snapshot in draw order. Additive
+source-alpha blending with an unscaled destination instead truncates the
+premultiplied source to bytes before GX2 adds the destination. That case
+requires the same alpha-test condition. All modes retain the exact paired
+color, depth, and stencil check.
+
+The resident target API keeps the paired GX2 surfaces alive across draws
+and resolves. Callers can read color alone for display, or synchronize both
+planes when a guest operation needs packed depth and stencil.
 
 ### Native program cache
 
@@ -184,7 +295,9 @@ little-endian fields, source/build identity and versioned encoder, numeric and
 renderer profiles. Vertex identity includes all code/descriptors and defined
 masks, entry and active output mapping. Pixel identity includes decoded TEV
 topology, buffer update masks, buffered-program selection, enabled-unit mask,
-Texture2 coordinate routing and depth profile. FIFO eviction is deterministic; duplicate stores retain their
+Texture2 coordinate routing, the derivative-sampling mask, fog enablement and
+depth profile. Fog color, direction and table values are current draw uniforms.
+FIFO eviction is deterministic. Duplicate stores retain their
 original position.
 
 Uniform values and stage/buffer colors remain dynamic. A vertex hit checks

@@ -12,9 +12,14 @@ The portable runtime opens `fs:USER`, initializes its session and supports:
 
 | Interface | Commands |
 |---|---|
-| FSUSER | Initialize / InitializeWithSdkVersion; OpenArchive / CloseArchive; OpenFile; CreateFile / DeleteFile; GetFreeBytes; ControlArchive(commit); scoped read-only OpenFileDirectly |
+| FSUSER | Initialize / InitializeWithSdkVersion; OpenArchive / CloseArchive; OpenFile; CreateFile / DeleteFile; GetFreeBytes; savedata GetFormatInfo; OpenDirectory for missing-directory checks; ControlArchive(commit); scoped read-only OpenFileDirectly |
 | FSFILE | Read / Write; GetSize / SetSize; Flush / Close |
 | Explicit archives | Savedata (4), private virtual SDMC (9), and current-process read-only RomFS view (3), supplied by the platform |
+
+Shared NAND extdata opens return the unformatted-archive response. Explicit-title
+NCCH data opens can serve a separate platform-supplied Mii RomFS view for the
+NAND Mii title and base content. Other requests return file not found. Both
+validate their binary IPC paths.
 
 No guest path names a host file. The platform owns a volume until guest teardown;
 mounts and file sessions retain its lifetime. Archive IDs are generation checked
@@ -33,9 +38,10 @@ read-only volumes are enforced. Guest buffers are checked across the entire
 requested range, including physical aliases of IPC storage, before file or guest
 output changes. Unsupported wire formats and commands fault visibly.
 
-Writes change the buffered volume. Flush and commit succeed for a writable
-volume only when its platform persistence callback succeeds. A failed flush can
-leave dirty buffered data but does not claim a successful save. The original
+Writes change the buffered volume. The legacy `0x00010001` write-and-flush
+option uses the same commit path as `0x00000001`. Flush and commit succeed for a
+writable volume only when its platform persistence callback succeeds. A failed
+flush leaves any buffered data dirty and returns an error. The original
 snapshot adapter uses explicit little-endian framing, bounded whole-input
 validation and a CRC32 corruption check. CRC32 provides no authenticity. It
 publishes through an exclusive sibling `.pending` file. The loader validates any
@@ -45,6 +51,9 @@ publish attempts rollback; if rollback fails, both siblings remain available.
 This avoids relying on POSIX replacement semantics: WUT passes rename directly
 to FSA. A no-overwrite filesystem model checks this platform constraint and the
 publication/rollback paths.
+
+Archive commit accepts the empty request and the checked one-byte input and
+output placeholders used by an older SDK.
 
 If the primary is missing, a validated `.previous` can be loaded with the explicit
 RECOVERED status. A corrupt primary is never masked by a backup or reset. Stale
@@ -70,17 +79,25 @@ returns two real retained events; Enable queues one empty wakeup and signals the
 resume event. NotifyToWait, GlanceParameter and ReceiveParameter run the checked
 local state machine. Glance preserves the pending parameter, Receive consumes it.
 Checked static descriptors support the shell-open query and enable-transition
-unlock. CheckNew3DS returns the configured Old-family policy. PrepareToClose /
+unlock. ReplySleepQuery accepts local application replies while the Wii U
+process lifecycle controls suspension. CheckNew3DS returns the configured
+Old-family policy. PrepareToClose /
 CloseApplication terminate the process; Finalize unregisters it while copied
 objects retain their lifetime. This lets the unmodified libctru event thread,
 LightEvent/arbitration waits, normal initialization and exit code actually run.
+
+The Mii Selector library applet can return a local guest preset when the title
+allows one and the platform provides a Mii data archive. APT validates the
+selector options and display-capture handoff, then delivers the checksummed
+selection through the resume event. The headless selector preserves guest VRAM
+and uses no system Mii database.
 
 The original boot checks `aptIsActive`, `aptShouldClose` and `aptMainLoop` in guest
 code. A single-instruction trace captures successful APT and FS requests; remaining
 lookup failures are exactly `APT:S`, `APT:A`, and optional `ptm:sysm`. The compiled
 runner explicitly mounts an empty read-only diagnostic virtual SDMC. This is not
 access to the user's SD card. There is no shell lid, HOME menu, sleep, cross-title
-launch, shared font, applet, CPU-time quota or New 3DS implementation. Unsupported
+launch, shared font, other applets, CPU-time quota or New 3DS implementation. Unsupported
 operations fail; `complete_service_startup` remains false in reports.
 
 ## Validation

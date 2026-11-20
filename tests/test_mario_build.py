@@ -8,7 +8,7 @@ import unittest
 
 from host.errors import HostError
 from host.loader import load_image
-from host.mario_build import generated_image,mario_profile,title_identity
+from host.mario_build import _embedded_audio_firmware,generated_image,mario_profile,title_identity
 from tests.romfs_fixtures import ncch_romfs
 
 
@@ -18,6 +18,22 @@ def original_rom():
 
 
 class MarioBuildTests(unittest.TestCase):
+    def test_embedded_dsp_profile_requires_complete_segment_hashes(self):
+        sample=bytearray(0x30a)
+        struct.pack_into('<4sIH',sample,0x100,b'DSP1',len(sample),0xdf03)
+        sample[0x10d:0x110]=bytes((2,5,3))
+        struct.pack_into('<II',sample,0x110,0x200,2)
+        for index,bank in enumerate((0,0,2,2,2)):
+            table=0x120+index*0x30
+            offset=0x300+index*2
+            payload=bytes((index,0x7a))
+            sample[offset:offset+2]=payload
+            struct.pack_into('<IIIxxxB',sample,table,offset,index,2,bank)
+            sample[table+16:table+48]=hashlib.sha256(payload).digest()
+        self.assertEqual(_embedded_audio_firmware(sample),(len(sample),hashlib.sha256(sample).digest()))
+        sample[-1]^=1
+        self.assertEqual(_embedded_audio_firmware(sample),(0,bytes(32)))
+
     def test_profile_policy(self):
         selected={'identity':{'program_id':'0004000000054000'},'executable_revision':'original-test',
             'partitions':[{'product_code':'CTR-P-AREE','remaster_version':0,'sections':{'romfs':{}}}]}

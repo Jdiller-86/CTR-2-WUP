@@ -92,6 +92,38 @@ static void shared_memory(void) {
     wait_one(&g,owned,0);CHECK(g.cpu.r[0]==0xd8e007f7);
     ctr_guest_close(&g); /* Live mapping without a handle retains ownership until close. */
 }
+static void microphone_share_from_bss(void) {
+    static const uint8_t code[4096]={0,0,0xa0,0xe1};
+    const ctr_guest_image image={code,sizeof(code),{0x00100000,1,4},{0,0,0},
+        {0x00400000,0,0},4096,4096,"original-bss-share"};
+    ctr_guest g;CHECK(ctr_guest_open(&g,&image,NULL,0));
+    const uint32_t base=0x00400000,tls=g.cpu.tls_address+0x80;
+    g.cpu.r[0]=3;g.cpu.r[1]=base;g.cpu.r[2]=4096;g.cpu.r[3]=3;ctr_guest_svc(&g,0x1e);
+    CHECK(!g.cpu.r[0]);uint32_t shared=g.cpu.r[1];unsigned index=ctr_guest_handle_for(&g,shared)->object;
+    uint32_t mic=ctr_guest_session_open(&g,CTR_SERVICE_MIC);CHECK(mic);
+    const uint32_t request[]={0x00010042,4096,0,shared};
+    for(unsigned i=0;i<4;++i)CHECK(ctr_memory_write(&g.memory,tls+i*4,4,request[i])==CTR_MEM_OK);
+    g.cpu.r[0]=mic;ctr_guest_svc(&g,0x32);
+    CHECK(g.mic.mapped && g.state==CTR_GUEST_READY && g.shared[index].references==2);
+    CHECK(g.shared[index].storage==g.storage[2] && !g.allocations[0].pins);
+    const uint32_t calls[][6]={{0x000a0040,1},{0x00030140,3,3,0,4092,1}};
+    for(unsigned call=0;call<2;++call) {
+        for(unsigned i=0;i<6;++i)CHECK(ctr_memory_write(&g.memory,tls+i*4,4,calls[call][i])==CTR_MEM_OK);
+        g.cpu.r[0]=mic;ctr_guest_svc(&g,0x32);
+        CHECK(g.state==CTR_GUEST_READY && !g.cpu.r[0]);
+    }
+    CHECK(ctr_memory_write(&g.memory,base,4,0xaabbccdd)==CTR_MEM_OK);
+    uint32_t cursor;
+    CHECK(ctr_guest_run(&g,0,1000000,false)==CTR_GUEST_READY);
+    CHECK(ctr_memory_read(&g.memory,base+4092,4,1,&cursor)==CTR_MEM_OK && cursor==0);
+    CHECK(ctr_guest_run(&g,0,2000000,false)==CTR_GUEST_READY);
+    CHECK(ctr_memory_read(&g.memory,base+4092,4,1,&cursor)==CTR_MEM_OK && cursor==30);
+    CHECK(ctr_memory_read(&g.memory,base,4,1,&cursor)==CTR_MEM_OK && cursor==0);
+    close_handle(&g,shared);CHECK(g.shared[index].active);
+    close_handle(&g,mic);CHECK(!g.mic.mapped && !g.mic.sampling && !g.shared[index].active);
+    CHECK(ctr_memory_write(&g.memory,base,4,0xaabbccdd)==CTR_MEM_OK);
+    ctr_guest_close(&g);
+}
 static void exhaustion(void) {
     ctr_guest g;CHECK(ctr_kernel_fixture_open(&g));
     for(unsigned i=0;i<8;++i)CHECK(ctr_shared_create(&g,4096,3));
@@ -108,7 +140,18 @@ static void exhaustion(void) {
     g.cpu.r[1]=1;ctr_guest_svc(&g,0x13);CHECK(g.cpu.r[0]==0xd86007f3 && !g.mutexes[0].active);
     ctr_guest_close(&g);
 }
+static void full_application_budget(void) {
+    ctr_guest g;CHECK(ctr_kernel_fixture_open(&g));
+    uint32_t remaining=CTR_GUEST_MAX_BYTES;
+    for(unsigned i=0;i<CTR_GUEST_STORAGE_COUNT;++i)remaining-=(uint32_t)g.storage_size[i];
+    CHECK(ctr_shared_create(&g,remaining,3));
+    CHECK(!ctr_shared_create(&g,CTR_GUEST_PAGE,3));
+    const uint32_t service=ctr_shared_create_service_page(&g,3);
+    CHECK(service && g.shared[ctr_guest_handle_for(&g,service)->object].size==CTR_GUEST_PAGE);
+    CHECK(!ctr_shared_create(&g,CTR_GUEST_PAGE,3));
+    ctr_guest_close(&g);
+}
 int main(void) {
-    synchronization();shared_memory();exhaustion();CHECK(ctr_kernel_selftest()==0);
+    synchronization();shared_memory();microphone_share_from_bss();exhaustion();full_application_budget();CHECK(ctr_kernel_selftest()==0);
     printf("{\"ok\":true,\"assertions\":%u,\"shared_memory_and_synchronization\":true,\"original_arm_kernel_probe\":true,\"console_verified\":false}\n",assertions);return 0;
 }

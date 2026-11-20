@@ -78,7 +78,7 @@ int ctr_recomp_instruction(Context *c,uint32_t address,uint32_t opcode) {
     if (r!=CTR_MEM_OK) { e->cpu->memory_fault=r;ctr_recomp_abort(c,CTR_CPU_MEMORY_FAULT,address); }
     if (actual!=opcode) ctr_recomp_abort(c,CTR_CPU_CODE_INVALIDATED,address);
     --c->budget;++e->cpu->instructions;
-    ctr_cpu flags={0};flags.cpsr=((uint32_t)c->n<<31)|((uint32_t)c->z<<30)|
+    uint32_t flags=((uint32_t)c->n<<31)|((uint32_t)c->z<<30)|
         ((uint32_t)c->c<<29)|((uint32_t)c->v<<28);
     bool fpscr_transfer=(opcode&0x0fff0fffu)==0x0ee10a10u || (opcode&0x0fff0fffu)==0x0ef10a10u;
     bool fp_memory=(opcode&0x0f200f00u)==0x0d000a00u || (opcode&0x0f200f00u)==0x0d000b00u;
@@ -93,14 +93,14 @@ int ctr_recomp_instruction(Context *c,uint32_t address,uint32_t opcode) {
         (((opcode>>8)&15u)==10u || ((opcode>>8)&15u)==11u);
     if(fp && opcode>>28==15u)ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
     /* Explicit recovery mode uses shared scalar VFP under CRT controls. */
-    if(fp && e->fallback && !fpscr_transfer && !fp_memory && ctr_cpu_condition(&flags,opcode>>28)) {
+    if(fp && e->fallback && !fpscr_transfer && !fp_memory && ctr_cpu_condition_cpsr(flags,opcode>>28)) {
         export_cpu(e);
         ctr_cpu_result result=ctr_cpu_vfp_arm(e->cpu,opcode);
         if(result!=CTR_CPU_OK) { import_cpu(e);ctr_recomp_abort(c,result,opcode); }
         e->cpu->r[15]=address+4u;++e->cpu->fallback_instructions;
         import_cpu(e);c->exit=EXIT_UNWIND;return 0;
     }
-    if(fp && ctr_cpu_condition(&flags,opcode>>28)) {
+    if(fp && ctr_cpu_condition_cpsr(flags,opcode>>28)) {
         if(fpscr_transfer && (opcode&0x00100000u)==0 && ((opcode>>12)&15u)==15u)
             ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
         if(fp_memory && (((opcode&0xf00u)==0xb00u && (opcode&0x400000u)) ||
@@ -116,17 +116,19 @@ int ctr_recomp_instruction(Context *c,uint32_t address,uint32_t opcode) {
     }
     uint32_t media=opcode&0x0ff00ff0u;
     if(!c->thumb && (opcode&0x0f900090u)==0x01000080u &&
-       (opcode>>28==15 || ctr_cpu_condition(&flags,opcode>>28))) {
-        if((opcode&0x0ff00090u)!=0x01000080u || ((opcode>>16)&15u)==15 ||
-           ((opcode>>12)&15u)==15 || ((opcode>>8)&15u)==15 || (opcode&15u)==15)
+       (opcode>>28==15 || ctr_cpu_condition_cpsr(flags,opcode>>28))) {
+        bool smlaxy=(opcode&0x0ff00090u)==0x01000080u && ((opcode>>12)&15u)!=15u;
+        bool smulxy=(opcode&0x0ff0f090u)==0x01600080u;
+        if(opcode>>28==15u || (!smlaxy && !smulxy) || ((opcode>>16)&15u)==15 ||
+           ((opcode>>8)&15u)==15 || (opcode&15u)==15)
             ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
     }
     if(!c->thumb && (media==0x06500f90u || media==0x06500ff0u || media==0x06800fb0u) &&
-        ctr_cpu_condition(&flags,opcode>>28) &&
+        ctr_cpu_condition_cpsr(flags,opcode>>28) &&
         (((opcode>>16)&15u)==15 || ((opcode>>12)&15u)==15 || (opcode&15u)==15))
         ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
     if(!c->thumb && (opcode&0x0e000000u)==0x08000000u &&
-        (opcode>>28==15u || ctr_cpu_condition(&flags,opcode>>28))) {
+        (opcode>>28==15u || ctr_cpu_condition_cpsr(flags,opcode>>28))) {
         unsigned rn=(opcode>>16)&15u;bool load=(opcode&0x100000u)!=0,writeback=(opcode&0x200000u)!=0;
         if(opcode>>28==15u || (opcode&0x400000u) ||
             !ctr_cpu_multiple_supported(rn,(uint16_t)opcode,writeback,load,false))
@@ -140,10 +142,10 @@ int ctr_recomp_instruction(Context *c,uint32_t address,uint32_t opcode) {
         bool writeback=stack || !(load && (list&(1u<<rn)));
         if(!ctr_cpu_multiple_supported(rn,list,writeback,load,true))ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
     }
-    if((!c->thumb && (opcode&0x0fffffffu)==0x012fff3fu && ctr_cpu_condition(&flags,opcode>>28)) ||
+    if((!c->thumb && (opcode&0x0fffffffu)==0x012fff3fu && ctr_cpu_condition_cpsr(flags,opcode>>28)) ||
         (c->thumb && opcode==0x47f8u))ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
     bool barrier=!c->thumb && ((opcode&0x0fff0fffu)==0x0e070f9au || (opcode&0x0fff0fffu)==0x0e070fbau);
-    if(barrier && ctr_cpu_condition(&flags,opcode>>28)) {
+    if(barrier && ctr_cpu_condition_cpsr(flags,opcode>>28)) {
         if(((opcode>>12)&15u)==15u)ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
         ctr_cpu_barrier();
     }
@@ -155,7 +157,7 @@ int ctr_recomp_instruction(Context *c,uint32_t address,uint32_t opcode) {
         ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
     if (!c->thumb && (opcode&0x0f000f10u)==0x0e000f10u &&
         ((opcode>>28)==15u || (!barrier && (opcode&0x0fff0fffu)!=0x0e1d0f70u) || ((opcode>>12)&15u)==15u)) {
-        if (opcode>>28==15u || ctr_cpu_condition(&flags,opcode>>28))
+        if (opcode>>28==15u || ctr_cpu_condition_cpsr(flags,opcode>>28))
             ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
     }
     return 1;

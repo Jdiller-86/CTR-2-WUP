@@ -34,7 +34,7 @@ static uint32_t directory(ctr_guest *g) {
     return handle;
 }
 static uint32_t cfg(ctr_guest *g,uint32_t srv) {
-    const uint32_t request[]={0x00050100,0x3a676663,0x75,5,1};
+    const uint32_t request[]={0x00050100,0x3a676663,0xa5a50075,5,1};
     send(g,srv,request,5);
     CHECK(g->state==CTR_GUEST_READY && g->cpu.r[0]==0);
     CHECK(read_word(g,0)==0x00050042 && read_word(g,1)==0 && read_word(g,2)==0x10);
@@ -62,6 +62,10 @@ static void ownership_and_configuration(void) {
         CHECK(read_word(&g,0)==(request[0]|0x80) && read_word(&g,1)==0);
         CHECK(read_word(&g,2)==(i==2?0:i==1?3:2));
     }
+    const uint32_t console_hash[]={0x00030040,0};
+    send(&g,service,console_hash,2);
+    CHECK(read_word(&g,0)==0x000300c0 && read_word(&g,1)==0);
+    CHECK(read_word(&g,2)==0x8944fea2 && read_word(&g,3)==0xccd7ea35);
     const uint32_t language[]={0x00010082,1,0x000a0002,0x1e,DATA+32};
     CHECK(ctr_memory_write(&g.memory,DATA+32,4,0xaabbccdd)==CTR_MEM_OK);
     send(&g,service,language,5);
@@ -123,7 +127,7 @@ static void rejection_tests(void) {
         uint32_t request[]={0x00050100,0x3a676663,0x75,5,1};
         if(kind==0)request[3]=9;
         if(kind==1)request[3]=0;
-        if(kind==2)request[2]=0x4175; /* Nonzero padding. */
+        if(kind==2)request[2]=0x2f; /* Invalid character inside the supplied name. */
         if(kind==3)request[1]=0x3a006663; /* Embedded NUL. */
         if(kind==4)request[4]=2;
         if(kind==5)request[0]=0x00050101;
@@ -156,7 +160,7 @@ static void memory_and_resource_tests(void) {
         if(kind==1)g.cpu.tls_address+=1;
         if(kind==2)g.cpu.tls_address=0xdead0000;
         if(kind==3)g.cpu.tls_address=0x00100000;
-        if(kind==4)g.cpu.tls_address+=4096-0x90;
+        if(kind==4)g.cpu.tls_address+=CTR_GUEST_TLS_BYTES-0x90;
         g.cpu.r[0]=srv;uint64_t generation=g.memory.generation;ctr_guest_svc(&g,0x32);
         CHECK(g.state==CTR_GUEST_FAULTED && g.fault==CTR_CPU_MEMORY_FAULT);
         CHECK(g.memory.generation==generation && sessions(&g)==1);ctr_guest_close(&g);
@@ -202,8 +206,50 @@ static void execution(void) {
     CHECK(ctr_memory_read(&a.memory,DATA+0x20,1,CTR_MEM_READ,&value)==CTR_MEM_OK && value==7);
     CHECK(!sessions(&a) && !sessions(&b));ctr_guest_close(&a);ctr_guest_close(&b);
 }
+static void notification_semaphore(void) {
+    ctr_guest g;
+    CHECK(ctr_service_fixture_open(&g));
+    uint32_t srv=directory(&g);
+    const uint32_t request[]={0x00020000};
+    send(&g,srv,request,1);
+    CHECK(g.state==CTR_GUEST_READY && g.cpu.r[0]==0);
+    CHECK(read_word(&g,0)==0x00020042 && read_word(&g,1)==0 && read_word(&g,2)==0);
+    uint32_t handle=read_word(&g,3);
+    ctr_guest_handle *object=ctr_guest_handle_for(&g,handle);
+    CHECK(object && object->type==CTR_HANDLE_SEMAPHORE);
+    unsigned slot=object->object;
+    CHECK(g.semaphores[slot].count==0 && g.semaphores[slot].maximum==16);
+    g.cpu.r[0]=handle;g.cpu.r[2]=g.cpu.r[3]=0;ctr_guest_svc(&g,0x24);
+    CHECK(g.cpu.r[0]==0x09401bfe);
+    g.cpu.r[0]=handle;ctr_guest_svc(&g,0x23);
+    CHECK(g.cpu.r[0]==0 && !g.semaphores[slot].active);
+    ctr_guest_close(&g);
+}
+static void daemon_startup(void) {
+    ctr_guest g;
+    CHECK(ctr_service_fixture_open(&g));
+    const uint32_t srv=directory(&g);
+    const uint32_t open_ndm[]={0x00050100,0x3a6d646e,0x75,5,0};
+    send(&g,srv,open_ndm,5);
+    CHECK(read_word(&g,0)==0x00050042 && read_word(&g,1)==0);
+    const uint32_t ndm=read_word(&g,3);
+    CHECK(ctr_guest_session_for(&g,ndm)->service==CTR_SERVICE_NDM);
+    const uint32_t override[]={0x00140040,0xf},suspend[]={0x00060040,6},scheduler[]={0x00080040,1};
+    send(&g,ndm,override,2);
+    CHECK(read_word(&g,1)==0 && g.ndm.default_mask==0xf);
+    send(&g,ndm,suspend,2);
+    CHECK(read_word(&g,1)==0 && g.ndm.suspended[1]==1 && g.ndm.suspended[2]==1);
+    CHECK(!g.ndm.suspended[0] && !g.ndm.suspended[3]);
+    send(&g,ndm,scheduler,2);
+    CHECK(read_word(&g,1)==0 && g.ndm.scheduler_suspensions==1);
+    const uint32_t resume[]={0x00090000};
+    send(&g,ndm,resume,1);
+    CHECK(read_word(&g,0)==0x00090040 && read_word(&g,1)==0 && g.ndm.scheduler_suspensions==0);
+    ctr_guest_close(&g);
+}
 int main(void) {
     ownership_and_configuration();rejection_tests();memory_and_resource_tests();execution();
+    notification_semaphore();daemon_startup();
     printf("{\"ok\":true,\"assertions\":%u,\"arm_tls_srv_cfg_startup\":true,\"aot_interpreter_memory_match\":true,\"console_verified\":false}\n",assertions);
     return 0;
 }

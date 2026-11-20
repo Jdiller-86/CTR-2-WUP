@@ -90,7 +90,7 @@ static void cold_warm_and_uniforms(void) {
 }
 static void key_changes(void) {
     initialize(false);size_t size=0,next_size=0;CHECK(vertex_key(&size));memcpy(saved_key,key,sizeof(key));
-    CHECK(key[10]==2 && !key[11] && !key[12] && !key[13]); /* Schema LE32. */
+    CHECK(key[10]==3 && !key[11] && !key[12] && !key[13]); /* Schema LE32. */
     CHECK(key[size-8u]==0 && key[size-7u]==1 && key[size-6u]==2 && key[size-5u]==3);
     CHECK(key[size-4u]==8 && key[size-3u]==9 && key[size-2u]==10 && key[size-1u]==11);
 #define DIFFERENT() do { CHECK(vertex_key(&next_size));CHECK(next_size!=size || memcmp(key,saved_key,size)); } while(0)
@@ -99,6 +99,12 @@ static void key_changes(void) {
     program.descriptors[127]=1;DIFFERENT();program.descriptors[127]=0;
     program.descriptor_defined[127]=1;DIFFERENT();program.descriptor_defined[127]=0;
     program.entry=1;DIFFERENT();program.entry=0;
+    program.round_f24=true;DIFFERENT();program.round_f24=false;
+    program.boolean_defined=true;DIFFERENT();
+    size_t with_booleans=next_size;memcpy(other_key,key,next_size);
+    program.boolean_uniforms=1;
+    CHECK(vertex_key(&next_size) && next_size==with_booleans && memcmp(key,other_key,next_size));
+    program.boolean_defined=false;
     maps[0]^=1;DIFFERENT();maps[0]^=1;
     CHECK(ctr_gx2_cache_vertex_key(&program,5,maps,2,key,&next_size));CHECK(memcmp(key,saved_key,size));
     CHECK(ctr_gx2_cache_vertex_key(&program,1,maps,1,key,&next_size));CHECK(next_size!=size);

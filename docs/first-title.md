@@ -22,6 +22,12 @@ stable program-derived Wii U ID; `--title-version` selects 1..65535 for rebuilds
 Check that the ID is not used by another installed title. `--jobs` selects 1..8
 compiler processes. Keep outputs and logs private.
 
+Mario's startup accesses the shared Mii RomFS. Pass `--mii-romfs` with a local
+binary extraction of the `MII_DATA` array from the pinned Azahar 2126.2 header.
+The builder accepts its exact bytes and the native runtime verifies the
+installed copy before serving it. The replacement retains its upstream license.
+[Pinned Mii archive](https://github.com/azahar-emu/azahar/blob/2126.2/externals/open_source_archives/include/mii.app.romfs.h)
+
 The output contains the installable `wup/` candidate, one `START-HERE.txt`, a
 machine-readable `build-report.json` and the private compiler log. Preparation
 checks the container and full RomFS, then the pinned lifter and native compiler
@@ -78,6 +84,13 @@ shader bytes are bundled. The software renderer supports only its
 [documented subset](software-scenes.md).
 
 ## Execution requirements
+
+The `host build --cemu` profile uses Cemu 2.6 software scanout and a virtual SD
+filesystem for local testing. Its paired GamePad and TV screens share the
+guest pixel scaling path with the Wii U build. The Cemu loop advances measured
+elapsed time up to the next pending display interrupt, with at most one guest
+frame of catch-up per pass. The guest services that deadline before time moves
+past it.
 
 Observed execution must determine required IPC/modules, shader entries, fragment
 state, save behavior and audio scheduling. Upstream Zakuro source observations

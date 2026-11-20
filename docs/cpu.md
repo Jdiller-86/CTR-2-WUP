@@ -65,7 +65,7 @@ execution remain outside this initial user-mode scope.
 
 ## Threads and synchronization
 
-One emulated CPU schedules eight process-local slots, including the initial
+One emulated CPU schedules 16 process-local slots, including the initial
 thread. Each owns registers/CPSR, 32 raw VFP words/FPSCR, a 512-byte TLS slot,
 waits and deadlines. Priorities are 0x18..0x3f; equal priorities rotate after
 32 instructions. Host budget boundaries do not reset the quantum. A context
@@ -98,7 +98,8 @@ supports all four FPSCR rounding modes, sticky exception flags, flush-to-zero an
 default-NaN controls. NaN payloads/signaling behavior are handled before host
 arithmetic; multiply/accumulate rounds the product separately. Comparisons update
 FPSCR NZCV; VMRS can copy them into CPSR. Precision and 32-bit integer conversions
-include explicit saturation on invalid/out-of-range results.
+include explicit saturation on invalid/out-of-range results. The truncating
+integer conversions apply truncation directly, independent of host rounding mode.
 
 The portable implementation requires IEEE binary32/binary64 and the C floating
 environment; it restores the host rounding mode, exception flags and errno after

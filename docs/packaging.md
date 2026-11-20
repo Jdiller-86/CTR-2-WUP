@@ -190,7 +190,12 @@ installation. It never claims an authentic or proven installable title.
 New installation candidates require `wup-menu-v3` in both candidate creation and
 independent handoff validation. This checks the native RPX FILEINFO/CRC and requires
 `app.xml` to carry the executable's declared nonzero SDK version. RPX inputs are
-bounded to 64 MiB. Historical `wup-menu-v2` and integrity-only reviews retain their
+bounded to 64 MiB. The COS code reservation is checked against uncompressed
+FILEINFO text/load sizes, rather than the compressed RPX file size. Small
+executables (up to 16 MiB declared text/load) retain the 48 MiB diagnostic pool;
+larger executables add their allocation to that baseline, rounded to 16 MiB,
+within the 224 MiB platform ceiling. Undersized reservations fail independent
+verification. Historical `wup-menu-v2` and integrity-only reviews retain their
 original scope. The new check also covers all 137 Menu/ACP fields, typed launch
 settings, matching app/Menu identity, the RPX entry, platform permissions and four
 uncompressed bottom-left TGA 2 images with their complete footer. Dimensions and

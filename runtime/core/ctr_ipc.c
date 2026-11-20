@@ -6,12 +6,60 @@
 #include "ctr_apt.h"
 #include "ctr_dsp.h"
 #include "ctr_module.h"
+#include "ctr_kernel.h"
+#include "ctr_sha256.h"
 #include <string.h>
 
 #define INVALID_HANDLE UINT32_C(0xd8e007f7)
 #define NO_MEMORY UINT32_C(0xd86007f3)
 /* Permanent / NotFound / SRV(25) / NotFound(1018). */
 #define SERVICE_NOT_FOUND UINT32_C(0xd88067fa)
+
+static const char *const services[CTR_SERVICE_COUNT]={
+    [CTR_SERVICE_SRV]="srv:", [CTR_SERVICE_CFG]="cfg:u", [CTR_SERVICE_HID]="hid:USER",
+    [CTR_SERVICE_GSP]="gsp::Gpu", [CTR_SERVICE_FS]="fs:USER", [CTR_SERVICE_FILE]="fs:FILE",
+    [CTR_SERVICE_APT]="APT:U", [CTR_SERVICE_DSP]="dsp::DSP", [CTR_SERVICE_RO]="ldr:ro",
+    [CTR_SERVICE_NDM]="ndm:u", [CTR_SERVICE_MIC]="mic:u",
+};
+
+void ctr_mic_poll(ctr_guest *g) {
+    if(!g->mic.sampling || g->now_ns==g->mic.last_ns)return;
+    /* Signed PCM16 at 16756991/2048 Hz. Publish the device's 15-sample batches. */
+    const uint64_t divisor=2048u*15u,denominator=divisor*UINT64_C(1000000000);
+    uint64_t elapsed=g->now_ns-g->mic.last_ns;
+    uint64_t whole=(elapsed/1000000000u)*16756991u;
+    uint64_t fraction=(whole%divisor)*1000000000u+(elapsed%1000000000u)*16756991u+g->mic.remainder;
+    uint64_t bytes=(whole/divisor+fraction/denominator)*30u;
+    g->mic.last_ns=g->now_ns;g->mic.remainder=fraction%denominator;
+    if(!bytes)return;
+
+    ctr_guest_shared *shared=&g->shared[g->mic.shared];
+    uint8_t *buffer=shared->storage+g->mic.offset;
+    uint32_t end=g->mic.size-g->mic.position;
+    uint32_t capacity=g->mic.loop?g->mic.size:end;
+    uint32_t count=bytes>capacity?capacity:(uint32_t)bytes;
+    uint32_t first=count<end?count:end;
+    memset(buffer+g->mic.position,0,first);
+    if(count>first)memset(buffer,0,count-first);
+    if(g->mic.loop)g->mic.position=(uint32_t)((g->mic.position+bytes)%g->mic.size);
+    else {
+        g->mic.position+=count;
+        g->mic.sampling=g->mic.position<g->mic.size;
+    }
+    uint8_t *cursor=shared->storage+shared->size-4u;
+    for(unsigned i=0;i<4u;++i)cursor[i]=(uint8_t)(g->mic.position>>(i*8u));
+    (void)ctr_memory_backing_changed(&g->memory,shared->storage,shared->size);
+    g->cpu.exclusive_valid=false;
+}
+
+static ctr_guest_service directory_service(const ctr_guest *g,const char *name) {
+    for(unsigned i=CTR_SERVICE_CFG;i<CTR_SERVICE_COUNT;++i) {
+        if(i==CTR_SERVICE_FILE || (i==CTR_SERVICE_RO && !g->modules) ||
+           (i==CTR_SERVICE_APT && !g->apt.available))continue;
+        if(!strcmp(name,services[i]))return (ctr_guest_service)i;
+    }
+    return CTR_SERVICE_COUNT;
+}
 
 static void unsupported(ctr_guest *g,uint32_t detail) {
     ++g->ipc_failures;g->fault=CTR_CPU_UNSUPPORTED;g->fault_detail=detail;
@@ -33,9 +81,9 @@ static bool reply(ctr_guest *g,uint32_t base,const uint32_t *words,unsigned coun
 static bool name(const uint32_t *words,char out[9]) {
     unsigned size=words[3];
     if (!size || size>8) return false;
-    for (unsigned i=0;i<8;++i) {
+    /* The separate length identifies the name; the rest of the slot is padding. */
+    for (unsigned i=0;i<size;++i) {
         unsigned byte=(words[1+i/4]>>(8*(i%4)))&255u;
-        if (i>=size) { if (byte) return false;continue; }
         if (!((byte>='a' && byte<='z') || (byte>='A' && byte<='Z') ||
               (byte>='0' && byte<='9') || byte==':' || byte=='_')) return false;
         out[i]=(char)byte;
@@ -79,7 +127,6 @@ void ctr_ipc_request(ctr_guest *g) {
     ++g->ipc_requests;g->ipc_header=0;g->ipc_result=0;g->ipc_service[0]=0;g->ipc_target[0]=0;
     ctr_guest_session *session=ctr_guest_session_for(g,g->cpu.r[0]);
     if (!session) { ++g->ipc_failures;g->ipc_result=INVALID_HANDLE;g->cpu.r[0]=INVALID_HANDLE;return; }
-    static const char *const services[]={"srv:","cfg:u","hid:USER","gsp::Gpu","fs:USER","fs:FILE","APT:U","dsp::DSP","ldr:ro"};
     strcpy(g->ipc_service,services[session->service]);
     uint64_t address=(uint64_t)g->cpu.tls_address+CTR_IPC_OFFSET;
     if (address>UINT32_MAX) { memory_ok(g,CTR_MEM_OVERFLOW,g->cpu.tls_address);return; }
@@ -93,23 +140,35 @@ void ctr_ipc_request(ctr_guest *g) {
     if ((words[0]&0xf000u) || request_words>CTR_IPC_WORDS) { unsupported(g,words[0]);return; }
     for (unsigned i=1;i<request_words;++i)
         if (!memory_ok(g,ctr_memory_read(&g->memory,base+i*4,4,CTR_MEM_READ,&words[i]),base+i*4)) return;
-    uint32_t out[9]={0};
+    uint32_t out[10]={0};
     if (session->service==CTR_SERVICE_SRV) {
         switch (words[0]) {
             case 0x00010002: /* RegisterClient with current-process-ID descriptor. */
                 if (words[1]!=0x20) { unsupported(g,words[0]);return; }
                 session->registered=true;out[0]=0x00010040;
                 reply(g,base,out,2);return;
+            case 0x00020000: { /* EnableNotification: one copied semaphore handle. */
+                if(!session->registered) { unsupported(g,words[0]);return; }
+                uint32_t handle=ctr_sync_create_semaphore(g,0,16);
+                if(!handle) {
+                    out[0]=0x00020040;out[1]=NO_MEMORY;
+                    ++g->ipc_failures;g->ipc_result=NO_MEMORY;
+                    reply(g,base,out,2);return;
+                }
+                out[0]=0x00020042;out[3]=handle;
+                reply(g,base,out,4);return;
+            }
             case 0x00050100: { /* GetServiceHandle(name[8], length, flags). */
                 char service[9]={0};
                 if (!session->registered || words[4]>1 || !name(words,service)) { unsupported(g,words[0]);return; }
                 strcpy(g->ipc_target,service);
-                if ((strcmp(service,"ldr:ro") || !g->modules) && strcmp(service,"dsp::DSP") && strcmp(service,"cfg:u") && strcmp(service,"hid:USER") && strcmp(service,"gsp::Gpu") && strcmp(service,"fs:USER") && (strcmp(service,"APT:U") || !g->apt.available)) {
+                ctr_guest_service target=directory_service(g,service);
+                if(target==CTR_SERVICE_COUNT) {
                     out[0]=0x00050040;out[1]=SERVICE_NOT_FOUND;
                     ++g->ipc_failures;g->ipc_result=SERVICE_NOT_FOUND;
                     reply(g,base,out,2);return;
                 }
-                uint32_t handle=ctr_guest_session_open(g,!strcmp(service,"ldr:ro")?CTR_SERVICE_RO:!strcmp(service,"dsp::DSP")?CTR_SERVICE_DSP:!strcmp(service,"cfg:u")?CTR_SERVICE_CFG:!strcmp(service,"hid:USER")?CTR_SERVICE_HID:!strcmp(service,"fs:USER")?CTR_SERVICE_FS:!strcmp(service,"APT:U")?CTR_SERVICE_APT:CTR_SERVICE_GSP);
+                uint32_t handle=ctr_guest_session_open(g,target);
                 if (!handle) {
                     out[0]=0x00050040;out[1]=NO_MEMORY;
                     ++g->ipc_failures;g->ipc_result=NO_MEMORY;
@@ -120,6 +179,88 @@ void ctr_ipc_request(ctr_guest *g) {
             }
             default: unsupported(g,words[0]);return;
         }
+    }
+    if(session->service==CTR_SERVICE_NDM) {
+        /* Standalone guest daemon policy; no host network daemons are started. */
+        if(words[0]==0x00140040 && words[1]<=0xfu) {
+            g->ndm.default_mask=(uint8_t)words[1];
+        } else if(words[0]==0x00060040 && words[1]<=0xfu) {
+            for(unsigned i=0;i<4;++i)if((words[1]&(1u<<i)) && g->ndm.suspended[i]==UINT16_MAX) {
+                unsupported(g,words[0]);return;
+            }
+            for(unsigned i=0;i<4;++i)if(words[1]&(1u<<i))++g->ndm.suspended[i];
+        } else if(words[0]==0x00080040 && words[1]<=1u && g->ndm.scheduler_suspensions<UINT16_MAX) {
+            ++g->ndm.scheduler_suspensions;
+        } else if(words[0]==0x00090000) {
+            if(g->ndm.scheduler_suspensions)--g->ndm.scheduler_suspensions;
+        } else { unsupported(g,words[0]);return; }
+        out[0]=(words[0]&0xffff0000u)|0x40u;
+        reply(g,base,out,2);return;
+    }
+    if(session->service==CTR_SERVICE_MIC) {
+        unsigned owner=(unsigned)(session-g->sessions),count=2;
+        if((g->mic.mapped || g->mic.powered) && g->mic.owner!=owner) { unsupported(g,words[0]);return; }
+        out[0]=(words[0]&0xffff0000u)|0x40u;
+        switch(words[0]) {
+            case 0x00010042: { /* MapSharedMem with one copied shared-memory handle. */
+                ctr_guest_handle *handle=ctr_guest_handle_for(g,words[3]);
+                if(g->mic.mapped || words[2] || !handle || handle->type!=CTR_HANDLE_SHARED) {
+                    unsupported(g,words[0]);return;
+                }
+                const ctr_guest_shared *shared=&g->shared[handle->object];
+                if(words[1]!=shared->size || shared->size<CTR_GUEST_PAGE || !(shared->other_permissions&CTR_MEM_WRITE)) {
+                    unsupported(g,words[0]);return;
+                }
+                ctr_guest_object_retain(g,CTR_HANDLE_SHARED,handle->object);
+                g->mic.mapped=true;g->mic.owner=owner;g->mic.shared=handle->object;
+                break;
+            }
+            case 0x00020000:
+                if(g->mic.mapped)ctr_guest_object_release(g,CTR_HANDLE_SHARED,g->mic.shared);
+                g->mic.mapped=g->mic.sampling=false;
+                break;
+            case 0x00030140: { /* Start the observed signed 16-bit, 8.182 kHz input mode. */
+                if(!g->mic.mapped || !g->mic.powered || g->mic.sampling || words[1]!=3u || words[2]!=3u ||
+                   (uint8_t)words[5]>1u || ((words[3]|words[4])&1u) || !words[4] ||
+                   (uint64_t)words[3]+words[4]>g->shared[g->mic.shared].size-4u) {
+                    unsupported(g,words[0]);return;
+                }
+                g->mic.offset=words[3];g->mic.size=words[4];g->mic.position=0;
+                g->mic.last_ns=g->now_ns;g->mic.remainder=0;
+                g->mic.sampling=true;g->mic.loop=(uint8_t)words[5]!=0;
+                break;
+            }
+            case 0x00050000:
+                g->mic.sampling=false;
+                break;
+            case 0x00060000:
+                out[0]=0x00060080;out[2]=g->mic.sampling;count=3;
+                break;
+            case 0x00080040:
+                if(words[1]>UINT8_MAX) { unsupported(g,words[0]);return; }
+                g->mic.gain=(uint8_t)words[1];
+                break;
+            case 0x00090000:
+                out[0]=0x00090080;out[2]=g->mic.gain;count=3;
+                break;
+            case 0x000a0040:
+                if(words[1]>1u) { unsupported(g,words[0]);return; }
+                g->mic.owner=owner;g->mic.powered=words[1]!=0;
+                if(!g->mic.powered)g->mic.sampling=false;
+                break;
+            case 0x000b0000:
+                out[0]=0x000b0080;out[2]=g->mic.powered;count=3;
+                break;
+            case 0x000d0040:
+                if(words[1]>1u) { unsupported(g,words[0]);return; }
+                g->mic.clamp=words[1]!=0;
+                break;
+            case 0x000e0000:
+                out[0]=0x000e0080;out[2]=g->mic.clamp;count=3;
+                break;
+            default:unsupported(g,words[0]);return;
+        }
+        reply(g,base,out,count);return;
     }
     if(session->service==CTR_SERVICE_RO) {
         unsigned n;
@@ -148,6 +289,26 @@ void ctr_ipc_request(ctr_guest *g) {
         reply(g,base,out,count);return;
     }
     if (session->service==CTR_SERVICE_HID) {
+        if(words[0]==0x00110000 || words[0]==0x00120000 || words[0]==0x00130000 || words[0]==0x00140000) {
+            out[0]=words[0]|0x40u;
+            bool ok=words[0]<=0x00120000?ctr_hid_accelerometer(g,words[0]==0x00110000):
+                ctr_hid_gyroscope(g,words[0]==0x00130000);
+            if(!ok) {
+                out[1]=NO_MEMORY;++g->ipc_failures;g->ipc_result=NO_MEMORY;
+            }
+            reply(g,base,out,2);return;
+        }
+        if(words[0]==0x00150000) {
+            out[0]=0x00150080;out[2]=0x41660000u; /* 14.375 counts per degree/second as binary32. */
+            reply(g,base,out,3);return;
+        }
+        if(words[0]==0x00160000) {
+            const uint32_t low=(uint16_t)-6700;
+            out[0]=0x00160180;
+            /* Three packed signed halfword triples for the calibrated axes. */
+            out[2]=6700u<<16;out[3]=low;out[4]=6700u|(low<<16);out[5]=6700u<<16;out[6]=low;
+            reply(g,base,out,7);return;
+        }
         if (words[0]!=0x000a0000) { unsupported(g,words[0]);return; }
         if (!ctr_hid_handles(g,out+3)) {
             out[0]=0x000a0040;out[1]=NO_MEMORY;++g->ipc_failures;g->ipc_result=NO_MEMORY;
@@ -168,20 +329,51 @@ void ctr_ipc_request(ctr_guest *g) {
     }
     switch (words[0]) {
         case 0x00020000: out[0]=0x00020080;out[2]=g->configuration.region;break;
+        case 0x00030040: { /* GenHashConsoleUnique for the standalone profile. */
+            uint8_t material[12]={'C','T','R','2','W','U','P',0},digest[32];
+            uint32_t salt=words[1]&UINT32_C(0x000fffff);
+            for(unsigned i=0;i<4;++i)material[8u+i]=(uint8_t)(salt>>(8u*i));
+            ctr_sha256 hash;ctr_sha256_init(&hash);
+            if(!ctr_sha256_update(&hash,material,sizeof(material)) || !ctr_sha256_final(&hash,digest)) {
+                unsupported(g,words[0]);return;
+            }
+            out[0]=0x000300c0;
+            for(unsigned i=0;i<8;++i)out[2u+i/4u]|=(uint32_t)digest[24u+i]<<(8u*(i%4u));
+            reply(g,base,out,4);return;
+        }
         case 0x00050000: out[0]=0x00050080;out[2]=g->configuration.model;break;
         case 0x00060000: out[0]=0x00060080;out[2]=g->configuration.model==CTR_GUEST_MODEL_2DS?0:1;break;
-        case 0x00010082: { /* GetConfigInfoBlk2: one-byte language block only. */
-            if (words[1]!=1 || words[2]!=0x000a0002 || (words[3]!=0x1c && words[3]!=0x1e)) {
+        case 0x00010082: { /* GetConfigInfoBlk2. */
+            /* The public default stereo camera parameters, as LE binary32 values. */
+            static const uint8_t stereo_camera[32]={
+                0,0,0x78,0x42, 0,0x80,0x90,0x43, 0x9a,0x99,0x99,0x42, 0xec,0x51,0x38,0x42,
+                0,0,0x20,0x41, 0,0,0xa0,0x40, 0xec,0x51,0x5e,0x42, 0x5c,0x8f,0xac,0x41
+            };
+            static const uint8_t parental_defaults[192]={[9]=20};
+            static const uint8_t eula_version[4]={0x7f,0x7f,0,0};
+            uint8_t value=words[2]==0x000a0002?g->configuration.language:1;
+            const uint8_t *data=&value;
+            unsigned size=1u;
+            switch(words[2]) {
+                case 0x00050005:data=stereo_camera;size=sizeof(stereo_camera);break;
+                case 0x000c0000:data=parental_defaults;size=sizeof(parental_defaults);break;
+                case 0x000d0000:data=eula_version;size=sizeof(eula_version);break;
+                case 0x000a0002:case 0x00070001:break;
+                default:unsupported(g,words[0]);return;
+            }
+            if (words[1]!=size || (words[3]!=(size<<4|0xcu) && words[3]!=(size<<4|0xeu))) {
                 unsupported(g,words[0]);return;
             }
-            if (words[4]>=base && (uint64_t)words[4]<address+CTR_IPC_WORDS*4) {
+            if ((uint64_t)words[4]+size>base && (uint64_t)words[4]<address+CTR_IPC_WORDS*4) {
                 unsupported(g,words[0]);return;
             }
-            unsigned rights=CTR_MEM_WRITE|(words[3]==0x1e?CTR_MEM_READ:0);
-            if (!memory_ok(g,ctr_memory_check_range(&g->memory,words[4],1,rights),words[4])) return;
-            if (aliases_command(&g->memory,words[4],base)) { unsupported(g,words[0]);return; }
+            unsigned rights=CTR_MEM_WRITE|((words[3]&15u)==0xeu?CTR_MEM_READ:0);
+            if (!memory_ok(g,ctr_memory_check_range(&g->memory,words[4],size,rights),words[4])) return;
+            for(unsigned i=0;i<size;++i)if(aliases_command(&g->memory,words[4]+i,base)) {
+                unsupported(g,words[0]);return;
+            }
             out[0]=0x00010042;out[2]=words[3];out[3]=words[4];
-            if (!memory_ok(g,ctr_memory_write(&g->memory,words[4],1,g->configuration.language),words[4])) return;
+            if (!memory_ok(g,ctr_memory_write_bytes(&g->memory,words[4],data,size),words[4])) return;
             reply(g,base,out,4);return;
         }
         default: unsupported(g,words[0]);return;

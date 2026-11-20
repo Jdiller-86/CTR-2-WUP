@@ -22,8 +22,9 @@ static void formats(void) {
         CHECK(stats(cache).pins==2u);ctr_texture_cache_release(&a);ctr_texture_cache_release(&b);
         CHECK(!a.rgba && !b.rgba && !stats(cache).pins);
     }
-    CHECK(stats(cache).decodes==14u && stats(cache).hits==14u && stats(cache).entries==CTR_TEXTURE_CACHE_SLOTS);
-    CHECK(stats(cache).evictions==14u-CTR_TEXTURE_CACHE_SLOTS);CHECK(ctr_texture_cache_destroy(cache));
+    unsigned retained=CTR_TEXTURE_CACHE_SLOTS<14u?CTR_TEXTURE_CACHE_SLOTS:14u;
+    CHECK(stats(cache).decodes==14u && stats(cache).hits==14u && stats(cache).entries==retained);
+    CHECK(stats(cache).evictions==14u-retained);CHECK(ctr_texture_cache_destroy(cache));
 }
 static void identity_and_failures(void) {
     uint8_t source[1025]={0},reference[1024];ctr_texture_cache *cache=ctr_texture_cache_create();CHECK(cache);

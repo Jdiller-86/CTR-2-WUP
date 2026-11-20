@@ -16,6 +16,78 @@ static uint32_t mov(unsigned source,unsigned dest,unsigned descriptor) {
 static uint32_t binary(unsigned op,unsigned a,unsigned b,unsigned dest,unsigned descriptor) {
     return (op<<26)|(a<<12)|(b<<7)|(dest<<21)|descriptor;
 }
+static void shader_relative_dot(void) {
+    ctr_shader_program p={0};ctr_vertex input={.enabled=1};ctr_shader_output out;
+    input.input[0][0]=2.0f;input.input[0][1]=1.0f;
+    p.code[0]=binary(0x12,0,0,0,0);
+    p.code[1]=binary(0x02,32,0,0,1)|(1u<<19);
+    p.code[2]=UINT32_C(0x88000000);
+    p.code_defined[0]=p.code_defined[1]=p.code_defined[2]=1;
+    p.descriptors[0]=8u;
+    p.descriptors[1]=(0x1bu<<5)|(0x1bu<<14)|8u;
+    p.descriptor_defined[0]=p.descriptor_defined[1]=1;
+    p.uniforms[2][0]=bits(3.0f);p.uniforms[2][1]=bits(4.0f);p.uniform_defined[2]=15u;
+    CHECK(ctr_shader_execute(&p,&input,&out)==CTR_SHADER_OK && out.instructions==3u);
+    CHECK(out.written[0]==1u && out.values[0][0]==10.0f);
+    p.uniforms[2][0]+=64u; /* Halfway above an even float24 mantissa. */
+    CHECK(ctr_shader_execute(&p,&input,&out)==CTR_SHADER_NUMERIC);
+    p.round_f24=true;
+    CHECK(ctr_shader_execute(&p,&input,&out)==CTR_SHADER_OK && out.values[0][0]==10.0f);
+
+    /* The inverted homogeneous form applies the relative offset to its wider
+     * second operand and supplies 1 in place of the first operand's W. */
+    p.uniforms[2][0]=bits(3.0f);p.uniforms[2][3]=bits(5.0f);
+    input.input[0][3]=value(UINT32_C(0x7fc00000));
+    p.code[1]=(0x18u<<26)|(1u<<19)|(32u<<7)|1u;
+    CHECK(ctr_shader_execute(&p,&input,&out)==CTR_SHADER_OK && out.values[0][0]==15.0f);
+    p.code[1]=binary(0x01,32,0,0,1)|(1u<<19);
+    CHECK(ctr_shader_execute(&p,&input,&out)==CTR_SHADER_OK && out.values[0][0]==10.0f);
+}
+static void shader_control_flow(void) {
+    ctr_shader_program p={.integer_uniforms={1},.integer_defined=1};
+    ctr_vertex input={.enabled=1};ctr_shader_output out;
+    input.input[0][0]=2.0f;
+    const uint32_t code[]={
+        binary(0x2e,0,0,0,0),
+        (0x28u<<26)|(1u<<25)|(2u<<22)|(4u<<10)|1u,
+        binary(0x0e,0,0,16,0), UINT32_C(0x84000000), mov(0,16,0),
+        (0x29u<<26)|(6u<<10), binary(0,16,0,16,0),
+        UINT32_C(0xe0000000)|(16u<<17), UINT32_C(0x88000000)
+    };
+    memcpy(p.code,code,sizeof(code));memset(p.code_defined,1,sizeof(code)/sizeof(*code));
+    p.descriptors[0]=8u;p.descriptor_defined[0]=1;
+    CHECK(ctr_shader_execute(&p,&input,&out)==CTR_SHADER_OK && out.instructions==9u);
+    CHECK(out.written[0]==1u && out.values[0][0]==11.0f);
+    p.code[1]=(0x27u<<26)|(3u<<22)|(4u<<10)|1u;
+    CHECK(ctr_shader_execute(&p,&input,&out)==CTR_SHADER_UNDEFINED);
+    p.boolean_defined=true;
+    CHECK(ctr_shader_execute(&p,&input,&out)==CTR_SHADER_OK && out.values[0][0]==14.0f);
+    p.boolean_uniforms=1u<<3;
+    CHECK(ctr_shader_execute(&p,&input,&out)==CTR_SHADER_OK && out.values[0][0]==11.0f);
+    p.round_f24=true;p.code[8]=mov(32,1,0);p.code[9]=UINT32_C(0x88000000);p.code_defined[9]=1;
+    CHECK(ctr_shader_execute(&p,&input,&out)==CTR_SHADER_OK && out.written[1]==0u && out.values[0][0]==11.0f);
+    p.code[0]=(0x24u<<26)|(2u<<10)|1u;
+    p.code[1]=UINT32_C(0x88000000);p.code[2]=mov(0,0,0);
+    CHECK(ctr_shader_execute(&p,&input,&out)==CTR_SHADER_OK && out.instructions==3u && out.values[0][0]==2.0f);
+    p.code[0]=(0x24u<<26)|(511u<<10)|2u;
+    CHECK(ctr_shader_execute(&p,&input,&out)==CTR_SHADER_RANGE);
+    p.code[0]=binary(0x0f,0,0,0,0);input.input[0][0]=8.0f;
+    CHECK(ctr_shader_execute(&p,&input,&out)==CTR_SHADER_OK && out.values[0][0]==92682.0f/262144.0f);
+    p.code[0]=binary(0x0f,0,0,16,0);input.input[0][0]=0.0f;
+    p.code[1]=binary(0x08,16,0,0,0);p.code[2]=UINT32_C(0x88000000);
+    CHECK(ctr_shader_execute(&p,&input,&out)==CTR_SHADER_OK && out.written[0]==1u && out.values[0][0]==0.0f);
+    p.code[1]=UINT32_C(0x88000000);p.code[2]=mov(0,0,0);input.input[0][0]=8.0f;
+    p.code[0]=(0x2du<<26)|(3u<<22)|(2u<<10)|1u;
+    p.code[3]=UINT32_C(0x88000000);
+    p.boolean_uniforms=0u;
+    CHECK(ctr_shader_execute(&p,&input,&out)==CTR_SHADER_OK && out.instructions==3u && out.values[0][0]==8.0f);
+    p.boolean_uniforms=1u<<3;
+    CHECK(ctr_shader_execute(&p,&input,&out)==CTR_SHADER_OK && out.instructions==2u && !out.written[0]);
+    p.code[0]=binary(0x2e,0,0,0,0);
+    p.code[1]=(0x2cu<<26)|(1u<<25)|(2u<<22)|(3u<<10);
+    p.code[2]=UINT32_C(0x88000000);p.code[3]=mov(0,0,0);p.code[4]=UINT32_C(0x88000000);
+    CHECK(ctr_shader_execute(&p,&input,&out)==CTR_SHADER_OK && out.instructions==4u && out.values[0][0]==8.0f);
+}
 static void shader_arithmetic(void) {
     ctr_shader_program p={0};ctr_vertex input={0};ctr_shader_output out,previous;
     p.code_defined[0]=p.code_defined[1]=p.descriptor_defined[0]=1;
@@ -116,6 +188,26 @@ static void arithmetic_boundaries(void) {
         CHECK(ctr_shader_execute(&p,&input,&out)==(cases[i].ok?CTR_SHADER_OK:CTR_SHADER_NUMERIC));
         if(cases[i].ok)CHECK(bits(out.values[0][0])==cases[i].result && out.written[0]==1);
         else CHECK(!memcmp(&out,&previous,sizeof(out)));
+    }
+    /* The sum or product narrows to a float24 midpoint in binary32.
+     * Inputs one side of that point must use the wider result's direction. */
+    static const struct { unsigned op;uint32_t a,b,result; } rounded[]={
+        {0,0x3f800000,0x37000000,0x3f800000},
+        {0,0x3f800000,0x37000080,0x3f800080},
+        {0,0x3f800080,0x36ffff80,0x3f800080},
+        {0,0x3f800080,0x37000000,0x3f800100},
+        {8,0x3ff59500,0x3fcdd280,0x40457280},
+        {8,0xbff68e00,0x3ffe2c80,0xc074cb80},
+        {0,0x80000000,0x80000000,0x80000000},
+        {8,0x80000000,0x7f800000,0}
+    };
+    p.round_f24=true;
+    for(unsigned i=0;i<sizeof(rounded)/sizeof(*rounded);++i) {
+        p.code[0]=binary(rounded[i].op,0,1,0,0);
+        input.input[0][0]=value(rounded[i].a);
+        input.input[1][0]=value(rounded[i].b);
+        CHECK(ctr_shader_execute(&p,&input,&out)==CTR_SHADER_OK);
+        CHECK(out.written[0]==1 && bits(out.values[0][0])==rounded[i].result);
     }
 }
 static void floats24(void) {
@@ -310,6 +402,15 @@ static void scenes(void) {
         CHECK(state.lists==1 && state.draws==2 && state.triangles==2 && state.fragments==2304 && state.shader_instructions==18);
         golden(pixels,false,false);
     }
+    /* Both halves of a rectangle extend well beyond the left clip plane. */
+    ctr_scene_fixture_make(&f,false);
+    put32(f.resources,bits(-1024.0f));put32(f.resources+32u,bits(-1024.0f));
+    ctr_scene_init(&state);state.shader.round_f24=true;
+    ctr_scene_fixture_background(pixels,sizeof(pixels));
+    CHECK(execute(&f,&state,pixels,&report)==CTR_SCENE_OK);
+    CHECK(report.draws==2u && report.triangles==2u && report.fragments==56u*48u);
+    const uint8_t clipped[]={0,255,0,255};
+    CHECK(!memcmp(pixels+16u*64u*4u,clipped,sizeof(clipped)));
     /* The output mask compacts o0/o15 into two semantic mappings. */
     /* Nonindexed draws use vertex_offset; the second reverses winding while
      * culling is disabled and still fills the complementary half-square. */
@@ -552,6 +653,38 @@ static void target_state(ctr_scene_state *state) {
             state->register_defined[tev[i]+2u]=state->register_defined[tev[i]+4u]=15;
     }
 }
+static void immediate_strip(void) {
+    ctr_scene_fixture f;ctr_scene_fixture_make(&f,false);
+    set(&f,0x040u,2u);set(&f,0x25eu,0x101u);
+    f.command_bytes=find(&f,0x232u,0u);
+    append(&f,0x242u,1u);append(&f,0x232u,CTR_SCENE_IMMEDIATE_INDEX);
+    append(&f,0x253u,1u);append(&f,0x245u,0u);
+    for(unsigned vertex=0;vertex<4u;++vertex) {
+        uint32_t raw[4];
+        for(unsigned lane=0;lane<4u;++lane)
+            CHECK(ctr_shader_f24_exact(get32(f.resources+vertex*16u+lane*4u),&raw[lane]));
+        append(&f,0x233u,(raw[3]<<8)|(raw[2]>>16));
+        append(&f,0x234u,(raw[2]<<16)|(raw[1]>>8));
+        append(&f,0x235u,(raw[1]<<24)|raw[0]);
+        append(&f,0x233u,0x3f000000u);append(&f,0x234u,0u);append(&f,0x235u,0x003f0000u);
+    }
+    append(&f,0x245u,1u);
+    ctr_scene_state initial,state;target_state(&initial);initial.shader.round_f24=true;state=initial;
+    uint8_t pixels[CTR_SCENE_FIXTURE_BYTES],background[CTR_SCENE_FIXTURE_BYTES];
+    ctr_scene_fixture_background(background,sizeof(background));memcpy(pixels,background,sizeof(pixels));
+    ctr_scene_resources resources={UINT32_C(0x18000000),NULL,0,NULL,0};
+    ctr_scene_surface surface={pixels,sizeof(pixels),64,64,256};ctr_scene_report report;
+    CHECK(ctr_scene_execute_target(&state,f.commands,f.command_bytes,&resources,&surface,
+          UINT32_C(0x18010000),&report)==CTR_SCENE_OK);
+    CHECK(report.draws==1u && report.triangles==2u && report.fragments==2304u);
+    CHECK(!memcmp(pixels+(10u*64u+10u)*4u,"\xff\0\0\xff",4u));
+    state=initial;memcpy(pixels,background,sizeof(pixels));
+    f.command_bytes=find(&f,0x245u,1u)-8u;
+    append(&f,0x245u,1u);
+    CHECK(ctr_scene_execute_target(&state,f.commands,f.command_bytes,&resources,&surface,
+          UINT32_C(0x18010000),&report)==CTR_SCENE_LAYOUT);
+    CHECK(!memcmp(&state,&initial,sizeof(state)) && !memcmp(pixels,background,sizeof(pixels)));
+}
 static void backend_full_target(void) {
     enum { SIZE=64u*260u+12u };
     ctr_scene_fixture f;ctr_scene_fixture_make(&f,false);
@@ -564,7 +697,7 @@ static void backend_full_target(void) {
     for(unsigned kind=0;kind<3;++kind) {
         state=initial;memcpy(pixels,old,sizeof(pixels));surface.bytes=pixels;
         padded_backend context={reference,sizeof(reference),kind==1u?256u:kind==2u?sizeof(reference)-1u:0u,0,0,0,0};
-        ctr_scene_backend backend={&context,padded_begin,padded_draw,padded_end,padded_abort,NULL,NULL,NULL};
+        ctr_scene_backend backend={&context,padded_begin,padded_draw,padded_end,padded_abort,NULL,NULL,NULL,NULL,0,NULL};
         CHECK(ctr_scene_execute_target_backend(&state,f.commands,f.command_bytes,&resources,&surface,
               UINT32_C(0x18010000),&backend,&report)==(kind?CTR_SCENE_BACKEND:CTR_SCENE_OK));
         CHECK(context.begins==1 && context.draws==2 && context.ends==1 && context.aborts==(kind?1u:0u));
@@ -576,7 +709,7 @@ static void backend_full_target(void) {
      * incomplete callback sets fail before any native invocation. */
     padded_backend context={reference,sizeof(reference),0,0,0,0,0};
     union { ctr_scene_backend backend;ctr_scene_report report; } alias;
-    alias.backend=(ctr_scene_backend){&context,padded_begin,padded_draw,padded_end,padded_abort,NULL,NULL,NULL};
+    alias.backend=(ctr_scene_backend){&context,padded_begin,padded_draw,padded_end,padded_abort,NULL,NULL,NULL,NULL,0,NULL};
     ctr_scene_backend previous=alias.backend;
     CHECK(ctr_scene_execute_target_backend(&state,f.commands,f.command_bytes,&resources,&surface,
           UINT32_C(0x18010000),&alias.backend,&alias.report)==CTR_SCENE_ALIAS);
@@ -665,6 +798,147 @@ static void textured_golden(const uint8_t *pixels,unsigned mode,unsigned wrap,
         CHECK(!memcmp(pixels+(y*64u+x)*4u,expected,4u));
     }
 }
+static void mipmapped_scene(void) {
+    ctr_scene_fixture fixture;
+    ctr_scene_state state;
+    ctr_scene_report report;
+    uint8_t raw[(32u*32u+16u*16u+8u*8u)*4u],pixels[CTR_SCENE_FIXTURE_BYTES];
+    const unsigned offsets[]={0,32u*32u*4u,(32u*32u+16u*16u)*4u,sizeof(raw)};
+    for(unsigned level=0;level<3;++level)
+        for(unsigned at=offsets[level];at<offsets[level+1u];at+=4u) {
+            raw[at]=255;
+            for(unsigned channel=0;channel<3;++channel)raw[at+3u-channel]=level==channel?255u:0u;
+        }
+    /* 32 base texels times three repeats over 48 covered pixels is 2 texels
+     * per pixel, giving LOD 1 before the signed Q8 bias. */
+    textured_fixture(&fixture,false,0,0,0,3,0,0);
+    set(&fixture,0x082,UINT32_C(0x00200020));
+    ctr_scene_resource_span texture={UINT32_C(0x18008000),raw,sizeof(raw)};
+    ctr_scene_resources resources={UINT32_C(0x18000000),fixture.resources,fixture.resource_bytes,&texture,1};
+    ctr_scene_surface surface={pixels,sizeof(pixels),64,64,256};
+    for(unsigned linear=0;linear<2;++linear) {
+        set(&fixture,0x083,linear?UINT32_C(0x01000006):0u);
+        set(&fixture,0x084,UINT32_C(0x00020000)|(linear?128u:0u));
+        ctr_scene_init(&state);state.shader.round_f24=true;
+        ctr_scene_fixture_background(pixels,sizeof(pixels));
+        CHECK(ctr_scene_execute(&state,fixture.commands,fixture.command_bytes,&resources,&surface,&report)==CTR_SCENE_OK);
+        const uint8_t expected[]={0,linear?128u:255u,linear?128u:0u,255};
+        CHECK(!memcmp(pixels+(32u*64u+32u)*4u,expected,sizeof(expected)));
+    }
+    ctr_scene_init(&state);state.shader.round_f24=true;
+    ctr_scene_state initial=state;
+    ctr_scene_fixture_background(pixels,sizeof(pixels));
+    --texture.size;
+    CHECK(ctr_scene_execute(&state,fixture.commands,fixture.command_bytes,&resources,&surface,&report)==CTR_SCENE_LAYOUT);
+    CHECK(!memcmp(&state,&initial,sizeof(state)));
+    const uint8_t background[]={16,32,48,255};
+    CHECK(!memcmp(pixels+(32u*64u+32u)*4u,background,sizeof(background)));
+
+    /* A 258-index draw crosses the batch boundary. The first 85 triangles
+     * are off the sample point, so the last triangle is required for its color. */
+    uint8_t geometry[512]={0};
+    memcpy(geometry,fixture.resources,fixture.resource_bytes);
+    for(unsigned i=0;i<255u;++i)geometry[96u+i]=0;
+    memcpy(geometry+351u,fixture.resources+96u,3u);
+    memcpy(geometry+354u,fixture.resources+99u,3u);
+    resources.bytes=geometry;
+    resources.size=sizeof(geometry);
+    ++texture.size;
+    put32(fixture.commands+find(&fixture,0x227,1),354u);
+    put32(fixture.commands+find(&fixture,0x228,0),258u);
+    insert(&fixture,find(&fixture,0x22f,1),0x228u,3u);
+    finish(&fixture);
+    CHECK(ctr_scene_execute(&state,fixture.commands,fixture.command_bytes,&resources,&surface,&report)==CTR_SCENE_OK);
+    CHECK(report.draws==2u && report.triangles==87u);
+    const uint8_t mip_color[]={0,128,128,255};
+    CHECK(!memcmp(pixels+(16u*64u+16u)*4u,mip_color,sizeof(mip_color)));
+
+    /* The unlit combiner resolves the first stage's Previous through its
+     * constant and adds zero for a later PrimaryFragmentColor input. */
+    set(&fixture,0xc0,UINT32_C(0x0e0f0e0f));
+    set(&fixture,0xc8,UINT32_C(0x000f001f));
+    set(&fixture,0xca,2u);
+    insert(&fixture,find(&fixture,0xc4,0),0xc3u,UINT32_C(0x7e9a7f42));
+    finish(&fixture);
+    CHECK(ctr_scene_execute(&state,fixture.commands,fixture.command_bytes,&resources,&surface,&report)==CTR_SCENE_OK);
+    const uint8_t constant[]={0x42,0x7f,0x9a,0x7e};
+    CHECK(!memcmp(pixels+(16u*64u+16u)*4u,constant,sizeof(constant)));
+
+    size_t at=find(&fixture,0x22f,0);
+    insert(&fixture,at,0x0e0u,5u);
+    insert(&fixture,at+8u,0x0e1u,UINT32_C(0x00302010));
+    insert(&fixture,at+16u,0x0e6u,64u);
+    insert(&fixture,at+24u,0x0e8u,1024u<<13);
+    finish(&fixture);
+    CHECK(ctr_scene_execute(&state,fixture.commands,fixture.command_bytes,&resources,&surface,&report)==CTR_SCENE_OK);
+    const uint8_t fogged[]={41,79,101,0x7e};
+    CHECK(!memcmp(pixels+(16u*64u+16u)*4u,fogged,sizeof(fogged)));
+}
+
+static void directional_lighting(void) {
+    ctr_scene_fixture fixture;
+    ctr_scene_state state;
+    ctr_scene_report report;
+    uint8_t pixels[CTR_SCENE_FIXTURE_BYTES];
+    textured_fixture(&fixture,false,0,0,0,0,0,0);
+    set(&fixture,0x080,0u);
+    set(&fixture,0x06f,UINT32_C(0x01000103));
+    set(&fixture,0x04f,4u);set(&fixture,0x2bd,15u);
+    insert(&fixture,find(&fixture,0x052,0),0x053u,UINT32_C(0x07060504));
+    insert(&fixture,find(&fixture,0x2cc,3),0x2ccu,mov(32,3,0));
+    size_t at=find(&fixture,0x22f,0);
+    insert(&fixture,at,0x2c0u,UINT32_C(0x80000000));
+    for(unsigned lane=0;lane<4u;++lane)insert(&fixture,at+(lane+1u)*8u,0x2c1u,lane?0u:bits(1.0f));
+    finish(&fixture);
+    ctr_scene_init(&state);state.shader.round_f24=true;
+    state.registers[0x08f]=1u;
+    state.registers[0x1c3]=UINT32_C(0x80000400);
+    state.registers[0x1c4]=UINT32_MAX;
+    state.registers[0x142]=128u<<20;
+    state.registers[0x143]=64u<<10;
+    state.registers[0x145]=0x3c00u; /* f16 +1 along the identity quaternion's normal. */
+    state.registers[0x149]=1u;
+    set(&fixture,0xc0,UINT32_C(0x00010001));
+    ctr_scene_fixture_background(pixels,sizeof(pixels));
+    CHECK(execute(&fixture,&state,pixels,&report)==CTR_SCENE_OK);
+    const uint8_t diffuse[]={128,64,0,255};
+    CHECK(!memcmp(pixels+(16u*64u+16u)*4u,diffuse,sizeof(diffuse)));
+
+    /* A +Z light gives L·N=1, using the last unsigned distribution sample. */
+    state.registers[0x1c4]&=~UINT32_C(0x10000);
+    state.registers[0x1d1]=3u;
+    state.registers[0x140]=200u<<20;
+    set(&fixture,0xc0,UINT32_C(0x00020002));
+    at=find(&fixture,0x22f,0);
+    insert(&fixture,at,0x1c5u,255u);insert(&fixture,at+8u,0x1c8u,2048u);
+    finish(&fixture);
+    CHECK(execute(&fixture,&state,pixels,&report)==CTR_SCENE_OK);
+    const uint8_t specular[]={100,0,0,255};
+    CHECK(!memcmp(pixels+(16u*64u+16u)*4u,specular,sizeof(specular)));
+
+    state.registers[0x1c3]=UINT32_C(0x80000430);
+    state.registers[0x1d1]=5u;
+    state.lighting_lut[0][0]=1024u;
+    CHECK(execute(&fixture,&state,pixels,&report)==CTR_SCENE_OK);
+    const uint8_t zero_projection[]={50,0,0,255};
+    CHECK(!memcmp(pixels+(16u*64u+16u)*4u,zero_projection,sizeof(zero_projection)));
+
+    /* The normal map is needed by lighting even when TEV never samples it
+     * directly. Its positive Z produces the same diffuse red as the flat normal. */
+    uint8_t raw[16u*8u*4u];
+    for(unsigned i=0;i<sizeof(raw);i+=4u) {
+        raw[i]=255;raw[i+1u]=255;raw[i+2u]=128;raw[i+3u]=128;
+    }
+    const ctr_scene_resource_span map={UINT32_C(0x18008000),raw,sizeof(raw)};
+    const ctr_scene_resources resources={UINT32_C(0x18000000),fixture.resources,fixture.resource_bytes,&map,1};
+    ctr_scene_surface target={pixels,sizeof(pixels),64,64,256};
+    state.registers[0x1c3]=UINT32_C(0xd0000400);
+    state.registers[0x1c4]=UINT32_MAX;
+    set(&fixture,0x080,1u);set(&fixture,0xc0,UINT32_C(0x00010001));
+    CHECK(ctr_scene_execute(&state,fixture.commands,fixture.command_bytes,&resources,&target,&report)==CTR_SCENE_OK);
+    CHECK(!memcmp(pixels+(16u*64u+16u)*4u,diffuse,sizeof(diffuse)));
+}
+
 static void textured_scenes(void) {
     ctr_scene_fixture f;ctr_scene_state state;ctr_scene_report report;
     uint8_t raw[16u*8u*4u],pixels[CTR_SCENE_FIXTURE_BYTES];texture_pattern(raw,16,8);
@@ -705,6 +979,33 @@ static void textured_scenes(void) {
     ctr_scene_surface surface={pixels,sizeof(pixels),64,64,256};
     CHECK(ctr_scene_execute(&state,f.commands,f.command_bytes,&resources,&surface,&report)==CTR_SCENE_OK);
     textured_golden(pixels,0,0,0,1,0,1);
+
+    /* Two texels per pixel produce LOD 1. A bias of -2 changes only the
+     * texel filter here because the mip range contains a single level. */
+    textured_fixture(&f,false,0,0x2204u,0.1875f,6.1875f,0.25f,0.25f);
+    resources=(ctr_scene_resources){UINT32_C(0x18000000),f.resources,f.resource_bytes,&span,1};
+    const uint8_t filtered[][4]={{139,177,52,230},{137,165,54,228}};
+    for(unsigned magnify=0;magnify<2u;++magnify) {
+        set(&f,0x084,magnify?0x1e00u:0u);
+        ctr_scene_init(&state);state.shader.round_f24=true;
+        ctr_scene_fixture_background(pixels,sizeof(pixels));
+        CHECK(ctr_scene_execute(&state,f.commands,f.command_bytes,&resources,&surface,&report)==CTR_SCENE_OK);
+        CHECK(!memcmp(pixels+(32u*64u+32u)*4u,filtered[magnify],4u));
+    }
+
+    textured_fixture(&f,false,0,0,0.25f,0.25f,0.25f,0.25f);
+    insert(&f,find(&f,0xc4,0),0xc3,0);finish(&f);
+    resources=(ctr_scene_resources){UINT32_C(0x18000000),f.resources,f.resource_bytes,&span,1};
+    set(&f,0xc0,0x000e00e3u);set(&f,0xc2,6u);set(&f,0xc4,1u);
+    for(unsigned negative=0;negative<2u;++negative) {
+        set(&f,0xc3,UINT32_C(0x7b808000)|(negative?0u:255u));
+        ctr_scene_init(&state);state.shader.round_f24=true;
+        ctr_scene_fixture_background(pixels,sizeof(pixels));
+        CHECK(ctr_scene_execute(&state,f.commands,f.command_bytes,&resources,&surface,&report)==CTR_SCENE_OK);
+        const uint8_t dot=negative?0u:36u,expected[]={dot,dot,dot,123u};
+        CHECK(!memcmp(pixels+(32u*64u+32u)*4u,expected,4u));
+    }
+
     /* Every existing base decoder is connected to sampling, including ETC1
      * signed modifiers and ETC1A4 alpha. All-zero source has an analytic value. */
     uint8_t blank[256]={0};
@@ -749,6 +1050,51 @@ static bool texture_end(void *context,const ctr_scene_surface *readback) {
     return true;
 }
 static void texture_abort(void *context) { texture_backend *p=context;++p->aborts; }
+static bool fog_draw(void *context,const ctr_scene_state *state,const ctr_vertex *vertices,unsigned count,
+                     const ctr_scene_texture *texture) {
+    texture_backend *p=context;++p->draws;
+    CHECK(!texture && count==3u && vertices[0].enabled==3u);
+    CHECK(state->registers[0x0e0u]==5u && state->registers[0x0e1u]==UINT32_C(0x302010));
+    CHECK(state->fog_lut[64]==(1024u<<13));
+    return true;
+}
+static void fog_backend_admission(void) {
+    ctr_scene_fixture setup={0},draw;
+    ctr_scene_fixture_make(&draw,false);
+    ctr_scene_resources resources={UINT32_C(0x18000000),draw.resources,draw.resource_bytes,NULL,0};
+    uint8_t pixels[CTR_SCENE_FIXTURE_BYTES],reference[CTR_SCENE_FIXTURE_BYTES];
+    ctr_scene_fixture_background(pixels,sizeof(pixels));
+    ctr_scene_fixture_background(reference,sizeof(reference));
+    ctr_scene_surface surface={pixels,sizeof(pixels),64,64,256};
+    ctr_scene_surface oracle={reference,sizeof(reference),64,64,256};
+    ctr_scene_state state;target_state(&state);
+    ctr_scene_report report;
+    texture_backend context={reference,0,0,0,0,false};
+    ctr_scene_backend backend={&context,texture_begin,fog_draw,texture_end,texture_abort,NULL,NULL,NULL,NULL,
+                               CTR_SCENE_BACKEND_DEPTH_FOG,NULL};
+    append(&setup,0x0e6u,64u);
+    append(&setup,0x0e8u,1024u<<13);
+    CHECK(ctr_scene_execute_target_backend(&state,setup.commands,setup.command_bytes,&resources,&surface,
+          UINT32_C(0x18010000),&backend,&report)==CTR_SCENE_OK);
+    CHECK(state.fog_lut[64]==(1024u<<13) && !context.begins);
+    size_t at=find(&draw,0x22fu,0);
+    insert(&draw,at,0x0e0u,5u);
+    insert(&draw,at+8u,0x0e1u,UINT32_C(0x302010));
+    finish(&draw);
+    ctr_scene_state expected=state;expected.shader.round_f24=true;
+    CHECK(ctr_scene_execute_target(&expected,draw.commands,draw.command_bytes,&resources,&oracle,
+          UINT32_C(0x18010000),&report)==CTR_SCENE_OK);
+    const uint8_t green[]={7,143,23,255};
+    CHECK(!memcmp(reference+(32u*64u+32u)*4u,green,4));
+    backend.features=0;
+    CHECK(ctr_scene_execute_target_backend(&state,draw.commands,draw.command_bytes,&resources,&surface,
+          UINT32_C(0x18010000),&backend,&report)==CTR_SCENE_UNSUPPORTED && !context.begins);
+    backend.features=CTR_SCENE_BACKEND_DEPTH_FOG;
+    CHECK(ctr_scene_execute_target_backend(&state,draw.commands,draw.command_bytes,&resources,&surface,
+          UINT32_C(0x18010000),&backend,&report)==CTR_SCENE_OK);
+    CHECK(context.begins==1u && context.draws==2u && context.ends==1u && !context.aborts);
+    CHECK(!memcmp(reference,pixels,sizeof(pixels)));
+}
 static void textured_rollback(void) {
     ctr_scene_fixture f;ctr_scene_state state,previous;ctr_scene_report report;
     uint8_t raw[512],raw_before[512],pixels[CTR_SCENE_FIXTURE_BYTES],before[CTR_SCENE_FIXTURE_BYTES],reference[CTR_SCENE_FIXTURE_BYTES];
@@ -767,7 +1113,7 @@ static void textured_rollback(void) {
             textured_fixture(&f,false,0,filter?6u:0u,0,1,0,1);resources.size=f.resource_bytes;
             target_state(&state);previous=state;memcpy(pixels,before,sizeof(pixels));
             texture_backend context={reference,0,0,0,0,corrupt!=0};
-            ctr_scene_backend backend={&context,texture_begin,texture_draw,texture_end,texture_abort,NULL,NULL,NULL};
+            ctr_scene_backend backend={&context,texture_begin,texture_draw,texture_end,texture_abort,NULL,NULL,NULL,NULL,0,NULL};
             CHECK(ctr_scene_execute_target_backend(&state,f.commands,f.command_bytes,&resources,&surface,
                   UINT32_C(0x18010000),&backend,&report)==(corrupt?CTR_SCENE_BACKEND:CTR_SCENE_OK));
             CHECK(context.begins==1 && context.draws==2 && context.ends==1 && context.aborts==corrupt);
@@ -805,7 +1151,7 @@ static void textured_rollback(void) {
             memset(raw,0,sizeof(raw));put32(raw+4,UINT32_C(0x702)); /* Invalid ETC differential block. */
         }
         texture_backend context={reference,0,0,0,0,false};
-        ctr_scene_backend backend={&context,texture_begin,texture_draw,texture_end,texture_abort,NULL,NULL,NULL};
+        ctr_scene_backend backend={&context,texture_begin,texture_draw,texture_end,texture_abort,NULL,NULL,NULL,NULL,0,NULL};
         CHECK(ctr_scene_execute_target_backend(&state,f.commands,f.command_bytes,&resources,&surface,
               UINT32_C(0x18010000),&backend,&report)!=CTR_SCENE_OK);
         CHECK(!context.begins && !context.draws && !context.ends && !context.aborts);
@@ -1442,7 +1788,7 @@ static void depth_backend_parity(void) {
         depth_backend context={reference_color,reference_depth,0,0,0,0,kind>=4u && kind<=6u?kind-3u:0u,
             kind==1u?256u:0u,kind==2u?128u:kind==3u?sizeof(depth)-1u:0u};
         ctr_scene_backend backend={&context,depth_backend_legacy_begin,depth_backend_draw,depth_backend_legacy_end,
-            depth_backend_abort,depth_backend_begin,depth_backend_end,NULL};
+            depth_backend_abort,depth_backend_begin,depth_backend_end,NULL,NULL,0,NULL};
         if(kind==7u)backend.begin_depth=NULL;
         if(kind==8u)backend.end_depth=NULL;
         ctr_scene_result result=ctr_scene_execute_targets_backend(&state,fixture.commands,fixture.command_bytes,
@@ -1464,7 +1810,7 @@ static void depth_backend_parity(void) {
         state=initial;memcpy(color,old_color,sizeof(color));memcpy(depth,old_depth,sizeof(depth));
         depth_backend context={reference_color,reference_depth,0,0,0,0,0,0,0};
         ctr_scene_backend backend={&context,depth_backend_legacy_begin,depth_backend_draw,depth_backend_legacy_end,
-            depth_backend_abort,depth_backend_begin,depth_backend_end,NULL};
+            depth_backend_abort,depth_backend_begin,depth_backend_end,NULL,NULL,0,NULL};
         CHECK(ctr_scene_execute_targets_backend(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
               UINT32_C(0x18010000),&z,&backend,&report)==CTR_SCENE_UNSUPPORTED);
         CHECK(report.draws==(kind==1u?2u:kind==2u?1u:0u));
@@ -1549,6 +1895,49 @@ static ctr_scene_result stencil_execute(ctr_scene_fixture *fixture,ctr_scene_sta
 static void stencil_pixel(uint8_t *color,unsigned x,unsigned y) {
     const uint8_t pixel[]={(uint8_t)(x+y<63u?255u:0u),(uint8_t)(x+y<63u?0u:255u),0,255};
     memcpy(color+y*DEPTH_COLOR_STRIDE+x*4u,pixel,4);
+}
+static void geometry_after_depth_target(void) {
+    ctr_scene_fixture fixture;
+    ctr_scene_state state;
+    ctr_scene_report report;
+    uint8_t geometry[0x8100]={0},color[DEPTH_COLOR_BYTES],packed[STENCIL_BYTES];
+    ctr_scene_fixture_make(&fixture,false);
+    memcpy(geometry+0x8000,fixture.resources,fixture.resource_bytes);
+    set(&fixture,0x203,0x8000);
+    for(unsigned draw=0;draw<2;++draw) {
+        size_t at=find(&fixture,0x227,draw);
+        put32(fixture.commands+at,get32(fixture.commands+at)+0x8000u);
+    }
+    stencil_state(&state,0x1f11,0,0);
+    state.shader.round_f24=true;
+    state.registers[0x11c]=UINT32_C(0x18004000)>>3;
+    stencil_initial(color,packed);
+    ctr_scene_resources resources={UINT32_C(0x18000000),geometry,sizeof(geometry),NULL,0};
+    ctr_scene_surface surface={color,sizeof(color),64,64,DEPTH_COLOR_STRIDE};
+    ctr_scene_depth_surface depth={packed,sizeof(packed),64,64,STENCIL_STRIDE,UINT32_C(0x18004000),3};
+    CHECK(ctr_scene_execute_targets(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
+          UINT32_C(0x18010000),&depth,&report)==CTR_SCENE_OK && report.draws==2u);
+    ctr_scene_state previous=state;
+    set(&fixture,0x203,0x4000);
+    CHECK(ctr_scene_execute_targets(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
+          UINT32_C(0x18010000),&depth,&report)==CTR_SCENE_ALIAS);
+    CHECK(!memcmp(&state,&previous,sizeof(state)));
+
+    const ctr_scene_resource_span external={UINT32_C(0x20000000),geometry+0x8000,fixture.resource_bytes};
+    resources.textures=&external;resources.texture_count=1u;
+    set(&fixture,0x203,0x08000000);
+    for(unsigned draw=0;draw<2u;++draw) {
+        size_t at=find(&fixture,0x227,draw);
+        put32(fixture.commands+at,get32(fixture.commands+at)+0x07ff8000u);
+    }
+    /* The second draw can use a different hardware base for the same bytes. */
+    size_t second_index=find(&fixture,0x227,1u);
+    put32(fixture.commands+second_index,get32(fixture.commands+second_index)-0x08000000u);
+    insert(&fixture,find(&fixture,0x22fu,1u),0x200u,0x04000000u);
+    insert(&fixture,find(&fixture,0x22fu,1u),0x203u,0u);
+    stencil_initial(color,packed);
+    CHECK(ctr_scene_execute_targets(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
+          UINT32_C(0x18010000),&depth,&report)==CTR_SCENE_OK && report.draws==2u && report.fragments==2304u);
 }
 static void stencil_images(void) {
     ctr_scene_fixture fixture;ctr_scene_state state;ctr_scene_report report;
@@ -1643,6 +2032,20 @@ static void stencil_order_and_retention(void) {
         }
         CHECK(stencil_execute(&fixture,&state,color,packed,&report)==CTR_SCENE_OK && report.fragments==2304);
         CHECK(!memcmp(color,expected_color,sizeof(color)) && !memcmp(packed,expected_packed,sizeof(packed)));
+    }
+    /* The game path can use either D24S8 plane independently. */
+    for(unsigned gate=1;gate<=2;++gate) {
+        ctr_scene_fixture_make(&fixture,false);
+        stencil_state(&state,gate==1u?0x1f00u:0x1f11u,gate==1u?stencil_word(1,255,0xa6,255):0u,0x200);
+        state.shader.round_f24=true;
+        state.registers[0x114]=state.registers[0x115]=gate;
+        memcpy(color,old_color,sizeof(color));memcpy(packed,old_packed,sizeof(packed));
+        CHECK(stencil_execute(&fixture,&state,color,packed,&report)==CTR_SCENE_OK);
+        size_t at=16u*STENCIL_STRIDE+16u*4u;
+        unsigned old=get32(old_packed+at);
+        unsigned expected=gate==1u?(old&UINT32_C(0xffffff))|UINT32_C(0xa6000000):
+            (old&UINT32_C(0xff000000))|UINT32_C(0x7fffff);
+        CHECK(get32(packed+at)==expected);
     }
     /* A stencil-only prepass retains per-pixel data for a later list. It changes
      * only the lower stencil nibble, preserving depth and color exactly. */
@@ -1784,7 +2187,7 @@ static void stencil_backend_parity(void) {
             kind>=6u && kind<=8u?kind-5u:0u,kind==1u?256u:0u,
             kind==2u?sample:kind==3u?sample+3u:kind==4u?256u:kind==5u?sizeof(packed)-1u:0u};
         ctr_scene_backend backend={&context,depth_backend_legacy_begin,stencil_backend_draw,depth_backend_legacy_end,
-            stencil_backend_abort,stencil_backend_begin,stencil_backend_end,NULL};
+            stencil_backend_abort,stencil_backend_begin,stencil_backend_end,NULL,NULL,0,NULL};
         if(kind==9u)backend.begin_depth=NULL;
         if(kind==10u)backend.end_depth=NULL;
         ctr_scene_resources resources={UINT32_C(0x18000000),fixture.resources,fixture.resource_bytes,NULL,0};
@@ -1994,7 +2397,7 @@ static void buffer_rollback(void) {
         state.register_defined[which?0x0fd:0x0e0]=0;previous=state;
         ctr_scene_fixture_background(pixels,sizeof(pixels));memcpy(before,pixels,sizeof(before));resources.size=fixture.resource_bytes;
         buffer_backend context={before,sizeof(before),0,0,0,0,0};
-        ctr_scene_backend backend={&context,buffer_backend_begin,buffer_backend_draw,buffer_backend_end,buffer_backend_abort,NULL,NULL,NULL};
+        ctr_scene_backend backend={&context,buffer_backend_begin,buffer_backend_draw,buffer_backend_end,buffer_backend_abort,NULL,NULL,NULL,NULL,0,NULL};
         CHECK(ctr_scene_execute_target_backend(&state,fixture.commands,fixture.command_bytes,&resources,
               &surface,UINT32_C(0x18010000),&backend,&report)==CTR_SCENE_UNSUPPORTED && !report.draws);
         CHECK(!context.begins && !context.draws && !context.ends && !context.aborts);
@@ -2019,7 +2422,7 @@ static void buffer_rollback(void) {
         ctr_scene_fixture_make(&fixture,false);insert(&fixture,0,0x0fd,UINT32_C(0x936b4527));
         append(&fixture,0x0e0,UINT32_C(0x1100)|(UINT32_C(1)<<bit));resources.size=fixture.resource_bytes;
         buffer_backend context={before,sizeof(before),0,0,0,0,0};
-        ctr_scene_backend backend={&context,buffer_backend_begin,buffer_backend_draw,buffer_backend_end,buffer_backend_abort,NULL,NULL,NULL};
+        ctr_scene_backend backend={&context,buffer_backend_begin,buffer_backend_draw,buffer_backend_end,buffer_backend_abort,NULL,NULL,NULL,NULL,0,NULL};
         CHECK(ctr_scene_execute_target_backend(&state,fixture.commands,fixture.command_bytes,&resources,
               &surface,UINT32_C(0x18010000),&backend,&report)==CTR_SCENE_UNSUPPORTED);
         CHECK(report.draws==2 && report.fragments==2304 && report.reg==0x0e0);
@@ -2042,7 +2445,7 @@ static void buffer_backend_parity(void) {
     for(unsigned kind=0;kind<4;++kind) {
         size_t corrupt=kind==1u?(16u*STRIDE+16u*4u):kind==2u?256u:kind==3u?SIZE-1u:0u;
         state=initial;memcpy(pixels,before,sizeof(pixels));buffer_backend context={reference,sizeof(reference),corrupt,0,0,0,0};
-        ctr_scene_backend backend={&context,buffer_backend_begin,buffer_backend_draw,buffer_backend_end,buffer_backend_abort,NULL,NULL,NULL};
+        ctr_scene_backend backend={&context,buffer_backend_begin,buffer_backend_draw,buffer_backend_end,buffer_backend_abort,NULL,NULL,NULL,NULL,0,NULL};
         CHECK(ctr_scene_execute_target_backend(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
               UINT32_C(0x18010000),&backend,&report)==(kind?CTR_SCENE_BACKEND:CTR_SCENE_OK));
         CHECK(context.begins==1 && context.draws==2 && context.ends==1 && context.aborts==(kind?1u:0u));
@@ -2203,7 +2606,7 @@ static void multiunit_rollback_and_backend(void) {
     for(unsigned failure=0;failure<5u;++failure) {
         material_state(&state);previous=state;memcpy(pixels,before,sizeof(pixels));
         material_backend context={reference,7u,0,0,0,0,failure};
-        ctr_scene_backend backend={&context,material_begin,NULL,material_end,material_abort,NULL,NULL,material_draw};
+        ctr_scene_backend backend={&context,material_begin,NULL,material_end,material_abort,NULL,NULL,material_draw,NULL,0,NULL};
         CHECK(ctr_scene_execute_target_backend(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
               UINT32_C(0x18010000),&backend,&report)==(failure?CTR_SCENE_BACKEND:CTR_SCENE_OK));
         CHECK(context.begins==1u && context.draws==(failure==1u?0u:failure==2u?1u:2u) &&
@@ -2220,14 +2623,14 @@ static void multiunit_rollback_and_backend(void) {
           UINT32_C(0x18010000),&report)==CTR_SCENE_OK);memcpy(reference,pixels,sizeof(reference));
     material_state(&state);memcpy(pixels,before,sizeof(pixels));
     material_backend context={reference,1u,0,0,0,0,0};
-    ctr_scene_backend backend={&context,material_begin,NULL,material_end,material_abort,NULL,NULL,material_draw};
+    ctr_scene_backend backend={&context,material_begin,NULL,material_end,material_abort,NULL,NULL,material_draw,NULL,0,NULL};
     CHECK(ctr_scene_execute_target_backend(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
           UINT32_C(0x18010000),&backend,&report)==CTR_SCENE_OK);
     CHECK(context.begins==1u && context.draws==2u && context.ends==1u && !context.aborts);
     material_fixture(&fixture,7u,7u,false,0);append(&fixture,0x080,1u);resources.size=fixture.resource_bytes;
     material_state(&state);previous=state;memcpy(pixels,before,sizeof(pixels));
     texture_backend legacy={reference,0,0,0,0,false};
-    ctr_scene_backend old={&legacy,texture_begin,texture_draw,texture_end,texture_abort,NULL,NULL,NULL};
+    ctr_scene_backend old={&legacy,texture_begin,texture_draw,texture_end,texture_abort,NULL,NULL,NULL,NULL,0,NULL};
     CHECK(ctr_scene_execute_target_backend(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
           UINT32_C(0x18010000),&old,&report)==CTR_SCENE_UNSUPPORTED);
     CHECK(!legacy.begins && !legacy.draws && !legacy.ends && !legacy.aborts && !report.draws);
@@ -2284,7 +2687,7 @@ static void cached_material_scenes(void) {
               UINT32_C(0x18010000),&report)==CTR_SCENE_OK);expected=state;memcpy(reference,pixels,sizeof(reference));
         material_state(&state);memcpy(pixels,before,sizeof(pixels));
         cached_material_backend context={{reference,7u,0,0,0,0,0},cache};
-        ctr_scene_backend backend={&context,material_begin,NULL,material_end,material_abort,NULL,NULL,cached_material_draw};
+        ctr_scene_backend backend={&context,material_begin,NULL,material_end,material_abort,NULL,NULL,cached_material_draw,NULL,0,NULL};
         CHECK(ctr_scene_execute_targets_cached(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
               UINT32_C(0x18010000),NULL,&backend,cache,&report)==CTR_SCENE_OK);
         CHECK(!memcmp(&state,&expected,sizeof(state)) && !memcmp(pixels,reference,sizeof(pixels)));
@@ -2310,7 +2713,7 @@ static void cached_material_scenes(void) {
     for(unsigned failure=1;failure<=4u;++failure) {
         ctr_scene_state state,previous;material_state(&state);previous=state;memcpy(pixels,before,sizeof(pixels));
         cached_material_backend context={{reference,7u,0,0,0,0,failure},cache};
-        ctr_scene_backend backend={&context,material_begin,NULL,material_end,material_abort,NULL,NULL,cached_material_draw};
+        ctr_scene_backend backend={&context,material_begin,NULL,material_end,material_abort,NULL,NULL,cached_material_draw,NULL,0,NULL};
         CHECK(ctr_scene_execute_targets_cached(&state,fixture.commands,fixture.command_bytes,&resources,&surface,
               UINT32_C(0x18010000),NULL,&backend,cache,&report)==CTR_SCENE_BACKEND);
         CHECK(!memcmp(&state,&previous,sizeof(state)) && !memcmp(pixels,before,sizeof(pixels)));
@@ -2334,11 +2737,12 @@ static void cached_material_scenes(void) {
 }
 
 int main(void) {
-    floats24();shader_patterns();shader_arithmetic();arithmetic_boundaries();shader_errors();shader_capacity();
-    scenes();arithmetic_scenes();scene_capacity();scene_errors();backend_full_target();textured_scenes();textured_rollback();
+    floats24();shader_patterns();shader_relative_dot();shader_control_flow();shader_arithmetic();
+    arithmetic_boundaries();shader_errors();shader_capacity();
+    scenes();arithmetic_scenes();scene_capacity();scene_errors();immediate_strip();backend_full_target();textured_scenes();textured_rollback();mipmapped_scene();fog_backend_admission();directional_lighting();
     fragment_contract();fragment_scenes();blend_contract();blend_scenes();
     depth_comparisons();depth_overdraw();depth_quantization();depth_rollback();depth_backend_parity();
-    stencil_contract();stencil_images();stencil_depth_comparisons();stencil_order_and_retention();stencil_quantization();stencil_rollback();stencil_backend_parity();stencil_capacity();
+    stencil_contract();stencil_images();geometry_after_depth_target();stencil_depth_comparisons();stencil_order_and_retention();stencil_quantization();stencil_rollback();stencil_backend_parity();stencil_capacity();
     buffer_images();buffer_retention();buffer_rollback();buffer_backend_parity();
     multiunit_images();multiunit_rollback_and_backend();cached_material_scenes();
     printf("original shader/scene tests: %u assertions passed\n",assertions);return 0;

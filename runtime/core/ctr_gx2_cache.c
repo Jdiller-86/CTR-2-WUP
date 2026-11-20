@@ -128,8 +128,8 @@ static void prefix(key_writer *writer,ctr_gx2_cache_kind kind) {
     static const uint8_t tag[]={'C','T','R','2','W','U','P','G','X','2'};
     static const char namespace[]=CTR_SOURCE_COMMIT;
     for(size_t i=0;i<sizeof(tag);++i)byte(writer,tag[i]);
-    word(writer,2u); /* Key schema, including explicit texture unit/routing identity. */
-    word(writer,2u); /* Original Latte encoder profile with three UV exports. */
+    word(writer,3u); /* Vertex keys include static flow inputs. */
+    word(writer,3u); /* Latte encoder with static flow and ordered dot products. */
     word(writer,1u); /* Exact finite float24/byte-domain numeric profile. */
     word(writer,2u); /* Position/color/Texture0..2, bounded TEV/depth renderer ABI. */
     word(writer,CTR_SOURCE_DIRTY?1u:0u);
@@ -155,6 +155,9 @@ bool ctr_gx2_cache_vertex_key(const ctr_shader_program *program,uint16_t mask,
     if(!mask || count!=bits || program->entry>=CTR_SHADER_MAX_CODE)return false;
     uint8_t next[CTR_GX2_CACHE_VERTEX_KEY_MAX];key_writer writer={next,0,sizeof(next),true};
     prefix(&writer,CTR_GX2_CACHE_VERTEX);word(&writer,program->entry);word(&writer,mask);word(&writer,count);
+    byte(&writer,program->round_f24);
+    byte(&writer,program->boolean_defined);
+    if(program->boolean_defined)word(&writer,program->boolean_uniforms);
     for(unsigned i=0;i<CTR_SHADER_MAX_CODE;++i) { word(&writer,program->code[i]);byte(&writer,program->code_defined[i]); }
     for(unsigned i=0;i<CTR_SHADER_MAX_DESCRIPTORS;++i) { word(&writer,program->descriptors[i]);byte(&writer,program->descriptor_defined[i]); }
     for(unsigned i=0;i<count;++i)word(&writer,maps[i]);

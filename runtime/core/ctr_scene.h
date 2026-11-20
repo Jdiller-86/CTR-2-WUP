@@ -8,13 +8,20 @@
 
 #define CTR_SCENE_MAX_VERTICES 256u
 #define CTR_SCENE_MAX_DRAWS 32u
+#define CTR_SCENE_MAX_GAME_DRAWS 512u
+#define CTR_SCENE_MAX_GAME_DRAW_VERTICES 12288u
+#define CTR_SCENE_IMMEDIATE_INDEX 15u
 #define CTR_SCENE_MAX_SURFACE_BYTES (1024u*1024u)
 #define CTR_SCENE_MAX_DEPTH_BYTES (512u*1024u)
 #define CTR_SCENE_MAX_D24S8_BYTES (1024u*1024u)
 enum { CTR_SCENE_DEPTH_D16=0u, CTR_SCENE_DEPTH_D24S8=3u };
+enum { CTR_SCENE_COLOR_RGBA8=0u, CTR_SCENE_COLOR_RGB5A1=2u, CTR_SCENE_COLOR_RGB565=3u, CTR_SCENE_COLOR_RGBA4=4u };
+bool ctr_scene_color_format(uint32_t register_value,unsigned *format);
 #define CTR_SCENE_MAX_TEXTURE_SPANS 32u
+#define CTR_SCENE_MAX_GAME_TEXTURE_SPANS 96u
 #define CTR_SCENE_MAX_TEXTURE_SOURCE_BYTES (4u*1024u*1024u)
 #define CTR_SCENE_TEXTURE_UNITS 3u
+#define CTR_SCENE_MAX_MIP_LEVELS 8u
 enum {
     CTR_SCENE_TEXTURE_DIMENSIONS, CTR_SCENE_TEXTURE_PARAMETERS, CTR_SCENE_TEXTURE_LOD,
     CTR_SCENE_TEXTURE_ADDRESS, CTR_SCENE_TEXTURE_FORMAT
@@ -26,6 +33,13 @@ typedef enum {
     CTR_SCENE_LAYOUT, CTR_SCENE_VERTEX, CTR_SCENE_SHADER, CTR_SCENE_NUMERIC,
     CTR_SCENE_BACKEND
 } ctr_scene_result;
+typedef struct {
+    unsigned width,height,min_level,max_level;
+    size_t byte_count;
+} ctr_scene_texture_layout;
+/* Shared bounds for the guest snapshot and software sampler. */
+ctr_scene_result ctr_scene_texture_layout_read(uint32_t dimensions,uint32_t params,uint32_t lod,
+    unsigned format,bool mipmaps,ctr_scene_texture_layout *layout);
 typedef enum {
     CTR_SCENE_BACKEND_NONE, CTR_SCENE_BACKEND_BEGIN, CTR_SCENE_BACKEND_DRAW,
     CTR_SCENE_BACKEND_END, CTR_SCENE_BACKEND_PARITY
@@ -36,7 +50,9 @@ typedef struct ctr_scene_state {
     ctr_shader_program shader;
     uint32_t fixed[12][4];uint16_t fixed_defined;
     uint32_t pending_fixed[3],pending_uniform[4];
-    unsigned fixed_words,uniform_words;
+    uint32_t fog_lut[128];
+    uint32_t lighting_lut[3][256];
+    unsigned fixed_words,uniform_words,geometry_uniform_words;
     uint64_t lists,draws,triangles,fragments,shader_instructions;
 } ctr_scene_state;
 typedef struct {
@@ -44,13 +60,13 @@ typedef struct {
     const void *bytes;size_t size;
 } ctr_scene_resource_span;
 typedef struct {
-    /* Explicit caller-resolved PICA physical base; never dereferenced. All array
-     * and index offsets resolve inside this single owned stable resource span. */
+    /* Explicit caller-resolved PICA physical base; never dereferenced. Array
+     * and index offsets are relative to this address. */
     uint32_t base_address;
     const void *bytes;size_t size;
-    /* Optional stable owned texture snapshots. A texture must fit completely
-     * inside this geometry span or one of these additional physical spans.
-     * Physical spans cannot overlap. At most 32 extra spans / 4 MiB total. */
+    /* Optional stable owned snapshots. A texture, or a game vertex or index
+     * read, must fit wholly in one span. Physical spans cannot overlap.
+     * At most 32 extra spans (96 for the game software path) and 4 MiB total. */
     const ctr_scene_resource_span *textures;
     unsigned texture_count;
 } ctr_scene_resources;
@@ -61,6 +77,12 @@ typedef struct {
     unsigned width,height;
     uint32_t address,format,params;
 } ctr_scene_texture;
+typedef struct {
+    ctr_scene_texture levels[CTR_SCENE_MAX_MIP_LEVELS];
+    unsigned min_level,max_level;
+    int bias_q8;
+    bool track_lod;
+} ctr_scene_sampler;
 typedef struct {
     /* Explicit resolved backend target: linear RGBA8, row zero at bottom.
      * No PICA framebuffer address, tiling or GPU coherency is inferred. */
@@ -76,6 +98,16 @@ typedef struct {
     uint32_t address;
     unsigned format; /* D16=0:2 bytes; D24S8=3:depth low24, stencil high8. */
 } ctr_scene_depth_surface;
+typedef struct {
+    float position[4],color[4],uv[CTR_SCENE_TEXTURE_UNITS][2],orientation[4],view[3];
+} ctr_scene_transformed_vertex;
+typedef struct {
+    const uint32_t *table[3];
+    double scale[3],direction[3],ambient[3],diffuse[3],specular[2][3];
+    unsigned input[3],flags,alpha,bump_unit;
+    bool active,needs_view,absolute[3],clamp_highlights,reconstruct_normal;
+} ctr_scene_light;
+enum { CTR_SCENE_BACKEND_DEPTH_FOG=1u };
 /* Optional synchronous renderer. All commands, resources and software pixels
  * are validated before begin. begin initializes private scratch from initial;
  * draw receives original inputs, complete current PICA/shader state and an
@@ -106,6 +138,21 @@ typedef struct ctr_scene_backend {
                           const ctr_vertex *vertices,unsigned count,
                           const ctr_scene_texture textures[CTR_SCENE_TEXTURE_UNITS],
                           unsigned texture_mask);
+    /* Optional mip sampler extension. Enabled units borrow every decoded
+     * level from zero through max_level. min_level clamps sampling, not
+     * storage. Disabled units are zero. The comparison covers the full target. */
+    bool (*draw_mips)(void *context,const ctr_scene_state *state,
+                     const ctr_vertex *vertices,unsigned count,
+                     const ctr_scene_sampler samplers[CTR_SCENE_TEXTURE_UNITS],
+                     unsigned texture_mask);
+    unsigned features;
+    /* Optional for rounded game shaders. The CPU executes, clips and snaps
+     * vertices first, then culls on the PICA screen grid. Submit each borrowed
+     * triangle batch in order. Full software comparison precedes publication. */
+    bool (*draw_transformed)(void *context,const ctr_scene_state *state,
+                            const ctr_scene_transformed_vertex *vertices,unsigned count,
+                            const ctr_scene_sampler samplers[CTR_SCENE_TEXTURE_UNITS],
+                            unsigned texture_mask,const ctr_scene_light *light);
 } ctr_scene_backend;
 typedef struct {
     ctr_scene_result result;
@@ -117,6 +164,12 @@ typedef struct {
 } ctr_scene_report;
 
 void ctr_scene_init(ctr_scene_state *state);
+/* Guest adapter only. Apply a configuration-only list to private staged state
+ * using its validated inspector output. Failure may alter the stage, which the
+ * caller discards. No targets, draw triggers or command jumps are admitted. */
+ctr_scene_result ctr_scene_apply_setup(ctr_scene_state *stage,const void *commands,
+                                     size_t command_bytes,const ctr_pica_write *writes,
+                                     size_t count,ctr_scene_report *report);
 /* Experimental owned-resource rendering boundary, separate from guest GSP.
  * Accept known PICA loader/index/move-shader/output-map/viewport/scissor/cull
  * registers, complete packed fixed/uniform uploads and full-mask draw triggers.
@@ -193,5 +246,14 @@ ctr_scene_result ctr_scene_execute_targets_cached(ctr_scene_state *state,const v
                                                   const ctr_scene_depth_surface *depth,
                                                   const ctr_scene_backend *backend,ctr_texture_cache *cache,
                                                   ctr_scene_report *report);
+/* Guest target format controls the physical span and color write precision.
+ * The guest adapter can provide an 8-byte-aligned stream after resolving links.
+ * The staging surface continues to contain four decoded RGBA bytes per pixel. */
+ctr_scene_result ctr_scene_execute_targets_format_cached(ctr_scene_state *state,const void *commands,
+                                                         size_t command_bytes,const ctr_scene_resources *resources,
+                                                         const ctr_scene_surface *surface,uint32_t color_address,
+                                                         unsigned color_format,const ctr_scene_depth_surface *depth,
+                                                         const ctr_scene_backend *backend,ctr_texture_cache *cache,
+                                                         ctr_scene_report *report);
 const char *ctr_scene_result_name(ctr_scene_result result);
 #endif

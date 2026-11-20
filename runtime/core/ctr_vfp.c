@@ -147,8 +147,8 @@ ctr_cpu_result ctr_cpu_vfp(ctr_cpu *cpu,ctr_vfp_operation op,unsigned d,unsigned
     } else if(to_int) {
         b=fp_input(b,wide,&status);double value=fp_double(b,wide),rounded;
         bool unsign=op==CTR_VFP_TO_U32 || op==CTR_VFP_ROUND_U32;
-        if(op==CTR_VFP_TO_I32 || op==CTR_VFP_TO_U32)fesetround(FE_TOWARDZERO);
-        rounded=rint(value);
+        /* VCVT specifies truncation independently of the FPSCR rounding mode. */
+        rounded=op==CTR_VFP_TO_I32 || op==CTR_VFP_TO_U32?trunc(value):rint(value);
         if(fp_nan(b,wide) || rounded<(unsign?0.0:-2147483648.0) || rounded>(unsign?4294967295.0:2147483647.0)) {
             feclearexcept(FE_INEXACT);status|=1u;
             result=fp_nan(b,wide)?0:rounded<0?(unsign?0:0x80000000u):(unsign?0xffffffffu:0x7fffffffu);

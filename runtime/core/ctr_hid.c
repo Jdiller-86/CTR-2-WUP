@@ -1,9 +1,10 @@
 /* Original HID shared-ring producer from public interface facts. */
 #include "ctr_hid.h"
+#include <limits.h>
 #include <string.h>
 static bool initialize(ctr_guest *g) {
     if (g->hid.initialized) return true;
-    uint32_t handles[6]={0};handles[0]=ctr_shared_create(g,4096,CTR_MEM_READ);
+    uint32_t handles[6]={0};handles[0]=ctr_shared_create_service_page(g,CTR_MEM_READ);
     for (unsigned i=1;i<6 && handles[i-1];++i) handles[i]=ctr_guest_event_create(g,0);
     for (unsigned i=0;i<6;++i) if (!handles[i]) {
         for (unsigned j=0;j<6;++j) if (handles[j]) ctr_guest_handle_close(g,handles[j]);
@@ -22,6 +23,32 @@ bool ctr_hid_handles(ctr_guest *g,uint32_t handles[6]) {
         }
     }
     return true;
+}
+static bool motion_enabled(ctr_guest *g,bool enable,unsigned *clients,uint64_t *since) {
+    if(enable) {
+        if(*clients==UINT_MAX || !initialize(g))return false;
+        if(!*clients)*since=g->now_ns;
+        ++*clients;
+    } else if(*clients) {
+        --*clients;
+    }
+    return true;
+}
+bool ctr_hid_accelerometer(ctr_guest *g,bool enable) {
+    return motion_enabled(g,enable,&g->hid.accelerometer_clients,&g->hid.accelerometer_ns);
+}
+bool ctr_hid_gyroscope(ctr_guest *g,bool enable) {
+    return motion_enabled(g,enable,&g->hid.gyroscope_clients,&g->hid.gyroscope_ns);
+}
+void ctr_hid_acceleration(ctr_guest *g,int16_t x,int16_t y,int16_t z) {
+    g->hid.acceleration[0]=x;
+    g->hid.acceleration[1]=y;
+    g->hid.acceleration[2]=z;
+}
+void ctr_hid_angular_velocity(ctr_guest *g,int16_t x,int16_t y,int16_t z) {
+    g->hid.angular_velocity[0]=x;
+    g->hid.angular_velocity[1]=y;
+    g->hid.angular_velocity[2]=z;
 }
 static void put(uint8_t *bytes,unsigned at,unsigned width,uint64_t value) {
     for (unsigned i=0;i<width;++i) bytes[at+i]=(uint8_t)(value>>(8*i));
@@ -48,9 +75,44 @@ bool ctr_hid_update(ctr_guest *g,uint32_t buttons,int cx,int cy,bool touched,uin
     put(next,pad,4,buttons);put(next,pad+4,4,buttons&~g->hid.held);put(next,pad+8,4,g->hid.held&~buttons);
     put(next,pad+12,2,(uint16_t)cx);put(next,pad+14,2,(uint16_t)cy);
     put(next,touch,2,touched?x:0);put(next,touch+2,2,touched?y:0);put(next,touch+4,4,touched?1:0);
+    bool accelerometer=g->hid.accelerometer_clients && now>=g->hid.accelerometer_ns &&
+                       now-g->hid.accelerometer_ns>=1000000000u/104u;
+    if(accelerometer) {
+        unsigned sample=g->hid.accelerometer_index;
+        if(!sample) {
+            memcpy(next+0x110,next+0x108,8);
+            put(next,0x108,8,ticks);
+        }
+        put(next,0x118,4,sample);
+        for(unsigned axis=0;axis<3;++axis)
+            put(next,0x128+sample*6u+axis*2u,2,(uint16_t)g->hid.acceleration[axis]);
+        g->hid.accelerometer_index=(sample+1u)%8u;
+        g->hid.accelerometer_ns=now;
+    }
+    bool gyroscope=g->hid.gyroscope_clients && now>=g->hid.gyroscope_ns &&
+                   now-g->hid.gyroscope_ns>=1000000000u/101u;
+    if(gyroscope) {
+        unsigned sample=g->hid.gyroscope_index;
+        const int16_t *rotation=g->hid.angular_velocity;
+        if(!sample) {
+            memcpy(next+0x160,next+0x158,8);
+            put(next,0x158,8,ticks);
+        }
+        put(next,0x168,4,sample);
+        put(next,0x170,2,(uint16_t)rotation[0]);
+        put(next,0x172,2,(uint16_t)rotation[2]);
+        put(next,0x174,2,(uint16_t)-(int32_t)rotation[1]);
+        for(unsigned axis=0;axis<3;++axis)
+            put(next,0x178+sample*6u+axis*2u,2,(uint16_t)rotation[axis]);
+        g->hid.gyroscope_index=(sample+1u)%32u;
+        g->hid.gyroscope_ns=now;
+    }
     ctr_shared_publish(g,h->object,next);
     g->hid.index=index;g->hid.held=buttons;g->hid.published=true;g->hid.last_ns=now;++g->hid.samples;
-    ctr_guest_signal(g,g->hid.handles[1]);ctr_guest_signal(g,g->hid.handles[2]);return true;
+    ctr_guest_signal(g,g->hid.handles[1]);ctr_guest_signal(g,g->hid.handles[2]);
+    if(accelerometer)ctr_guest_signal(g,g->hid.handles[3]);
+    if(gyroscope)ctr_guest_signal(g,g->hid.handles[4]);
+    return true;
 }
 bool ctr_hid_read(const ctr_guest *g,uint32_t base,uint32_t *buttons,int *cx,int *cy,bool *touched,uint16_t *x,uint16_t *y) {
     uint32_t pad_index,touch_index,held,circle,position,valid;

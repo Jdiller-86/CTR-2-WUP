@@ -5,6 +5,21 @@ do not establish commercial-game compatibility or installable WUP acceptance.
 
 ## 0.27.0 — unreleased
 
+- Expand CPU/AOT translation and Mario test builds with 16 process-local threads
+  (two TLS pages), direct truncating VFP conversions, compact aligned jump-table
+  dispatch, `SMULxy`/media and `conversion` upstream probe coverage, WUT CRT
+  `.init`/`.fini` startup layout and uncompressed FILEINFO COS reservation
+  scaling, optional `--mii-romfs` wiring, and a `host build --cemu` profile.
+- Expand HLE runtime services (`SRV::EnableNotification`, `NDM`, expanded `CFG`
+  blocks, `mic:u`, `hid:USER` accelerometer/gyro, headless APT Mii Selector,
+  savedata/Mii RomFS support) and verified embedded DSP1 HLE component binding
+  (PCM8, 1/512–4× ratios, fractional-rate ADPCM, sequential filters, and dual
+  auxiliary buses).
+- Expand software and GX2 game-path graphics (dedicated read-only VRAM backing,
+  command-buffer jumps, immediate triangle strips, expanded vertex ISA with
+  subroutines/control flow/float24 rounding, perspective/clipping, directional
+  lighting/fog, 16-bit color targets, independent D24S8 gates, mip chains and
+  mixed filters, and Cemu 2.6 paired readback/48-slot texture caching).
 - Fix the Wii U MCP control plugin to enable `WUPS_USE_WUT_DEVOPTAB`, pass the
   `/vol/app_sd` path to `MCP_InstallTitleAsync` while verifying staged files via
   `fs:/vol/external01`, skip redundant FTP readback during console-hash-verified
