@@ -7,6 +7,8 @@
 #define DECODER_PROFILE 1u /* Base-level Morton/ETC1 to raw-row RGBA8. */
 typedef struct {
     uint8_t *bytes;
+    const uint8_t *source_ptr;
+    uint64_t source_version;
     size_t source_size,rgba_size;
     uint32_t hash;
     unsigned format,width,height,profile,pins;
@@ -104,6 +106,11 @@ bool ctr_texture_cache_destroy(ctr_texture_cache *cache) {
 ctr_texture_cache_result ctr_texture_cache_acquire(ctr_texture_cache *cache,
     const uint8_t *source,size_t source_bytes,unsigned format,unsigned width,
     unsigned height,ctr_texture_cache_lease *lease) {
+    return ctr_texture_cache_acquire_keyed(cache,source,source_bytes,format,width,height,0,lease);
+}
+ctr_texture_cache_result ctr_texture_cache_acquire_keyed(ctr_texture_cache *cache,
+    const uint8_t *source,size_t source_bytes,unsigned format,unsigned width,
+    unsigned height,uint64_t version,ctr_texture_cache_lease *lease) {
     if((cache && !owner(cache)) || !external(cache,lease,sizeof(*lease)) ||
        (uintptr_t)lease%_Alignof(ctr_texture_cache_lease) ||
        !external(cache,source,source_bytes) ||
@@ -125,6 +132,18 @@ ctr_texture_cache_result ctr_texture_cache_acquire(ctr_texture_cache *cache,
             free(rgba);return CTR_TEXTURE_CACHE_DECODE;
         }
         *lease=(ctr_texture_cache_lease){rgba,NULL,rgba,0,0};return CTR_TEXTURE_CACHE_OK;
+    }
+    if(version) {
+        for(unsigned i=0;i<CTR_TEXTURE_CACHE_SLOTS;++i) {
+            texture_entry *e=&cache->entries[i];
+            if(e->bytes && e->source_ptr==source && e->source_version==version &&
+               e->profile==DECODER_PROFILE && e->format==format &&
+               e->width==width && e->height==height && e->source_size==need) {
+                if(e->pins==UINT_MAX)return CTR_TEXTURE_CACHE_BUSY;
+                ++e->pins;increment(cache,&cache->statistics.hits);
+                *lease=(ctr_texture_cache_lease){e->bytes+need,cache,NULL,i,e->identity};return CTR_TEXTURE_CACHE_OK;
+            }
+        }
     }
     uint32_t source_hash=hash_source(source,need);
     for(unsigned i=0;i<CTR_TEXTURE_CACHE_SLOTS;++i) {
@@ -170,7 +189,7 @@ ctr_texture_cache_result ctr_texture_cache_acquire(ctr_texture_cache *cache,
         free(bytes);return CTR_TEXTURE_CACHE_DECODE;
     }
     uint32_t identity=allocate_texture_identity();
-    cache->entries[selected]=(texture_entry){bytes,need,rgba_size,source_hash,format,width,height,DECODER_PROFILE,1,identity};
+    cache->entries[selected]=(texture_entry){bytes,source,version,need,rgba_size,source_hash,format,width,height,DECODER_PROFILE,1,identity};
     unsigned at=resident_lower_bound(cache,(uintptr_t)bytes);
     memmove(&cache->by_address[at+1u],&cache->by_address[at],
             (cache->statistics.entries-at)*sizeof(cache->by_address[0]));

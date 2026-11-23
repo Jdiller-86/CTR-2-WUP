@@ -29,6 +29,13 @@ void ctr_guest_close(ctr_guest *guest) {
     ctr_modules_close(guest);
     ctr_resource_cache_destroy(guest->pica_resources);
     ctr_texture_cache_destroy(guest->pica_textures);
+    free(guest->pica_writes);
+    free(guest->pica_chain_bytes);
+    free(guest->pica_trial);
+    free(guest->pica_color_raw);
+    free(guest->pica_color_pixels);
+    free(guest->pica_depth_raw);
+    free(guest->pica_depth_pixels);
     free(guest->gsp.pica_scene);
     for(unsigned i=0;i<2;++i)if(guest->fs_volumes[i] && guest->fs_volumes[i]->mounts)--guest->fs_volumes[i]->mounts;
     if(guest->fs_romfs && guest->fs_romfs->mounts)--guest->fs_romfs->mounts;

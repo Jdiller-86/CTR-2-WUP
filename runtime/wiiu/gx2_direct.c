@@ -355,10 +355,11 @@ static const direct_gpu_vs_entry *direct_gpu_vs_ensure(ctr_wiiu_gx2_scene *s,sce
     const direct_gpu_vs_entry *last=pool->last_gpu_vs;
     /* A new upload can reuse the same guest state object with different code. */
     if(last && gpu_vs_options_match(last,prog,&opt) &&
-       !memcmp(pool->last_vs_code,prog->code,sizeof(pool->last_vs_code)) &&
-       !memcmp(pool->last_vs_descriptors,prog->descriptors,sizeof(pool->last_vs_descriptors)) &&
-       !memcmp(pool->last_vs_code_defined,prog->code_defined,sizeof(pool->last_vs_code_defined)) &&
-       !memcmp(pool->last_vs_descriptors_defined,prog->descriptor_defined,sizeof(pool->last_vs_descriptors_defined)))
+       ((prog->code_generation && last->code_generation==prog->code_generation) ||
+        (!memcmp(pool->last_vs_code,prog->code,sizeof(pool->last_vs_code)) &&
+         !memcmp(pool->last_vs_descriptors,prog->descriptors,sizeof(pool->last_vs_descriptors)) &&
+         !memcmp(pool->last_vs_code_defined,prog->code_defined,sizeof(pool->last_vs_code_defined)) &&
+         !memcmp(pool->last_vs_descriptors_defined,prog->descriptor_defined,sizeof(pool->last_vs_descriptors_defined)))))
         return last;
     uint64_t h=UINT64_C(14695981039346656037);
     h=fnv1a_bytes(h,&prog->entry,sizeof(prog->entry));
@@ -396,7 +397,7 @@ static const direct_gpu_vs_entry *direct_gpu_vs_ensure(ctr_wiiu_gx2_scene *s,sce
     DCFlushRange(p->vertex_program,p->vertex.size);
     GX2Invalidate(GX2_INVALIDATE_MODE_CPU_SHADER,p->vertex_program,p->vertex.size);
     direct_gpu_vs_entry *e=&pool->gpu_vs_entries[pool->gpu_vs_count++];
-    e->hash=h;e->code_hash2=code_hash2;e->entry=prog->entry;
+    e->hash=h;e->code_hash2=code_hash2;e->code_generation=prog->code_generation;e->entry=prog->entry;
     e->boolean_defined=prog->boolean_defined;e->boolean_uniforms=prog->boolean_uniforms;
     e->integer_defined=prog->integer_defined;
     memcpy(e->integer_uniforms,prog->integer_uniforms,sizeof(e->integer_uniforms));
@@ -523,16 +524,29 @@ bool ctr_gx2_draw_gpu_legacy(void *context,const ctr_scene_gpu_draw *draw) {
     const uint8_t *source_bytes[12]={NULL};
     size_t fetch_padding=s->cemu_readback?8u:4u;
     uint8_t *ring=pool->vertex_ring;
-    bool reuse=s->cemu_readback && draw->stream_count==pool->vertex_upload_streams;
     for(size_t si=0;si<draw->stream_count;++si) {
         const ctr_vertex_stream *st=&draw->streams[si];
         if((uint64_t)st->offset+(uint64_t)(max_idx+1u)*st->stride>st->size)return false;
         copy_bytes[si]=(size_t)span_verts*st->stride;
         source_bytes[si]=(const uint8_t *)st->bytes+st->offset+(size_t)min_idx*st->stride;
         stream_bytes[si]=(copy_bytes[si]+fetch_padding+255u)&~(size_t)255u;
-        reuse=reuse && copy_bytes[si]==pool->vertex_upload_sizes[si] &&
-            !memcmp(ring+pool->vertex_upload+vertex_bytes,source_bytes[si],copy_bytes[si]);
         vertex_bytes+=stream_bytes[si];
+    }
+    size_t reuse_offset=0;
+    bool reuse=false;
+    for(unsigned ci=0;ci<pool->vertex_upload_count;++ci) {
+        if(pool->vertex_upload_cache[ci].streams!=draw->stream_count)continue;
+        bool match=true;
+        size_t off=0;
+        for(size_t si=0;si<draw->stream_count;++si) {
+            if(pool->vertex_upload_cache[ci].sources[si]!=source_bytes[si] ||
+               pool->vertex_upload_cache[ci].sizes[si]!=copy_bytes[si] ||
+               memcmp(ring+pool->vertex_upload_cache[ci].offset+off,source_bytes[si],copy_bytes[si])) {
+                match=false;break;
+            }
+            off+=stream_bytes[si];
+        }
+        if(match) { reuse=true;reuse_offset=pool->vertex_upload_cache[ci].offset;break; }
     }
     size_t idx_bytes=draw->indexed?(((size_t)draw->vertex_count*2u+255u)&~(size_t)255u):0u;
     if(vertex_bytes+idx_bytes>DIRECT_VERTEX_RING_BYTES)return false;
@@ -540,13 +554,14 @@ bool ctr_gx2_draw_gpu_legacy(void *context,const ctr_scene_gpu_draw *draw) {
     if(pool->vertex_cursor+total_ring>DIRECT_VERTEX_RING_BYTES) {
         if(!ctr_gx2_retire(s,p))return false;
         pool->vertex_cursor=0;
-        pool->vertex_upload_streams=0;
+        pool->vertex_upload_count=0;
+        pool->vertex_upload_cursor=0;
         reuse=false;
         total_ring=vertex_bytes+idx_bytes;
     }
 
     uint8_t *ring_base=ring+pool->vertex_cursor;
-    uint8_t *stream_base=reuse?ring+pool->vertex_upload:ring_base;
+    uint8_t *stream_base=reuse?ring+reuse_offset:ring_base;
     size_t ring_off=0;
     void *stream_ptrs[12]={NULL};
     for(size_t si=0;si<draw->stream_count;++si) {
@@ -581,10 +596,14 @@ bool ctr_gx2_draw_gpu_legacy(void *context,const ctr_scene_gpu_draw *draw) {
                                    draw->texture_leases,draw->validated_tev,&skip_draw))
         return false;
     if(skip_draw) { ++s->draws;s->result=CTR_WIIU_GX2_SCENE_OK;return true; }
-    if(s->cemu_readback && !reuse) {
-        pool->vertex_upload=pool->vertex_cursor;
-        pool->vertex_upload_streams=(unsigned)draw->stream_count;
-        memcpy(pool->vertex_upload_sizes,copy_bytes,draw->stream_count*sizeof(copy_bytes[0]));
+    if(!reuse) {
+        unsigned slot=pool->vertex_upload_cursor;
+        pool->vertex_upload_cache[slot].offset=pool->vertex_cursor;
+        pool->vertex_upload_cache[slot].streams=(unsigned)draw->stream_count;
+        memcpy(pool->vertex_upload_cache[slot].sizes,copy_bytes,draw->stream_count*sizeof(copy_bytes[0]));
+        memcpy((void *)pool->vertex_upload_cache[slot].sources,source_bytes,draw->stream_count*sizeof(source_bytes[0]));
+        pool->vertex_upload_cursor=(slot+1u)&15u;
+        if(pool->vertex_upload_count<16u)++pool->vertex_upload_count;
     }
     pool->vertex_cursor+=total_ring;
 

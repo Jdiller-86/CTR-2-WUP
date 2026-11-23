@@ -148,6 +148,13 @@ typedef struct ctr_guest {
      * native GPU lifetime. Cleared before the memory owner is closed/reused. */
     struct ctr_resource_cache *pica_resources;
     struct ctr_texture_cache *pica_textures;
+    ctr_pica_write *pica_writes;
+    size_t pica_writes_cap;
+    uint8_t *pica_chain_bytes;
+    size_t pica_chain_cap;
+    struct ctr_scene_state *pica_trial;
+    uint8_t *pica_color_raw,*pica_color_pixels,*pica_depth_raw,*pica_depth_pixels;
+    size_t pica_color_raw_cap,pica_color_pixels_cap,pica_depth_raw_cap,pica_depth_pixels_cap;
     ctr_guest_thread threads[CTR_GUEST_MAX_THREADS];
     unsigned current_thread, quantum_left;
     uint32_t next_thread_id;

@@ -2008,7 +2008,7 @@ static bool draw_samples(void *context,const ctr_scene_state *state,const ctr_ve
     if(direct && pool->vertex_cursor+vbytes>DIRECT_VERTEX_RING_BYTES) {
         if(!retire(s,p))return false;
         pool->vertex_cursor=0;
-        pool->vertex_upload_streams=0;
+        pool->vertex_upload_count=0;pool->vertex_upload_cursor=0;
     }
     void *vertex_upload=direct?(void *)((uint8_t *)pool->vertex_ring+pool->vertex_cursor):p->vertices;
     if(batched)vertex_upload=select_draw_upload(s,p);

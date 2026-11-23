@@ -101,6 +101,7 @@ typedef struct {
 typedef struct {
     uint64_t hash;
     uint64_t code_hash2;
+    uint32_t code_generation;
     unsigned entry;
     uint16_t boolean_uniforms;
     bool boolean_defined;
@@ -127,9 +128,13 @@ typedef struct {
     uint32_t fetch_size;
     void *vertex_ring;
     size_t vertex_cursor;
-    size_t vertex_upload;
-    size_t vertex_upload_sizes[12];
-    unsigned vertex_upload_streams;
+    struct {
+        size_t offset;
+        size_t sizes[12];
+        const uint8_t *sources[12];
+        unsigned streams;
+    } vertex_upload_cache[16];
+    unsigned vertex_upload_count,vertex_upload_cursor;
     GX2ColorBuffer target,color_candidate;
     GX2Surface linear;
     GX2DepthBuffer depth_target;

@@ -24,6 +24,7 @@ typedef struct {
     bool boolean_defined;
     unsigned entry;
     bool round_f24; /* Game software model. Zero selects exact diagnostic arithmetic. */
+    uint32_t code_generation;
 } ctr_shader_program;
 typedef struct {
     float values[16][4];

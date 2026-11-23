@@ -482,6 +482,7 @@ static ctr_scene_result upload(ctr_scene_state *s,unsigned reg,uint32_t value,un
         unsigned index=s->registers[0x2cbu];
         if(index>=CTR_SHADER_MAX_CODE)return CTR_SCENE_LIMIT;
         s->shader.code[index]=value;s->shader.code_defined[index]=1u;
+        ++s->shader.code_generation;
         s->registers[0x2cbu]=index+1u;
     } else if(reg==0x2d5u) {
         if(value>CTR_SHADER_MAX_DESCRIPTORS)return CTR_SCENE_LIMIT;
@@ -491,6 +492,7 @@ static ctr_scene_result upload(ctr_scene_state *s,unsigned reg,uint32_t value,un
         if(index>=CTR_SHADER_MAX_DESCRIPTORS)return CTR_SCENE_LIMIT;
         /* The upload wire carries a 32-bit word with 31 operand bits. */
         s->shader.descriptors[index]=value&UINT32_C(0x7fffffff);s->shader.descriptor_defined[index]=1u;
+        ++s->shader.code_generation;
         s->registers[0x2d5u]=index+1u;
     } else if(reg==0x2bfu) {
         if(value!=1u)return CTR_SCENE_UNSUPPORTED;
