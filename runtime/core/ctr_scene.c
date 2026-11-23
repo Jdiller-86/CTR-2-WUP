@@ -1445,7 +1445,7 @@ typedef struct {
     ctr_scene_transformed_vertex *transformed_batch;
     unsigned transformed_cap;
 } scene_direct_ctx;
-#if defined(CTR_GAME_CEMU_TEST) && defined(__GNUC__) && !defined(__clang__)
+#if (defined(CTR_GAME_TEST) || defined(CTR_GAME_CEMU_TEST)) && defined(__GNUC__) && !defined(__clang__)
 __attribute__((optimize("Os")))
 #endif
 static ctr_scene_result draw(ctr_scene_state *s,const ctr_scene_resources *resources,
@@ -1824,7 +1824,7 @@ static ctr_scene_result draw(ctr_scene_state *s,const ctr_scene_resources *resou
     return result;
 }
 void ctr_scene_init(ctr_scene_state *state) { if(state)memset(state,0,sizeof(*state)); }
-#if defined(CTR_GAME_CEMU_TEST) && defined(__GNUC__) && !defined(__clang__)
+#if (defined(CTR_GAME_TEST) || defined(CTR_GAME_CEMU_TEST)) && defined(__GNUC__) && !defined(__clang__)
 __attribute__((optimize("Os")))
 #endif
 static ctr_scene_result replay(ctr_scene_state *trial,const void *commands,

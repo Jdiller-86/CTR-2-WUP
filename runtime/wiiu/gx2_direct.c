@@ -215,7 +215,7 @@ bool ctr_gx2_direct_pixel_program(ctr_wiiu_gx2_scene *s,scene_private *p,const c
                                   bool fog,bool transformed,const ctr_scene_light *light,
                                   bool depth_plane,pixel_blend_mode blend,const uint8_t *key,size_t key_size) {
     direct_pool_state *pool=s->direct_pool;
-    if(s->cemu_readback && pool->last_ps) {
+    if(pool->last_ps) {
         const direct_ps_entry *last=&pool->ps_entries[pool->last_ps-1u];
         if(last->key_size==key_size && !memcmp(last->key,key,key_size)) {
             p->pixel=last->shader;++s->direct_shader_hits;return true;
@@ -608,7 +608,7 @@ bool ctr_gx2_draw_gpu_legacy(void *context,const ctr_scene_gpu_draw *draw) {
     pool->vertex_cursor+=total_ring;
 
     if(!pool->list_bound)direct_list_bind_init(p,pool);
-    bool reuse_uniforms=s->cemu_readback && context_active && pool->bound_vs==&vs->shader;
+    bool reuse_uniforms=context_active && pool->bound_vs==&vs->shader;
     if(pool->bound_fetch!=fs) { GX2SetFetchShader(fs);pool->bound_fetch=fs; }
     if(pool->bound_vs!=&vs->shader) { GX2SetVertexShader(&vs->shader);pool->bound_vs=&vs->shader; }
     if(!pool->bound_ps_valid || pool->bound_ps.program!=p->pixel.program) {
@@ -629,7 +629,7 @@ bool ctr_gx2_draw_gpu_legacy(void *context,const ctr_scene_gpu_draw *draw) {
         size_t bytes=(u-first)*sizeof(draw->state->shader.uniforms[0]);
         if(reuse_uniforms && !memcmp(pool->uploaded_vertex_uniforms[first],values,bytes))continue;
         GX2SetVertexUniformReg(first*4u,(u-first)*4u,draw->state->shader.uniforms[first]);
-        if(s->cemu_readback)memcpy(pool->uploaded_vertex_uniforms[first],values,bytes);
+        memcpy(pool->uploaded_vertex_uniforms[first],values,bytes);
     }
     if(fixed_input_mask)
         for(unsigned slot=0;slot<16u;++slot)if(fixed_input_mask&(1u<<slot))

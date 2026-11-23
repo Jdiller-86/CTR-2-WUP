@@ -160,10 +160,7 @@ ifeq ($(GAME_CEMU_TEST),1)
 CFLAGS += -DCTR_GAME_CEMU_TEST
 endif
 APP_NAME := CTR2WUP Mario Test
-SOURCES := game_main.c diagnostic_display.c diagnostic_font.c diagnostic_audio.c native_audio_stream.c viewport.c image_scale.c guest_slice.c test_lifecycle.c test_report.c report_storage.c
-ifeq ($(GAME_CEMU_TEST),1)
-SOURCES += gx2_scene.c gx2_direct.c
-endif
+SOURCES := game_main.c diagnostic_display.c diagnostic_font.c diagnostic_audio.c native_audio_stream.c viewport.c image_scale.c guest_slice.c test_lifecycle.c test_report.c report_storage.c gx2_scene.c gx2_direct.c
 endif
 OBJECTS := $(addprefix $(BUILD)/,$(SOURCES:.c=.o))
 CORE_SOURCES := $(CTR_RUNTIME_SOURCES) ../core/ctr_cpu_selftest.c \
@@ -219,7 +216,7 @@ $(BUILD)/identity: identity-force | $(BUILD)
 	@printf '%s\n' '$(CTR_BUILD_SHA):$(CTR_BUILD_DIRTY):$(APP_VERSION)' > "$@.tmp"
 	@if ! cmp -s "$@.tmp" "$@"; then mv "$@.tmp" "$@"; else rm "$@.tmp"; fi
 $(BUILD)/code%.o $(BUILD)/entries.o: CFLAGS += -g0
-ifeq ($(GAME_TEST)$(GAME_CEMU_TEST),11)
+ifeq ($(GAME_TEST),1)
 $(BUILD)/ctr_shader.o: CFLAGS += -O3
 endif
 $(BUILD)/%.o: %.c $(CTR_RUNTIME_MANIFEST) Makefile $(BUILD)/identity | $(BUILD)

@@ -16,7 +16,7 @@ GX2ContextState *ctr_diagnostic_display_context(void);
 void ctr_diagnostic_display_line(const char *text);
 bool ctr_diagnostic_display_draw(void);
 bool ctr_diagnostic_display_guest(const uint32_t *top,const uint32_t *bottom);
-#ifdef CTR_GAME_CEMU_TEST
+#if defined(CTR_GAME_CEMU_TEST) || defined(CTR_GAME_TEST)
 bool ctr_diagnostic_display_scanout(const ctr_diagnostic_scanout *top_texture,const ctr_diagnostic_scanout *bottom_texture,
                                     const uint32_t *top,const uint32_t *bottom);
 #endif

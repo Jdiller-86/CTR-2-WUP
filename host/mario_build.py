@@ -195,7 +195,7 @@ def build_test_title(path,output,*,keys_config=None,title_id=None,title_version=
             'mii_romfs_sha256':mii_hash,
             'translator':{key:generation[key] for key in ('source_commit','generator_sha256','abi','generated_instructions')},
             'source_commit':source_commit,'source_dirty':source_dirty,'backend':'external-AOT-with-explicit-interpreter-recovery',
-            'renderer':'gx2-direct' if cemu else 'shared-software-PICA','runtime_profile':'cemu' if cemu else 'wiiu',
+            'renderer':'gx2-direct','runtime_profile':'cemu' if cemu else 'wiiu',
             'assets_in_wup':bool(assets),'stages':steps,
             'seconds':round(time.perf_counter()-started,3),'package':packed,
             'runtime_log_directory':'sd:/ctr2wup/titles/'+title_id+'/results/',

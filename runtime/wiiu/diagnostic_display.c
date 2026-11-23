@@ -3,7 +3,7 @@
 #include "image_scale.h"
 #include <coreinit/cache.h>
 #include <coreinit/memdefaultheap.h>
-#ifdef CTR_GAME_CEMU_TEST
+#if defined(CTR_GAME_CEMU_TEST) || defined(CTR_GAME_TEST)
 #include <coreinit/time.h>
 #include <gx2/draw.h>
 #include <gx2/registers.h>
@@ -25,7 +25,7 @@ enum { WIDTH=512,HEIGHT=288,ROWS=14,COLUMNS=82 };
 static uint32_t pixels[WIDTH*HEIGHT];
 static char rows[ROWS][COLUMNS+1];
 static GX2Surface surfaces[2];
-#ifdef CTR_GAME_CEMU_TEST
+#if defined(CTR_GAME_CEMU_TEST) || defined(CTR_GAME_TEST)
 typedef struct {
     float x,y,z,w,u,v,s,t;
 } cemu_quad_vertex;
@@ -80,7 +80,7 @@ void ctr_diagnostic_display_line(const char *text) {
     dirty=true;
 }
 
-#ifdef CTR_GAME_CEMU_TEST
+#if defined(CTR_GAME_CEMU_TEST) || defined(CTR_GAME_TEST)
 static void cemu_put32(void *p,uint32_t v) {
     uint8_t *b=p;b[0]=(uint8_t)v;b[1]=(uint8_t)(v>>8);b[2]=(uint8_t)(v>>16);b[3]=(uint8_t)(v>>24);
 }
@@ -309,7 +309,7 @@ GX2ContextState *ctr_diagnostic_display_context(void) {
 }
 bool ctr_diagnostic_display_init(void) {
     if(initialized)return ready;
-#ifdef CTR_GAME_CEMU_TEST
+#if defined(CTR_GAME_CEMU_TEST) || defined(CTR_GAME_TEST)
     if(!WHBGfxInit())return false;
     initialized=true;
     GX2SetSwapInterval(0);
@@ -400,7 +400,7 @@ bool ctr_diagnostic_display_init(void) {
     ready=true;dirty=true;return true;
 }
 
-#ifndef CTR_GAME_CEMU_TEST
+#if !defined(CTR_GAME_CEMU_TEST) && !defined(CTR_GAME_TEST)
 static bool configure_plans(unsigned top_width,unsigned top_height,unsigned bottom_width,unsigned bottom_height) {
     const unsigned widths[]={top_width,bottom_width},heights[]={top_height,bottom_height};
     for(unsigned i=0;i<2;++i) {
@@ -427,16 +427,16 @@ static bool present(void) {
 bool ctr_diagnostic_display_draw(void) {
     if(!ready)return false;
     if(guest_mode) {
-#ifndef CTR_GAME_CEMU_TEST
+#if !defined(CTR_GAME_CEMU_TEST) && !defined(CTR_GAME_TEST)
         if(!configure_plans(WIDTH,HEIGHT,WIDTH,HEIGHT))return false;
 #endif
         guest_mode=false;dirty=true;
     }
-#ifdef CTR_GAME_CEMU_TEST
+#if defined(CTR_GAME_CEMU_TEST) || defined(CTR_GAME_TEST)
     if(!dirty && presented)return true;
 #endif
     if(dirty) {
-#ifndef CTR_GAME_CEMU_TEST
+#if !defined(CTR_GAME_CEMU_TEST) && !defined(CTR_GAME_TEST)
         if(presented)GX2DrawDone();
 #endif
         for(unsigned i=0;i<WIDTH*HEIGHT;++i)pixels[i]=UINT32_C(0x102238ff);
@@ -445,7 +445,7 @@ bool ctr_diagnostic_display_draw(void) {
         for(unsigned i=0;i<ROWS;++i)
             ctr_draw_text(pixels,WIDTH,HEIGHT,8,34+i*16,rows[i],UINT32_C(0xffffffff));
         ctr_draw_text(pixels,WIDTH,HEIGHT,8,HEIGHT-14,footer,UINT32_C(0x74ceffff));
-#ifdef CTR_GAME_CEMU_TEST
+#if defined(CTR_GAME_CEMU_TEST) || defined(CTR_GAME_TEST)
         cemu_upload_rgba(0,pixels,WIDTH,HEIGHT);
 #else
         for(unsigned i=0;i<2;++i) {
@@ -457,14 +457,14 @@ bool ctr_diagnostic_display_draw(void) {
 #endif
         dirty=false;
     }
-#ifdef CTR_GAME_CEMU_TEST
+#if defined(CTR_GAME_CEMU_TEST) || defined(CTR_GAME_TEST)
     cemu_gfx.gpu_scanout=false;
     return cemu_present(false,NULL,NULL);
 #else
     return present();
 #endif
 }
-#ifdef CTR_GAME_CEMU_TEST
+#if defined(CTR_GAME_CEMU_TEST) || defined(CTR_GAME_TEST)
 bool ctr_diagnostic_display_scanout(const ctr_diagnostic_scanout *top_texture,const ctr_diagnostic_scanout *bottom_texture,
                                     const uint32_t *top,const uint32_t *bottom) {
     if(!ready || (!top_texture && !bottom_texture) || !cemu_init_scanout_shader() ||
@@ -477,7 +477,7 @@ bool ctr_diagnostic_display_scanout(const ctr_diagnostic_scanout *top_texture,co
 }
 #endif
 bool ctr_diagnostic_display_guest(const uint32_t *top,const uint32_t *bottom) {
-#ifdef CTR_GAME_CEMU_TEST
+#if defined(CTR_GAME_CEMU_TEST) || defined(CTR_GAME_TEST)
     if(!ready || !top || !bottom)return false;
     bool top_changed=cemu_upload_rgba(1,top,400u,240u);
     bool bottom_changed=cemu_upload_rgba(2,bottom,320u,240u);
@@ -505,7 +505,7 @@ bool ctr_diagnostic_display_touch(uint32_t x,uint32_t y,uint16_t *guest_x,uint16
 
 void ctr_diagnostic_display_invalidate(void) {
     dirty=true;
-#ifdef CTR_GAME_CEMU_TEST
+#if defined(CTR_GAME_CEMU_TEST) || defined(CTR_GAME_TEST)
     cemu_gfx.scanout_generation[0]=0;
     cemu_gfx.scanout_generation[1]=0;
     presented=false;
@@ -514,7 +514,7 @@ void ctr_diagnostic_display_invalidate(void) {
 
 void ctr_diagnostic_display_close(bool foreground) {
     if(initialized && foreground)GX2DrawDone();
-#ifdef CTR_GAME_CEMU_TEST
+#if defined(CTR_GAME_CEMU_TEST) || defined(CTR_GAME_TEST)
     if(cemu_gfx.vs_prog)MEMFreeToDefaultHeap(cemu_gfx.vs_prog);
     if(cemu_gfx.ps_prog)MEMFreeToDefaultHeap(cemu_gfx.ps_prog);
     if(cemu_gfx.fetch_prog)MEMFreeToDefaultHeap(cemu_gfx.fetch_prog);

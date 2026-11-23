@@ -12,10 +12,8 @@
 #include "diagnostic_audio.h"
 #include "diagnostic_display.h"
 #include "guest_slice.h"
-#ifdef CTR_GAME_CEMU_TEST
 #include "ctr_guest_pica.h"
 #include "gx2_scene.h"
-#endif
 #include "native_audio_stream.h"
 #include "report_storage.h"
 #include "test_lifecycle_wiiu.h"
@@ -33,10 +31,8 @@
 #include <sys/stat.h>
 
 static ctr_guest guest;
-#ifdef CTR_GAME_CEMU_TEST
 static ctr_wiiu_gx2_scene gx2_scene;
 static ctr_scene_backend gx2_backend;
-#endif
 static ctr_fs_volume savedata,sdmc;
 static ctr_romfs_file romfs;
 #if CTR_GAME_HAS_MII_ROMFS
@@ -49,9 +45,7 @@ static ctr_diagnostic_audio audio;
 static ctr_native_stream stream;
 static ctr_dsp_stream converter;
 static uint32_t top[400u*240u],bottom[320u*240u];
-#ifdef CTR_GAME_CEMU_TEST
 static ctr_gsp_pixel_cache screen_cache[2];
-#endif
 static int16_t dsp_pcm[CTR_DSP_FRAME_SAMPLES*2],pcm[CTR_NATIVE_STREAM_FRAMES*2];
 static size_t pcm_frames;
 static uint64_t session,clock_ns,last_status_us,frames;
@@ -168,14 +162,14 @@ static bool start_guest(void) {
 #endif
     if(CTR_GAME_READONLY_VRAM && !ctr_gsp_open_vram(&guest))return false;
     guest.gsp.pica_round_f24=true;
-#ifdef CTR_GAME_CEMU_TEST
     ctr_wiiu_gx2_scene_init(&gx2_scene,ctr_diagnostic_display_context());
+#ifdef CTR_GAME_CEMU_TEST
     gx2_scene.cemu_readback=true;
+#endif
     gx2_scene.batch_transformed=true;
     gx2_backend=ctr_wiiu_gx2_scene_backend_direct(&gx2_scene);
     ctr_guest_set_scene_backend(&guest,&gx2_backend);
     guest.gsp.pica_depth_hint=ctr_wiiu_gx2_scene_set_depth_keep;
-#endif
     guest.dsp_firmware=&ctr_game_dsp_firmware;
     guest.cpu.log=trace;guest.debug=debug;
     if(!ctr_apt_configure(&guest))return false;
@@ -206,10 +200,8 @@ static bool pump_audio(void) {
             if(!ctr_dsp_stream_push(&converter,dsp_pcm,CTR_DSP_FRAME_SAMPLES))return false;
             progress=true;
         }
-#ifdef CTR_GAME_CEMU_TEST
         else if(ctr_dsp_stream_space(&converter)<CTR_DSP_FRAME_SAMPLES && ctr_dsp_read(&guest,dsp_pcm,CTR_DSP_FRAME_SAMPLES*2))
             progress=true;
-#endif
         if(ctr_native_stream_space(&stream)) {
             size_t count;
             if(!ctr_dsp_stream_pull(&converter,pcm+pcm_frames*2,CTR_NATIVE_STREAM_FRAMES-pcm_frames,&count))return false;
@@ -307,13 +299,9 @@ static void cleanup(void *unused) {
     ctr_romfs_file_close(&mii_romfs);
 #endif
     ctr_romfs_file_close(&romfs);
-#ifdef CTR_GAME_CEMU_TEST
     ctr_wiiu_gx2_scene_abort(&gx2_scene);
-#endif
     ctr_diagnostic_display_close(foreground);
-#ifdef CTR_GAME_CEMU_TEST
     ctr_wiiu_gx2_scene_after_shutdown(&gx2_scene);
-#endif
     ctr_test_report_close(&report);
 }
 static const ctr_exit_ops exit_ops={cleanup,clear_callbacks,ctr_procui_request_menu,ctr_procui_messages,
@@ -377,11 +365,9 @@ int main(void) {
         if(status==CTR_PROC_RELEASE) {
             ctr_diagnostic_audio_end(&audio,ctr_native_stream_release,&stream);
             if(save_ready && savedata.dirty && !ctr_fs_snapshot_save(CTR_GAME_DATA_ROOT "/save.snapshot",&savedata))fail("Save publication failed");
-#ifdef CTR_GAME_CEMU_TEST
             if(opened && (!ctr_guest_pica_flush_color(&guest) || !ctr_guest_scanout_flush(&guest)))
                 fail("Pending GPU color publication failed");
             ctr_wiiu_gx2_scene_abort(&gx2_scene);
-#endif
             status_report("background");ctr_report_storage_close(&storage);ctr_procui_release(NULL);
         }
         bool previous_foreground=foreground;foreground=status==CTR_PROC_FOREGROUND;
@@ -389,12 +375,9 @@ int main(void) {
         if(!foreground) { ctr_procui_wait(NULL);continue; }
         if(!previous_foreground) {
             delta=0;last_status_draw_us=0;previous_picture=false;ctr_diagnostic_display_invalidate();
-#ifdef CTR_GAME_CEMU_TEST
             gx2_scene.restore_context=ctr_diagnostic_display_context();
-#endif
             if(!failure && !open_audio())fail("Audio reacquisition failed");
         }
-#ifdef CTR_GAME_CEMU_TEST
         /* Service each pending display deadline before crossing it. Limit
          * catch-up after a host stall to one guest frame per pass. */
         uint64_t elapsed_ns=delta>CTR_GSP_FRAME_NS/1000u?CTR_GSP_FRAME_NS:delta*1000u;
@@ -404,9 +387,6 @@ int main(void) {
             if(elapsed_ns>until)elapsed_ns=until;
         }
         clock_ns+=elapsed_ns;
-#else
-        clock_ns+=delta*1000u;
-#endif
         VPADStatus sample={0};VPADReadError error;
         pad.trigger=pad.release=0;
         int count=VPADRead(VPAD_CHAN_0,&sample,1,&error);
@@ -447,7 +427,6 @@ int main(void) {
         if(picture && (!previous_picture || presented_vblank!=guest.gsp.vblanks ||
            presented_swaps[0]!=guest.gsp.swaps[0] || presented_swaps[1]!=guest.gsp.swaps[1])) {
             uint64_t presentation_start=slice_clock(NULL);
-#ifdef CTR_GAME_CEMU_TEST
             const void *top_scanout=ctr_wiiu_gx2_scene_scanout_texture(&gx2_scene,ctr_guest_scanout_screen(&guest,0));
             const void *bottom_scanout=ctr_wiiu_gx2_scene_scanout_texture(&gx2_scene,ctr_guest_scanout_screen(&guest,1));
             bool drawn=(top_scanout || bottom_scanout) &&
@@ -457,11 +436,6 @@ int main(void) {
             if(!drawn && (ctr_gsp_pixels_cached(&guest,0,top,400u*240u,&screen_cache[0])!=CTR_MEM_OK ||
                ctr_gsp_pixels_cached(&guest,1,bottom,320u*240u,&screen_cache[1])!=CTR_MEM_OK ||
                !ctr_diagnostic_display_guest(top,bottom))) {
-#else
-            if(ctr_gsp_pixels(&guest,0,top,400u*240u)!=CTR_MEM_OK ||
-               ctr_gsp_pixels(&guest,1,bottom,320u*240u)!=CTR_MEM_OK ||
-               !ctr_diagnostic_display_guest(top,bottom)) {
-#endif
                 fail("Guest display presentation failed");picture=false;
             } else {
                 presented_vblank=guest.gsp.vblanks;
@@ -484,12 +458,8 @@ int main(void) {
         if(now-last_status_us>=5000000u) {
             last_status_us=now;if(!status_report(failure?"stopped":"progress"))fail("Private runtime log failed");
         }
-#ifdef CTR_GAME_CEMU_TEST
         if(guest.state==CTR_GUEST_WAITING || guest.state==CTR_GUEST_SLEEPING)
             OSSleepTicks(OSMillisecondsToTicks(1));
-#else
-        OSSleepTicks(OSMillisecondsToTicks(1));
-#endif
     }
     if(!ctr_test_complete_exit(&lifecycle,exit_observed,&exit_ops,NULL))failure="Exit transition failed";
     ctr_report_storage_close(&storage);return failure?1:0;
