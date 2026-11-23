@@ -436,11 +436,48 @@ static void game_profile_shader(void) {
     opt.fixed_mask=2u;opt.int_signed_mask=1u;opt.int_unsigned_mask=4u;
     CHECK(ctr_gx2_shader_compile_game(&p,&opt,&out)==CTR_GX2_SHADER_OK);
     CHECK(out.gprs==CTR_GX2_SHADER_GAME_GPRS && out.alu_instructions>0u);
+    unsigned pops=0;
+    for(unsigned cf=0;cf<CTR_GX2_SHADER_GAME_ALU_OFFSET;cf+=8u) {
+        uint32_t word=get32(out.program+cf+4u);
+        if(((word>>23)&127u)==0x0eu) {
+            CHECK((word&7u)==1u);
+            ++pops;
+        }
+        if((word&UINT32_C(0xfc000000))<UINT32_C(0x80000000) && (word&(1u<<21)))break;
+    }
+    CHECK(pops==4u);
     opt.light_active=true;
     CHECK(ctr_gx2_shader_compile_game(&p,&opt,&out)==CTR_GX2_SHADER_UNDEFINED);
     opt.output_maps[1]=0x07060504u;
     CHECK(ctr_gx2_shader_compile_game(&p,&opt,&out)==CTR_GX2_SHADER_OK);
     CHECK(out.light_active && !out.light_needs_view);
+
+    /* Verify RCP with .y-only write mask loads R49.x before RECIP_IEEE, and
+     * 2-component integer input converts lanes 0..1 and sets 0.0f/1.0f on 2..3. */
+    init();
+    p.code[0]=UINT32_C(0x38000000); /* RCP o0.y, v0.z (descriptor 0) */
+    p.code[1]=UINT32_C(0x88000000); /* END */
+    p.code_defined[0]=p.code_defined[1]=1;
+    p.descriptors[0]=(2u<<11)|4u; /* lane0=.z, write mask .y (bit 2 = 4) */
+    ctr_gx2_shader_game_options ropt={0};
+    ropt.output_mask=1u;ropt.output_count=1u;ropt.output_maps[0]=0x03020100u;
+    ropt.int_signed_mask=1u;ropt.int_components[0]=2u;
+    CHECK(ctr_gx2_shader_compile_game(&p,&ropt,&out)==CTR_GX2_SHADER_OK);
+    bool saw_load_r49x=false,saw_rcp=false,saw_int2=false,saw_one_w=false;
+    for(uint32_t i=0;i<out.alu_instructions;++i) {
+        const uint8_t *ins=out.program+CTR_GX2_SHADER_GAME_ALU_OFFSET+i*8u;
+        uint32_t w0=(uint32_t)ins[0]|((uint32_t)ins[1]<<8)|((uint32_t)ins[2]<<16)|((uint32_t)ins[3]<<24);
+        uint32_t w1=(uint32_t)ins[4]|((uint32_t)ins[5]<<8)|((uint32_t)ins[6]<<16)|((uint32_t)ins[7]<<24);
+        unsigned op=(w1>>7)&0x7ffu,dest=(w1>>21)&0x7fu,lane=(w1>>29)&3u;
+        unsigned srca=w0&0x1ffu,chana=(w0>>10)&3u;
+        if(op==0x6cu && dest==1u && lane<2u)saw_int2=true;
+        if(op==25u && dest==1u && lane==3u && srca==249u)saw_one_w=true;
+        if(op==25u && dest==49u && lane==0u && srca==1u && chana==2u)saw_load_r49x=true;
+        if(op==0x66u && srca==49u && chana==0u && dest==51u && lane==0u) {
+            CHECK(saw_load_r49x);saw_rcp=true;
+        }
+    }
+    CHECK(saw_int2 && saw_one_w && saw_load_r49x && saw_rcp);
 }
 int main(void) {
     original_shader();inputs_uniforms_and_dependencies();swizzles_and_masks();semantic_maps();

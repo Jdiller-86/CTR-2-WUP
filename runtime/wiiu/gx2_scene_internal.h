@@ -34,6 +34,7 @@ extern void GX2ConvertDepthBufferToTextureSurface(GX2DepthBuffer *depth,GX2Surfa
 #define DIRECT_TEXTURE_SLOTS 256u
 #define DIRECT_VS_SLOTS 32u
 #define DIRECT_PS_SLOTS 256u
+#define DIRECT_PS_INDEX_SLOTS (DIRECT_PS_SLOTS*2u)
 #define DIRECT_PS_ARENA_BYTES (1024u*1024u)
 #define DIRECT_VERTEX_STRIDE (7u*4u*sizeof(float))
 #define DIRECT_VERTEX_RING_BYTES (8u*1024u*1024u)
@@ -74,17 +75,19 @@ typedef struct {
 } texture_image;
 typedef struct {
     texture_image upload;
-    uint64_t hash;
-    const uint8_t *last_rgba;
+    uint32_t hash;
     unsigned pins;
     bool submitted;
+    uint32_t identities[CTR_SCENE_MAX_MIP_LEVELS];
 } texture_cache_entry;
+#define GX2_TEXTURE_IDENTITY_SLOTS 1024u
 struct ctr_wiiu_gx2_texture_cache {
     unsigned next,slots;
+    texture_cache_entry *identity_index[GX2_TEXTURE_IDENTITY_SLOTS];
     texture_cache_entry entries[];
 };
 typedef struct {
-    uint64_t hash;
+    uint32_t hash;
     size_t key_size;
     uint8_t key[CTR_GX2_CACHE_PIXEL_KEY_MAX];
     GX2PixelShader shader;
@@ -93,18 +96,28 @@ typedef struct {
 #define DIRECT_GPU_VS_ARENA_BYTES (1024u*1024u)
 #define DIRECT_GPU_FETCH_SLOTS 128u
 #define DIRECT_GPU_FETCH_BYTES 512u
+#define CEMU_GPU_SHADER_SLOTS 512u
+#define CEMU_GPU_VS_ARENA_BYTES (4u*1024u*1024u)
 typedef struct {
     uint64_t hash;
+    uint64_t code_hash2;
+    unsigned entry;
+    uint16_t boolean_uniforms;
+    bool boolean_defined;
+    uint8_t integer_defined;
+    uint32_t integer_uniforms[4];
+    uint8_t uniform_defined[CTR_SHADER_UNIFORMS];
+    ctr_gx2_shader_game_options opt;
     GX2VertexShader shader;
     uint16_t input_mask;
     uint8_t uniform_used[CTR_SHADER_UNIFORMS];
     uint32_t pica_instructions;
-    bool has_relative;
 } direct_gpu_vs_entry;
 typedef struct {
     uint64_t hash;
     GX2FetchShader shader;
     unsigned attribute_count;
+    ctr_vertex_attribute attributes[16];
 } direct_gpu_fetch_entry;
 typedef struct {
     GX2ContextState *context;
@@ -114,31 +127,44 @@ typedef struct {
     uint32_t fetch_size;
     void *vertex_ring;
     size_t vertex_cursor;
-    GX2ColorBuffer target;
+    size_t vertex_upload;
+    size_t vertex_upload_sizes[12];
+    unsigned vertex_upload_streams;
+    GX2ColorBuffer target,color_candidate;
     GX2Surface linear;
     GX2DepthBuffer depth_target;
     unsigned width,height,depth_format;
     bool has_depth;
+    bool color_resolved,color_pending;
+    bool color_flipped;
     void *vs_arena;
     GX2VertexShader vs[DIRECT_VS_SLOTS];
     bool vs_valid[DIRECT_VS_SLOTS];
     void *ps_arena;
     size_t ps_arena_used;
-    unsigned ps_count;
+    unsigned ps_count,last_ps;
     direct_ps_entry ps_entries[DIRECT_PS_SLOTS];
+    uint16_t ps_index[DIRECT_PS_INDEX_SLOTS];
     uint8_t scratch_ps[PIXEL_BYTES];
     void *gpu_vs_arena;
     size_t gpu_vs_arena_used;
     unsigned gpu_vs_count;
-    direct_gpu_vs_entry gpu_vs_entries[DIRECT_GPU_VS_SLOTS];
+    direct_gpu_vs_entry *gpu_vs_entries;
+    const direct_gpu_vs_entry *last_gpu_vs;
+    uint32_t last_vs_code[CTR_SHADER_MAX_CODE],last_vs_descriptors[CTR_SHADER_MAX_DESCRIPTORS];
+    uint8_t last_vs_code_defined[CTR_SHADER_MAX_CODE],last_vs_descriptors_defined[CTR_SHADER_MAX_DESCRIPTORS];
     void *gpu_fetch_arena;
     unsigned gpu_fetch_count;
-    direct_gpu_fetch_entry gpu_fetch_entries[DIRECT_GPU_FETCH_SLOTS];
+    direct_gpu_fetch_entry *gpu_fetch_entries;
     bool resident_depth_valid;
     uint32_t resident_depth_address;
     unsigned resident_depth_width,resident_depth_height,resident_depth_format;
     const GX2VertexShader *bound_vs;
+    const GX2FetchShader *bound_fetch;
     GX2PixelShader bound_ps;
+    const void *uploaded_pixel_program;
+    uint32_t uploaded_pixel_constants[PIXEL_CONSTANTS][4];
+    uint32_t uploaded_vertex_uniforms[CTR_SHADER_UNIFORMS][4];
     bool bound_ps_valid;
     bool list_bound;
 } direct_pool_state;
@@ -159,6 +185,10 @@ typedef struct {
     texture_image texture[3];
     texture_cache_entry *texture_lease[3];
     GX2Sampler sampler[3];
+    const GX2Texture *bound_textures[3];
+    GX2Sampler bound_samplers[3];
+    uint64_t bound_texture_uploads;
+    unsigned bound_texture_mask,bound_sampler_mask;
     ctr_gx2_shader *compiled;
     void *vertex_storage,*pixel_storage;
     void *vertex_program,*pixel_program,*fetch_program,*vertices,*draw_uploads;
@@ -175,10 +205,13 @@ typedef struct {
     uint8_t seed_stencil,stencil_written;
     bool seed_far,depth_written;
     bool pending,depth_enabled,buffered,resident,fog_table_valid,upload_batch_unavailable;
-    bool draw_context_active;
+    bool draw_context_active,raster_current,merger_current;
+    uint32_t raster_registers[9],merger_registers[10];
     uint32_t fog_table[128];
+    uint32_t light_tables[3][256];
+    unsigned light_table_mask;
     uint32_t pixel_constants[PIXEL_CONSTANTS][4];
-    unsigned pixel_uniform_vectors;
+    unsigned pixel_uniform_vectors,uploaded_pixel_vectors;
 } scene_private;
 
 void *ctr_gx2_allocate(ctr_wiiu_gx2_scene *s,size_t alignment,size_t bytes);
@@ -217,7 +250,12 @@ void ctr_gx2_abort_cb(void *context);
 
 void ctr_gx2_direct_pool_destroy(ctr_wiiu_gx2_scene *s);
 bool ctr_gx2_direct_begin_targets(ctr_wiiu_gx2_scene *s,const ctr_scene_surface *initial,
-                                  const ctr_scene_depth_surface *depth);
+                                  const ctr_scene_depth_surface *depth,bool reuse_pending,bool deferred);
+bool ctr_gx2_begin_deferred_color(void *context,const ctr_scene_surface *initial,
+                                  const ctr_scene_depth_surface *depth,bool reuse_pending);
+bool ctr_gx2_end_deferred_color(void *context);
+bool ctr_gx2_resolve_deferred_color(void *context,const ctr_scene_surface *readback);
+extern const ctr_scene_scanout ctr_gx2_scanout;
 bool ctr_gx2_direct_pixel_program(ctr_wiiu_gx2_scene *s,scene_private *p,const ctr_tev_program *tev,
                                   unsigned mask,bool texture2_coord1,unsigned implicit_lod,
                                   unsigned explicit_lod,unsigned filter_mask,unsigned mixed_filters,
@@ -227,7 +265,8 @@ void ctr_gx2_direct_prepare_draw(ctr_wiiu_gx2_scene *s,scene_private *p,unsigned
                                  unsigned coordinates,const ctr_scene_light *light);
 void ctr_gx2_direct_bind_pipeline(scene_private *p,direct_pool_state *pool,unsigned direct_vs_id);
 bool ctr_gx2_direct_setup_state(ctr_wiiu_gx2_scene *s,scene_private *p,const ctr_scene_state *state,
-                                const ctr_scene_sampler sources[3],unsigned mask,
-                                const ctr_scene_light *light,bool *skip_draw);
+                                const ctr_scene_sampler sources[3],unsigned mask,const ctr_scene_light *light,
+                                const ctr_texture_cache_lease (*leases)[CTR_SCENE_MAX_MIP_LEVELS],
+                                const ctr_tev_program *validated_tev,bool *skip_draw);
 bool ctr_gx2_draw_gpu_legacy(void *context,const ctr_scene_gpu_draw *draw);
 #endif

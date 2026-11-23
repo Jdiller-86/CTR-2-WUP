@@ -34,6 +34,7 @@ static void identity_and_failures(void) {
     /* Unused tail bytes do not enter the exact base-level key. */
     source[1024]=199;
     CHECK(ctr_texture_cache_acquire(cache,source,sizeof(source),0,16,16,&a)==CTR_TEXTURE_CACHE_OK && a.rgba==first);
+    /* An edit outside the sampled key must still miss. */
     ctr_texture_cache_release(&a);source[17]=129;
     CHECK(ctr_texture_decode(source,1024,0,16,16,reference,sizeof(reference))==CTR_TEXTURE_OK);
     CHECK(ctr_texture_cache_acquire(cache,source,1024,0,16,16,&a)==CTR_TEXTURE_CACHE_OK);
@@ -43,12 +44,15 @@ static void identity_and_failures(void) {
     CHECK(ctr_texture_cache_acquire(cache,source,1024,0,8,32,&a)==CTR_TEXTURE_CACHE_OK);
     CHECK(ctr_texture_cache_acquire(cache,source,1024,2,16,32,&b)==CTR_TEXTURE_CACHE_OK);
     CHECK(stats(cache).decodes==4u);ctr_texture_cache_release(&a);ctr_texture_cache_release(&b);
+    memset(source,0,sizeof(source));
+    CHECK(ctr_texture_cache_acquire(cache,source,128,12,16,16,&a)==CTR_TEXTURE_CACHE_OK);
+    ctr_texture_cache_release(&a);
     size_t bytes=stats(cache).bytes;uint64_t evictions=stats(cache).evictions;
     CHECK(ctr_texture_cache_acquire(cache,source,255,0,8,8,&a)==CTR_TEXTURE_CACHE_DECODE && !a.rgba);
     CHECK(ctr_texture_cache_acquire(cache,source,sizeof(source),14,8,8,&a)==CTR_TEXTURE_CACHE_DECODE);
     CHECK(ctr_texture_cache_acquire(cache,source,sizeof(source),0,7,8,&a)==CTR_TEXTURE_CACHE_DECODE);
-    memset(source,0,sizeof(source));source[7]=0xf9;source[4]=2; /* Invalid ETC1 differential endpoint. */
-    CHECK(ctr_texture_cache_acquire(cache,source,32,12,8,8,&a)==CTR_TEXTURE_CACHE_DECODE);
+    source[7]=0xf9;source[4]=2; /* Invalid ETC1 endpoint outside the sampled key. */
+    CHECK(ctr_texture_cache_acquire(cache,source,128,12,16,16,&a)==CTR_TEXTURE_CACHE_DECODE);
     CHECK(stats(cache).bytes==bytes && stats(cache).evictions==evictions && stats(cache).rejections==4u);
     CHECK(ctr_texture_cache_acquire(cache,NULL,0,0,8,8,&a)==CTR_TEXTURE_CACHE_ARGUMENT);
     CHECK(ctr_texture_cache_acquire(cache,source,sizeof(source),0,8,8,(ctr_texture_cache_lease *)source)==CTR_TEXTURE_CACHE_ARGUMENT);

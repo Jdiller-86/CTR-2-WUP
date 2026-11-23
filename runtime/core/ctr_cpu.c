@@ -122,7 +122,8 @@ static ctr_mem_result cpu_read_cached(const ctr_memory *mem, uint32_t address, u
         for (size_t i = 0; i < mem->count; ++i) {
             const ctr_mapping *m = &mem->maps[i];
             if ((m->permissions & permission) == permission &&
-                address >= m->base && (uint64_t)address + width <= (uint64_t)m->base + m->size) {
+                address >= m->base && (uint64_t)address + width <= (uint64_t)m->base + m->size &&
+                !ctr_memory_backing_watched(mem,m->storage,m->size)) {
                 *base = m->base; *end = m->base + m->size;
                 *storage = m->storage; *version = mem->resource_mapping_version;
                 break;

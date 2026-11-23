@@ -1,5 +1,6 @@
 /* Original single-process GSP direct/shared framebuffer bridge from wire facts. */
 #include "ctr_gsp.h"
+#include "ctr_guest_pica.h"
 #include "ctr_apt.h"
 #include "ctr_kernel.h"
 #include "ctr_gx.h"
@@ -42,9 +43,12 @@ static bool supported(unsigned screen,const uint32_t *info) {
         (stereo?info[2]!=0u:(!info[2] || info[2]==info[1])) &&
         info[3]>=240*pixel_bytes(format) && info[3]<=4096;
 }
-static ctr_mem_result source_ok(const ctr_guest *g,unsigned screen,const uint32_t *info) {
+static uint32_t source_size(unsigned screen,const uint32_t *info) {
     unsigned width=screen?320:400;
-    uint32_t size=(width-1)*info[3]+240*pixel_bytes(info[4]&7u);
+    return (width-1)*info[3]+240*pixel_bytes(info[4]&7u);
+}
+static ctr_mem_result source_ok(const ctr_guest *g,unsigned screen,const uint32_t *info) {
+    uint32_t size=source_size(screen,info);
     ctr_mem_result result=ctr_memory_check_range(&g->memory,info[1],size,CTR_MEM_READ);
     if(result==CTR_MEM_OK && info[2] && info[2]!=info[1])
         result=ctr_memory_check_range(&g->memory,info[2],size,CTR_MEM_READ);
@@ -215,6 +219,19 @@ bool ctr_gsp_poll(ctr_guest *g,uint64_t now) {
 static unsigned expand(unsigned value,unsigned bits) {
     return bits==6?(value<<2)|(value>>4):bits==5?(value<<3)|(value>>2):(value<<4)|value;
 }
+unsigned ctr_guest_scanout_screen(const ctr_guest *g,unsigned screen) {
+    const ctr_scene_scanout_state *scanout=ctr_guest_scanout_state(g);
+    if(screen>1 || !scanout || scanout->guest!=g || !g->gsp.active[screen] || g->gsp.black)return 0;
+    const uint32_t *info=g->gsp.info[screen];
+    if((info[4]&7u)!=2u || info[3]!=CTR_GX_SCANOUT_WIDTH*2u ||
+       source_ok(g,screen,info)!=CTR_MEM_OK)return 0;
+    unsigned first_row=screen?CTR_GX_SCANOUT_HEIGHT-CTR_GX_BOTTOM_HEIGHT:0u;
+    for(unsigned i=0;i<CTR_GX_SCANOUT_SLOTS;++i) {
+        const ctr_scene_scanout_slot *slot=&scanout->slots[i];
+        if(slot->storage && slot->address==info[1] && slot->first_row==first_row)return i+1u;
+    }
+    return 0;
+}
 ctr_mem_result ctr_gsp_pixels(const ctr_guest *g,unsigned screen,uint32_t *rgba,size_t count) {
     if(screen>1 || !rgba || count!=(screen?320u:400u)*240u || !g->gsp.active[screen])return CTR_MEM_UNMAPPED;
     if(g->gsp.black) { for(size_t i=0;i<count;++i)rgba[i]=0x000000ff;return CTR_MEM_OK; }
@@ -238,4 +255,22 @@ ctr_mem_result ctr_gsp_pixels(const ctr_guest *g,unsigned screen,uint32_t *rgba,
         }
     }
     return CTR_MEM_OK;
+}
+ctr_mem_result ctr_gsp_pixels_cached(const ctr_guest *g,unsigned screen,uint32_t *rgba,
+                                     size_t count,ctr_gsp_pixel_cache *cache) {
+    if(!cache || screen>1 || !g->gsp.active[screen] || !rgba || count!=(screen?320u:400u)*240u)
+        return ctr_gsp_pixels(g,screen,rgba,count);
+    const uint32_t *info=g->gsp.info[screen];
+    if(!g->gsp.black && cache->rgba==rgba && cache->count==count &&
+       !memcmp(cache->descriptor,info,sizeof(cache->descriptor)) &&
+       ctr_memory_resource_key_current(&g->memory,&cache->source))return CTR_MEM_OK;
+    cache->rgba=NULL;
+    ctr_mem_result result=ctr_gsp_pixels(g,screen,rgba,count);
+    /* Stereo validation also checks the other eye, which is outside this key. */
+    if(result==CTR_MEM_OK && !g->gsp.black && (!info[2] || info[2]==info[1]) &&
+       ctr_memory_resource_key_capture(&g->memory,info[1],source_size(screen,info),CTR_MEM_READ,&cache->source)) {
+        memcpy(cache->descriptor,info,sizeof(cache->descriptor));
+        cache->rgba=rgba;cache->count=count;
+    }
+    return result;
 }

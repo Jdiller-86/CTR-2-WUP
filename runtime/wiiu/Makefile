@@ -219,6 +219,9 @@ $(BUILD)/identity: identity-force | $(BUILD)
 	@printf '%s\n' '$(CTR_BUILD_SHA):$(CTR_BUILD_DIRTY):$(APP_VERSION)' > "$@.tmp"
 	@if ! cmp -s "$@.tmp" "$@"; then mv "$@.tmp" "$@"; else rm "$@.tmp"; fi
 $(BUILD)/code%.o $(BUILD)/entries.o: CFLAGS += -g0
+ifeq ($(GAME_TEST)$(GAME_CEMU_TEST),11)
+$(BUILD)/ctr_shader.o: CFLAGS += -O3
+endif
 $(BUILD)/%.o: %.c $(CTR_RUNTIME_MANIFEST) Makefile $(BUILD)/identity | $(BUILD)
 	"$(CC)" $(CFLAGS) -MMD -MP -c "$<" -o "$@"
 $(OUTPUT)/$(TARGET).elf: $(OBJECTS) $(WUT_SPECS)

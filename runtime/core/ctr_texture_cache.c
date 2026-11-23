@@ -1,5 +1,6 @@
 #include "ctr_texture_cache.h"
 #include <limits.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -7,23 +8,38 @@
 typedef struct {
     uint8_t *bytes;
     size_t source_size,rgba_size;
-    uint64_t hash;
+    uint32_t hash;
     unsigned format,width,height,profile,pins;
+    uint32_t identity;
 } texture_entry;
 struct ctr_texture_cache {
     texture_entry entries[CTR_TEXTURE_CACHE_SLOTS];
+    /* Live allocations are disjoint and sorted by start address. */
+    texture_entry *by_address[CTR_TEXTURE_CACHE_SLOTS];
     unsigned next;
     ctr_texture_cache_statistics statistics;
 };
 
-static uint64_t hash_source(const uint8_t *bytes,size_t size) {
-    uint64_t h=UINT64_C(14695981039346656037)^(uint64_t)size;
-    size_t i=0;
-    for(;i+8u<=size;i+=8u) {
-        uint64_t w;memcpy(&w,bytes+i,8u);
-        h=(h^w)*UINT64_C(1099511628211);
+static uint32_t allocate_texture_identity(void) {
+    static atomic_uint_least32_t sequence=1u;
+    uint_least32_t id=atomic_load_explicit(&sequence,memory_order_relaxed);
+    while(id<UINT32_MAX) {
+        if(atomic_compare_exchange_weak_explicit(&sequence,&id,id+1u,
+                                                 memory_order_relaxed,memory_order_relaxed))
+            return (uint32_t)id;
     }
-    for(;i<size;++i)h=(h^bytes[i])*UINT64_C(1099511628211);
+    /* Saturation disables the optimization without recycling identities. */
+    return 0;
+}
+
+static uint32_t hash_source(const uint8_t *bytes,size_t size) {
+    uint32_t h=UINT32_C(2166136261)^(uint32_t)size;
+    /* The key only filters candidates. Cache hits still compare every byte. */
+    size_t words=size/4u,step=(words+15u)/16u;
+    for(size_t i=0;i<words;i+=step) {
+        uint32_t w;memcpy(&w,bytes+i*4u,sizeof(w));
+        h=(h^w)*UINT32_C(16777619);
+    }
     return h;
 }
 
@@ -36,15 +52,27 @@ static bool overlap(const void *a,size_t an,const void *b,size_t bn) {
 static bool owner(const ctr_texture_cache *cache) {
     return span(cache,sizeof(*cache)) && !((uintptr_t)cache%_Alignof(ctr_texture_cache));
 }
+static unsigned resident_lower_bound(const ctr_texture_cache *cache,uintptr_t address) {
+    unsigned first=0,last=cache->statistics.entries;
+    while(first<last) {
+        unsigned middle=first+(last-first)/2u;
+        if((uintptr_t)cache->by_address[middle]->bytes<address)first=middle+1u;
+        else last=middle;
+    }
+    return first;
+}
 static bool external(const ctr_texture_cache *cache,const void *p,size_t bytes) {
     if(!span(p,bytes))return false;
     if(!cache)return true;
     if(overlap(cache,sizeof(*cache),p,bytes))return false;
-    for(unsigned i=0;i<CTR_TEXTURE_CACHE_SLOTS;++i) {
-        const texture_entry *e=&cache->entries[i];
-        if(overlap(e->bytes,e->source_size+e->rgba_size,p,bytes))return false;
-    }
-    return true;
+    if(!bytes)return true;
+    uintptr_t start=(uintptr_t)p;
+    unsigned next=resident_lower_bound(cache,start);
+    if(next<cache->statistics.entries && (uintptr_t)cache->by_address[next]->bytes<start+bytes)
+        return false;
+    if(!next)return true;
+    const texture_entry *previous=cache->by_address[next-1u];
+    return !overlap(previous->bytes,previous->source_size+previous->rgba_size,p,bytes);
 }
 static void increment(ctr_texture_cache *cache,uint64_t *counter) {
     if(*counter<UINT64_MAX)++*counter;
@@ -53,8 +81,12 @@ static void increment(ctr_texture_cache *cache,uint64_t *counter) {
 static void discard(ctr_texture_cache *cache,unsigned index) {
     texture_entry *e=&cache->entries[index];
     if(!e->bytes)return;
+    unsigned at=resident_lower_bound(cache,(uintptr_t)e->bytes);
     cache->statistics.bytes-=e->source_size+e->rgba_size;
     --cache->statistics.entries;
+    memmove(&cache->by_address[at],&cache->by_address[at+1u],
+            (cache->statistics.entries-at)*sizeof(cache->by_address[0]));
+    cache->by_address[cache->statistics.entries]=NULL;
     free(e->bytes);memset(e,0,sizeof(*e));
 }
 ctr_texture_cache *ctr_texture_cache_create(void) { return calloc(1,sizeof(ctr_texture_cache)); }
@@ -79,21 +111,22 @@ ctr_texture_cache_result ctr_texture_cache_acquire(ctr_texture_cache *cache,
     if(lease->rgba || lease->owner || lease->owned)return CTR_TEXTURE_CACHE_ARGUMENT;
     if(cache)increment(cache,&cache->statistics.lookups);
     size_t need;
-    if(ctr_texture_size(format,width,height,&need)!=CTR_TEXTURE_OK ||
-       ctr_texture_validate(source,source_bytes,format,width,height)!=CTR_TEXTURE_OK) {
+    if(ctr_texture_size(format,width,height,&need)!=CTR_TEXTURE_OK || source_bytes<need) {
         if(cache)increment(cache,&cache->statistics.rejections);
         return CTR_TEXTURE_CACHE_DECODE;
     }
     size_t rgba_size=(size_t)width*height*4u;
     if(!cache) {
+        if(ctr_texture_validate(source,need,format,width,height)!=CTR_TEXTURE_OK)
+            return CTR_TEXTURE_CACHE_DECODE;
         uint8_t *rgba=malloc(rgba_size);
         if(!rgba)return CTR_TEXTURE_CACHE_NO_MEMORY;
         if(ctr_texture_decode(source,need,format,width,height,rgba,rgba_size)!=CTR_TEXTURE_OK) {
             free(rgba);return CTR_TEXTURE_CACHE_DECODE;
         }
-        *lease=(ctr_texture_cache_lease){rgba,NULL,rgba,0};return CTR_TEXTURE_CACHE_OK;
+        *lease=(ctr_texture_cache_lease){rgba,NULL,rgba,0,0};return CTR_TEXTURE_CACHE_OK;
     }
-    uint64_t source_hash=hash_source(source,need);
+    uint32_t source_hash=hash_source(source,need);
     for(unsigned i=0;i<CTR_TEXTURE_CACHE_SLOTS;++i) {
         texture_entry *e=&cache->entries[i];
         if(!e->bytes || e->profile!=DECODER_PROFILE || e->format!=format ||
@@ -101,7 +134,11 @@ ctr_texture_cache_result ctr_texture_cache_acquire(ctr_texture_cache *cache,
            e->hash!=source_hash || memcmp(e->bytes,source,need))continue;
         if(e->pins==UINT_MAX)return CTR_TEXTURE_CACHE_BUSY;
         ++e->pins;increment(cache,&cache->statistics.hits);
-        *lease=(ctr_texture_cache_lease){e->bytes+need,cache,NULL,i};return CTR_TEXTURE_CACHE_OK;
+        *lease=(ctr_texture_cache_lease){e->bytes+need,cache,NULL,i,e->identity};return CTR_TEXTURE_CACHE_OK;
+    }
+    /* A matching entry already passed preflight. Validate new bytes before eviction. */
+    if(ctr_texture_validate(source,need,format,width,height)!=CTR_TEXTURE_OK) {
+        increment(cache,&cache->statistics.rejections);return CTR_TEXTURE_CACHE_DECODE;
     }
     increment(cache,&cache->statistics.misses);
     size_t required=need+rgba_size,available=CTR_TEXTURE_CACHE_MAX_BYTES-cache->statistics.bytes;
@@ -132,12 +169,17 @@ ctr_texture_cache_result ctr_texture_cache_acquire(ctr_texture_cache *cache,
     if(ctr_texture_decode(bytes,need,format,width,height,bytes+need,rgba_size)!=CTR_TEXTURE_OK) {
         free(bytes);return CTR_TEXTURE_CACHE_DECODE;
     }
-    cache->entries[selected]=(texture_entry){bytes,need,rgba_size,source_hash,format,width,height,DECODER_PROFILE,1};
+    uint32_t identity=allocate_texture_identity();
+    cache->entries[selected]=(texture_entry){bytes,need,rgba_size,source_hash,format,width,height,DECODER_PROFILE,1,identity};
+    unsigned at=resident_lower_bound(cache,(uintptr_t)bytes);
+    memmove(&cache->by_address[at+1u],&cache->by_address[at],
+            (cache->statistics.entries-at)*sizeof(cache->by_address[0]));
+    cache->by_address[at]=&cache->entries[selected];
     cache->statistics.bytes+=required;++cache->statistics.entries;
     if(cache->statistics.bytes>cache->statistics.peak_bytes)cache->statistics.peak_bytes=cache->statistics.bytes;
     increment(cache,&cache->statistics.decodes);
     cache->next=(selected+1u)%CTR_TEXTURE_CACHE_SLOTS;
-    *lease=(ctr_texture_cache_lease){bytes+need,cache,NULL,selected};return CTR_TEXTURE_CACHE_OK;
+    *lease=(ctr_texture_cache_lease){bytes+need,cache,NULL,selected,identity};return CTR_TEXTURE_CACHE_OK;
 }
 void ctr_texture_cache_release(ctr_texture_cache_lease *lease) {
     if(!span(lease,sizeof(*lease)) || (uintptr_t)lease%_Alignof(ctr_texture_cache_lease))return;

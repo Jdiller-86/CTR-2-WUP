@@ -13,6 +13,7 @@
 #include "diagnostic_display.h"
 #include "guest_slice.h"
 #ifdef CTR_GAME_CEMU_TEST
+#include "ctr_guest_pica.h"
 #include "gx2_scene.h"
 #endif
 #include "native_audio_stream.h"
@@ -48,6 +49,9 @@ static ctr_diagnostic_audio audio;
 static ctr_native_stream stream;
 static ctr_dsp_stream converter;
 static uint32_t top[400u*240u],bottom[320u*240u];
+#ifdef CTR_GAME_CEMU_TEST
+static ctr_gsp_pixel_cache screen_cache[2];
+#endif
 static int16_t dsp_pcm[CTR_DSP_FRAME_SAMPLES*2],pcm[CTR_NATIVE_STREAM_FRAMES*2];
 static size_t pcm_frames;
 static uint64_t session,clock_ns,last_status_us,frames;
@@ -158,6 +162,7 @@ static bool start_guest(void) {
     ctr_guest_image image=ctr_game_image;image.code=code;
     opened=ctr_guest_open(&guest,&image,NULL,0);free(code);
     if(!opened || !ctr_recomp_attach(&guest,true))return false;
+    ctr_recomp_enable_runfast(&guest);
 #ifdef CTR_GAME_CEMU_TEST
     guest.gsp.clock_us=slice_clock;
 #endif
@@ -201,6 +206,10 @@ static bool pump_audio(void) {
             if(!ctr_dsp_stream_push(&converter,dsp_pcm,CTR_DSP_FRAME_SAMPLES))return false;
             progress=true;
         }
+#ifdef CTR_GAME_CEMU_TEST
+        else if(ctr_dsp_stream_space(&converter)<CTR_DSP_FRAME_SAMPLES && ctr_dsp_read(&guest,dsp_pcm,CTR_DSP_FRAME_SAMPLES*2))
+            progress=true;
+#endif
         if(ctr_native_stream_space(&stream)) {
             size_t count;
             if(!ctr_dsp_stream_pull(&converter,pcm+pcm_frames*2,CTR_NATIVE_STREAM_FRAMES-pcm_frames,&count))return false;
@@ -369,6 +378,8 @@ int main(void) {
             ctr_diagnostic_audio_end(&audio,ctr_native_stream_release,&stream);
             if(save_ready && savedata.dirty && !ctr_fs_snapshot_save(CTR_GAME_DATA_ROOT "/save.snapshot",&savedata))fail("Save publication failed");
 #ifdef CTR_GAME_CEMU_TEST
+            if(opened && (!ctr_guest_pica_flush_color(&guest) || !ctr_guest_scanout_flush(&guest)))
+                fail("Pending GPU color publication failed");
             ctr_wiiu_gx2_scene_abort(&gx2_scene);
 #endif
             status_report("background");ctr_report_storage_close(&storage);ctr_procui_release(NULL);
@@ -436,9 +447,21 @@ int main(void) {
         if(picture && (!previous_picture || presented_vblank!=guest.gsp.vblanks ||
            presented_swaps[0]!=guest.gsp.swaps[0] || presented_swaps[1]!=guest.gsp.swaps[1])) {
             uint64_t presentation_start=slice_clock(NULL);
+#ifdef CTR_GAME_CEMU_TEST
+            const void *top_scanout=ctr_wiiu_gx2_scene_scanout_texture(&gx2_scene,ctr_guest_scanout_screen(&guest,0));
+            const void *bottom_scanout=ctr_wiiu_gx2_scene_scanout_texture(&gx2_scene,ctr_guest_scanout_screen(&guest,1));
+            bool drawn=(top_scanout || bottom_scanout) &&
+                (top_scanout || ctr_gsp_pixels_cached(&guest,0,top,400u*240u,&screen_cache[0])==CTR_MEM_OK) &&
+                (bottom_scanout || ctr_gsp_pixels_cached(&guest,1,bottom,320u*240u,&screen_cache[1])==CTR_MEM_OK) &&
+                ctr_diagnostic_display_scanout(top_scanout,bottom_scanout,top,bottom);
+            if(!drawn && (ctr_gsp_pixels_cached(&guest,0,top,400u*240u,&screen_cache[0])!=CTR_MEM_OK ||
+               ctr_gsp_pixels_cached(&guest,1,bottom,320u*240u,&screen_cache[1])!=CTR_MEM_OK ||
+               !ctr_diagnostic_display_guest(top,bottom))) {
+#else
             if(ctr_gsp_pixels(&guest,0,top,400u*240u)!=CTR_MEM_OK ||
                ctr_gsp_pixels(&guest,1,bottom,320u*240u)!=CTR_MEM_OK ||
                !ctr_diagnostic_display_guest(top,bottom)) {
+#endif
                 fail("Guest display presentation failed");picture=false;
             } else {
                 presented_vblank=guest.gsp.vblanks;

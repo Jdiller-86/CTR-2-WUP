@@ -35,11 +35,17 @@ static void display_formats(void) {
         CHECK(pixels[0]==0xffffffff && pixels[width-1]==0xff0000ff && pixels[239*width]==0x00ff00ff && pixels[width*240-1]==0x0000ffff);
         CHECK(pixels[width+1]==interior[format]);
     }
+    ctr_gsp_pixel_cache cache={0};
+    CHECK(ctr_gsp_pixels_cached(&g,0,pixels,400*240,&cache)==CTR_MEM_OK && cache.rgba==pixels);
+    CHECK(ctr_gsp_pixels_cached(&g,0,pixels,400*240,&cache)==CTR_MEM_OK && pixels[0]==0xffffffff);
+    CHECK(ctr_memory_write(&g.memory,0x20000000+239*2,2,0xf00f)==CTR_MEM_OK);
+    CHECK(ctr_gsp_pixels_cached(&g,0,pixels,400*240,&cache)==CTR_MEM_OK && pixels[0]==0xff0000ff);
     const uint32_t black[]={0xb0040,1};send(&g,session,black,2);CHECK(g.gsp.black);
-    CHECK(ctr_gsp_pixels(&g,0,pixels,400*240)==CTR_MEM_OK && pixels[0]==0xff && pixels[400*240-1]==0xff);
+    CHECK(ctr_gsp_pixels_cached(&g,0,pixels,400*240,&cache)==CTR_MEM_OK && pixels[0]==0xff && pixels[400*240-1]==0xff);
     const uint32_t visible[]={0xb0040,0};send(&g,session,visible,2);CHECK(!g.gsp.black);
+    CHECK(ctr_gsp_pixels_cached(&g,0,pixels,400*240,&cache)==CTR_MEM_OK && pixels[0]==0xff0000ff);
     memset(pixels,0xab,400*240*sizeof(*pixels));CHECK(ctr_memory_change_range(&g.memory,0x20000001,1,0,false)==CTR_MEM_OK);
-    CHECK(ctr_gsp_pixels(&g,0,pixels,400*240)==CTR_MEM_PERMISSION && pixels[0]==0xabababab && pixels[400*240-1]==0xabababab);
+    CHECK(ctr_gsp_pixels_cached(&g,0,pixels,400*240,&cache)==CTR_MEM_PERMISSION && pixels[0]==0xabababab && pixels[400*240-1]==0xabababab);
     CHECK(ctr_gsp_pixels(&g,2,pixels,400*240)==CTR_MEM_UNMAPPED);
     CHECK(ctr_gsp_pixels(&g,0,pixels,1)==CTR_MEM_UNMAPPED);
     uint32_t duplicate=ctr_guest_handle_new(&g,CTR_HANDLE_SESSION,ctr_guest_handle_for(&g,session)->object);CHECK(duplicate);

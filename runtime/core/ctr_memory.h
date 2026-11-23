@@ -11,7 +11,8 @@
 enum { CTR_MEM_READ = 1u, CTR_MEM_WRITE = 2u, CTR_MEM_EXEC = 4u };
 typedef enum {
     CTR_MEM_OK = 0, CTR_MEM_UNMAPPED, CTR_MEM_PERMISSION,
-    CTR_MEM_ALIGNMENT, CTR_MEM_OVERFLOW, CTR_MEM_OVERLAP, CTR_MEM_CAPACITY
+    CTR_MEM_ALIGNMENT, CTR_MEM_OVERFLOW, CTR_MEM_OVERLAP, CTR_MEM_CAPACITY,
+    CTR_MEM_PENDING
 } ctr_mem_result;
 
 typedef struct {
@@ -20,6 +21,21 @@ typedef struct {
     unsigned permissions;
     uint8_t *storage;
 } ctr_mapping;
+
+typedef void (*ctr_memory_access_fn)(void *context,const uint8_t *storage,size_t size,bool write);
+#define CTR_MEMORY_WATCH_SLOTS 13u
+typedef struct {
+    const uint8_t *storage;
+    size_t size;
+    ctr_memory_access_fn access;
+    void *context;
+} ctr_memory_watch;
+typedef struct {
+    ctr_memory_watch slots[CTR_MEMORY_WATCH_SLOTS];
+    void *owner;
+    uintptr_t primary_start,primary_end;
+    uintptr_t scanout_start,scanout_end;
+} ctr_memory_watch_group;
 
 typedef struct ctr_memory {
     ctr_mapping maps[CTR_MEMORY_MAX_MAPS];
@@ -33,6 +49,10 @@ typedef struct ctr_memory {
      * permanently disables resource keys until the memory owner is reset. */
     uint64_t resource_clock, resource_mapping_version;
     uint64_t resource_versions[CTR_MEMORY_RESOURCE_SLOTS];
+    const uint8_t *watch_storage;
+    size_t watch_size;
+    ctr_memory_access_fn watch_access;
+    void *watch_context;
 } ctr_memory;
 
 typedef struct {
@@ -43,6 +63,26 @@ typedef struct {
 } ctr_memory_resource_key;
 
 void ctr_memory_init(ctr_memory *memory);
+/* One pending backing range, shared by all aliases. Clear it with a null
+ * callback after publishing the pending bytes. An overlapping access fails
+ * if the callback leaves the range watched. Invalid or saturated installs
+ * leave the current watch unchanged. */
+void ctr_memory_set_watch(ctr_memory *memory,const uint8_t *storage,size_t size,
+                          ctr_memory_access_fn on_access,void *context);
+/* Direct CPU caches must also exclude previously watched backing in an
+ * attached group. Checked accesses resolve only active watches. */
+bool ctr_memory_backing_watched(const ctr_memory *memory,const uint8_t *storage,size_t size);
+/* A caller-owned group extends the primary watch in slot zero without moving
+ * guest memory fields. Detach before freeing it, after clearing extra slots. */
+bool ctr_memory_attach_watch_group(ctr_memory *memory,ctr_memory_watch_group *group);
+bool ctr_memory_detach_watch_group(ctr_memory *memory,ctr_memory_watch_group *group);
+bool ctr_memory_set_watch_slot(ctr_memory *memory,unsigned index,const uint8_t *storage,size_t size,
+                               ctr_memory_access_fn on_access,void *context);
+/* Resolve pending contents of an already validated virtual span. */
+bool ctr_memory_resolve_watches(const ctr_memory *memory,uint32_t address,uint32_t size,bool write);
+/* Clip mapped backing around a validated access for a direct CPU cache fill. */
+bool ctr_memory_unwatched_span(const ctr_memory *memory,const ctr_mapping *map,
+                               uint32_t address,unsigned width,ctr_mapping *out);
 ctr_mem_result ctr_memory_map(ctr_memory *memory, uint32_t base, uint32_t size,
                              unsigned permissions, uint8_t *storage,
                              size_t storage_size);

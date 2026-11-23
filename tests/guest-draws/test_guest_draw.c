@@ -382,7 +382,7 @@ static bool backend_end(void *context,const ctr_scene_surface *readback) {
 }
 static void backend_abort(void *context) { backend_mock *m=context;++m->aborts;m->active=false; }
 static ctr_scene_backend mock_backend(backend_mock *m) {
-    ctr_scene_backend backend={m,backend_begin,backend_draw,backend_end,backend_abort,NULL,NULL,NULL,NULL,0,NULL,NULL};return backend;
+    ctr_scene_backend backend={m,backend_begin,backend_draw,backend_end,backend_abort,NULL,NULL,NULL,NULL,0,NULL,NULL,NULL};return backend;
 }
 static void native_backend_success(void) {
     for(unsigned kind=0;kind<4;++kind) {
@@ -626,7 +626,8 @@ static bool guest_texture_begin(void *context,const ctr_scene_surface *initial) 
     guest_texture_backend *m=context;++m->begins;CHECK(initial->size==BYTES);
     memcpy(m->pixels,initial->bytes,BYTES);
     /* Simulate source changes after preflight. Callbacks must see owned snapshots. */
-    memset(m->guest->allocations[1].storage,0,4096);return true;
+    if(m->guest)memset(m->guest->allocations[1].storage,0,4096);
+    return true;
 }
 static bool guest_texture_draw(void *context,const ctr_scene_state *s,const ctr_vertex *v,unsigned count,
                                const ctr_scene_texture *texture) {
@@ -651,14 +652,23 @@ static bool guest_texture_end(void *context,const ctr_scene_surface *readback) {
 }
 static void guest_texture_abort(void *context) { ++((guest_texture_backend *)context)->aborts; }
 static void guest_texture_snapshots(void) {
-    ctr_guest g;list l;ctr_gx_completion c;textured_open(&g,&l,false);
-    insert_at(&l,find(&l,0x22f,1),0x085,(TEXTURE_PA+1024u)/8u);trim(&l);finish(&l);
-    guest_texture_backend m={0};m.guest=&g;
-    ctr_scene_backend backend={&m,guest_texture_begin,guest_texture_draw,guest_texture_end,guest_texture_abort,NULL,NULL,NULL,NULL,0,NULL,NULL};
-    ctr_guest_set_scene_backend(&g,&backend);
-    CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK && c.signal && c.irq==5);
-    CHECK(m.begins==1 && m.draws==2 && m.ends==1 && !m.aborts);texture_golden(&g,true,false,true);
-    ctr_guest_close(&g);
+    for(unsigned stable=0;stable<2u;++stable) {
+        ctr_guest g;list l;ctr_gx_completion c;textured_open(&g,&l,false);
+        insert_at(&l,find(&l,0x22f,1),0x085,(TEXTURE_PA+1024u)/8u);trim(&l);finish(&l);
+        guest_texture_backend m={0};m.guest=stable?NULL:&g;
+        ctr_scene_backend backend={&m,guest_texture_begin,guest_texture_draw,guest_texture_end,guest_texture_abort,
+            NULL,NULL,NULL,NULL,stable?CTR_SCENE_BACKEND_STABLE_INPUTS:0u,NULL,NULL,NULL};
+        ctr_guest_set_scene_backend(&g,&backend);
+        CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK && c.signal && c.irq==5);
+        CHECK(m.begins==1 && m.draws==2 && m.ends==1 && !m.aborts);texture_golden(&g,true,false,true);
+        if(stable) {
+            ctr_resource_cache_statistics stats={0};ctr_resource_cache_statistics_get(g.pica_resources,&stats);
+            CHECK(!stats.lookups[CTR_RESOURCE_VERTEX] && !stats.lookups[CTR_RESOURCE_TEXTURE]);
+            CHECK(ctr_memory_change_range(&g.memory,TEXTURE_VA+1024u,8u,0u,false)==CTR_MEM_OK);
+            CHECK(submit(&g,&l,&c)==CTR_GX_MEMORY && !c.signal && m.begins==1);
+        }
+        ctr_guest_close(&g);
+    }
 }
 static void guest_texture_rollback(void) {
     for(unsigned retained=0;retained<2;++retained)for(unsigned kind=0;kind<15;++kind) {
@@ -809,7 +819,7 @@ static void guest_material_snapshots(void) {
     ctr_guest g;list l;ctr_gx_completion c;textured_open(&g,&l,false);material_setup(&g,&l);
     insert_at(&l,find(&l,0x22f,1),0x095,(TEXTURE_PA+3072u)/8u);trim(&l);finish(&l);
     guest_texture_backend m={0};m.guest=&g;
-    ctr_scene_backend backend={&m,guest_texture_begin,NULL,guest_texture_end,guest_texture_abort,NULL,NULL,guest_material_draw,NULL,0,NULL,NULL};
+    ctr_scene_backend backend={&m,guest_texture_begin,NULL,guest_texture_end,guest_texture_abort,NULL,NULL,guest_material_draw,NULL,0,NULL,NULL,NULL};
     ctr_guest_set_scene_backend(&g,&backend);
     CHECK(execute(&g,&l,BASE,&c)==CTR_GX_OK && c.signal && c.irq==5);
     CHECK(m.begins==1u && m.draws==2u && m.ends==1u && !m.aborts);

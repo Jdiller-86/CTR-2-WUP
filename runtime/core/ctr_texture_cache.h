@@ -19,6 +19,8 @@ typedef struct {
     ctr_texture_cache *owner;
     void *owned;
     unsigned slot;
+    /* A nonzero identity names this immutable decoded image process-wide. */
+    uint32_t identity;
 } ctr_texture_cache_lease;
 typedef struct {
     uint64_t lookups,hits,misses,decodes,evictions,rejections;

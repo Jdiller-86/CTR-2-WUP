@@ -33,6 +33,7 @@ typedef struct {
     uint16_t fixed_mask;
     uint16_t int_signed_mask;
     uint16_t int_unsigned_mask;
+    uint8_t int_components[16];
     uint32_t output_maps[7];
     unsigned output_count;
     bool light_active;

@@ -5,6 +5,15 @@
  * e6c528a20a41c34e0f9eb91dd3da40f119db2dee, src/libgpu/latte definitions.
  * The rounded game diagnostic can submit CPU-transformed vertices. */
 #include "gx2_scene_internal.h"
+#include "diagnostic_display.h"
+#include "ctr_guest_pica.h"
+
+typedef struct {
+    ctr_scene_scanout_state queue;
+    GX2Texture images[CTR_GX_SCANOUT_SLOTS];
+    ctr_diagnostic_scanout display[CTR_GX_SCANOUT_SLOTS];
+    GX2Surface linear;
+} gx2_scanout_state;
 #define pixel_shader ctr_gx2_pixel_shader
 #define transformed_program ctr_gx2_transformed_program
 #define upload_vertex_program ctr_gx2_upload_vertex_program
@@ -61,17 +70,23 @@ void ctr_wiiu_gx2_scene_cache_clear(ctr_wiiu_gx2_scene *s) {
     s->cache_stats.bytes=0;
 }
 
-bool ctr_gx2_restore(ctr_wiiu_gx2_scene *s) {
+static scene_private *queue_restore(ctr_wiiu_gx2_scene *s) {
     if(s && s->restore_context) {
         GX2SetContextState(s->restore_context);
-        /* Context switching can queue shadow-state memory references. Drain
-         * the switch before a context allocation can be reclaimed or reused. */
+        /* Keep shadow-state references alive through the next retirement. */
         scene_private *p=s->private_state;
         if(p && p->context) {
-            p->draw_context_active=false;p->pending=true;return ctr_gx2_retire(s,p);
+            p->raster_current=false;
+            p->merger_current=false;
+            p->bound_texture_mask=p->bound_sampler_mask=0;
+            p->draw_context_active=false;p->uploaded_pixel_vectors=0;p->pending=true;return p;
         }
     }
-    return true;
+    return NULL;
+}
+bool ctr_gx2_restore(ctr_wiiu_gx2_scene *s) {
+    scene_private *p=queue_restore(s);
+    return !p || ctr_gx2_retire(s,p);
 }
 #define restore ctr_gx2_restore
 bool ctr_gx2_fail(ctr_wiiu_gx2_scene *s,ctr_wiiu_gx2_scene_result result) {
@@ -95,17 +110,12 @@ static void texture_cache_add(ctr_wiiu_gx2_scene *s,uint64_t *counter,uint64_t a
         *counter=UINT64_MAX;s->texture_cache_stats.saturated=true;
     } else *counter+=amount;
 }
-static void texture_pins_observe(ctr_wiiu_gx2_scene *s) {
-    uint64_t pins=0;
-    if(s->texture_cache)for(unsigned i=0;i<s->texture_cache->slots;++i)
-        pins+=s->texture_cache->entries[i].pins;
-    s->texture_cache_stats.pins=pins;
-}
 static void texture_leases_release(ctr_wiiu_gx2_scene *s,scene_private *p) {
     for(unsigned unit=0;unit<3u;++unit)if(p->texture_lease[unit]) {
-        --p->texture_lease[unit]->pins;p->texture_lease[unit]=NULL;
+        --p->texture_lease[unit]->pins;
+        --s->texture_cache_stats.pins;
+        p->texture_lease[unit]=NULL;
     }
-    texture_pins_observe(s);
 }
 static void texture_cache_destroy(ctr_wiiu_gx2_scene *s) {
     if(s->texture_cache) {
@@ -119,8 +129,7 @@ bool ctr_wiiu_gx2_scene_texture_cache_clear(ctr_wiiu_gx2_scene *s) {
     if(!s || s->private_state)return false;
     texture_cache_destroy(s);return true;
 }
-bool ctr_gx2_retire(ctr_wiiu_gx2_scene *s,scene_private *p) {
-    if(!p->pending)return true;
+static bool wait_for_gx2(ctr_wiiu_gx2_scene *s) {
     ++s->waits;
     bool finished;
     if(s->cemu_readback) {
@@ -133,10 +142,15 @@ bool ctr_gx2_retire(ctr_wiiu_gx2_scene *s,scene_private *p) {
         ++s->wait_failures;s->quarantined=true;s->result=CTR_WIIU_GX2_SCENE_WAIT;
         return false;
     }
+    s->quarantined=false;return true;
+}
+bool ctr_gx2_retire(ctr_wiiu_gx2_scene *s,scene_private *p) {
+    if(!p->pending)return true;
+    if(!wait_for_gx2(s))return false;
     if(p->used_uploads && s->texture_cache)
         for(unsigned i=0;i<s->texture_cache->slots;++i)s->texture_cache->entries[i].submitted=false;
     p->used_uploads=0;
-    p->pending=false;s->quarantined=false;return true;
+    p->pending=false;return true;
 }
 #define retire ctr_gx2_retire
 void ctr_gx2_release(ctr_wiiu_gx2_scene *s,scene_private *p) {
@@ -147,7 +161,8 @@ void ctr_gx2_release(ctr_wiiu_gx2_scene *s,scene_private *p) {
         direct_pool_state *pool=s->direct_pool;
         if(p->context==pool->context)p->context=NULL;
         if(p->compiled==pool->compiled)p->compiled=NULL;
-        if(p->target.surface.image==pool->target.surface.image)p->target.surface.image=NULL;
+        if(p->target.surface.image==pool->target.surface.image ||
+           p->target.surface.image==pool->color_candidate.surface.image)p->target.surface.image=NULL;
         if(p->linear.image==pool->linear.image)p->linear.image=NULL;
         if(p->depth_target.surface.image==pool->depth_target.surface.image)p->depth_target.surface.image=NULL;
     }
@@ -178,6 +193,14 @@ void ctr_wiiu_gx2_scene_after_shutdown(ctr_wiiu_gx2_scene *s) {
     ctr_gx2_direct_pool_destroy(s);
     texture_cache_destroy(s);
     ctr_wiiu_gx2_scene_cache_clear(s);
+    gx2_scanout_state *scanout=s->scanout;
+    if(scanout) {
+        for(unsigned i=0;i<CTR_GX_SCANOUT_SLOTS;++i)
+            dispose(s,scanout->images[i].surface.image);
+        dispose(s,scanout->linear.image);
+        dispose(s,scanout);
+        s->scanout=NULL;
+    }
     s->restore_context=NULL;
 }
 static bool dimensions(const ctr_scene_surface *surface) {
@@ -430,6 +453,11 @@ static bool lighting_constants(scene_private *p,const ctr_scene_light *light,uns
            !isfinite(light->scale[table]))return false;
         p->pixel_constants[LIGHT_SCALE][table]=bits((float)light->scale[table]);
         unsigned first=LIGHT_TABLE_FIRST+table*64u;
+        p->pixel_uniform_vectors=first+64u;
+        unsigned table_bit=1u<<table;
+        if((p->light_table_mask&table_bit) &&
+           !memcmp(p->light_tables[table],light->table[table],sizeof(p->light_tables[table])))continue;
+        p->light_table_mask&=~table_bit;
         for(unsigned index=0;index<256u;++index) {
             uint32_t entry=light->table[table][index];
             if(entry>0xffffffu)return false;
@@ -437,7 +465,8 @@ static bool lighting_constants(scene_private *p,const ctr_scene_light *light,uns
             if(entry&UINT32_C(0x800000))slope=-slope;
             p->pixel_constants[first+index/4u][index%4u]=pack_lut(entry&4095u,slope);
         }
-        p->pixel_uniform_vectors=first+64u;
+        memcpy(p->light_tables[table],light->table[table],sizeof(p->light_tables[table]));
+        p->light_table_mask|=table_bit;
     }
     lookup_constants(p);
     return true;
@@ -1084,25 +1113,28 @@ static bool texture_source_aliases_cache(const ctr_wiiu_gx2_scene *s,const ctr_s
     }
     return false;
 }
+static inline bool texture_owned_overlap(const void *rgba,size_t bytes,const void *owned,size_t size) {
+    return owned && overlaps(rgba,bytes,owned,size);
+}
 static bool texture_source_aliases_upload(const scene_private *p,const ctr_scene_texture *source) {
     size_t bytes=(size_t)source->width*source->height*4u;
-    const struct { const void *pointer;size_t size; } owned[]={
-        {p,sizeof(*p)},{p->context,sizeof(*p->context)},
-        {p->compiled,sizeof(*p->compiled)},
-        {p->vertex_storage,sizeof(p->compiled->program)*p->shader_slots},
-        {p->pixel_storage,PIXEL_BYTES*p->shader_slots},{p->fetch_program,p->fetch_size},
-        {p->vertices,VERTEX_UPLOAD_BYTES},{p->draw_uploads,DRAW_UPLOAD_SLOTS*DRAW_UPLOAD_BYTES},
-        {p->target.surface.image,p->target.surface.imageSize},
-        {p->linear.image,p->linear.imageSize},
-        {p->depth_target.surface.image,p->depth_target.surface.imageSize},
-        {p->depth_linear.image,p->depth_linear.imageSize},
-        {p->depth_resolve.image,p->depth_resolve.imageSize},
-        {p->blend_snapshot.surface.image,p->blend_snapshot.surface.imageSize},
-        {p->stencil_target.surface.image,p->stencil_target.surface.imageSize},
-        {p->stencil_linear.image,p->stencil_linear.imageSize}
-    };
-    for(unsigned i=0;i<sizeof(owned)/sizeof(*owned);++i)
-        if(owned[i].pointer && overlaps(source->rgba,bytes,owned[i].pointer,owned[i].size))return true;
+    const void *rgba=source->rgba;
+    if(texture_owned_overlap(rgba,bytes,p,sizeof(*p)) ||
+       texture_owned_overlap(rgba,bytes,p->context,sizeof(*p->context)) ||
+       texture_owned_overlap(rgba,bytes,p->compiled,sizeof(*p->compiled)) ||
+       texture_owned_overlap(rgba,bytes,p->vertex_storage,sizeof(p->compiled->program)*p->shader_slots) ||
+       texture_owned_overlap(rgba,bytes,p->pixel_storage,PIXEL_BYTES*p->shader_slots) ||
+       texture_owned_overlap(rgba,bytes,p->fetch_program,p->fetch_size) ||
+       texture_owned_overlap(rgba,bytes,p->vertices,VERTEX_UPLOAD_BYTES) ||
+       texture_owned_overlap(rgba,bytes,p->draw_uploads,DRAW_UPLOAD_SLOTS*DRAW_UPLOAD_BYTES) ||
+       texture_owned_overlap(rgba,bytes,p->target.surface.image,p->target.surface.imageSize) ||
+       texture_owned_overlap(rgba,bytes,p->linear.image,p->linear.imageSize) ||
+       texture_owned_overlap(rgba,bytes,p->depth_target.surface.image,p->depth_target.surface.imageSize) ||
+       texture_owned_overlap(rgba,bytes,p->depth_linear.image,p->depth_linear.imageSize) ||
+       texture_owned_overlap(rgba,bytes,p->depth_resolve.image,p->depth_resolve.imageSize) ||
+       texture_owned_overlap(rgba,bytes,p->blend_snapshot.surface.image,p->blend_snapshot.surface.imageSize) ||
+       texture_owned_overlap(rgba,bytes,p->stencil_target.surface.image,p->stencil_target.surface.imageSize) ||
+       texture_owned_overlap(rgba,bytes,p->stencil_linear.image,p->stencil_linear.imageSize))return true;
     for(unsigned unit=0;unit<3u;++unit) {
         const texture_image *image=&p->texture[unit];
         if(image->texture.surface.image && overlaps(source->rgba,bytes,image->texture.surface.image,image->bytes))return true;
@@ -1240,38 +1272,37 @@ static bool texture_matches(const texture_image *image,const ctr_scene_sampler *
     }
     return true;
 }
-static uint64_t texture_sampler_hash(const ctr_scene_sampler *source) {
-    uint64_t h=UINT64_C(14695981039346656037)^(uint64_t)source->levels[0].width^
-        ((uint64_t)source->levels[0].height<<16)^((uint64_t)source->max_level<<32);
+static uint32_t texture_sampler_hash(const ctr_scene_sampler *source) {
+    uint32_t h=UINT32_C(2166136261)^source->levels[0].width^
+        (source->levels[0].height<<16)^source->max_level;
+    /* The hash only filters candidates. A hit compares every mip byte. */
     for(unsigned i=0;i<=source->max_level;++i) {
         const ctr_scene_texture *lv=&source->levels[i];
-        size_t bytes=(size_t)lv->width*lv->height*4u;
-        const uint8_t *p=lv->rgba;
-        for(size_t k=0;k+8u<=bytes;k+=8u) {
-            uint64_t w;memcpy(&w,p+k,8u);
-            h=(h^w)*UINT64_C(1099511628211);
+        size_t pixels=(size_t)lv->width*lv->height;
+        size_t step=(pixels+15u)/16u;
+        for(size_t k=0;k<pixels;k+=step) {
+            uint32_t w;memcpy(&w,lv->rgba+k*4u,sizeof(w));
+            h=(h^w)*UINT32_C(16777619);
         }
     }
     return h;
 }
 static texture_cache_entry *texture_find(ctr_wiiu_gx2_texture_cache *cache,
-                                         const ctr_scene_sampler *source,uint64_t h,bool direct) {
+                                         const ctr_scene_sampler *source,uint32_t h) {
     for(unsigned i=0;i<cache->slots;++i) {
         texture_cache_entry *entry=&cache->entries[i];
         const GX2Surface *surface=&entry->upload.texture.surface;
         if(!surface->image || entry->hash!=h ||
            surface->width!=source->levels[0].width || surface->height!=source->levels[0].height ||
            surface->mipLevels!=source->max_level+1u)continue;
-        if((direct && entry->last_rgba==source->levels[0].rgba) ||
-           texture_matches(&entry->upload,source)) {
-            entry->last_rgba=source->levels[0].rgba;
-            return entry;
-        }
+        if(texture_matches(&entry->upload,source))return entry;
     }
     return NULL;
 }
 static void texture_pin(ctr_wiiu_gx2_scene *s,scene_private *p,unsigned unit,texture_cache_entry *entry) {
-    ++entry->pins;p->texture_lease[unit]=entry;texture_pins_observe(s);
+    ++entry->pins;
+    ++s->texture_cache_stats.pins;
+    p->texture_lease[unit]=entry;
 }
 static texture_cache_entry *texture_slot(ctr_wiiu_gx2_scene *s,size_t bytes) {
     ctr_wiiu_gx2_texture_cache *cache=s->texture_cache;texture_cache_entry *slot=NULL;
@@ -1292,8 +1323,35 @@ static texture_cache_entry *texture_slot(ctr_wiiu_gx2_scene *s,size_t bytes) {
     }
     return NULL;
 }
+static bool texture_has_identities(const ctr_scene_sampler *source,const ctr_texture_cache_lease *levels) {
+    if(!levels)return false;
+    for(unsigned i=0;i<=source->max_level;++i)
+        if(!levels[i].identity || levels[i].rgba!=source->levels[i].rgba)return false;
+    return true;
+}
+static texture_cache_entry **texture_identity_slot(ctr_wiiu_gx2_texture_cache *cache,uint32_t identity) {
+    return &cache->identity_index[identity&(GX2_TEXTURE_IDENTITY_SLOTS-1u)];
+}
+static texture_cache_entry *texture_find_identity(ctr_wiiu_gx2_texture_cache *cache,
+                                                  const ctr_scene_sampler *source,
+                                                  const ctr_texture_cache_lease *levels) {
+    texture_cache_entry *entry=*texture_identity_slot(cache,levels[0].identity);
+    if(!entry)return NULL;
+    const GX2Surface *surface=&entry->upload.texture.surface;
+    if(surface->width!=source->levels[0].width || surface->height!=source->levels[0].height ||
+       surface->mipLevels!=source->max_level+1u)return NULL;
+    for(unsigned i=0;i<=source->max_level;++i)
+        if(entry->identities[i]!=levels[i].identity)return NULL;
+    return entry;
+}
+static void texture_record_identity(ctr_wiiu_gx2_texture_cache *cache,texture_cache_entry *entry,
+                                    const ctr_scene_sampler *source,const ctr_texture_cache_lease *levels) {
+    for(unsigned i=0;i<=source->max_level;++i)entry->identities[i]=levels[i].identity;
+    *texture_identity_slot(cache,levels[0].identity)=entry;
+}
 static bool upload_textures(ctr_wiiu_gx2_scene *s,scene_private *p,
-                            const ctr_scene_sampler sources[3],unsigned mask,bool mipmaps) {
+                            const ctr_scene_sampler sources[3],unsigned mask,bool mipmaps,
+                            const ctr_texture_cache_lease (*leases)[CTR_SCENE_MAX_MIP_LEVELS]) {
     if(!mask)return true;
     if(s->cemu_readback && s->texture_cache_disabled)return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
     if(s->texture_cache_disabled)texture_cache_destroy(s);
@@ -1317,12 +1375,18 @@ static bool upload_textures(ctr_wiiu_gx2_scene *s,scene_private *p,
     for(unsigned unit=0;unit<3u;++unit) {
         dispose(s,p->texture[unit].texture.surface.image);memset(&p->texture[unit],0,sizeof(p->texture[unit]));
     }
-    uint64_t hashes[3]={0};
+    uint32_t hashes[3]={0};
+    bool known[3]={false};
     /* Protect all current-draw resident hits before any miss can evict one,
      * including hits on units later than the first missing descriptor. */
     for(unsigned unit=0;unit<3u;++unit)if(mask&(1u<<unit)) {
-        hashes[unit]=texture_sampler_hash(&sources[unit]);
-        texture_cache_entry *entry=texture_find(s->texture_cache,&sources[unit],hashes[unit],s->direct_hardware);
+        known[unit]=leases && texture_has_identities(&sources[unit],leases[unit]);
+        texture_cache_entry *entry=known[unit]?texture_find_identity(s->texture_cache,&sources[unit],leases[unit]):NULL;
+        if(!entry) {
+            hashes[unit]=texture_sampler_hash(&sources[unit]);
+            entry=texture_find(s->texture_cache,&sources[unit],hashes[unit]);
+            if(entry && known[unit])texture_record_identity(s->texture_cache,entry,&sources[unit],leases[unit]);
+        }
         if(entry) {
             texture_cache_add(s,&s->texture_cache_stats.lookups,1u);
             texture_cache_add(s,&s->texture_cache_stats.hits,1u);texture_pin(s,p,unit,entry);
@@ -1332,7 +1396,7 @@ static bool upload_textures(ctr_wiiu_gx2_scene *s,scene_private *p,
         if(!p->texture_lease[unit]) {
             /* A preceding new unit can have uploaded the same decoded image. */
             texture_cache_add(s,&s->texture_cache_stats.lookups,1u);
-            texture_cache_entry *entry=texture_find(s->texture_cache,&sources[unit],hashes[unit],s->direct_hardware);
+            texture_cache_entry *entry=texture_find(s->texture_cache,&sources[unit],hashes[unit]);
             if(entry)texture_cache_add(s,&s->texture_cache_stats.hits,1u);
             else {
                 texture_cache_add(s,&s->texture_cache_stats.misses,1u);
@@ -1349,16 +1413,42 @@ static bool upload_textures(ctr_wiiu_gx2_scene *s,scene_private *p,
                     return fail(s,CTR_WIIU_GX2_SCENE_ALLOCATION);
                 }
                 texture_upload(s,&next,&sources[unit]);
-                entry->upload=next;entry->hash=hashes[unit];entry->last_rgba=sources[unit].levels[0].rgba;
+                entry->upload=next;entry->hash=hashes[unit];
                 s->texture_cache_stats.bytes+=next.bytes;
                 if(s->texture_cache_stats.bytes>s->texture_cache_stats.peak_bytes)
                     s->texture_cache_stats.peak_bytes=s->texture_cache_stats.bytes;
             }
+            if(known[unit])texture_record_identity(s->texture_cache,entry,&sources[unit],leases[unit]);
             texture_pin(s,p,unit,entry);
         }
         texture_sampler(&p->sampler[unit],&sources[unit]);
     }
     return true;
+}
+static void bind_draw_textures(ctr_wiiu_gx2_scene *s,scene_private *p,unsigned mask) {
+    bool reuse=s->direct_hardware && s->cemu_readback;
+    /* A new upload can replace a cache entry without changing its address. */
+    if(p->bound_texture_uploads!=s->texture_uploads) {
+        p->bound_texture_mask=0;
+        p->bound_texture_uploads=s->texture_uploads;
+    }
+    for(unsigned unit=0;unit<3u;++unit)if(mask&(1u<<unit)) {
+        unsigned bit=1u<<unit;
+        const GX2Texture *texture=p->texture_lease[unit]?
+            &p->texture_lease[unit]->upload.texture:&p->texture[unit].texture;
+        const GX2Sampler *sampler=&p->sampler[unit];
+        if(!reuse || !(p->bound_texture_mask&bit) || p->bound_textures[unit]!=texture) {
+            GX2SetPixelTexture(texture,unit);
+            if(reuse) { p->bound_textures[unit]=texture;p->bound_texture_mask|=bit; }
+        }
+        if(!reuse || !(p->bound_sampler_mask&bit) || memcmp(&p->bound_samplers[unit],sampler,sizeof(*sampler))) {
+            GX2SetPixelSampler(sampler,unit);
+            if(reuse) {
+                memcpy(&p->bound_samplers[unit],sampler,sizeof(*sampler));
+                p->bound_sampler_mask|=bit;
+            }
+        }
+    }
 }
 bool ctr_gx2_depth_clear_seed(const ctr_scene_depth_surface *depth,float *value,uint8_t *stencil) {
     const uint8_t *seed=depth->bytes;
@@ -1387,7 +1477,7 @@ static bool begin_targets(void *context,const ctr_scene_surface *initial,
        (depth && !depth_dimensions(depth,initial)))return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
     if(s->private_state)return fail(s,CTR_WIIU_GX2_SCENE_BUSY);
     if(s->direct_hardware && !resident)
-        return ctr_gx2_direct_begin_targets(s,initial,depth);
+        return ctr_gx2_direct_begin_targets(s,initial,depth,false,false);
     bool clear_depth=depth && s->cemu_readback;
     float clear_value=0.0f;uint8_t clear_stencil=0;
     /* Cemu's depth copy does not reliably initialize the renderer's texture
@@ -1820,6 +1910,24 @@ static bool prepare_blend_snapshot(ctr_wiiu_gx2_scene *s,scene_private *p) {
     GX2InitSampler(&p->blend_sampler,GX2_TEX_CLAMP_MODE_CLAMP,GX2_TEX_XY_FILTER_MODE_POINT);
     return true;
 }
+static void upload_pixel_uniforms(ctr_wiiu_gx2_scene *s,scene_private *p) {
+    direct_pool_state *pool=s->direct_hardware && s->cemu_readback?s->direct_pool:NULL;
+    unsigned vectors=p->pixel_uniform_vectors;
+    if(pool) {
+        if(p->uploaded_pixel_vectors==vectors && pool->uploaded_pixel_program==p->pixel.program) {
+            unsigned table=vectors>LIGHT_TABLE_FIRST?LIGHT_TABLE_FIRST:FOG_TABLE_FIRST;
+            if(vectors>table &&
+               !memcmp(pool->uploaded_pixel_constants[table],p->pixel_constants[table],
+                       (vectors-table)*sizeof(p->pixel_constants[0])))vectors=table;
+            if(!memcmp(pool->uploaded_pixel_constants,p->pixel_constants,
+                       vectors*sizeof(p->pixel_constants[0])))return;
+        }
+        memcpy(pool->uploaded_pixel_constants,p->pixel_constants,vectors*sizeof(p->pixel_constants[0]));
+        pool->uploaded_pixel_program=p->pixel.program;
+        p->uploaded_pixel_vectors=p->pixel_uniform_vectors;
+    }
+    GX2SetPixelUniformReg(0,vectors*4u,p->pixel_constants);
+}
 typedef struct {
     int32_t xy[3][2];
     int64_t area;
@@ -1900,6 +2008,7 @@ static bool draw_samples(void *context,const ctr_scene_state *state,const ctr_ve
     if(direct && pool->vertex_cursor+vbytes>DIRECT_VERTEX_RING_BYTES) {
         if(!retire(s,p))return false;
         pool->vertex_cursor=0;
+        pool->vertex_upload_streams=0;
     }
     void *vertex_upload=direct?(void *)((uint8_t *)pool->vertex_ring+pool->vertex_cursor):p->vertices;
     if(batched)vertex_upload=select_draw_upload(s,p);
@@ -1952,7 +2061,7 @@ static bool draw_samples(void *context,const ctr_scene_state *state,const ctr_ve
        !pixel_program(s,p,&tev,mask,texture2_coord1,implicit_lod,explicit_lod,filter_mask,mixed_filters,sources,state,fog,transformed!=NULL,
                       light,depth_plane,blend))
         return fail(s,CTR_WIIU_GX2_SCENE_SHADER);
-    if(!upload_textures(s,p,sources,mask,mipmaps))return false;
+    if(!upload_textures(s,p,sources,mask,mipmaps,NULL))return false;
     for(unsigned unit=0;unit<3u;++unit)if(explicit_lod&(1u<<unit))
         GX2InitSamplerLOD(&p->sampler[unit],(float)sources[unit].min_level,(float)sources[unit].max_level,0.0f);
     for(unsigned unit=0;unit<3u;++unit)if(filter_mask&(1u<<unit))
@@ -2029,6 +2138,8 @@ static bool draw_samples(void *context,const ctr_scene_state *state,const ctr_ve
     if(!p->draw_context_active) {
         GX2SetContextState(p->context);p->draw_context_active=true;
     }
+    p->raster_current=false;
+    p->merger_current=false;
     if(reads_destination && !prepare_blend_snapshot(s,p))return false;
     viewport(p,half,offset,fog);
     if(direct) {
@@ -2042,18 +2153,14 @@ static bool draw_samples(void *context,const ctr_scene_state *state,const ctr_ve
     /* Inactive descriptors may remain in shadow state, but only the explicit
      * mask's unit IDs can occur in this fully rebound program. No inactive
      * texture image is sampled or freed before the common retirement gate. */
-    for(unsigned unit=0;unit<3u;++unit)if(mask&(1u<<unit)) {
-        const GX2Texture *texture=p->texture_lease[unit]?
-            &p->texture_lease[unit]->upload.texture:&p->texture[unit].texture;
-        GX2SetPixelTexture(texture,unit);GX2SetPixelSampler(&p->sampler[unit],unit);
-    }
+    bind_draw_textures(s,p,mask);
     if(reads_destination) {
         GX2SetPixelTexture(&p->blend_snapshot,3u);GX2SetPixelSampler(&p->blend_sampler,3u);
         fragment.blend_enabled=false;fragment.logic_op=3u;
     } else if(blend==BLEND_ALPHA_ADD) {
         fragment.blend_source[0]=fragment.blend_source[1]=1u;
     }
-    GX2SetPixelUniformReg(0,p->pixel_uniform_vectors*4u,p->pixel_constants);
+    upload_pixel_uniforms(s,p);
     GX2SetAttribBuffer(0,(unsigned)vbytes,stride,vertex_upload);
     if(!transformed)for(unsigned uniform=0;uniform<CTR_SHADER_UNIFORMS;++uniform)if(p->compiled->uniform_used[uniform])
         GX2SetVertexUniformReg(uniform*4u,4,state->shader.uniforms[uniform]);
@@ -2125,8 +2232,9 @@ static bool draw_samples(void *context,const ctr_scene_state *state,const ctr_ve
     s->result=CTR_WIIU_GX2_SCENE_OK;return true;
 }
 bool ctr_gx2_direct_setup_state(ctr_wiiu_gx2_scene *s,scene_private *p,const ctr_scene_state *state,
-                                const ctr_scene_sampler sources[3],unsigned mask,
-                                const ctr_scene_light *light,bool *skip_draw) {
+                                const ctr_scene_sampler sources[3],unsigned mask,const ctr_scene_light *light,
+                                const ctr_texture_cache_lease (*leases)[CTR_SCENE_MAX_MIP_LEVELS],
+                                const ctr_tev_program *validated_tev,bool *skip_draw) {
     *skip_draw=false;
     if(!p || !state || mask>7u || (mask && !sources) || s->quarantined)return false;
     ctr_fragment_state fragment;ctr_stencil_state stencil;
@@ -2159,31 +2267,55 @@ bool ctr_gx2_direct_setup_state(ctr_wiiu_gx2_scene *s,scene_private *p,const ctr
         if(sources[unit].max_level || sources[unit].bias_q8 || (filters!=0u && filters!=6u))
             implicit_lod|=1u<<unit;
     }
-    ctr_tev_program tev;
+    ctr_tev_program decoded;
+    const ctr_tev_program *tev=s->cemu_readback?validated_tev:NULL;
+    if(!tev) {
+        if(!ctr_tev_decode_game(state->registers,state->register_defined,mask,&decoded))return false;
+        tev=&decoded;
+    }
     bool fog=(state->registers[0x0e0u]&7u)==5u;
-    if(!ctr_tev_decode_game(state->registers,state->register_defined,mask,&tev) ||
-       !pixel_program(s,p,&tev,mask,texture2_coord1,implicit_lod,0u,0u,0u,sources,state,fog,true,
+    if(!pixel_program(s,p,tev,mask,texture2_coord1,implicit_lod,0u,0u,0u,sources,state,fog,true,
                       light && light->active?light:NULL,false,BLEND_FIXED))
         return false;
-    if(!upload_textures(s,p,sources,mask,true))return false;
+    if(!upload_textures(s,p,sources,mask,true,leases))return false;
     if(!p->draw_context_active) {
         GX2SetContextState(p->context);p->draw_context_active=true;
     }
-    viewport(p,half,offset,fog);
-    for(unsigned unit=0;unit<3u;++unit)if(mask&(1u<<unit)) {
-        const GX2Texture *texture=p->texture_lease[unit]?
-            &p->texture_lease[unit]->upload.texture:&p->texture[unit].texture;
-        GX2SetPixelTexture(texture,unit);GX2SetPixelSampler(&p->sampler[unit],unit);
+    unsigned x=0,y=0,w=p->width,h=p->height;
+    if(mode==3u) {
+        x=x1;w=x2-x1+1u;h=y2-y1+1u;y=p->flip_y?p->height-y1-h:y1;
     }
-    GX2SetPixelUniformReg(0,p->pixel_uniform_vectors*4u,p->pixel_constants);
+    const uint32_t raster[]={bits(half[0]),bits(half[1]),(uint32_t)offset[0],(uint32_t)offset[1],fog,x,y,w,h};
+    bool update_raster=!s->cemu_readback || !p->raster_current ||
+        memcmp(p->raster_registers,raster,sizeof(raster));
+    if(update_raster)viewport(p,half,offset,fog);
+    bind_draw_textures(s,p,mask);
+    upload_pixel_uniforms(s,p);
     if(s->cemu_readback && !fragment.blend_enabled && fragment.logic_op==6u) {
         fragment.logic_op=3u;
         fragment.write_mask=0u;
     }
-    fragment_state(&fragment);
-    depth_state(p,state,&stencil);
-    if(mode==3u)GX2SetScissor(x1,p->flip_y?p->height-y1-(y2-y1+1u):y1,x2-x1+1u,y2-y1+1u);
-    else GX2SetScissor(0,0,p->width,p->height);
+    const uint32_t *regs=state->registers;
+    const uint32_t merger[]={regs[0x100u],regs[0x101u],regs[0x102u],
+        state->register_defined[0x103u]==15u?regs[0x103u]:0u,regs[0x104u],
+        regs[0x105u],regs[0x106u],regs[0x107u],regs[0x113u],regs[0x115u]};
+    bool update_merger=!s->cemu_readback || !p->merger_current ||
+        memcmp(p->merger_registers,merger,sizeof(merger));
+    if(update_merger) {
+        fragment_state(&fragment);
+        depth_state(p,state,&stencil);
+        if(s->cemu_readback) {
+            memcpy(p->merger_registers,merger,sizeof(merger));
+            p->merger_current=true;
+        }
+    }
+    if(update_raster) {
+        GX2SetScissor(x,y,w,h);
+        if(s->cemu_readback) {
+            memcpy(p->raster_registers,raster,sizeof(raster));
+            p->raster_current=true;
+        }
+    }
     return true;
 }
 bool ctr_gx2_draw_mips_legacy(void *context,const ctr_scene_state *state,const ctr_vertex *vertices,unsigned count,
@@ -2344,10 +2476,12 @@ static bool resolve_targets(void *context,const ctr_scene_surface *readback,
         GX2Invalidate(GX2_INVALIDATE_MODE_DEPTH_BUFFER,p->depth_target.surface.image,p->depth_target.surface.imageSize);
         GX2CopySurface(&p->depth_target.surface,0,0,&p->depth_linear,0,0);
     }
+    bool batch_restore=direct_skip && s->cemu_readback;
+    if(batch_restore)queue_restore(s);
     if(!retire(s,p))return fail(s,CTR_WIIU_GX2_SCENE_WAIT);
     /* A resident caller can publish this surface directly. Restore the
      * presentation context successfully before modifying its output. */
-    if((resident || cemu_depth || direct_skip) && !restore(s))return false;
+    if(!batch_restore && (resident || cemu_depth || direct_skip) && !restore(s))return false;
     if(cemu_depth && !publish_cemu_depth(p,depth))return fail(s,CTR_WIIU_GX2_SCENE_LAYOUT);
     DCInvalidateRange(p->linear.image,p->linear.imageSize);
     if(depth && !cemu_depth && !direct_skip)DCInvalidateRange(p->depth_linear.image,p->depth_linear.imageSize);
@@ -2360,8 +2494,153 @@ static bool resolve_targets(void *context,const ctr_scene_surface *readback,
     if(s->observe_readback)s->observe_readback(s->readback_context,readback);
     if(depth && !direct_skip && s->observe_depth_readback)s->observe_depth_readback(s->readback_context,depth);
     if(!resident && !cemu_depth && !direct_skip && !restore(s))return false;
+    if(direct_skip && s->direct_pool) {
+        direct_pool_state *pool=s->direct_pool;
+        pool->color_resolved=true;pool->color_flipped=p->flip_y;
+    }
     ++s->readbacks;s->result=CTR_WIIU_GX2_SCENE_OK;
     if(!resident)release(s,p);
+    return true;
+}
+bool ctr_gx2_begin_deferred_color(void *context,const ctr_scene_surface *initial,
+                                  const ctr_scene_depth_surface *depth,bool reuse_pending) {
+    ctr_wiiu_gx2_scene *s=context;
+    if(!s || !s->cemu_readback || !s->direct_hardware || !s->restore_context || !dimensions(initial) ||
+       (depth && !depth_dimensions(depth,initial)))return fail(s,CTR_WIIU_GX2_SCENE_ARGUMENT);
+    if(s->private_state)return fail(s,CTR_WIIU_GX2_SCENE_BUSY);
+    return ctr_gx2_direct_begin_targets(s,initial,depth,reuse_pending,true);
+}
+bool ctr_gx2_end_deferred_color(void *context) {
+    ctr_wiiu_gx2_scene *s=context;
+    scene_private *p=s->private_state;
+    direct_pool_state *pool=s->direct_pool;
+    if(!p || !pool || s->quarantined)return false;
+    queue_restore(s);
+    if(!retire(s,p))return false;
+    if(p->target.surface.image==pool->color_candidate.surface.image) {
+        pool->color_candidate=pool->target;
+        pool->target=p->target;
+    }
+    pool->color_pending=true;pool->color_resolved=false;pool->color_flipped=p->flip_y;
+    if(p->depth_enabled)++s->direct_depth_skips;
+    s->result=CTR_WIIU_GX2_SCENE_OK;
+    release(s,p);
+    return true;
+}
+static ctr_scene_scanout_state *scanout_state(void *context,bool create) {
+    ctr_wiiu_gx2_scene *s=context;
+    if(!s->cemu_readback)return NULL;
+    gx2_scanout_state *scanout=s->scanout;
+    if(!scanout && create) {
+        scanout=allocate(s,256,sizeof(*scanout));
+        if(!scanout)return NULL;
+        memset(scanout,0,sizeof(*scanout));
+        s->scanout=scanout;
+    }
+    return scanout?&scanout->queue:NULL;
+}
+const void *ctr_wiiu_gx2_scene_scanout_texture(const ctr_wiiu_gx2_scene *s,unsigned slot) {
+    const gx2_scanout_state *scanout=s->scanout;
+    if(!scanout || !slot || slot>CTR_GX_SCANOUT_SLOTS || s->quarantined)return NULL;
+    return scanout->images[slot-1u].surface.image?&scanout->display[slot-1u]:NULL;
+}
+static uint32_t scanout_generation;
+static bool scanout_lend(void *context,unsigned slot) {
+    ctr_wiiu_gx2_scene *s=context;
+    gx2_scanout_state *scanout=s->scanout;
+    direct_pool_state *pool=s->direct_pool;
+    if(!scanout || slot>=CTR_GX_SCANOUT_SLOTS || scanout->queue.source_slot ||
+       !pool || !pool->color_pending || !pool->color_flipped || s->private_state ||
+       s->quarantined || pool->width!=CTR_GX_SCANOUT_WIDTH || pool->height!=CTR_GX_SCANOUT_HEIGHT)
+        return false;
+    GX2Texture *image=&scanout->images[slot];
+    GX2Surface surface=pool->target.surface;
+    void *spare=image->surface.image;
+    if(spare && (image->surface.format!=surface.format ||
+                 image->surface.pitch!=surface.pitch || image->surface.tileMode!=surface.tileMode ||
+                 image->surface.imageSize!=surface.imageSize))return false;
+    if(!spare) {
+        spare=allocate(s,surface.alignment,surface.imageSize);
+        if(!spare)return false;
+        DCFlushRange(spare,surface.imageSize);
+    }
+    image->surface=surface;
+    image->viewNumMips=1;image->viewNumSlices=1;
+    image->compMap=GX2_COMP_MAP(GX2_SQ_SEL_X,GX2_SQ_SEL_Y,GX2_SQ_SEL_Z,GX2_SQ_SEL_W);
+    GX2InitTextureRegs(image);
+    pool->target.surface.image=spare;
+    GX2InitColorBufferRegs(&pool->target);
+    scanout->queue.source_slot=slot+1u;
+    /* A surface address can be reused between presentations. Each successful
+     * lend gets a new identity for the pixels in that surface. */
+    uint32_t generation=scanout_generation!=UINT32_MAX?++scanout_generation:0u;
+    scanout->display[slot]=(ctr_diagnostic_scanout){image,generation};
+    return true;
+}
+static void scanout_discard_source(void *context) {
+    ctr_wiiu_gx2_scene *s=context;
+    gx2_scanout_state *scanout=s->scanout;
+    direct_pool_state *pool=s->direct_pool;
+    scanout->queue.source_slot=0;
+    pool->color_pending=false;pool->color_resolved=false;
+}
+static bool scanout_read(void *context,unsigned slot,const ctr_scene_surface *readback) {
+    ctr_wiiu_gx2_scene *s=context;
+    gx2_scanout_state *scanout=s->scanout;
+    if(!scanout || slot>=CTR_GX_SCANOUT_SLOTS || s->private_state ||
+       s->quarantined || !dimensions(readback))return false;
+    GX2Surface *image=&scanout->images[slot].surface;
+    if(!image->image || image->width!=readback->width || image->height!=readback->height)return false;
+    GX2Surface *linear=&scanout->linear;
+    if(!linear->image) {
+        if(!layout(linear,image->width,image->height,GX2_TILE_MODE_LINEAR_SPECIAL,image->format))return false;
+        linear->image=allocate(s,linear->alignment,linear->imageSize);
+        if(!linear->image)return false;
+        DCFlushRange(linear->image,linear->imageSize);
+    }
+    direct_pool_state *pool=s->direct_pool;
+    if(pool)GX2SetContextState(pool->context);
+    GX2Invalidate(GX2_INVALIDATE_MODE_COLOR_BUFFER,image->image,image->imageSize);
+    GX2CopySurface(image,0,0,linear,0,0);
+    queue_restore(s);
+    if(!wait_for_gx2(s))return false;
+    DCInvalidateRange(linear->image,linear->imageSize);
+    for(unsigned y=0;y<image->height;++y)
+        memcpy((uint8_t *)readback->bytes+(size_t)y*readback->stride,
+               (const uint8_t *)linear->image+(size_t)y*linear->pitch*4u,image->width*4u);
+    ++s->readbacks;
+    return true;
+}
+const ctr_scene_scanout ctr_gx2_scanout={
+    scanout_state,scanout_lend,scanout_read,scanout_discard_source
+};
+bool ctr_gx2_resolve_deferred_color(void *context,const ctr_scene_surface *readback) {
+    ctr_wiiu_gx2_scene *s=context;
+    direct_pool_state *pool=s->direct_pool;
+    if(s->private_state || !pool || !dimensions(readback) ||
+       readback->width!=pool->width || readback->height!=pool->height)return false;
+    gx2_scanout_state *scanout=s->scanout;
+    unsigned source_slot=scanout?scanout->queue.source_slot:0u;
+    if(pool->color_pending) {
+        GX2Surface *source=source_slot?&scanout->images[source_slot-1u].surface:&pool->target.surface;
+        GX2SetContextState(pool->context);
+        GX2Invalidate(GX2_INVALIDATE_MODE_COLOR_BUFFER,source->image,source->imageSize);
+        GX2CopySurface(source,0,0,&pool->linear,0,0);
+        queue_restore(s);
+        if(!wait_for_gx2(s))return false;
+        DCInvalidateRange(pool->linear.image,pool->linear.imageSize);
+        pool->color_pending=false;pool->color_resolved=true;
+        ++s->readbacks;
+    }
+    if(!pool->color_resolved)return false;
+    for(unsigned y=0;y<pool->height;++y) {
+        unsigned row=pool->color_flipped?pool->height-y-1u:y;
+        memcpy((uint8_t *)readback->bytes+(size_t)y*readback->stride,
+               (const uint8_t *)pool->linear.image+(size_t)row*pool->linear.pitch*4u,(size_t)pool->width*4u);
+    }
+    if(source_slot)scanout_discard_source(s);
+    if(s->observe_readback)s->observe_readback(s->readback_context,readback);
+    s->result=CTR_WIIU_GX2_SCENE_OK;
     return true;
 }
 bool ctr_gx2_begin_legacy(void *context,const ctr_scene_surface *initial) {
@@ -2390,12 +2669,17 @@ bool ctr_wiiu_gx2_scene_resolve_targets(ctr_wiiu_gx2_scene *s,const ctr_scene_su
 void ctr_wiiu_gx2_scene_init(ctr_wiiu_gx2_scene *s,GX2ContextState *restore_context) {
     if(s) { memset(s,0,sizeof(*s));s->restore_context=restore_context; }
 }
-void ctr_gx2_abort_cb(void *context) { ctr_wiiu_gx2_scene_abort(context); }
+void ctr_gx2_abort_cb(void *context) {
+    ctr_wiiu_gx2_scene *s=context;
+    direct_pool_state *pool=s?s->direct_pool:NULL;
+    if(pool && pool->color_pending && !s->private_state)return;
+    ctr_wiiu_gx2_scene_abort(s);
+}
 ctr_scene_backend ctr_wiiu_gx2_scene_backend(ctr_wiiu_gx2_scene *s) {
     return (ctr_scene_backend){s,ctr_gx2_begin_legacy,ctr_gx2_draw_legacy,ctr_gx2_end_legacy,
                                ctr_gx2_abort_cb,ctr_gx2_begin_depth_legacy,ctr_gx2_end_depth_legacy,
                                ctr_gx2_draw_textures_legacy,ctr_gx2_draw_mips_legacy,
-                               CTR_SCENE_BACKEND_DEPTH_FOG,ctr_gx2_draw_transformed_legacy,NULL};
+                               CTR_SCENE_BACKEND_DEPTH_FOG,ctr_gx2_draw_transformed_legacy,NULL,NULL};
 }
 const char *ctr_wiiu_gx2_scene_result_name(ctr_wiiu_gx2_scene_result result) {
     static const char *const names[]={"ok","argument","allocation","layout","shader","wait","busy","unsupported-readback"};

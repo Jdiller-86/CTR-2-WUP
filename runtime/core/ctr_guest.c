@@ -349,17 +349,30 @@ ctr_guest_state ctr_guest_run(ctr_guest *g,uint64_t budget,uint64_t now_ns,bool 
     uint64_t start=g->cpu.instructions;
     while (g->cpu.instructions-start<budget) {
         uint64_t remaining=budget-(g->cpu.instructions-start);
-        if(g->threads_enabled && remaining>g->quantum_left)remaining=g->quantum_left;
+        bool batch=translated && g->threads_enabled && g->quantum_uncontended && g->quantum_left &&
+            g->executor_uncontended && remaining>g->quantum_left;
+        if(g->threads_enabled && !batch && remaining>g->quantum_left)remaining=g->quantum_left;
         uint64_t before=g->cpu.instructions;
-        ctr_cpu_result result=translated?(g->executor?g->executor(&g->cpu,g->executor_context,remaining):
+        ctr_cpu_result result=batch?g->executor_uncontended(&g->cpu,g->executor_context,remaining):
+            translated?(g->executor?g->executor(&g->cpu,g->executor_context,remaining):
             ctr_modules_dispatch(g,remaining)):ctr_modules_interpret(g,remaining);
         if(g->threads_enabled) {
             uint64_t charged=g->cpu.instructions-before;
+            if(batch && charged>g->quantum_left) {
+                charged=(charged-g->quantum_left)%CTR_GUEST_THREAD_QUANTUM;
+                g->quantum_left=CTR_GUEST_THREAD_QUANTUM;
+                if(!charged)charged=CTR_GUEST_THREAD_QUANTUM;
+            }
             g->quantum_left=charged>=g->quantum_left?0:g->quantum_left-(unsigned)charged;
         }
         if (result==CTR_CPU_LIMIT) {
             if(!g->threads_enabled)return g->state;
-            if(!ctr_thread_schedule(g,!g->quantum_left))return g->state;
+            /* At a fixed guest timestamp, only service calls can make a
+             * competing thread runnable. Poll
+             * again before returning or handling an SVC. */
+            bool keep_running=g->quantum_uncontended && g->state==CTR_GUEST_READY &&
+                g->cpu.instructions>before && g->cpu.instructions-start<budget;
+            if(!keep_running && !ctr_thread_schedule(g,!g->quantum_left))return g->state;
             if(!g->quantum_left)g->quantum_left=CTR_GUEST_THREAD_QUANTUM;
             continue;
         }

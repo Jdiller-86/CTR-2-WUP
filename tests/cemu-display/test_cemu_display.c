@@ -140,6 +140,11 @@ void GX2SetCullOnlyControl(int front_face, bool cull_front, bool cull_back) {
 void GX2SetFetchShader(const GX2FetchShader *fs) { (void)fs; }
 void GX2SetVertexShader(const GX2VertexShader *vs) { (void)vs; }
 void GX2SetPixelShader(const GX2PixelShader *ps) { (void)ps; }
+void GX2InitColorBufferRegs(GX2ColorBuffer *buffer) { (void)buffer; }
+void GX2SetColorBuffer(const GX2ColorBuffer *buffer, int target) { (void)buffer; (void)target; }
+void GX2SetPixelUniformReg(uint32_t offset, uint32_t count, const void *data) {
+    (void)offset; (void)count; (void)data;
+}
 void GX2SetPixelTexture(const GX2Texture *tex, uint32_t unit) { (void)tex; (void)unit; }
 void GX2SetPixelSampler(const GX2Sampler *sampler, uint32_t unit) { (void)sampler; (void)unit; }
 void GX2SetAttribBuffer(uint32_t idx, uint32_t size, uint32_t stride, const void *buf) {
@@ -224,8 +229,16 @@ int main(void) {
     top[0] = 0xff0000ffu;
     bottom[0] = 0x00ff00ffu;
     assert(ctr_diagnostic_display_guest(top, bottom));
+    unsigned draws = g_wut_mock.draw_calls;
+    assert(ctr_diagnostic_display_guest(top, bottom));
+    assert(g_wut_mock.draw_calls == draws);
+    ctr_diagnostic_display_invalidate();
+    assert(ctr_diagnostic_display_guest(top, bottom));
+    assert(g_wut_mock.draw_calls == draws + 2);
+    top[0] = 0x0000ffffu;
     assert(ctr_diagnostic_display_guest(top, bottom));
     /* Third guest upload wraps back to slot 0 which has submitted_ts > retired_ts */
+    top[0] = 0xffffffffu;
     assert(ctr_diagnostic_display_guest(top, bottom));
     assert(g_wut_mock.wait_ts_calls >= 1);
 

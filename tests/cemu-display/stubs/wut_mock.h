@@ -29,6 +29,7 @@ typedef struct GX2Surface {
 
 typedef struct GX2ColorBuffer {
     GX2Surface surface;
+    unsigned viewNumSlices;
 } GX2ColorBuffer;
 
 typedef struct GX2Texture {
@@ -94,7 +95,9 @@ enum {
     GX2_SURFACE_FORMAT_UNORM_R8_G8_B8_A8 = 0x1a,
     GX2_AA_MODE1X = 0,
     GX2_SURFACE_USE_TEXTURE = 1,
+    GX2_SURFACE_USE_COLOR_BUFFER = 2,
     GX2_TILE_MODE_LINEAR_ALIGNED = 1,
+    GX2_TILE_MODE_TILED_2D_THIN1 = 4,
     GX2_SQ_SEL_X = 0,
     GX2_SQ_SEL_Y = 1,
     GX2_SQ_SEL_Z = 2,
@@ -102,6 +105,7 @@ enum {
     GX2_INVALIDATE_MODE_CPU_ATTRIBUTE_BUFFER = 1,
     GX2_INVALIDATE_MODE_CPU_TEXTURE = 2,
     GX2_INVALIDATE_MODE_CPU_SHADER = 4,
+    GX2_INVALIDATE_MODE_COLOR_BUFFER = 16,
     GX2_SHADER_MODE_UNIFORM_REGISTER = 1,
     GX2_COMPARE_FUNC_ALWAYS = 7,
     GX2_LOGIC_OP_COPY = 0xcc,
@@ -118,6 +122,7 @@ enum {
     GX2_ATTRIB_INDEX_PER_VERTEX = 0,
     GX2_ENDIAN_SWAP_8_IN_32 = 2,
     GX2_TEX_CLAMP_MODE_CLAMP = 2,
+    GX2_TEX_XY_FILTER_MODE_POINT = 0,
     GX2_TEX_XY_FILTER_MODE_LINEAR = 1
 };
 
@@ -149,6 +154,9 @@ void MEMFreeToDefaultHeap(void *ptr);
 void GX2Invalidate(int mode, void *buf, uint32_t size);
 void GX2CalcSurfaceSizeAndAlignment(GX2Surface *surface);
 void GX2InitTextureRegs(GX2Texture *texture);
+void GX2InitColorBufferRegs(GX2ColorBuffer *buffer);
+void GX2SetColorBuffer(const GX2ColorBuffer *buffer, int target);
+void GX2SetPixelUniformReg(uint32_t offset, uint32_t count, const void *data);
 OSTime GX2GetRetiredTimeStamp(void);
 OSTime GX2GetLastSubmittedTimeStamp(void);
 bool GX2WaitTimeStamp(OSTime ts);
