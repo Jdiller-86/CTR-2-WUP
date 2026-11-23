@@ -121,7 +121,7 @@ bool ctr_guest_open(ctr_guest *g,const ctr_guest_image *image,const ctr_block *b
     g->cpu.tls_address=CTR_GUEST_TLS_BASE;
     g->threads[0]=(ctr_guest_thread){.active=true,.references=1,.id=1,.priority=0x30,
         .stack_allocation=CTR_GUEST_MAX_ALLOCATIONS,.state=CTR_GUEST_READY,.tls_address=CTR_GUEST_TLS_BASE};
-    g->next_thread_id=2;g->quantum_left=CTR_GUEST_THREAD_QUANTUM;
+    g->next_thread_id=2;g->thread_quantum=CTR_GUEST_THREAD_QUANTUM;g->quantum_left=g->thread_quantum;
     g->configuration=(ctr_guest_configuration){1,1,0}; /* Explicit diagnostic defaults: USA, English, Old 3DS. */
     g->ndm.default_mask=9u; /* CEC and Friends are the default daemon selection. */
     return true;
@@ -366,9 +366,9 @@ ctr_guest_state ctr_guest_run(ctr_guest *g,uint64_t budget,uint64_t now_ns,bool 
         if(g->threads_enabled) {
             uint64_t charged=g->cpu.instructions-before;
             if(batch && charged>g->quantum_left) {
-                charged=(charged-g->quantum_left)%CTR_GUEST_THREAD_QUANTUM;
-                g->quantum_left=CTR_GUEST_THREAD_QUANTUM;
-                if(!charged)charged=CTR_GUEST_THREAD_QUANTUM;
+                charged=(charged-g->quantum_left)%g->thread_quantum;
+                g->quantum_left=g->thread_quantum;
+                if(!charged)charged=g->thread_quantum;
             }
             g->quantum_left=charged>=g->quantum_left?0:g->quantum_left-(unsigned)charged;
         }
@@ -380,7 +380,7 @@ ctr_guest_state ctr_guest_run(ctr_guest *g,uint64_t budget,uint64_t now_ns,bool 
             bool keep_running=g->quantum_uncontended && g->state==CTR_GUEST_READY &&
                 g->cpu.instructions>before && g->cpu.instructions-start<budget;
             if(!keep_running && !ctr_thread_schedule(g,!g->quantum_left))return g->state;
-            if(!g->quantum_left)g->quantum_left=CTR_GUEST_THREAD_QUANTUM;
+            if(!g->quantum_left)g->quantum_left=g->thread_quantum;
             continue;
         }
         if (result!=CTR_CPU_SVC) {
@@ -391,7 +391,7 @@ ctr_guest_state ctr_guest_run(ctr_guest *g,uint64_t budget,uint64_t now_ns,bool 
         if(g->threads_enabled) {
             bool rotate=g->state!=CTR_GUEST_READY || !g->quantum_left;
             if(!ctr_thread_schedule(g,rotate))return g->state;
-            if(!g->quantum_left)g->quantum_left=CTR_GUEST_THREAD_QUANTUM;
+            if(!g->quantum_left)g->quantum_left=g->thread_quantum;
         } else if (g->state!=CTR_GUEST_READY) return g->state;
     }
     return g->state;

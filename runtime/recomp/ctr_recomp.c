@@ -63,10 +63,10 @@ static inline void set_write_cache(Engine *e,uint32_t base,uint32_t end,uint8_t 
     e->fast.rw_end=storage?end:0u;
     e->fast.rw_limit=(storage && end>=4u && !(((uintptr_t)storage-base)&3u))?(end-3u):0u;
 }
-static void import_cpu(Engine *e) {
+static void import_cpu_mode(Engine *e,bool copy_vfp) {
     Context *c=&e->fast.context;ctr_cpu *p=e->fast.cpu;
     /* Host services can capture new resource keys between translated slices. */
-    e->fast.dirty_page_plus_one=0;
+    e->fast.dirty_page_plus_one=0;e->fast.dirty_page2_plus_one=0;
     /* Host services and interpreter bridges can alter mappings. Generated stores
        use checked callbacks for executable backing and abort on invalidation. */
     uint64_t map_version=p->memory->resource_mapping_version;
@@ -84,20 +84,21 @@ static void import_cpu(Engine *e) {
     }
     if(e->fast.code_generation!=p->memory->code_generation)e->fast.rx_size=0;
     memcpy(c->r,p->r,sizeof(c->r));
-    memcpy(e->fast.vfp,p->vfp,sizeof(e->fast.vfp));e->fast.fpscr=p->fpscr;
+    if(copy_vfp) { memcpy(e->fast.vfp,p->vfp,sizeof(e->fast.vfp));e->fast.fpscr=p->fpscr; }
     c->n=p->cpsr>>31;c->z=(p->cpsr>>30)&1;c->c=(p->cpsr>>29)&1;c->v=(p->cpsr>>28)&1;
     c->q=(p->cpsr>>27)&1;c->ge=(p->cpsr>>16)&15;c->thumb=(p->cpsr&CTR_FLAG_T)!=0;
     c->exclusive=p->exclusive_valid && p->exclusive_size==4 && p->exclusive_generation==p->memory->generation;
     c->exclusive_address=p->exclusive_address;
     c->tls=p->tls_address;
 }
-static void export_cpu(Engine *e) {
+static void import_cpu(Engine *e) { import_cpu_mode(e,true); }
+static void export_cpu_mode(Engine *e,bool copy_vfp) {
     Context *c=&e->fast.context;ctr_cpu *p=e->fast.cpu;
     if(c->budget<0)c->budget=-c->budget;
     p->instructions+=(uint32_t)(e->accounted_budget-c->budget);
     e->accounted_budget=c->budget;
     memcpy(p->r,c->r,sizeof(p->r));
-    memcpy(p->vfp,e->fast.vfp,sizeof(e->fast.vfp));p->fpscr=e->fast.fpscr;
+    if(copy_vfp) { memcpy(p->vfp,e->fast.vfp,sizeof(e->fast.vfp));p->fpscr=e->fast.fpscr; }
     p->cpsr=(p->cpsr&~0xf80f0020u)|((uint32_t)c->n<<31)|((uint32_t)c->z<<30)|
         ((uint32_t)c->c<<29)|((uint32_t)c->v<<28)|((uint32_t)c->q<<27)|((uint32_t)c->ge<<16)|
         (c->thumb?CTR_FLAG_T:0);
@@ -105,6 +106,7 @@ static void export_cpu(Engine *e) {
     p->exclusive_size=4;
     p->exclusive_generation=p->memory->generation;p->svc_number=c->svc;
 }
+static void export_cpu(Engine *e) { export_cpu_mode(e,true); }
 _Noreturn void ctr_recomp_abort(Context *c,ctr_cpu_result result,uint32_t detail) {
     Engine *e=c->user;e->fault=result;
     if(result==CTR_CPU_MEMORY_FAULT) {
@@ -493,6 +495,7 @@ static uint32_t read_value(Context *c,uint32_t a,unsigned width) {
     }
     return n;
 }
+static inline void ctr_recomp_note_store(Context *c,RecompFast *f,const uint8_t *p,unsigned width,unsigned words);
 static void write_value(Context *c,uint32_t a,unsigned width,uint32_t n) {
     Engine *e=c->user;ctr_memory *mem=e->fast.cpu->memory;
     uint8_t *p=NULL;
@@ -559,8 +562,146 @@ void ctr_recomp_note_store_cold(RecompFast *f,uintptr_t begin,uintptr_t last) {
     uint64_t ver=*f->mem_resource_clock!=UINT64_MAX?++*f->mem_resource_clock:*f->mem_resource_clock;
     f->mem_resource_versions[(begin^(begin>>10u))&(CTR_MEMORY_RESOURCE_SLOTS-1u)]=ver;
     if(last!=begin)f->mem_resource_versions[(last^(last>>10u))&(CTR_MEMORY_RESOURCE_SLOTS-1u)]=ver;
+    f->dirty_page2_plus_one=f->dirty_page_plus_one;
     f->dirty_page_plus_one=last+1u;
 }
+int ctr_recomp_step_vfp(Context *c,uint32_t address) {
+    RecompFast *f=(RecompFast *)c;
+    int32_t b=c->budget;
+    if(b<=0 || (f->fpscr&0x04ff9f00u))return 0;
+    c->r[15]=address;
+    c->budget=b-1;
+    return 1;
+}
+static inline void ctr_recomp_step_reg_body(Context *c,uint32_t address) {
+    int32_t b=c->budget;
+    if(b<=0){ctr_recomp_step_slow_void(c,address,false);return;}
+    c->r[15]=address;
+    c->budget=b-1;
+}
+void ctr_recomp_step_reg(Context *c,uint32_t address) { ctr_recomp_step_reg_body(c,address); }
+void ctr_recomp_step_reg4(Context *c) { ctr_recomp_step_reg_body(c,c->r[15]+4u); }
+static inline void ctr_recomp_step_mem_body(Context *c,uint32_t address,bool single_data) {
+    RecompFast *f=(RecompFast *)c;
+    int32_t b=c->budget;
+    if(b<=0){ctr_recomp_step_slow_void(c,address,single_data);return;}
+    c->r[15]=address;
+    c->budget=b-1;
+    f->rollback_base=false;
+    f->single_data=single_data;
+}
+void ctr_recomp_step_mem00(Context *c,uint32_t address) { ctr_recomp_step_mem_body(c,address,false); }
+void ctr_recomp_step_mem00_4(Context *c) { ctr_recomp_step_mem_body(c,c->r[15]+4u,false); }
+void ctr_recomp_step_mem10(Context *c,uint32_t address) { ctr_recomp_step_mem_body(c,address,!c->thumb); }
+void ctr_recomp_step_mem01(Context *c,uint32_t address) { ctr_recomp_step_mem_body(c,address,c->thumb!=0); }
+void ctr_recomp_step_mem11(Context *c,uint32_t address) { ctr_recomp_step_mem_body(c,address,true); }
+void ctr_recomp_step_mem11_4(Context *c) { ctr_recomp_step_mem_body(c,c->r[15]+4u,true); }
+void ctr_recomp_step_run(Context *c,uint32_t address,int32_t count) {
+    int32_t b=c->budget;
+    if(b<count){ctr_recomp_step_run_slow(c,address,count);return;}
+    c->r[15]=address+(uint32_t)(count-1)*4u;
+    c->budget=b-count;
+}
+void ctr_recomp_step_run4(Context *c,int32_t count) {
+    int32_t b=c->budget;
+    if(b<count){ctr_recomp_step_run_slow(c,c->r[15]+4u,count);return;}
+    c->r[15]+=(uint32_t)count*4u;
+    c->budget=b-count;
+}
+uint8_t ctr_recomp_read8(Context *c,uint32_t a) {
+    RecompFast *f=(RecompFast *)c;
+    uint32_t off=a-f->rd_base;
+    if(off<f->rd_end)return f->rd_storage[off];
+    return c->host->read8(c,a);
+}
+uint16_t ctr_recomp_read16(Context *c,uint32_t a) {
+    RecompFast *f=(RecompFast *)c;
+    uint32_t off=a-f->rd_base;
+    if(!(a&1u) && off<f->rd_limit) {
+        const uint8_t *p=f->rd_storage+off;
+        return (uint16_t)((uint32_t)p[0]|((uint32_t)p[1]<<8));
+    }
+    return c->host->read16(c,a);
+}
+uint32_t ctr_recomp_read32(Context *c,uint32_t a) {
+    RecompFast *f=(RecompFast *)c;
+    uint32_t off=a-f->rd_base;
+    if(!(a&3u) && off<f->rd_limit) {
+        const uint8_t *p=f->rd_storage+off;
+        return (uint32_t)p[0]|((uint32_t)p[1]<<8)|((uint32_t)p[2]<<16)|((uint32_t)p[3]<<24);
+    }
+    return c->host->read32(c,a);
+}
+static inline void ctr_recomp_note_store1(Context *c,RecompFast *f,const uint8_t *p) {
+    *f->mem_generation+=1u;
+    c->exclusive=0;
+    uintptr_t page_plus_one=((uintptr_t)p>>12u)+1u;
+    if(f->dirty_page_plus_one==page_plus_one || f->dirty_page2_plus_one==page_plus_one)return;
+    ctr_recomp_note_store_cold(f,page_plus_one-1u,page_plus_one-1u);
+}
+static inline void ctr_recomp_note_store(Context *c,RecompFast *f,const uint8_t *p,unsigned width,unsigned words) {
+    *f->mem_generation+=words;
+    c->exclusive=0;
+    uintptr_t begin=(uintptr_t)p>>12u,last=((uintptr_t)p+width-1u)>>12u;
+    if(last==begin && (f->dirty_page_plus_one==begin+1u || f->dirty_page2_plus_one==begin+1u))return;
+    ctr_recomp_note_store_cold(f,begin,last);
+}
+void ctr_recomp_write8(Context *c,uint32_t a,uint8_t n) {
+    RecompFast *f=(RecompFast *)c;
+    uint32_t off=a-f->rw_base;
+    if(off<f->rw_end) {
+        uint8_t *p=f->rw_storage+off;*p=n;
+        ctr_recomp_note_store1(c,f,p);return;
+    }
+    c->host->write8(c,a,n);
+}
+void ctr_recomp_write16(Context *c,uint32_t a,uint16_t n) {
+    RecompFast *f=(RecompFast *)c;
+    uint32_t off=a-f->rw_base;
+    if(!(a&1u) && off<f->rw_limit) {
+        uint8_t *p=f->rw_storage+off;
+        p[0]=(uint8_t)n;p[1]=(uint8_t)(n>>8);
+        ctr_recomp_note_store1(c,f,p);return;
+    }
+    c->host->write16(c,a,n);
+}
+void ctr_recomp_write32(Context *c,uint32_t a,uint32_t n) {
+    RecompFast *f=(RecompFast *)c;
+    uint32_t off=a-f->rw_base;
+    if(!(a&3u) && off<f->rw_limit) {
+        uint8_t *p=f->rw_storage+off;
+        p[0]=(uint8_t)n;p[1]=(uint8_t)(n>>8);p[2]=(uint8_t)(n>>16);p[3]=(uint8_t)(n>>24);
+        ctr_recomp_note_store1(c,f,p);return;
+    }
+    c->host->write32(c,a,n);
+}
+static inline bool ctr_recomp_span_fits(uint32_t a,uint32_t n,uint32_t base,uint32_t size,const uint8_t *storage) {
+    uint32_t off=a-base;
+    return storage && n && n<=sizeof(((RecompFast *)0)->vfp) && !((a|n)&3u) &&
+           off<size && n<=size-off && !((uintptr_t)(storage+off)&3u);
+}
+const uint8_t *ctr_recomp_read_span(Context *c,uint32_t a,uint32_t n) {
+    RecompFast *f=(RecompFast *)c;
+    if(!ctr_recomp_span_fits(a,n,f->rd_base,f->rd_end,f->rd_storage)){f->span_addr=a;return NULL;}
+    return f->rd_storage+(a-f->rd_base);
+}
+uint8_t *ctr_recomp_write_span(Context *c,uint32_t a,uint32_t n) {
+    RecompFast *f=(RecompFast *)c;
+    if(!ctr_recomp_span_fits(a,n,f->rw_base,f->rw_end,f->rw_storage)){f->span_addr=a;return NULL;}
+    uint8_t *p=f->rw_storage+(a-f->rw_base);
+    ctr_recomp_note_store(c,f,p,n,n/4u);
+    return p;
+}
+void ctr_recomp_call(Context *c,Code code) {
+    uint32_t d=c->depth;
+    if(d>=CTR_RECOMP_CALL_LIMIT){c->exit=EXIT_UNWIND;ctr_recomp_unwind(c);}
+    c->depth=d+1u;
+    if(d+1u>((RecompFast *)c)->maximum_depth)((RecompFast *)c)->maximum_depth=d+1u;
+    code(c);
+    c->depth=d;
+    if(c->exit)ctr_recomp_unwind(c);
+}
+void recomp_call(Context *c) { Code f=c->host->lookup(c,c->r[15]|c->thumb);if(f)f(c);else c->exit=EXIT_UNWIND; }
 static uint32_t span_slow(Context *c,bool write,bool vfp,uint32_t spec) {
     RecompFast *f=(RecompFast *)c;
     uint32_t a=f->span_addr,last=0;
@@ -606,12 +747,13 @@ static Code lookup(Context *c,uint32_t a) {
 static void interpret(Context *c,uint32_t a,uint32_t opcode) {
     Engine *e=c->user;
     if (!e->fallback) ctr_recomp_abort(c,CTR_CPU_UNSUPPORTED,opcode);
-    c->r[15]=a;export_cpu(e);
+    bool copy_vfp=!c->thumb && ((opcode&0x0e000000u)==0x0c000000u || (opcode&0x0f000000u)==0x0e000000u);
+    c->r[15]=a;export_cpu_mode(e,copy_vfp);
     uint64_t count=e->fast.cpu->instructions;
     ctr_cpu_result r=ctr_cpu_step(e->fast.cpu);
     e->fast.cpu->instructions=count; /* Already charged by CTR_INSTRUCTION. */
     ++e->fast.cpu->fallback_instructions;
-    import_cpu(e);
+    import_cpu_mode(e,copy_vfp);
     if(!e->fast.rx_size && c->budget>0)c->budget=-c->budget;
     if(r==CTR_CPU_SVC){c->svc=e->fast.cpu->svc_number;c->exit=EXIT_SVC;}
     else if(r!=CTR_CPU_OK) ctr_recomp_abort(c,r,opcode);
@@ -682,11 +824,11 @@ after_code:;
 budget_done:;
     if(!c->budget && remaining) {
         /* Keep each generated dispatch boundary while the thread stays runnable. */
-        slice=remaining<CTR_GUEST_THREAD_QUANTUM?remaining:CTR_GUEST_THREAD_QUANTUM;
+        slice=remaining<e->guest->thread_quantum?remaining:e->guest->thread_quantum;
         remaining-=slice;
         c->budget=(int32_t)slice;c->exit=EXIT_NONE;c->depth=0;
         e->accounted_budget+=(int32_t)slice;
-        e->fast.rollback_base=false;e->fast.dirty_page_plus_one=0;
+        e->fast.rollback_base=false;e->fast.dirty_page_plus_one=0;e->fast.dirty_page2_plus_one=0;
         goto dispatch_slice;
     }
     export_cpu(e);return CTR_CPU_LIMIT;
@@ -704,10 +846,20 @@ static bool matches(const ctr_guest *g) {
     for(uint32_t i=0;i<o->piece_count;++i) {
         const Piece *p=&o->pieces[i];uint64_t hash=UINT64_C(14695981039346656037);
         if(p->end<=p->start || (uint64_t)p->end-p->start>CTR_GUEST_MAX_BYTES)return false;
-        for(uint32_t a=p->start;a<p->end;++a) {
-            uint32_t n;
-            if(ctr_memory_read(&g->memory,a,1,CTR_MEM_EXEC,&n)!=CTR_MEM_OK)return false;
-            hash=(hash^n)*UINT64_C(1099511628211);
+        if(ctr_memory_check_range(&g->memory,p->start,p->end-p->start,CTR_MEM_EXEC)!=CTR_MEM_OK)return false;
+        uint64_t cursor=p->start,end=p->end;
+        while(cursor<end) {
+            const ctr_mapping *found=NULL;
+            for(size_t j=0;j<g->memory.count;++j) {
+                const ctr_mapping *m=&g->memory.maps[j];
+                if(cursor>=m->base && cursor<(uint64_t)m->base+m->size) { found=m;break; }
+            }
+            if(!found)return false;
+            uint64_t stop=(uint64_t)found->base+found->size;
+            size_t count=(size_t)((stop<end?stop:end)-cursor);
+            const uint8_t *bytes=found->storage+(size_t)(cursor-found->base);
+            for(size_t k=0;k<count;++k)hash=(hash^bytes[k])*UINT64_C(1099511628211);
+            cursor+=count;
         }
         if(hash!=p->hash)return false;
     }
@@ -754,6 +906,7 @@ void ctr_recomp_enable_runfast(ctr_guest *g) {
         if(e->fallback) {
             e->fpscr_mask=0x04ff9f00u;
             e->batch_uncontended=true;
+            g->thread_quantum=256u;
         }
     }
 }

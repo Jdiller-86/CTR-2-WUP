@@ -156,7 +156,7 @@ typedef struct ctr_guest {
     uint8_t *pica_color_raw,*pica_color_pixels,*pica_depth_raw,*pica_depth_pixels;
     size_t pica_color_raw_cap,pica_color_pixels_cap,pica_depth_raw_cap,pica_depth_pixels_cap;
     ctr_guest_thread threads[CTR_GUEST_MAX_THREADS];
-    unsigned current_thread, quantum_left;
+    unsigned current_thread, quantum_left, thread_quantum;
     uint32_t next_thread_id;
     uint64_t context_switches;
     bool threads_enabled, process_exited, quantum_uncontended;

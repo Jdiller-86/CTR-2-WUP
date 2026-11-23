@@ -25,6 +25,11 @@ _NON_PURE_REG_TOKENS = (
     "recomp_call(", "ctx->r[15]", "RETURN", "JUMP_TO", "goto ", "dispatch",
     "STALE_CHECK", "media_", "ctr_recomp_abort", "ctr_recomp_unwind",
 )
+_TAIL_NON_PURE_TOKENS = (
+    "mem_", "CTR_SCALAR_VFP", "VFP_", "vfp_", "CALL(", "SVC(", "INTERPRET(",
+    "recomp_call(", "ctx->r[15]", "STALE_CHECK", "media_",
+    "ctr_recomp_abort", "ctr_recomp_unwind",
+)
 _ANY_CASE = re.compile(r"^(    case 0x[0-9A-Fa-f]+u: goto )(L_[0-9A-Fa-f]{8})(;)$")
 _MAX_REG_RUN = 127
 _SPAN_BLOCK = re.compile(
@@ -165,10 +170,13 @@ def _rewrite_function_reg_runs(chunk):
         return chunk
     for b in blocks:
         btxt = "\n".join(b["body"])
-        b["pure"] = (
-            b["op"] is not None
-            and _is_reg_only_arm(b["op"])
-            and not any(tok in btxt for tok in _NON_PURE_REG_TOKENS)
+        reg_op = b["op"] is not None and _is_reg_only_arm(b["op"])
+        b["pure"] = reg_op and not any(tok in btxt for tok in _NON_PURE_REG_TOKENS)
+        b["tail_branch"] = (
+            reg_op
+            and not b["pure"]
+            and not any(tok in btxt for tok in _TAIL_NON_PURE_TOKENS)
+            and any(tok in btxt for tok in ("goto ", "RETURN_TO", "JUMP_TO", "RETURN()"))
         )
     removed_lbls = set()
     i = 0
@@ -178,10 +186,13 @@ def _rewrite_function_reg_runs(chunk):
             i += 1
             continue
         k = 1
-        while (i + k < nb and k < _MAX_REG_RUN and blocks[i + k]["pure"]
+        while (i + k < nb and k < _MAX_REG_RUN
+               and (blocks[i + k]["pure"] or blocks[i + k]["tail_branch"])
                and blocks[i + k]["addr"] == blocks[i + k - 1]["addr"] + 4
                and blocks[i + k]["lbl"] not in gotos):
             k += 1
+            if blocks[i + k - 1]["tail_branch"]:
+                break
         if k >= 2:
             head = blocks[i]
             head["insn_line"] = (f"    CTR_INSTRUCTION_RUN_NEXT({k});" if head["is_next"]

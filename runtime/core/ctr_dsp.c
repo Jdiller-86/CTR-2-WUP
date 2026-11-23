@@ -58,6 +58,7 @@ struct ctr_guest_dsp {
     voice voices[CTR_DSP_CHANNELS];int32_t master,aux_volume[AUX_BUSES];bool aux_enabled[AUX_BUSES];
     int16_t output[CTR_DSP_OUTPUT_FRAMES][CTR_DSP_FRAME_SAMPLES*2];
     unsigned first,count;
+    uint64_t validated_mapping_version;
 };
 static uint32_t le(const uint8_t *p,unsigned n) { uint32_t v=0;for(unsigned i=0;i<n;++i)v|=(uint32_t)p[i]<<(8*i);return v; }
 static int16_t signed_half(uint32_t value) { return (int16_t)(value<32768u?(int32_t)value:(int32_t)value-65536); }
@@ -325,23 +326,27 @@ static bool frame(ctr_guest *g) {
     unsigned span=d->verified_component?COMPONENT_SPAN:FRAME_SPAN;
     /* Memory mappings are caller-editable in the public API. Require the exact
      * original backing, including every command/status/capture byte. */
-    for(unsigned bank=0;bank<2;++bank) {
-        if(!range(g,CTR_DSP_RAM+bank*BANK,span,CTR_MEM_READ|CTR_MEM_WRITE))return false;
-        for(unsigned i=0;i<span;) {
-            unsigned covered=0;uint32_t address=CTR_DSP_RAM+bank*BANK+i;
-            for(size_t j=0;j<g->memory.count;++j) {
-                const ctr_mapping *m=&g->memory.maps[j];
-                uint64_t end=(uint64_t)m->base+m->size;
-                if(address>=m->base && (uint64_t)address+4096u<=end &&
-                   m->storage+(address-m->base)==g->storage[7]+bank*BANK+i) {
-                    /* Backing identity is constant across consecutive pages of this mapping. */
-                    covered=end-address>=span-i?span-i:(unsigned)(end-address)&~4095u;
-                    break;
+    if(g->memory.resource_mapping_version==UINT64_MAX || !d->validated_mapping_version ||
+       d->validated_mapping_version!=g->memory.resource_mapping_version) {
+        for(unsigned bank=0;bank<2;++bank) {
+            if(!range(g,CTR_DSP_RAM+bank*BANK,span,CTR_MEM_READ|CTR_MEM_WRITE))return false;
+            for(unsigned i=0;i<span;) {
+                unsigned covered=0;uint32_t address=CTR_DSP_RAM+bank*BANK+i;
+                for(size_t j=0;j<g->memory.count;++j) {
+                    const ctr_mapping *m=&g->memory.maps[j];
+                    uint64_t end=(uint64_t)m->base+m->size;
+                    if(address>=m->base && (uint64_t)address+4096u<=end &&
+                       m->storage+(address-m->base)==g->storage[7]+bank*BANK+i) {
+                        /* Backing identity is constant across consecutive pages of this mapping. */
+                        covered=end-address>=span-i?span-i:(unsigned)(end-address)&~4095u;
+                        break;
+                    }
                 }
+                if(!covered)return fail(g,address,CTR_MEM_OVERLAP);
+                i+=covered;
             }
-            if(!covered)return fail(g,address,CTR_MEM_OVERLAP);
-            i+=covered;
         }
+        d->validated_mapping_version=g->memory.resource_mapping_version;
     }
     const uint8_t *ram=g->storage[7]+offset;
     if(le(ram,2)!=d->counter)return fail(g,CTR_DSP_RAM+offset,CTR_MEM_OK);
@@ -455,32 +460,34 @@ static bool frame(ctr_guest *g) {
     int32_t aux_send[AUX_BUSES][AUX_LANES][CTR_DSP_FRAME_SAMPLES]={0};
     for(unsigned c=0;c<CTR_DSP_CHANNELS;++c) {
         voice *v=&voices[c];
-        sample_source views[2]={{0}};
-        unsigned sends_aux=0;
-        for(unsigned bus=0;bus<AUX_BUSES;++bus)
-            for(unsigned lane=0;lane<AUX_LANES;++lane)if(v->aux_gain[bus][lane])sends_aux|=1u<<bus;
-        for(unsigned i=0;i<CTR_DSP_FRAME_SAMPLES && v->playing && v->current.sequence;++i) {
-            buffer *b=&v->current;int32_t s;
-            if(!voice_sample(g,v,views,&s))return false;
-            s=filter_sample(v,s);
-            for(unsigned lane=0;lane<2;++lane)mix[i*2+lane]+=voice_gain(s,v->gain[lane]);
-            if(sends_aux)for(unsigned bus=0;bus<AUX_BUSES;++bus)if(sends_aux&(1u<<bus))
-                for(unsigned lane=0;lane<AUX_LANES;++lane)
-                    aux_send[bus][lane][i]+=voice_gain(s,v->aux_gain[bus][lane]);
-            uint64_t phase=v->phase+v->step;v->phase=(uint32_t)phase;
-            unsigned advance=(unsigned)(phase>>32);
-            while(advance-- && b->sequence)if(++b->position==b->count) {
-                if(b->looping) { b->position=0;b->decoder=b->initial;add(&stats.loops,1); }
-                else {
-                    v->last=b->sequence;add(&stats.completed,1);
-                    if(v->count) {
-                        const buffer *next=&v->queued[v->head];
-                        /* Faster rates can cross the boundary with unread source samples. */
-                        if(next->continue_history && !adpcm_sample(g,v->coefficients,b,b->count-1u,&views[0],&s))return false;
-                        CtrDspAdpcmState start=adpcm_start(next,b);
-                        *b=*next;b->decoder=start;v->head=(v->head+1)%4;--v->count;
+        if(v->playing && v->current.sequence) {
+            sample_source views[2]={{0}};
+            unsigned sends_aux=0;
+            for(unsigned bus=0;bus<AUX_BUSES;++bus)
+                for(unsigned lane=0;lane<AUX_LANES;++lane)if(v->aux_gain[bus][lane])sends_aux|=1u<<bus;
+            for(unsigned i=0;i<CTR_DSP_FRAME_SAMPLES && v->playing && v->current.sequence;++i) {
+                buffer *b=&v->current;int32_t s;
+                if(!voice_sample(g,v,views,&s))return false;
+                s=filter_sample(v,s);
+                for(unsigned lane=0;lane<2;++lane)mix[i*2+lane]+=voice_gain(s,v->gain[lane]);
+                if(sends_aux)for(unsigned bus=0;bus<AUX_BUSES;++bus)if(sends_aux&(1u<<bus))
+                    for(unsigned lane=0;lane<AUX_LANES;++lane)
+                        aux_send[bus][lane][i]+=voice_gain(s,v->aux_gain[bus][lane]);
+                uint64_t phase=v->phase+v->step;v->phase=(uint32_t)phase;
+                unsigned advance=(unsigned)(phase>>32);
+                while(advance-- && b->sequence)if(++b->position==b->count) {
+                    if(b->looping) { b->position=0;b->decoder=b->initial;add(&stats.loops,1); }
+                    else {
+                        v->last=b->sequence;add(&stats.completed,1);
+                        if(v->count) {
+                            const buffer *next=&v->queued[v->head];
+                            /* Faster rates can cross the boundary with unread source samples. */
+                            if(next->continue_history && !adpcm_sample(g,v->coefficients,b,b->count-1u,&views[0],&s))return false;
+                            CtrDspAdpcmState start=adpcm_start(next,b);
+                            *b=*next;b->decoder=start;v->head=(v->head+1)%4;--v->count;
+                        }
+                        else { *b=(buffer){0};v->playing=false;v->phase=0; }
                     }
-                    else { *b=(buffer){0};v->playing=false;v->phase=0; }
                 }
             }
         }

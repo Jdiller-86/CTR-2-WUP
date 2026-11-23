@@ -83,7 +83,7 @@ typedef struct RecompFast {
     unsigned maximum_depth;
     bool single_data;
     bool rollback_base;
-    uintptr_t dirty_page_plus_one;
+    uintptr_t dirty_page_plus_one,dirty_page2_plus_one;
 } RecompFast;
 
 _Noreturn void ctr_recomp_abort(Context *ctx,ctr_cpu_result result,uint32_t detail);
@@ -96,14 +96,7 @@ void ctr_recomp_step_run_slow(Context *ctx,uint32_t address,int32_t count);
 enum { CTR_VFP_STOP, CTR_VFP_EMIT, CTR_VFP_HANDLED };
 int ctr_recomp_scalar_vfp(Context *ctx,uint32_t address,uint32_t opcode);
 bool ctr_recomp_scalar_vfp_emit(Context *ctx,uint32_t address,uint32_t opcode);
-static CTR_NOINLINE int ctr_recomp_step_vfp(Context *c,uint32_t address) {
-    RecompFast *f=(RecompFast *)c;
-    int32_t b=c->budget;
-    if(b<=0 || (f->fpscr&0x04ff9f00u))return 0;
-    c->r[15]=address;
-    c->budget=b-1;
-    return 1;
-}
+int ctr_recomp_step_vfp(Context *c,uint32_t address);
 #if defined(__GNUC__) || defined(__clang__)
 #define CTR_SCALAR_VFP(address,opcode) \
     if((__builtin_constant_p(opcode) && ((opcode)>>28)==14u && (((opcode)&0x0fbe0e50u)!=0x0ebc0a40u) && \
@@ -186,45 +179,14 @@ static inline int ctr_recomp_instruction_fast(Context *c,uint32_t address,uint32
     return 1;
 }
 #if defined(__GNUC__) || defined(__clang__)
-static inline void ctr_recomp_step_reg_body(Context *c,uint32_t address) {
-    int32_t b=c->budget;
-    if(b<=0){ctr_recomp_step_slow_void(c,address,false);return;}
-    c->r[15]=address;
-    c->budget=b-1;
-}
-static CTR_NOINLINE void ctr_recomp_step_reg(Context *c,uint32_t address) {
-    ctr_recomp_step_reg_body(c,address);
-}
-static CTR_NOINLINE void ctr_recomp_step_reg4(Context *c) {
-    ctr_recomp_step_reg_body(c,c->r[15]+4u);
-}
-static inline void ctr_recomp_step_mem_body(Context *c,uint32_t address,bool single_data) {
-    RecompFast *f=(RecompFast *)c;
-    int32_t b=c->budget;
-    if(b<=0){ctr_recomp_step_slow_void(c,address,single_data);return;}
-    c->r[15]=address;
-    c->budget=b-1;
-    f->rollback_base=false;
-    f->single_data=single_data;
-}
-static CTR_NOINLINE void ctr_recomp_step_mem00(Context *c,uint32_t address) {
-    ctr_recomp_step_mem_body(c,address,false);
-}
-static CTR_NOINLINE void ctr_recomp_step_mem00_4(Context *c) {
-    ctr_recomp_step_mem_body(c,c->r[15]+4u,false);
-}
-static CTR_NOINLINE void ctr_recomp_step_mem10(Context *c,uint32_t address) {
-    ctr_recomp_step_mem_body(c,address,!c->thumb);
-}
-static CTR_NOINLINE void ctr_recomp_step_mem01(Context *c,uint32_t address) {
-    ctr_recomp_step_mem_body(c,address,c->thumb!=0);
-}
-static CTR_NOINLINE void ctr_recomp_step_mem11(Context *c,uint32_t address) {
-    ctr_recomp_step_mem_body(c,address,true);
-}
-static CTR_NOINLINE void ctr_recomp_step_mem11_4(Context *c) {
-    ctr_recomp_step_mem_body(c,c->r[15]+4u,true);
-}
+void ctr_recomp_step_reg(Context *c,uint32_t address);
+void ctr_recomp_step_reg4(Context *c);
+void ctr_recomp_step_mem00(Context *c,uint32_t address);
+void ctr_recomp_step_mem00_4(Context *c);
+void ctr_recomp_step_mem10(Context *c,uint32_t address);
+void ctr_recomp_step_mem01(Context *c,uint32_t address);
+void ctr_recomp_step_mem11(Context *c,uint32_t address);
+void ctr_recomp_step_mem11_4(Context *c);
 /* 0=reg, 1=mem00, 2=mem11, 3=mem10, 4=mem01, 5=special */
 #define CTR_INSN_KIND(op) ( \
     CTR_INSN_FAST_VMRS_TLS(op)?0: \
@@ -263,18 +225,8 @@ static CTR_NOINLINE void ctr_recomp_step_mem11_4(Context *c) {
         if(!ctr_recomp_instruction_fast(ctx,ctx->r[15]+4u,(opcode)))ctr_recomp_unwind(ctx); \
     } \
 } while (0)
-static CTR_NOINLINE void ctr_recomp_step_run(Context *c,uint32_t address,int32_t count) {
-    int32_t b=c->budget;
-    if(b<count){ctr_recomp_step_run_slow(c,address,count);return;}
-    c->r[15]=address+(uint32_t)(count-1)*4u;
-    c->budget=b-count;
-}
-static CTR_NOINLINE void ctr_recomp_step_run4(Context *c,int32_t count) {
-    int32_t b=c->budget;
-    if(b<count){ctr_recomp_step_run_slow(c,c->r[15]+4u,count);return;}
-    c->r[15]+=(uint32_t)count*4u;
-    c->budget=b-count;
-}
+void ctr_recomp_step_run(Context *c,uint32_t address,int32_t count);
+void ctr_recomp_step_run4(Context *c,int32_t count);
 #define CTR_INSTRUCTION_RUN(address,count) ctr_recomp_step_run(ctx,(address),(count))
 #define CTR_INSTRUCTION_RUN_NEXT(count) ctr_recomp_step_run4(ctx,(count))
 #define CTR_STEP_MID(address) ctr_recomp_step_run_slow(ctx,(address),INT32_MAX)
@@ -291,79 +243,13 @@ static CTR_NOINLINE void ctr_recomp_step_run4(Context *c,int32_t count) {
 } while (0)
 #define CTR_STEP_MID(address) ctr_recomp_step_run_slow(ctx,(address),INT32_MAX)
 #endif
-static CTR_NOINLINE uint8_t ctr_recomp_read8(Context *c,uint32_t a) {
-    RecompFast *f=(RecompFast *)c;
-    uint32_t off=a-f->rd_base;
-    if(off<f->rd_end)
-        return f->rd_storage[off];
-    return c->host->read8(c,a);
-}
-static CTR_NOINLINE uint16_t ctr_recomp_read16(Context *c,uint32_t a) {
-    RecompFast *f=(RecompFast *)c;
-    uint32_t off=a-f->rd_base;
-    if(!(a&1u) && off<f->rd_limit) {
-        const uint8_t *p=f->rd_storage+off;
-        return (uint16_t)((uint32_t)p[0]|((uint32_t)p[1]<<8));
-    }
-    return c->host->read16(c,a);
-}
-static CTR_NOINLINE uint32_t ctr_recomp_read32(Context *c,uint32_t a) {
-    RecompFast *f=(RecompFast *)c;
-    uint32_t off=a-f->rd_base;
-    if(!(a&3u) && off<f->rd_limit) {
-        const uint8_t *p=f->rd_storage+off;
-        return (uint32_t)p[0]|((uint32_t)p[1]<<8)|((uint32_t)p[2]<<16)|((uint32_t)p[3]<<24);
-    }
-    return c->host->read32(c,a);
-}
+uint8_t ctr_recomp_read8(Context *c,uint32_t a);
+uint16_t ctr_recomp_read16(Context *c,uint32_t a);
+uint32_t ctr_recomp_read32(Context *c,uint32_t a);
 void ctr_recomp_note_store_cold(RecompFast *f,uintptr_t begin,uintptr_t last);
-static inline void ctr_recomp_note_store1(Context *c,RecompFast *f,const uint8_t *p) {
-    *f->mem_generation+=1u;
-    c->exclusive=0;
-    uintptr_t page=(uintptr_t)p>>12u;
-    if(f->dirty_page_plus_one==page+1u)return;
-    ctr_recomp_note_store_cold(f,page,page);
-}
-static inline void ctr_recomp_note_store(Context *c,RecompFast *f,const uint8_t *p,unsigned width,unsigned words) {
-    *f->mem_generation+=words;
-    c->exclusive=0;
-    uintptr_t begin=(uintptr_t)p>>12u,last=((uintptr_t)p+width-1u)>>12u;
-    if(last==begin && f->dirty_page_plus_one==begin+1u)return;
-    ctr_recomp_note_store_cold(f,begin,last);
-}
-static CTR_NOINLINE void ctr_recomp_write8(Context *c,uint32_t a,uint8_t n) {
-    RecompFast *f=(RecompFast *)c;
-    uint32_t off=a-f->rw_base;
-    if(off<f->rw_end) {
-        uint8_t *p=f->rw_storage+off;
-        *p=n;
-        ctr_recomp_note_store1(c,f,p);
-        return;
-    }
-    c->host->write8(c,a,n);
-}
-static CTR_NOINLINE void ctr_recomp_write16(Context *c,uint32_t a,uint16_t n) {
-    RecompFast *f=(RecompFast *)c;
-    uint32_t off=a-f->rw_base;
-    if(!(a&1u) && off<f->rw_limit) {
-        uint8_t *p=f->rw_storage+off;
-        p[0]=(uint8_t)n;p[1]=(uint8_t)(n>>8);
-        ctr_recomp_note_store1(c,f,p);
-        return;
-    }
-    c->host->write16(c,a,n);
-}
-static CTR_NOINLINE void ctr_recomp_write32(Context *c,uint32_t a,uint32_t n) {
-    RecompFast *f=(RecompFast *)c;
-    uint32_t off=a-f->rw_base;
-    if(!(a&3u) && off<f->rw_limit) {
-        uint8_t *p=f->rw_storage+off;
-        p[0]=(uint8_t)n;p[1]=(uint8_t)(n>>8);p[2]=(uint8_t)(n>>16);p[3]=(uint8_t)(n>>24);
-        ctr_recomp_note_store1(c,f,p);
-        return;
-    }
-    c->host->write32(c,a,n);
-}
+void ctr_recomp_write8(Context *c,uint32_t a,uint8_t n);
+void ctr_recomp_write16(Context *c,uint32_t a,uint16_t n);
+void ctr_recomp_write32(Context *c,uint32_t a,uint32_t n);
 #define mem_read8(c,a) ctr_recomp_read8((c),(a))
 #define mem_read16(c,a) ctr_recomp_read16((c),(a))
 #define mem_read32(c,a) ctr_recomp_read32((c),(a))
@@ -376,23 +262,8 @@ static CTR_NOINLINE void ctr_recomp_write32(Context *c,uint32_t a,uint32_t n) {
 #else
 #define CTR_WORD_ALIGNED
 #endif
-static inline bool ctr_recomp_span_fits(uint32_t a,uint32_t n,uint32_t base,uint32_t size,const uint8_t *storage) {
-    uint32_t off=a-base;
-    return storage && n && n<=sizeof(((RecompFast *)0)->vfp) && !((a|n)&3u) &&
-           off<size && n<=size-off && !((uintptr_t)(storage+off)&3u);
-}
-static CTR_NOINLINE CTR_WORD_ALIGNED const uint8_t *ctr_recomp_read_span(Context *c,uint32_t a,uint32_t n) {
-    RecompFast *f=(RecompFast *)c;
-    if(!ctr_recomp_span_fits(a,n,f->rd_base,f->rd_end,f->rd_storage)){f->span_addr=a;return NULL;}
-    return f->rd_storage+(a-f->rd_base);
-}
-static CTR_NOINLINE CTR_WORD_ALIGNED uint8_t *ctr_recomp_write_span(Context *c,uint32_t a,uint32_t n) {
-    RecompFast *f=(RecompFast *)c;
-    if(!ctr_recomp_span_fits(a,n,f->rw_base,f->rw_end,f->rw_storage)){f->span_addr=a;return NULL;}
-    uint8_t *p=f->rw_storage+(a-f->rw_base);
-    ctr_recomp_note_store(c,f,p,n,n/4u);
-    return p;
-}
+CTR_WORD_ALIGNED const uint8_t *ctr_recomp_read_span(Context *c,uint32_t a,uint32_t n);
+CTR_WORD_ALIGNED uint8_t *ctr_recomp_write_span(Context *c,uint32_t a,uint32_t n);
 uint32_t ctr_recomp_read_span_gpr(Context *c,uint32_t mask);
 void ctr_recomp_write_span_gpr(Context *c,uint32_t mask);
 void ctr_recomp_read_span_vfp(Context *c,uint32_t spec);
@@ -512,17 +383,9 @@ static inline void vfp_vector(Context *c,int op,int wide,int d,int n,int m) { (v
 #if CTR_RECOMP_CALL_LIMIT < 1 || CTR_RECOMP_CALL_LIMIT > 64
 #error "CTR_RECOMP_CALL_LIMIT must be between 1 and 64"
 #endif
-static CTR_NOINLINE void ctr_recomp_call(Context *c,Code code) {
-    uint32_t d=c->depth;
-    if(d>=CTR_RECOMP_CALL_LIMIT){c->exit=EXIT_UNWIND;ctr_recomp_unwind(c);}
-    c->depth=d+1u;
-    if(d+1u>((RecompFast *)c)->maximum_depth)((RecompFast *)c)->maximum_depth=d+1u;
-    code(c);
-    c->depth=d;
-    if(c->exit)ctr_recomp_unwind(c);
-}
+void ctr_recomp_call(Context *c,Code code);
 #define CALL(code) ctr_recomp_call(ctx,(code))
-static CTR_NOINLINE void recomp_call(Context *c) { Code f=c->host->lookup(c,c->r[15]|c->thumb);if(f)f(c);else c->exit=EXIT_UNWIND; }
+void recomp_call(Context *c);
 #define RETURNED(address) do { if(ctx->r[15]!=(address)||ctx->thumb){target=ctx->r[15];goto dispatch;} } while (0)
 #define RETURNED_T(address) do { if(ctx->r[15]!=(address)||!ctx->thumb){target=ctx->r[15];goto dispatch;} } while (0)
 #define RETURN_TO(value) do { uint32_t ctr_target_=(value),ctr_t_=ctr_target_&1u;ctx->thumb=(uint8_t)ctr_t_;ctx->r[15]=ctr_target_&((ctr_t_<<1)-4u);return; } while (0)
