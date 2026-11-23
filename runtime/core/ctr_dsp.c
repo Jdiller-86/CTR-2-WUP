@@ -5,6 +5,7 @@
 #include "ctr_heap.h"
 #include "ctr_kernel.h"
 #include "ctr_sha256.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -83,6 +84,14 @@ static bool fail(ctr_guest *g,uint32_t detail,ctr_mem_result memory) {
     g->fault=memory==CTR_MEM_OK?CTR_CPU_UNSUPPORTED:CTR_CPU_MEMORY_FAULT;
     g->fault_detail=detail;g->cpu.memory_fault=memory;g->state=CTR_GUEST_FAULTED;
     ctr_cpu_stop(&g->cpu,g->fault,detail);return false;
+}
+static bool dsp_reject(ctr_guest *g,unsigned c,const char *reason,uint32_t a,uint32_t b) {
+    if(g->debug) {
+        char buf[96];
+        snprintf(buf,sizeof(buf),"DSP_REJECT ch=%u %s a=%08x b=%08x",c,reason,a,b);
+        g->debug(g->debug_context,buf);
+    }
+    return fail(g,c,CTR_MEM_OK);
 }
 static bool range(ctr_guest *g,uint32_t address,uint32_t size,unsigned rights) {
     ctr_mem_result r=ctr_memory_check_range(&g->memory,address,size,rights);
@@ -380,22 +389,22 @@ static bool frame(ctr_guest *g) {
     const uint32_t channel_flags=ALLOWED|(d->verified_component?0x01800000u:0u);
     for(unsigned c=0;c<CTR_DSP_CHANNELS;++c) {
         const uint8_t *p=ram+CHANNEL+c*STRIDE;uint32_t flags=le(p,4);voice *v=&voices[c];
-        if(flags&~channel_flags)return fail(g,c,CTR_MEM_OK);
+        if(flags&~channel_flags)return dsp_reject(g,c,"flags",flags,channel_flags);
         if(flags&0x20000000u) { memset(v,0,sizeof(*v));v->gain[0]=v->gain[1]=32768;v->step=UINT64_C(0x100000000); }
         if(flags&0x10000000u) { v->sync=(uint16_t)le(p+0xa2,2);v->current=(buffer){0};v->head=v->count=0;v->last=0;v->phase=0; }
         if(flags&4u) {
-            if(v->current.sequence && v->format==ADPCM)return fail(g,c,CTR_MEM_OK);
+            if(v->current.sequence && v->format==ADPCM)return dsp_reject(g,c,"coeff_active",flags,v->current.sequence);
             for(unsigned i=0;i<16;++i)v->coefficients[i]=signed_half(le(ram+COEFFICIENTS+c*32+i*2,2));
         }
-        if((flags&0x40000u) && !rate(le(p+0x34,4),d->verified_component,&v->step))return fail(g,c,CTR_MEM_OK);
+        if((flags&0x40000u) && !rate(le(p+0x34,4),d->verified_component,&v->step))return dsp_reject(g,c,"rate",le(p+0x34,4),flags);
         if(flags&0x20000u) {
-            if(p[0x38]>2 || p[0x39]>2)return fail(g,c,CTR_MEM_OK);
+            if(p[0x38]>2 || p[0x39]>2)return dsp_reject(g,c,"interp",p[0x38],p[0x39]);
             v->interpolation=p[0x38];
             if(d->verified_component && !v->interpolation)v->interpolation=1;
         }
         if(flags&0x400000u) {
             unsigned filter=le(p+0x3a,2);
-            if(filter>(d->verified_component?3u:0u))return fail(g,c,CTR_MEM_OK);
+            if(filter>(d->verified_component?3u:0u))return dsp_reject(g,c,"filter",filter,flags);
             v->mono_enabled=(filter&1u)!=0;
             v->biquad_enabled=(filter&2u)!=0;
             if(!v->mono_enabled)v->mono_output=0;
@@ -410,50 +419,50 @@ static bool frame(ctr_guest *g) {
             v->biquad_configured=true;
         }
         if((v->mono_enabled && !v->mono_configured) || (v->biquad_enabled && !v->biquad_configured))
-            return fail(g,c,CTR_MEM_OK);
+            return dsp_reject(g,c,"filter_cfg",v->mono_enabled|(v->biquad_enabled<<1),flags);
         if(flags&0xe000000u) {
             for(unsigned i=0;i<12;++i) {
-                int32_t value;if(!gain(le(p+4+i*4,4),&value))return fail(g,c,CTR_MEM_OK);
+                int32_t value;if(!gain(le(p+4+i*4,4),&value))return dsp_reject(g,c,"gain_nan",i,le(p+4+i*4,4));
                 if(i<2) {
                     if(!d->verified_component || (flags&0x02000000u))v->gain[i]=value;
                 } else if(d->verified_component && i>=AUX_LANES) {
                     unsigned bus=i/AUX_LANES-1u;
                     if(flags&(0x04000000u<<bus))v->aux_gain[bus][i%AUX_LANES]=value;
-                } else if(value)return fail(g,c,CTR_MEM_OK);
+                } else if(value)return dsp_reject(g,c,"gain_lane",i,(uint32_t)value);
             }
         }
-        if(flags&0x10000u) { if(le(p+0xa0,2)>1)return fail(g,c,CTR_MEM_OK);v->playing=le(p+0xa0,2)!=0; }
+        if(flags&0x10000u) { if(le(p+0xa0,2)>1)return dsp_reject(g,c,"playing",le(p+0xa0,2),flags);v->playing=le(p+0xa0,2)!=0; }
         if(flags&0x40200010u) {
             unsigned format=le(p+0xb4,2);
             /* This verified component also supplies bit 4 with mono ADPCM.
                The channel count and codec occupy bits 0 through 3. */
             if(d->verified_component && format==0x19u)format=9u;
             if((flags&0x40200010u)!=0x40200010u || (format!=5 && format!=9 &&
-               !(d->verified_component && format==1)))return fail(g,c,CTR_MEM_OK);
+               !(d->verified_component && format==1)))return dsp_reject(g,c,"format",format,flags);
             v->format=format==9?ADPCM:format==1?PCM8:PCM16;
             if(!decode_buffer(g,p+0xac,true,v->format,&v->current))return false;
             v->count=v->head=v->next_slot=0;v->phase=0;add(&stats.queued,1);
         }
         if(flags&0x80000u) {
-            unsigned mask=le(p+0x4a,2);if((mask && !v->current.sequence) || (mask&~15u))return fail(g,c,CTR_MEM_OK);
+            unsigned mask=le(p+0x4a,2);if((mask && !v->current.sequence) || (mask&~15u))return dsp_reject(g,c,"qmask",mask,v->current.sequence);
             for(unsigned slots=0;mask && slots<4;++slots) {
                 unsigned i=v->next_slot;
-                if(!(mask&(1u<<i)))return fail(g,c,CTR_MEM_OK);
+                if(!(mask&(1u<<i)))return dsp_reject(g,c,"qslot",mask,i);
                 mask&=~(1u<<i);v->next_slot=(i+1)%4;
-                if(v->count==4)return fail(g,c,CTR_MEM_OK);
+                if(v->count==4)return dsp_reject(g,c,"qfull",v->count,i);
                 buffer b;if(!decode_buffer(g,p+0x4c+i*20,false,v->format,&b))return false;
-                if(b.sequence==v->current.sequence)return fail(g,c,CTR_MEM_OK);
-                for(unsigned j=0;j<v->count;++j)if(v->queued[(v->head+j)%4].sequence==b.sequence)return fail(g,c,CTR_MEM_OK);
+                if(b.sequence==v->current.sequence)return dsp_reject(g,c,"qseq_cur",b.sequence,i);
+                for(unsigned j=0;j<v->count;++j)if(v->queued[(v->head+j)%4].sequence==b.sequence)return dsp_reject(g,c,"qseq_dup",b.sequence,j);
                 v->queued[(v->head+v->count)%4]=b;++v->count;add(&stats.queued,1);
             }
         }
         /* Keep the original probe's polyphase mode at unity rate. The verified
          * component profile explicitly selects linear resampling. */
         if(v->current.sequence && (!v->step || (!v->interpolation &&
-           (v->step!=UINT64_C(0x100000000) || v->phase))))return fail(g,c,CTR_MEM_OK);
+           (v->step!=UINT64_C(0x100000000) || v->phase))))return dsp_reject(g,c,"step_interp",v->interpolation,(uint32_t)(v->step>>32));
         if(!d->verified_component && v->current.sequence && v->format==ADPCM &&
            (v->step!=UINT64_C(0x100000000) || v->phase))
-            return fail(g,c,CTR_MEM_OK);
+            return dsp_reject(g,c,"adpcm_rate",v->format,(uint32_t)(v->step>>32));
     }
     /* At most 24 voice contributions of magnitude 32768 per lane. */
     int32_t mix[CTR_DSP_FRAME_SAMPLES*2]={0};uint8_t status[CTR_DSP_CHANNELS*12]={0},capture[CTR_DSP_FRAME_SAMPLES*4];

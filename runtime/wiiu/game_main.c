@@ -400,7 +400,7 @@ int main(void) {
             /* Match the host replay's guest-time input cadence and retain
              * short controller presses between those samples. */
             pending_buttons|=pad.trigger;
-            if(!guest.hid.published || clock_ns-guest.hid.last_ns>=UINT64_C(17000000)) {
+            if(!guest.hid.published || clock_ns-guest.hid.last_ns>=UINT64_C(16000000)) {
                 VPADStatus guest_pad=pad;
                 guest_pad.hold|=pending_buttons;
                 pending_buttons=0;

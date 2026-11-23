@@ -906,7 +906,6 @@ void ctr_recomp_enable_runfast(ctr_guest *g) {
         if(e->fallback) {
             e->fpscr_mask=0x04ff9f00u;
             e->batch_uncontended=true;
-            g->thread_quantum=256u;
         }
     }
 }
