@@ -352,7 +352,7 @@ int main(void) {
     startup_checkpoint("guest_load_end");
     if(!failure && !status_report("running"))fail("Private runtime log failed");
     uint64_t previous_us=slice_clock(NULL),last_status_draw_us=0;clock_ns=1;
-    uint64_t presented_vblank=0,presented_swaps[2]={0,0};
+    uint64_t presented_swaps[2]={0,0};
     bool exit_observed=false,previous_picture=false;
     const char *shown_failure=NULL;
     VPADStatus pad={0};
@@ -380,17 +380,21 @@ int main(void) {
         }
         /* Service each pending display deadline before crossing it. Limit
          * catch-up after a host stall to one guest frame per pass. */
-        uint64_t elapsed_ns=delta>CTR_GSP_FRAME_NS/1000u?CTR_GSP_FRAME_NS:delta*1000u;
+        bool behind_realtime=delta>CTR_GSP_FRAME_NS/1000u;
+        uint64_t elapsed_ns=behind_realtime?CTR_GSP_FRAME_NS:delta*1000u;
         if(guest.gsp.registered && guest.gsp.right) {
             uint64_t deadline=guest.gsp.next_vblank_ns;
             uint64_t until=deadline>clock_ns?deadline-clock_ns:0u;
             if(elapsed_ns>until)elapsed_ns=until;
         }
         clock_ns+=elapsed_ns;
-        VPADStatus sample={0};VPADReadError error;
+        VPADStatus samples[16];VPADReadError error;
         pad.trigger=pad.release=0;
-        int count=VPADRead(VPAD_CHAN_0,&sample,1,&error);
-        if(count>0 && error==VPAD_READ_SUCCESS)pad=sample;
+        int count=VPADRead(VPAD_CHAN_0,samples,16,&error);
+        if(count>0 && error==VPAD_READ_SUCCESS) {
+            pad=samples[0];
+            for(int i=1;i<count;++i)pad.trigger|=samples[i].trigger;
+        }
         /* Cemu can return a successful empty poll before the next sample. */
         else if(error!=VPAD_READ_SUCCESS && error!=VPAD_READ_NO_SAMPLES)memset(&pad,0,sizeof(pad));
         if(count>0 && error==VPAD_READ_SUCCESS && (pad.trigger&VPAD_BUTTON_MINUS) &&
@@ -410,7 +414,7 @@ int main(void) {
             if(!update_input(&pad))fail("Guest input publication failed");
 #endif
             if(!failure) {
-                const ctr_slice_policy policy={10000,32,200000,12000};
+                const ctr_slice_policy policy={10000,32,200000,25000};
                 ctr_slice_report slice=ctr_guest_slice(&policy,slice_clock,execute,NULL);
                 guest_exec_us+=slice.elapsed_us;
                 if(guest.state==CTR_GUEST_FAULTED) {
@@ -424,7 +428,7 @@ int main(void) {
             }
         }
         bool picture=!failure && opened && !guest.gsp.black && guest.gsp.active[0] && guest.gsp.active[1];
-        if(picture && (!previous_picture || presented_vblank!=guest.gsp.vblanks ||
+        if(picture && (!previous_picture ||
            presented_swaps[0]!=guest.gsp.swaps[0] || presented_swaps[1]!=guest.gsp.swaps[1])) {
             uint64_t presentation_start=slice_clock(NULL);
             const void *top_scanout=ctr_wiiu_gx2_scene_scanout_texture(&gx2_scene,ctr_guest_scanout_screen(&guest,0));
@@ -438,7 +442,6 @@ int main(void) {
                !ctr_diagnostic_display_guest(top,bottom))) {
                 fail("Guest display presentation failed");picture=false;
             } else {
-                presented_vblank=guest.gsp.vblanks;
                 presented_swaps[0]=guest.gsp.swaps[0];presented_swaps[1]=guest.gsp.swaps[1];++frames;
             }
             presentation_us+=slice_clock(NULL)-presentation_start;
@@ -458,7 +461,7 @@ int main(void) {
         if(now-last_status_us>=5000000u) {
             last_status_us=now;if(!status_report(failure?"stopped":"progress"))fail("Private runtime log failed");
         }
-        if(guest.state==CTR_GUEST_WAITING || guest.state==CTR_GUEST_SLEEPING)
+        if(!behind_realtime && (guest.state==CTR_GUEST_WAITING || guest.state==CTR_GUEST_SLEEPING))
             OSSleepTicks(OSMillisecondsToTicks(1));
     }
     if(!ctr_test_complete_exit(&lifecycle,exit_observed,&exit_ops,NULL))failure="Exit transition failed";
