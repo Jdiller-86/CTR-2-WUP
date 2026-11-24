@@ -117,7 +117,7 @@ static void bulk_ranges(void) {
     CHECK(!memcmp(storage,input,8) && !memcmp(storage+8,input+16,16));
 }
 static void transfers(void) {
-    uint8_t source[512],out[512],back[512];for(unsigned i=0;i<512;++i)source[i]=(uint8_t)(i*19);
+    _Alignas(4) uint8_t source[512],out[512],back[512];for(unsigned i=0;i<512;++i)source[i]=(uint8_t)(i*19);
     for(unsigned format=0;format<5;++format) {
         uint32_t flags=2|(format<<8)|(format<<12),dim=16|(8<<16);ctr_transfer t;
         CHECK(ctr_transfer_init(&t,dim,dim,flags));CHECK(ctr_transfer_convert(dim,dim,flags,source,sizeof(source),out,sizeof(out)));
@@ -130,6 +130,21 @@ static void transfers(void) {
     for(unsigned i=0;i<128;i+=2)CHECK(out[i]==0xe0 && out[i+1]==7);
     CHECK(ctr_transfer_convert(8|(16<<16),8|(8<<16),0x2004,source,sizeof(source),out,128));
     CHECK(out[0]==0xe0 && out[1]==7 && out[126]==0xe0 && out[127]==7);
+    _Alignas(4) uint8_t linear[16*16*4],tiled[sizeof(linear)+1u],unaligned[sizeof(out)+1u];
+    uint32_t dim=16|(16u<<16),crop=13|(11u<<16);
+    for(unsigned i=0;i<sizeof(linear);++i)linear[i]=(uint8_t)(i*29u+i/7u);
+    CHECK(ctr_transfer_convert(dim,dim,2,linear,sizeof(linear),tiled,sizeof(tiled)));
+    for(unsigned flip=0;flip<2;++flip) {
+        uint32_t out_dim=flip?dim:crop,flags=flip?1u:4u;
+        memset(out,0xa5,sizeof(out));memset(back,0xa5,sizeof(back));
+        CHECK(ctr_transfer_convert(dim,out_dim,0x2000|flags,tiled,sizeof(tiled),out,sizeof(out)));
+        CHECK(ctr_transfer_convert(dim,out_dim,0x2022|flags,linear,sizeof(linear),back,sizeof(back)));
+        CHECK(!memcmp(out,back,sizeof(out)));
+        if(!flip)CHECK(out[13*11*2]==0xa5);
+    }
+    memmove(tiled+1,tiled,sizeof(linear));
+    CHECK(ctr_transfer_convert(dim,dim,0x2001,tiled+1,sizeof(linear),unaligned+1,sizeof(out)));
+    CHECK(!memcmp(out,unaligned+1,sizeof(out)));
     memset(out,0xa5,512);
     const uint32_t invalid[]={8,0x1000000,0x10,0x80000000,0x500,0x5000};
     for(unsigned i=0;i<sizeof(invalid)/sizeof(*invalid);++i)CHECK(!ctr_transfer_convert(8|(8<<16),8|(8<<16),invalid[i],source,256,out,512));
@@ -163,6 +178,29 @@ static void operations(void) {
     }
     uint32_t cache[]={0x00000105,0x30000000,24,0,0,0,0,0};uint64_t generation=g.memory.generation;
     CHECK(ctr_gx_execute(&g,cache,&c)==CTR_GX_OK && !c.signal && g.memory.generation==generation);
+    ctr_guest_close(&g);
+}
+static void display_backing(void) {
+    ctr_guest g;open(&g);ctr_gx_completion c;
+    const uint32_t dim=16u|(8u<<16),flags=0x2000u;
+    uint8_t expected[256],actual[256];
+    CHECK(ctr_gsp_open_vram(&g));
+    CHECK(ctr_memory_map(&g.memory,0x31000000u,256,CTR_MEM_READ|CTR_MEM_WRITE,buffers+8,256)==CTR_MEM_OK);
+    CHECK(ctr_memory_map(&g.memory,0x32000000u,128,CTR_MEM_READ|CTR_MEM_WRITE,buffers+4096,128)==CTR_MEM_OK);
+    CHECK(ctr_memory_map(&g.memory,0x32000080u,128,CTR_MEM_READ|CTR_MEM_WRITE,buffers+4352,128)==CTR_MEM_OK);
+    const uint32_t targets[]={0x30001000u,CTR_VRAM_BASE,0x31000000u,0x32000000u};
+    for(unsigned i=0;i<sizeof(targets)/sizeof(*targets);++i) {
+        for(unsigned j=0;j<512;++j)buffers[j]=(uint8_t)(j*17u+j/7u);
+        CHECK(ctr_transfer_convert(dim,dim,flags,buffers,512,expected,sizeof(expected)));
+        uint32_t w[]={0x01000103,0x30000000,targets[i],dim,dim,flags,0,0};
+        ctr_memory_resource_key key;
+        CHECK(ctr_memory_resource_key_capture(&g.memory,targets[i],256,CTR_MEM_READ,&key));
+        uint64_t generation=g.memory.generation;
+        CHECK(ctr_gx_execute(&g,w,&c)==CTR_GX_OK);
+        CHECK(g.memory.generation==generation+1 && !ctr_memory_resource_key_current(&g.memory,&key));
+        CHECK(ctr_memory_read_bytes(&g.memory,targets[i],actual,sizeof(actual))==CTR_MEM_OK &&
+              !memcmp(actual,expected,sizeof(actual)));
+    }
     ctr_guest_close(&g);
 }
 static void rejection(void) {
@@ -271,6 +309,6 @@ static void pica_commands(void) {
     }
 }
 int main(void) {
-    bulk();bulk_ranges();transfers();operations();rejection();queue();pica_commands();
+    bulk();bulk_ranges();transfers();operations();display_backing();rejection();queue();pica_commands();
     printf("{\"ok\":true,\"assertions\":%u,\"gx_queue\":true,\"cpu_transfers\":true,\"console_verified\":false}\n",assertions);return 0;
 }

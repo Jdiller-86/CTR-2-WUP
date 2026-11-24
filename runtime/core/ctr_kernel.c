@@ -138,42 +138,48 @@ void ctr_shared_svc(ctr_guest *g,uint32_t number) {
     }
     r[0]=result;g->memory_result=result;if (result) ++g->memory_failures;
 }
-static bool ready(const ctr_guest *g,ctr_guest_handle_type type,unsigned object) {
+static bool ready(const ctr_guest *g,uint32_t owner,ctr_guest_handle_type type,unsigned object) {
     if (type==CTR_HANDLE_EVENT) return g->events[object].signaled;
     if (type==CTR_HANDLE_MUTEX) return !g->mutexes[object].depth ||
-        (g->mutexes[object].owner==g->threads[g->current_thread].id && g->mutexes[object].depth<UINT32_MAX);
+        (g->mutexes[object].owner==owner && g->mutexes[object].depth<UINT32_MAX);
     if (type==CTR_HANDLE_SEMAPHORE) return g->semaphores[object].count!=0;
     if (type==CTR_HANDLE_THREAD) return g->threads[object].finished;
     return false;
 }
-static void acquire(ctr_guest *g,ctr_guest_handle_type type,unsigned object) {
+static void acquire(ctr_guest *g,uint32_t owner,ctr_guest_handle_type type,unsigned object) {
     if (type==CTR_HANDLE_EVENT) { if (!g->events[object].reset) g->events[object].signaled=false; }
     else if (type==CTR_HANDLE_MUTEX) {
         ctr_guest_mutex *m=&g->mutexes[object];
         if(!m->depth)ctr_guest_object_retain(g,CTR_HANDLE_MUTEX,object);
-        ++m->depth;m->owner=g->threads[g->current_thread].id;
+        ++m->depth;m->owner=owner;
     }
     else if (type==CTR_HANDLE_SEMAPHORE) --g->semaphores[object].count;
 }
-static void finish(ctr_guest *g,uint32_t result,uint32_t index) {
-    g->cpu.r[0]=result;if (g->wait_multiple) g->cpu.r[1]=index;
-    g->state=CTR_GUEST_READY;
-    for (unsigned i=0;i<g->wait_count;++i) ctr_guest_object_release(g,g->wait_types[i],g->wait_objects[i]);
-    g->wait_count=0;
+static uint32_t wait_result(ctr_guest *g,uint32_t owner,const ctr_guest_handle_type *types,
+                            const unsigned *objects,unsigned count,bool wait_all,bool expired,uint32_t *index) {
+    *index=UINT32_MAX;
+    if (wait_all) {
+        bool all=true;
+        for (unsigned i=0;i<count;++i) if (!ready(g,owner,types[i],objects[i])) { all=false;break; }
+        if (all) {
+            for (unsigned i=0;i<count;++i) acquire(g,owner,types[i],objects[i]);
+            return 0;
+        }
+    } else for (unsigned i=0;i<count;++i) if (ready(g,owner,types[i],objects[i])) {
+        acquire(g,owner,types[i],objects[i]);*index=i;return 0;
+    }
+    return expired?TIMEOUT:UINT32_MAX;
 }
 void ctr_sync_poll(ctr_guest *g) {
     if (g->state!=CTR_GUEST_WAITING) return;
-    if (g->wait_all) {
-        bool all=true;
-        for (unsigned i=0;i<g->wait_count;++i) if (!ready(g,g->wait_types[i],g->wait_objects[i])) all=false;
-        if (all) {
-            for (unsigned i=0;i<g->wait_count;++i) acquire(g,g->wait_types[i],g->wait_objects[i]);
-            finish(g,0,UINT32_MAX);return;
-        }
-    } else for (unsigned i=0;i<g->wait_count;++i) if (ready(g,g->wait_types[i],g->wait_objects[i])) {
-        acquire(g,g->wait_types[i],g->wait_objects[i]);finish(g,0,i);return;
+    uint32_t index,result=wait_result(g,g->threads[g->current_thread].id,g->wait_types,g->wait_objects,
+        g->wait_count,g->wait_all,!g->infinite_wait && g->now_ns>=g->deadline_ns,&index);
+    if(result!=UINT32_MAX) {
+        g->cpu.r[0]=result;if(g->wait_multiple)g->cpu.r[1]=index;
+        g->state=CTR_GUEST_READY;
+        for(unsigned i=0;i<g->wait_count;++i)ctr_guest_object_release(g,g->wait_types[i],g->wait_objects[i]);
+        g->wait_count=0;
     }
-    if (!g->infinite_wait && g->now_ns>=g->deadline_ns) finish(g,TIMEOUT,UINT32_MAX);
 }
 uint32_t ctr_sync_create_semaphore(ctr_guest *g,uint32_t count,uint32_t maximum) {
     if(!maximum || maximum>INT32_MAX || count>maximum)return 0;
@@ -202,7 +208,7 @@ void ctr_sync_svc(ctr_guest *g,uint32_t number) {
         if (slot<16) {
             g->mutexes[slot]=(ctr_guest_mutex){.active=true};
             handle=ctr_guest_handle_new(g,CTR_HANDLE_MUTEX,slot);
-            if(handle && r[1])acquire(g,CTR_HANDLE_MUTEX,slot);
+            if(handle && r[1])acquire(g,g->threads[g->current_thread].id,CTR_HANDLE_MUTEX,slot);
             if(!handle)memset(&g->mutexes[slot],0,sizeof(g->mutexes[slot]));
         }
         r[0]=handle?0:NO_MEMORY;r[1]=handle;return;
@@ -284,42 +290,42 @@ static void thread_restore(ctr_guest *g,unsigned slot) {
 void ctr_threads_poll(ctr_guest *g) {
     if(!g->threads_enabled) { ctr_sync_poll(g);return; }
     unsigned original=g->current_thread;
-    thread_capture(g);
-    /* Preserve the active CPU even if it just exited and has no retained handle. */
-    ctr_cpu saved_cpu=g->cpu;ctr_guest_thread saved_control={0};
-    saved_control.state=g->state;saved_control.deadline_ns=g->deadline_ns;
-    saved_control.infinite_wait=g->infinite_wait;saved_control.wait_all=g->wait_all;
-    saved_control.wait_multiple=g->wait_multiple;saved_control.wait_count=g->wait_count;saved_control.wait_object=g->wait_object;
-    saved_control.wait_address=g->wait_address;
-    memcpy(saved_control.wait_types,g->wait_types,sizeof(g->wait_types));
-    memcpy(saved_control.wait_objects,g->wait_objects,sizeof(g->wait_objects));uint32_t saved_tls=g->tls_address;
-    for(unsigned n=0;n<CTR_GUEST_MAX_THREADS;++n) {
+    if(g->threads[original].active && !g->threads[original].finished) {
+        if(g->state==CTR_GUEST_YIELDED || (g->state==CTR_GUEST_SLEEPING && g->now_ns>=g->deadline_ns))
+            g->state=CTR_GUEST_READY;
+        ctr_sync_poll(g);
+    }
+    /* Keep the same order when multiple waiters can consume one signal. */
+    for(unsigned n=1;n<CTR_GUEST_MAX_THREADS;++n) {
         unsigned slot=(original+n)%CTR_GUEST_MAX_THREADS;ctr_guest_thread *t=&g->threads[slot];
         if(!t->active || t->finished)continue;
-        thread_restore(g,slot);
-        if(g->state==CTR_GUEST_SLEEPING && g->now_ns>=g->deadline_ns)g->state=CTR_GUEST_READY;
-        if(g->state==CTR_GUEST_YIELDED)g->state=CTR_GUEST_READY;
-        ctr_sync_poll(g);thread_capture(g);
+        if(t->state==CTR_GUEST_YIELDED || (t->state==CTR_GUEST_SLEEPING && g->now_ns>=t->deadline_ns))
+            t->state=CTR_GUEST_READY;
+        if(t->state!=CTR_GUEST_WAITING)continue;
+        uint32_t index,result=wait_result(g,t->id,t->wait_types,t->wait_objects,t->wait_count,
+            t->wait_all,!t->infinite_wait && g->now_ns>=t->deadline_ns,&index);
+        if(result==UINT32_MAX)continue;
+        t->r[0]=result;if(t->wait_multiple)t->r[1]=index;
+        t->state=CTR_GUEST_READY;
+        for(unsigned i=0;i<t->wait_count;++i)ctr_guest_object_release(g,t->wait_types[i],t->wait_objects[i]);
+        t->wait_count=0;
     }
-    if(g->threads[original].active)thread_restore(g,original);
-    else {
-        g->current_thread=original;g->cpu=saved_cpu;g->tls_address=saved_tls;
-        g->state=saved_control.state;g->deadline_ns=saved_control.deadline_ns;
-        g->infinite_wait=saved_control.infinite_wait;g->wait_all=saved_control.wait_all;
-        g->wait_multiple=saved_control.wait_multiple;g->wait_count=saved_control.wait_count;g->wait_object=saved_control.wait_object;
-        g->wait_address=saved_control.wait_address;
-        memcpy(g->wait_types,saved_control.wait_types,sizeof(g->wait_types));memcpy(g->wait_objects,saved_control.wait_objects,sizeof(g->wait_objects));
-    }
+    thread_capture(g);
+    if(g->threads[original].active)g->tls_address=g->cpu.tls_address;
 }
 bool ctr_thread_schedule(ctr_guest *g,bool rotate) {
     unsigned old=g->current_thread,best=CTR_GUEST_MAX_THREADS;int priority=INT32_MAX;
+    bool shared=false;
     ctr_threads_poll(g);
     for(unsigned n=0;n<CTR_GUEST_MAX_THREADS;++n) {
         unsigned slot=(old+n+(rotate?1u:0u))%CTR_GUEST_MAX_THREADS;
         const ctr_guest_thread *t=&g->threads[slot];
-        if(t->active && !t->finished && t->state==CTR_GUEST_READY && t->priority<priority) { best=slot;priority=t->priority; }
+        if(!t->active || t->finished || t->state!=CTR_GUEST_READY)continue;
+        if(t->priority<priority) { best=slot;priority=t->priority;shared=false; }
+        else if(t->priority==priority)shared=true;
     }
     bool runnable=best<CTR_GUEST_MAX_THREADS;
+    g->quantum_uncontended=runnable && !shared;
     if(!runnable) {
         for(unsigned n=0;n<CTR_GUEST_MAX_THREADS;++n) {
             unsigned slot=(old+n)%CTR_GUEST_MAX_THREADS;const ctr_guest_thread *t=&g->threads[slot];

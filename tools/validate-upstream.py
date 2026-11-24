@@ -66,7 +66,7 @@ def main():
         code=(ROOT/'tests/recomp/abi.arm.bin').read_bytes() if name=='abi' else struct.pack('<6I',0x1e070f15,0xee070f15,0xf57ff05f,0xf57ff04f,0xf57ff06f,0xef000003) if name=='cp15' else None
         if name=='thread_vfp':code=(ROOT/'tests/recomp/thread-vfp.arm.bin').read_bytes()
         # Original VCVT.U32.F32 s0,s0; VCVT.S32.F32 s0,s0; ExitProcess.
-        if name=='conversion':code=struct.pack('<3I',0xeebc0ac0,0xeebd0ac0,0xef000003)
+        if name=='conversion':code=struct.pack('<5I',0xeebc0ac0,0xeebd0ac0,0xeebc0bc0,0xeebd0bc0,0xef000003)
         if name=='media':code=struct.pack('<20I',0xe6502f91,0xe6503ff1,0xe6804fb1,0xe1050281,0xe10602a1,0xe10702c1,0xe10802e1,0xee070fba,0xee070f9a,
             0xe6a72010,0xe6e03011,0xe6a74f30,0xe6e05f31,0xe6806071,0xe6c07071,
             0xe1650180,0xe16601a0,0xe16701c0,0xe16801e0,0xef000003)

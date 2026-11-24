@@ -14,4 +14,13 @@ void ctr_gsp_session_closed(ctr_guest *guest,unsigned session);
 bool ctr_gsp_poll(ctr_guest *guest,uint64_t now_ns);
 /* Revalidate the entire rotated source before writing any host output. */
 ctr_mem_result ctr_gsp_pixels(const ctr_guest *guest,unsigned screen,uint32_t *rgba,size_t count);
+typedef struct {
+    ctr_memory_resource_key source;
+    uint32_t descriptor[7];
+    uint32_t *rgba;
+    size_t count;
+} ctr_gsp_pixel_cache;
+/* The caller retains the same unmodified output buffer for this cache. */
+ctr_mem_result ctr_gsp_pixels_cached(const ctr_guest *guest,unsigned screen,uint32_t *rgba,
+                                     size_t count,ctr_gsp_pixel_cache *cache);
 #endif

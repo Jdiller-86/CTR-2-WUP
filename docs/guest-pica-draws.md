@@ -147,6 +147,8 @@ Guest-owned CPU caches retain up to 40 immutable command, vertex/index, texture,
 color and depth snapshots within 12 MiB. Every lookup validates current mappings,
 permissions, resource versions and exact backing bytes. Active leases prevent
 eviction; capacity pressure or exhausted versions use temporary owned snapshots.
+The direct GX2 backend can read validated geometry and texture spans in place
+during synchronous replay. It copies GPU inputs into its own upload buffers.
 Targets copy into separate writable staging. Committed targets may become later
 lists' textures; same-list feedback remains rejected. Failed lists may warm CPU
 caches but never publish targets, state, generations or completion.

@@ -72,6 +72,8 @@ typedef struct {
     uint32_t gpu_depth_address;
     unsigned gpu_depth_width,gpu_depth_height,gpu_depth_format;
     ctr_memory_resource_key gpu_depth_key;
+    uint32_t pending_color_address;
+    unsigned pending_color_width,pending_color_height;
     uint32_t last_gx_header,last_gx_detail;
     ctr_pica_state pica;
     struct ctr_scene_state *pica_scene;
@@ -146,11 +148,18 @@ typedef struct ctr_guest {
      * native GPU lifetime. Cleared before the memory owner is closed/reused. */
     struct ctr_resource_cache *pica_resources;
     struct ctr_texture_cache *pica_textures;
+    ctr_pica_write *pica_writes;
+    size_t pica_writes_cap;
+    uint8_t *pica_chain_bytes;
+    size_t pica_chain_cap;
+    struct ctr_scene_state *pica_trial;
+    uint8_t *pica_color_raw,*pica_color_pixels,*pica_depth_raw,*pica_depth_pixels;
+    size_t pica_color_raw_cap,pica_color_pixels_cap,pica_depth_raw_cap,pica_depth_pixels_cap;
     ctr_guest_thread threads[CTR_GUEST_MAX_THREADS];
-    unsigned current_thread, quantum_left;
+    unsigned current_thread, quantum_left, thread_quantum;
     uint32_t next_thread_id;
     uint64_t context_switches;
-    bool threads_enabled, process_exited;
+    bool threads_enabled, process_exited, quantum_uncontended;
     unsigned resource_references;
     ctr_guest_handle_type wait_types[16];
     unsigned wait_objects[16], wait_count;
@@ -168,6 +177,8 @@ typedef struct ctr_guest {
     void *debug_context;
     /* Optional checked static-code engine; the scheduler retains SVC ownership. */
     ctr_cpu_result (*executor)(ctr_cpu *cpu,void *context,uint64_t budget);
+    /* May restart fixed-size quanta internally until a service call or fault. */
+    ctr_cpu_result (*executor_uncontended)(ctr_cpu *cpu,void *context,uint64_t budget);
     void *executor_context;
     void (*executor_close)(void *context);
 } ctr_guest;

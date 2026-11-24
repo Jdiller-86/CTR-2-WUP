@@ -36,9 +36,10 @@ prevent bundling that implementation.
 
 ## Runtime contract
 
-- Registers/guest addresses are `uint32_t`. Every access takes checked
-  little-endian callbacks; page pointers/span bypasses are unused. No 4 GiB
-  host reservation is needed.
+- Registers and guest addresses are `uint32_t`. Multiword transfers may use
+  one checked mapping for all their words. Other transfers use the checked
+  little-endian accessors, which preserve partial effects when a word faults.
+  No 4 GiB host reservation is needed.
 - Attach checks ABI 4, generation 3, entry ordering and FNV code-piece hashes
   against executable mappings. External-emitter module tables are rejected;
   [packaged CRO modules](modules.md) use the shared checked original-AOT registry.

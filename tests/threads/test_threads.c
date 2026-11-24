@@ -9,6 +9,45 @@ static uint32_t create(ctr_guest *g,uint32_t entry,uint32_t stack,uint32_t prior
     g->cpu.r[0]=priority;g->cpu.r[1]=entry;g->cpu.r[2]=0x12345678;g->cpu.r[3]=stack;g->cpu.r[4]=processor;
     ctr_guest_svc(g,8);return g->cpu.r[1];
 }
+typedef struct { ctr_guest *guest;unsigned calls;uint32_t signal;bool peer; } quantum_probe;
+static ctr_cpu_result probe_quantum(ctr_cpu *cpu,void *context,uint64_t budget) {
+    quantum_probe *probe=context;
+    CHECK(budget<=CTR_GUEST_THREAD_QUANTUM);
+    if(++probe->calls==2 && !probe->peer)CHECK(!probe->guest->threads[0].r[12]);
+    cpu->r[12]=probe->calls;
+    cpu->instructions+=budget;
+    if(probe->signal && probe->calls==2) {
+        CHECK(budget==32);
+        cpu->svc_number=0x18;cpu->r[0]=probe->signal;
+        return CTR_CPU_SVC;
+    }
+    return CTR_CPU_LIMIT;
+}
+static void uncontended_quanta(void) {
+    for(unsigned peer=0;peer<2u;++peer) {
+        ctr_guest g;CHECK(ctr_thread_fixture_open(&g));
+        CHECK(create(&g,0x100300,0x0fffe000,peer?0x30:0x31,0));
+        quantum_probe probe={.guest=&g,.peer=peer!=0};g.executor=probe_quantum;g.executor_context=&probe;
+        CHECK(ctr_guest_run(&g,100,0,true)==CTR_GUEST_READY);
+        CHECK(probe.calls==4 && g.cpu.instructions==100 && g.quantum_left==28);
+        CHECK(g.current_thread==peer && g.context_switches==(peer?3u:0u));
+        CHECK(g.threads[g.current_thread].r[12]==4);
+        ctr_guest_close(&g);
+    }
+    ctr_guest g;CHECK(ctr_thread_fixture_open(&g));
+    CHECK(create(&g,0x100300,0x0fffe000,0x30,0));
+    uint32_t event=ctr_guest_event_create(&g,0);CHECK(event);
+    CHECK(ctr_thread_schedule(&g,true) && g.current_thread==1);
+    g.cpu.r[0]=event;g.cpu.r[2]=g.cpu.r[3]=UINT32_MAX;
+    ctr_guest_svc(&g,0x24);
+    CHECK(g.state==CTR_GUEST_WAITING);
+    CHECK(ctr_thread_schedule(&g,true) && g.current_thread==0);
+    quantum_probe probe={.guest=&g,.signal=event};g.executor=probe_quantum;g.executor_context=&probe;
+    CHECK(ctr_guest_run(&g,80,0,true)==CTR_GUEST_READY);
+    CHECK(probe.calls==3 && g.cpu.instructions==80 && g.quantum_left==16);
+    CHECK(g.current_thread==1 && g.context_switches==3 && g.cpu.r[0]==0);
+    ctr_guest_close(&g);
+}
 static void contexts(void) {
     ctr_guest g;CHECK(ctr_thread_fixture_open(&g));
     g.cpu.cpsr=0xa8000010;g.cpu.r[12]=0x11223344;g.cpu.vfp[31]=0x3f800000;g.cpu.fpscr=0x80000000;
@@ -71,6 +110,11 @@ static void waits_and_pins(void) {
     /* Closing the handle does not release the waiter's join reference. */
     CHECK(ctr_guest_handle_close(&g,handle) && g.threads[1].references==2);
     ctr_guest_svc(&g,9);CHECK(g.threads[1].finished && !g.allocations[0].pins);
+    uint32_t exiting_pc=g.cpu.r[15],exiting_fp=g.cpu.vfp[31];
+    ctr_threads_poll(&g);
+    CHECK(g.current_thread==1 && g.state==CTR_GUEST_EXITED && !g.threads[1].active);
+    CHECK(g.cpu.r[15]==exiting_pc && g.cpu.vfp[31]==exiting_fp);
+    CHECK(g.threads[0].state==CTR_GUEST_READY && !g.threads[0].wait_count);
     CHECK(ctr_thread_schedule(&g,true) && g.current_thread==0 && !g.cpu.r[0]);
     CHECK(!g.wait_count && !g.threads[1].active);
     g.cpu.r[0]=1;g.cpu.r[1]=base;g.cpu.r[2]=0;g.cpu.r[3]=4096;g.cpu.r[4]=0;ctr_guest_svc(&g,1);CHECK(!g.cpu.r[0]);
@@ -200,7 +244,7 @@ static void signed_halves(void) {
     }
 }
 int main(void) {
-    contexts();creation_failures();waits_and_pins();mutex_owner_exit();arbiter();budget_invariance();resource_limits();fp_word_faults();signed_halves();
+    contexts();uncontended_quanta();creation_failures();waits_and_pins();mutex_owner_exit();arbiter();budget_invariance();resource_limits();fp_word_faults();signed_halves();
     int result=ctr_thread_selftest();if(result)fprintf(stderr,"thread_selftest=%d\n",result);CHECK(result==0);
     printf("{\"ok\":true,\"assertions\":%u,\"original_arm_thread_scheduler\":true,\"console_verified\":false}\n",assertions);return 0;
 }

@@ -12,7 +12,11 @@ connects ROM intake, assets, AOT/native compilation and verified WUP publication
 [#38](https://github.com/Jdiller-86/CTR-2-WUP/issues/38)), with optional pinned
 Azahar 2126.2 Mii RomFS (`--mii-romfs`), WUT CRT startup layout and uncompressed
 FILEINFO COS code reservation sizing for large AOT executables, and a
-`host build --cemu` local Cemu 2.6 test profile. Next, verify behavior from the
+`host build --cemu` local Cemu 2.6 test profile. Both `wiiu` and `cemu`
+`GAME_TEST=1` profiles now use `gx2-direct` and GPU scanout, alongside
+single-pass PICA command prep, reusable `ctr_guest` scratch buffers,
+versioned VS/vertex/texture caches, deduplicated AOT helpers with `CTR_STEP_RUN`
+coalescing, and cached DSP mapping checks. Next, verify behavior from the
 owned ROM locally and on console, then resolve remaining observed execution gaps.
 Original-input build and Cemu checks do not establish physical Wii U Mario boot
 or gameplay.

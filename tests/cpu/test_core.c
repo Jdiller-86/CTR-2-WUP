@@ -381,6 +381,9 @@ static void scalar_vfp_tests(void) {
     fenv_t saved;CHECK(fegetenv(&saved)==0);
     CHECK(fesetround(FE_DOWNWARD)==0);feraiseexcept(FE_DIVBYZERO);errno=EDOM;
     CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.vfp[0]==0x40400000 && !cpu.fpscr);
+    cpu.vfp[0]=0x3f800000;cpu.vfp[4]=0x33c00000;
+    CHECK(ctr_cpu_vfp(&cpu,CTR_VFP_ADD,0,0,4,false,0)==CTR_CPU_OK);
+    CHECK(cpu.vfp[0]==0x3f800001 && cpu.fpscr==16u);
     CHECK(fegetround()==FE_DOWNWARD && fetestexcept(FE_DIVBYZERO) && errno==EDOM);
     CHECK(fesetenv(&saved)==0);
     setup(0xee300a02);cpu.vfp[0]=123;cpu.fpscr=0x100; /* Exception trap requested. */
@@ -389,11 +392,122 @@ static void scalar_vfp_tests(void) {
     CHECK(ctr_cpu_step(&cpu)==CTR_CPU_OK && cpu.vfp[0]==123 && cpu.r[15]==0x1004);
     setup(0xecb80a02);cpu.r[8]=0x203c;data[60]=17;cpu.vfp[1]=23; /* VLDM fault after first word. */
     CHECK(ctr_cpu_step(&cpu)==CTR_CPU_MEMORY_FAULT && cpu.vfp[0]==17 && cpu.vfp[1]==23 && cpu.r[8]==0x203c && cpu.r[15]==0x1000);
+
+    setup(0);
+    cpu.vfp[0]=0x3f800000;cpu.vfp[2]=0x00800000;cpu.vfp[4]=0x3dcccccdu;
+    cpu.fpscr=0x01000000u;
+    CHECK(ctr_cpu_vfp(&cpu,CTR_VFP_MLA,0,2,4,false,0)==CTR_CPU_OK);
+    CHECK(cpu.vfp[0]==0x3f800000 && cpu.fpscr==0x01000008u);
+
+    cpu.vfp[2]=cpu.vfp[4]=0x3f800001;cpu.fpscr=0;
+    CHECK(ctr_cpu_vfp(&cpu,CTR_VFP_MLA,0,2,4,false,0)==CTR_CPU_OK);
+    CHECK(cpu.vfp[0]==0x40000001 && cpu.fpscr==16u);
+}
+static void vfp_compare_tests(void) {
+    setup(0);
+    static const struct { uint64_t a,b;uint32_t control,expected;bool wide,signaling; } cases[]={
+        {0x80000000u,0,0,0x60000000u,false,false},
+        {0xbf800000u,0xc0000000u,0,0x20000000u,false,false},
+        {1,0,0,0x20000000u,false,false},
+        {1,0,0x01000000u,0x60000080u,false,false},
+        {0x7fc00000u,0,0,0x30000000u,false,false},
+        {0x7fc00000u,0,0,0x30000001u,false,true},
+        {UINT64_C(0x8000000000000001),0,0,0x80000000u,true,false},
+        {UINT64_C(0x7ff0000000000001),0,0,0x30000001u,true,false},
+    };
+    for(size_t i=0;i<sizeof(cases)/sizeof(*cases);++i) {
+        cpu.vfp[0]=(uint32_t)cases[i].a;cpu.vfp[1]=(uint32_t)(cases[i].a>>32);
+        cpu.vfp[2]=(uint32_t)cases[i].b;cpu.vfp[3]=(uint32_t)(cases[i].b>>32);
+        cpu.fpscr=cases[i].control|0xf0000002u;
+        ctr_vfp_operation op=cases[i].signaling?CTR_VFP_CMPE:CTR_VFP_CMP;
+        CHECK(ctr_cpu_vfp(&cpu,op,0,0,2,cases[i].wide,0)==CTR_CPU_OK);
+        CHECK(cpu.fpscr==(cases[i].control|cases[i].expected|2u));
+    }
+}
+static void vfp_multiply_tests(void) {
+    setup(0);
+    static const struct { uint32_t a,b,control,result,flags; } cases[]={
+        {0x3fc00000u,0x3fc00000u,0,0x40100000u,0},
+        {0x3fc00000u,0x3f800001u,0,0x3fc00002u,16},
+        {0x3fc00000u,0x3f800003u,0,0x3fc00004u,16},
+        {0x3ffffffeu,0x3f800001u,0,0x40000000u,16},
+        {0x3f800001u,0x3f800001u,0x00400000u,0x3f800003u,16},
+        {0xbf800001u,0x3f800001u,0x00400000u,0xbf800002u,16},
+        {0xbf800001u,0x3f800001u,0x00800000u,0xbf800003u,16},
+        {0xbf800001u,0x3f800001u,0x00c00000u,0xbf800002u,16},
+        {0x80000000u,0x3f800000u,0,0x80000000u,0},
+        {0x80000000u,0x80000000u,0,0,0},
+    };
+    for(size_t i=0;i<sizeof(cases)/sizeof(*cases);++i) {
+        cpu.vfp[2]=cases[i].a;cpu.vfp[4]=cases[i].b;
+        uint32_t status=0x03000002u|cases[i].control;
+        cpu.fpscr=status;
+        CHECK(ctr_cpu_vfp(&cpu,CTR_VFP_MUL,0,2,4,false,0)==CTR_CPU_OK);
+        CHECK(cpu.vfp[0]==cases[i].result && cpu.fpscr==(status|cases[i].flags));
+        cpu.fpscr=status;
+        CHECK(ctr_cpu_vfp(&cpu,CTR_VFP_NMUL,0,2,4,false,0)==CTR_CPU_OK);
+        CHECK(cpu.vfp[0]==(cases[i].result^0x80000000u) && cpu.fpscr==(status|cases[i].flags));
+    }
+}
+static void vfp_add_accumulate_tests(void) {
+    static const struct {
+        ctr_vfp_operation op;
+        uint32_t accumulator,a,b,control,result,flags;
+    } cases[]={
+        {CTR_VFP_ADD,0,0x3f800000u,0x33800000u,0,0x3f800000u,16},
+        {CTR_VFP_ADD,0,0x3f800001u,0x33800000u,0,0x3f800002u,16},
+        {CTR_VFP_ADD,0,0x3f800000u,0x33800000u,0x400000u,0x3f800001u,16},
+        {CTR_VFP_ADD,0,0x3f800000u,0x2f800000u,0,0x3f800000u,16},
+        {CTR_VFP_ADD,0,0x3f800000u,0x2f800000u,0x400000u,0x3f800001u,16},
+        {CTR_VFP_SUB,0,0x3f800000u,0x2f800000u,0x800000u,0x3f7fffffu,16},
+        {CTR_VFP_ADD,0,0xbf800000u,0xaf800000u,0x800000u,0xbf800001u,16},
+        {CTR_VFP_SUB,0,0xbf800000u,0xaf800000u,0xc00000u,0xbf7fffffu,16},
+        {CTR_VFP_SUB,0,0x3f800000u,0x3f800000u,0x800000u,0x80000000u,0},
+        {CTR_VFP_ADD,0,0,0x80000000u,0x800000u,0x80000000u,0},
+        {CTR_VFP_ADD,0,0x80000001u,0,0x800000u,0x80000000u,128},
+        {CTR_VFP_SUB,0,0x3f800001u,0x3f800000u,0,0x34000000u,0},
+        {CTR_VFP_MLS,0x3fc00002u,0x3fc00000u,0x3f800001u,0,0,16},
+        {CTR_VFP_NMLA,0x3f800000u,0x40000000u,0x3fc00000u,0,0xc0800000u,0},
+        {CTR_VFP_MLA,0x3fa00000u,0x3fc00000u,0x40000000u,0,0x40880000u,0},
+        {CTR_VFP_MLA,0x3fa00000u,0x80000000u,0x40000000u,0,0x3fa00000u,0},
+    };
+    for(size_t i=0;i<sizeof(cases)/sizeof(*cases);++i) {
+        cpu.vfp[0]=cases[i].accumulator;cpu.vfp[2]=cases[i].a;cpu.vfp[4]=cases[i].b;
+        uint32_t status=0x03000002u|cases[i].control;
+        cpu.fpscr=status;
+        CHECK(ctr_cpu_vfp(&cpu,cases[i].op,0,2,4,false,0)==CTR_CPU_OK);
+        CHECK(cpu.vfp[0]==cases[i].result && cpu.fpscr==(status|cases[i].flags));
+    }
+}
+static void vfp_truncation_tests(void) {
+    static const struct {
+        uint64_t bits;
+        uint32_t result,flags,control;
+        bool wide,unsign;
+    } conversions[]={
+        {0x3fe00000u,1u,16u,0x400000u,false,false},
+        {0xbf000000u,0u,16u,0x800000u,false,true},
+        {0xbf800000u,0u,1u,0u,false,true},
+        {1u,0u,16u,0u,false,false},
+        {1u,0u,0x80u,0x01000000u,false,false},
+        {UINT64_C(0xc1e0000000100000),0x80000000u,16u,0u,true,false},
+        {UINT64_C(0x41effffffffffff0),0xffffffffu,16u,0u,true,true},
+        {UINT64_C(0x41f0000000000000),0xffffffffu,1u,0u,true,true},
+        {UINT64_C(0xfff0000000000000),0x80000000u,1u,0u,true,false},
+        {UINT64_C(0x7ff0000000000001),0u,1u,0u,true,false},
+    };
+    for(size_t i=0;i<sizeof(conversions)/sizeof(*conversions);++i) {
+        cpu.vfp[0]=(uint32_t)conversions[i].bits;cpu.vfp[1]=(uint32_t)(conversions[i].bits>>32);
+        cpu.fpscr=conversions[i].control|2u;
+        ctr_vfp_operation op=conversions[i].unsign?CTR_VFP_TO_U32:CTR_VFP_TO_I32;
+        CHECK(ctr_cpu_vfp(&cpu,op,2,0,0,conversions[i].wide,0)==CTR_CPU_OK);
+        CHECK(cpu.vfp[2]==conversions[i].result && cpu.fpscr==(conversions[i].control|conversions[i].flags|2u));
+    }
 }
 int main(void) {
     memory_tests();resource_version_tests();flag_tests();instruction_tests();viewport_tests();halfword_tests();extend_tests();
     initial_integer_tests();
-    scalar_vfp_tests();
+    scalar_vfp_tests();vfp_compare_tests();vfp_multiply_tests();vfp_add_accumulate_tests();vfp_truncation_tests();
     clock_t start=clock();
     for (unsigned i=0;i<1000;++i) CHECK(ctr_cpu_selftest()==0);
     double seconds=(double)(clock()-start)/CLOCKS_PER_SEC;

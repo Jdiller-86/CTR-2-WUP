@@ -5,6 +5,32 @@ do not establish commercial-game compatibility or installable WUP acceptance.
 
 ## 0.27.0 — unreleased
 
+- Complete `/ponytail-audit` performance and reliability fixes across PICA, GX2,
+  AOT recompiler, DSP audio, and Wii U build profiles:
+  - **PICA prep & staging**: single-pass command validation/expansion into
+    reusable `ctr_guest` scratch buffers, lazy/non-zeroed target staging,
+    dirty-tracked texture prewalk, `stable_inputs` direct index-bound reads,
+    and `resource_range` fast-path (`runtime/core/ctr_guest_pica.c`,
+    `ctr_guest.{h,c}`).
+  - **GX2 & cache replay**: `ctr_texture_cache_acquire_keyed` for
+    version-keyed texture hits, monotonic `code_generation` on
+    `ctr_shader_program` for O(1) VS cache hits, and a 16-slot
+    `vertex_upload_cache` in `runtime/wiiu/gx2_direct.c`.
+  - **Recompiler, CPU & DSP**: deduplicated `CTR_NOINLINE` helpers from
+    `recomp.h` into `runtime/recomp/ctr_recomp.c` with a 2-slot
+    `dirty_page2_plus_one` store cache, `CTR_STEP_RUN` pure-register +
+    tail-branch coalescing in `translator/portable.py`, GPR-only `interpret()`
+    sync for integer fallbacks, `thread_quantum = 256` under `runfast`,
+    contiguous `matches()` startup hashing, and `ctr_dsp.c` mapping-version
+    caching + inactive-voice skip (plus branch-free ADPCM predictor floor in
+    `ctr_dsp_adpcm.c`).
+  - **Wii U GPU path & build hygiene**: unlocked `gx2-direct`, GPU scanout
+    (`diagnostic_display.{h,c}`), `-O3` on `ctr_shader.o`, `-Os` on
+    `ctr_scene.c`, and `gx2_direct.c` caches for all `GAME_TEST=1` Wii U and
+    Cemu builds (`host/mario_build.py`, `runtime/wiiu/Makefile`), and added
+    `.gitattributes` LF enforcement for `.githooks/*` and `*.sh`. Physical Wii
+    U console acceptance remains unverified.
+
 - Add full PICA vertex-shader-to-Latte-VLIW5 GPU compilation in
   `runtime/core/ctr_gx2_shader.{h,c}` and wire `draw_gpu` into
   `runtime/core/ctr_scene.{h,c}` and `runtime/wiiu/gx2_direct.c`:

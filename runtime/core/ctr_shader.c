@@ -762,13 +762,18 @@ ctr_shader_result ctr_shader_execute_fast(const ctr_shader_fast *fast,
             float *dst=dest<16u?result.values[dest]:r[dest];
             uint8_t mask=insn->mask;
             switch(op) {
-            case FAST_MOV:
-                if(mask&8u)dst[0]=p0[insn->swiz[0][0]]*m0;
-                if(mask&4u)dst[1]=p0[insn->swiz[0][1]]*m0;
-                if(mask&2u)dst[2]=p0[insn->swiz[0][2]]*m0;
-                if(mask&1u)dst[3]=p0[insn->swiz[0][3]]*m0;
+            case FAST_MOV: {
+                float x=(mask&8u)?p0[insn->swiz[0][0]]*m0:0.0f;
+                float y=(mask&4u)?p0[insn->swiz[0][1]]*m0:0.0f;
+                float z=(mask&2u)?p0[insn->swiz[0][2]]*m0:0.0f;
+                float w=(mask&1u)?p0[insn->swiz[0][3]]*m0:0.0f;
+                if(mask&8u)dst[0]=x;
+                if(mask&4u)dst[1]=y;
+                if(mask&2u)dst[2]=z;
+                if(mask&1u)dst[3]=w;
                 if(dest<16u)result.written[dest]|=insn->wmask; else defined[dest]|=insn->wmask;
                 continue;
+            }
             case FAST_ADD: {
                 float v0=0,v1=0,v2=0,v3=0;
                 if(mask&8u) { v0=p0[insn->swiz[0][0]]*m0+p1[insn->swiz[1][0]]*m1;if(fast_is_nan(v0))return CTR_SHADER_NUMERIC; }

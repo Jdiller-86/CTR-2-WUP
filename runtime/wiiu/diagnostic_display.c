@@ -3,7 +3,7 @@
 #include "image_scale.h"
 #include <coreinit/cache.h>
 #include <coreinit/memdefaultheap.h>
-#ifdef CTR_GAME_CEMU_TEST
+#if defined(CTR_GAME_CEMU_TEST) || defined(CTR_GAME_TEST)
 #include <coreinit/time.h>
 #include <gx2/draw.h>
 #include <gx2/registers.h>
@@ -25,7 +25,7 @@ enum { WIDTH=512,HEIGHT=288,ROWS=14,COLUMNS=82 };
 static uint32_t pixels[WIDTH*HEIGHT];
 static char rows[ROWS][COLUMNS+1];
 static GX2Surface surfaces[2];
-#ifdef CTR_GAME_CEMU_TEST
+#if defined(CTR_GAME_CEMU_TEST) || defined(CTR_GAME_TEST)
 typedef struct {
     float x,y,z,w,u,v,s,t;
 } cemu_quad_vertex;
@@ -39,6 +39,14 @@ static struct {
     GX2Texture tex[3][2];
     OSTime tex_ts[3][2];
     unsigned tex_slot[3];
+    bool tex_valid[3];
+    bool gpu_scanout;
+    GX2ColorBuffer scanout_target[2];
+    uint32_t scanout_generation[2];
+    GX2Texture scanout_texture[2];
+    GX2PixelShader scanout_shader;
+    GX2Sampler scanout_sampler;
+    cemu_quad_vertex *scanout_quad[2];
 } cemu_gfx;
 #else
 static ctr_scale_plan plans[2];
@@ -72,12 +80,12 @@ void ctr_diagnostic_display_line(const char *text) {
     dirty=true;
 }
 
-#ifdef CTR_GAME_CEMU_TEST
+#if defined(CTR_GAME_CEMU_TEST) || defined(CTR_GAME_TEST)
 static void cemu_put32(void *p,uint32_t v) {
     uint8_t *b=p;b[0]=(uint8_t)v;b[1]=(uint8_t)(v>>8);b[2]=(uint8_t)(v>>16);b[3]=(uint8_t)(v>>24);
 }
 static bool cemu_init_quad_verts(cemu_quad_vertex **out,unsigned screen_w,unsigned screen_h,
-                                 unsigned src_w,unsigned src_h) {
+                                 unsigned src_w,unsigned src_h,bool rotate) {
     CtrViewport view;
     if(!ctr_viewport_fit(&view,screen_w,screen_h,src_w,src_h))return false;
     cemu_quad_vertex *v=MEMAllocFromDefaultHeapEx(6u*sizeof(*v),256);
@@ -95,6 +103,10 @@ static bool cemu_init_quad_verts(cemu_quad_vertex **out,unsigned screen_w,unsign
         {x1,y1,0.0f,1.0f, 1.0f,1.0f,0.0f,1.0f}
     };
     memcpy(v,q,sizeof(q));
+    if(rotate)for(unsigned i=0;i<6u;++i) {
+        v[i].u=1.0f-q[i].v;
+        v[i].v=src_w==320u?0.2f+0.8f*q[i].u:q[i].u;
+    }
     DCFlushRange(v,6u*sizeof(*v));
     GX2Invalidate(GX2_INVALIDATE_MODE_CPU_ATTRIBUTE_BUFFER,v,6u*sizeof(*v));
     *out=v;
@@ -117,8 +129,15 @@ static bool cemu_init_tex(GX2Texture *t,unsigned w,unsigned h) {
     GX2InitTextureRegs(t);
     return true;
 }
-static void cemu_upload_rgba(unsigned idx,const uint32_t *src,unsigned w,unsigned h) {
+static bool cemu_upload_rgba(unsigned idx,const uint32_t *src,unsigned w,unsigned h) {
     unsigned slot=cemu_gfx.tex_slot[idx];
+    if(idx && cemu_gfx.tex_valid[idx]) {
+        const GX2Surface *previous=&cemu_gfx.tex[idx][slot^1u].surface;
+        unsigned y=0;
+        while(y<h && !memcmp((const uint32_t *)previous->image+(size_t)y*previous->pitch,
+                             src+(size_t)y*w,(size_t)w*4u))++y;
+        if(y==h)return false;
+    }
     GX2Texture *t=&cemu_gfx.tex[idx][slot];
     if(cemu_gfx.tex_ts[idx][slot]>GX2GetRetiredTimeStamp())
         (void)GX2WaitTimeStamp(cemu_gfx.tex_ts[idx][slot]);
@@ -127,8 +146,94 @@ static void cemu_upload_rgba(unsigned idx,const uint32_t *src,unsigned w,unsigne
     DCFlushRange(t->surface.image,t->surface.imageSize);
     GX2Invalidate(GX2_INVALIDATE_MODE_CPU_TEXTURE,t->surface.image,t->surface.imageSize);
     cemu_gfx.tex_slot[idx]=slot^1u;
+    cemu_gfx.tex_valid[idx]=true;
+    return true;
 }
-static bool cemu_present(bool guest) {
+static void scanout_alu(uint8_t *program,unsigned *count,unsigned op,
+                        unsigned a,unsigned ac,unsigned b,unsigned bc,unsigned dest,unsigned lane) {
+    uint8_t *at=program+256u+8u*(*count)++;
+    cemu_put32(at,UINT32_C(0x80000000)|a|(ac<<10)|(b<<13)|(bc<<23));
+    cemu_put32(at+4u,(op<<7)|(1u<<4)|(dest<<21)|(lane<<29));
+}
+static bool cemu_init_scanout_target(unsigned screen) {
+    GX2ColorBuffer *target=&cemu_gfx.scanout_target[screen];
+    unsigned width=screen?320u:400u;
+    if(cemu_gfx.scanout_quad[screen])return true;
+    if(target->surface.image)return false;
+    target->surface=(GX2Surface){
+        .dim=GX2_SURFACE_DIM_TEXTURE_2D,.width=width,.height=240,.depth=1,.mipLevels=1,
+        .format=GX2_SURFACE_FORMAT_UNORM_R8_G8_B8_A8,.aa=GX2_AA_MODE1X,
+        .use=GX2_SURFACE_USE_TEXTURE|GX2_SURFACE_USE_COLOR_BUFFER,.tileMode=GX2_TILE_MODE_TILED_2D_THIN1
+    };
+    GX2CalcSurfaceSizeAndAlignment(&target->surface);
+    if(!target->surface.imageSize)return false;
+    target->surface.image=MEMAllocFromDefaultHeapEx(target->surface.imageSize,target->surface.alignment);
+    if(!target->surface.image)return false;
+    DCFlushRange(target->surface.image,target->surface.imageSize);
+    target->viewNumSlices=1;
+    GX2InitColorBufferRegs(target);
+    GX2Texture *texture=&cemu_gfx.scanout_texture[screen];
+    *texture=(GX2Texture){.surface=target->surface,.viewNumMips=1,.viewNumSlices=1,
+        .compMap=GX2_COMP_MAP(GX2_SQ_SEL_X,GX2_SQ_SEL_Y,GX2_SQ_SEL_Z,GX2_SQ_SEL_W)};
+    GX2InitTextureRegs(texture);
+    return cemu_init_quad_verts(&cemu_gfx.scanout_quad[screen],width,240,width,240,true);
+}
+static bool cemu_init_scanout_shader(void) {
+    if(cemu_gfx.scanout_shader.program)return true;
+    GX2InitSampler(&cemu_gfx.scanout_sampler,GX2_TEX_CLAMP_MODE_CLAMP,GX2_TEX_XY_FILTER_MODE_POINT);
+    uint8_t *program=MEMAllocFromDefaultHeapEx(512,256);
+    if(!program)return false;
+    cemu_gfx.scanout_shader=cemu_gfx.ps;
+    cemu_gfx.scanout_shader.program=program;
+    cemu_gfx.scanout_shader.size=512;
+    cemu_gfx.scanout_shader.regs.sq_pgm_resources_ps=3;
+    memset(program,0,512);
+    memcpy(program,cemu_gfx.ps_prog,256);
+    unsigned count=0;
+    /* Quantize each nearest texel before the TV pass applies its linear filter.
+     * floor(channel * 255 / step) gives the RGB565 bits. Replicate the high bits
+     * into the low bits, exactly as the guest framebuffer reader does. */
+    for(unsigned lane=0;lane<3u;++lane) {
+        unsigned scale=(lane==1u)?1u:0u;
+        scanout_alu(program,&count,2,1,lane,256,scale,1,lane);
+        scanout_alu(program,&count,20,1,lane,0,0,1,lane);
+        scanout_alu(program,&count,2,1,lane,257,scale,2,lane);
+        scanout_alu(program,&count,20,2,lane,0,0,2,lane);
+        scanout_alu(program,&count,2,1,lane,258,scale,1,lane);
+        scanout_alu(program,&count,0,1,lane,2,lane,1,lane);
+        scanout_alu(program,&count,2,1,lane,258,2,1,lane);
+    }
+    scanout_alu(program,&count,25,249,0,0,0,1,3);
+    cemu_put32(program+8u,256u/8u);
+    cemu_put32(program+12u,UINT32_C(0xa0000000)|((count-1u)<<18));
+    cemu_put32(program+16u,1u<<15);
+    cemu_put32(program+20u,UINT32_C(0x94200688));
+    DCFlushRange(program,512);
+
+    GX2Invalidate(GX2_INVALIDATE_MODE_CPU_SHADER,program,512);
+    return true;
+}
+static void cemu_quantize_scanout(const GX2Texture *source,unsigned screen) {
+    /* Slightly round up the byte scales so exact step boundaries survive
+     * UNORM-to-float conversion. The offset is smaller than a single byte. */
+    static const float constants[12]={31.875004f,63.750008f,0,0,
+        0.25f,0.0625f,0,0,8.0f,4.0f,1.0f/255.0f,0};
+    GX2ColorBuffer *target=&cemu_gfx.scanout_target[screen];
+    unsigned width=target->surface.width;
+    GX2SetColorBuffer(target,GX2_RENDER_TARGET_0);
+    GX2SetViewport(0.0f,0.0f,(float)width,240.0f,0.0f,1.0f);
+    GX2SetScissor(0,0,width,240);
+    GX2SetPixelShader(&cemu_gfx.scanout_shader);
+    GX2SetPixelUniformReg(0,12,constants);
+    GX2Invalidate(GX2_INVALIDATE_MODE_COLOR_BUFFER,source->surface.image,source->surface.imageSize);
+    GX2SetPixelTexture(source,0);
+    GX2SetPixelSampler(&cemu_gfx.scanout_sampler,0);
+    GX2SetAttribBuffer(0,6u*sizeof(cemu_quad_vertex),sizeof(cemu_quad_vertex),cemu_gfx.scanout_quad[screen]);
+    GX2DrawEx(GX2_PRIMITIVE_MODE_TRIANGLES,6,0,1);
+    GX2Invalidate(GX2_INVALIDATE_MODE_COLOR_BUFFER,target->surface.image,target->surface.imageSize);
+}
+static bool cemu_present(bool guest,const ctr_diagnostic_scanout *top_scanout,
+                         const ctr_diagnostic_scanout *bottom_scanout) {
     const GX2Surface *tv=&WHBGfxGetTVColourBuffer()->surface;
     const GX2Surface *drc=&WHBGfxGetDRCColourBuffer()->surface;
     unsigned ti=guest?1u:0u,di=guest?2u:0u;
@@ -148,8 +253,16 @@ static bool cemu_present(bool guest) {
     GX2SetCullOnlyControl(GX2_FRONT_FACE_CCW,false,false);
     GX2SetFetchShader(&cemu_gfx.fs);
     GX2SetVertexShader(&cemu_gfx.vs);
+    if(top_scanout && (!top_scanout->generation ||
+       top_scanout->generation!=cemu_gfx.scanout_generation[0])) {
+        cemu_quantize_scanout(top_scanout->texture,0);
+        cemu_gfx.scanout_generation[0]=top_scanout->generation;
+        GX2SetColorBuffer(WHBGfxGetTVColourBuffer(),GX2_RENDER_TARGET_0);
+        GX2SetViewport(0.0f,0.0f,(float)tv->width,(float)tv->height,0.0f,1.0f);
+        GX2SetScissor(0,0,tv->width,tv->height);
+    }
     GX2SetPixelShader(&cemu_gfx.ps);
-    GX2SetPixelTexture(&cemu_gfx.tex[ti][tslot],0);
+    GX2SetPixelTexture(top_scanout?&cemu_gfx.scanout_texture[0]:&cemu_gfx.tex[ti][tslot],0);
     GX2SetPixelSampler(&cemu_gfx.sampler,0);
     GX2SetAttribBuffer(0,6u*sizeof(cemu_quad_vertex),sizeof(cemu_quad_vertex),cemu_gfx.verts[guest?2:0]);
     GX2DrawEx(GX2_PRIMITIVE_MODE_TRIANGLES,6,0,1);
@@ -169,16 +282,24 @@ static bool cemu_present(bool guest) {
     GX2SetCullOnlyControl(GX2_FRONT_FACE_CCW,false,false);
     GX2SetFetchShader(&cemu_gfx.fs);
     GX2SetVertexShader(&cemu_gfx.vs);
+    if(bottom_scanout && (!bottom_scanout->generation ||
+       bottom_scanout->generation!=cemu_gfx.scanout_generation[1])) {
+        cemu_quantize_scanout(bottom_scanout->texture,1);
+        cemu_gfx.scanout_generation[1]=bottom_scanout->generation;
+        GX2SetColorBuffer(WHBGfxGetDRCColourBuffer(),GX2_RENDER_TARGET_0);
+        GX2SetViewport(0.0f,0.0f,(float)drc->width,(float)drc->height,0.0f,1.0f);
+        GX2SetScissor(0,0,drc->width,drc->height);
+    }
     GX2SetPixelShader(&cemu_gfx.ps);
-    GX2SetPixelTexture(&cemu_gfx.tex[di][dslot],0);
+    GX2SetPixelTexture(bottom_scanout?&cemu_gfx.scanout_texture[1]:&cemu_gfx.tex[di][dslot],0);
     GX2SetPixelSampler(&cemu_gfx.sampler,0);
     GX2SetAttribBuffer(0,6u*sizeof(cemu_quad_vertex),sizeof(cemu_quad_vertex),cemu_gfx.verts[guest?3:1]);
     GX2DrawEx(GX2_PRIMITIVE_MODE_TRIANGLES,6,0,1);
     WHBGfxFinishRenderDRC();
     WHBGfxFinishRender();
     OSTime ts=GX2GetLastSubmittedTimeStamp();
-    cemu_gfx.tex_ts[ti][tslot]=ts;
-    cemu_gfx.tex_ts[di][dslot]=ts;
+    if(!top_scanout)cemu_gfx.tex_ts[ti][tslot]=ts;
+    if(!bottom_scanout)cemu_gfx.tex_ts[di][dslot]=ts;
     presented=true;
     return true;
 }
@@ -188,7 +309,7 @@ GX2ContextState *ctr_diagnostic_display_context(void) {
 }
 bool ctr_diagnostic_display_init(void) {
     if(initialized)return ready;
-#ifdef CTR_GAME_CEMU_TEST
+#if defined(CTR_GAME_CEMU_TEST) || defined(CTR_GAME_TEST)
     if(!WHBGfxInit())return false;
     initialized=true;
     GX2SetSwapInterval(0);
@@ -250,10 +371,10 @@ bool ctr_diagnostic_display_init(void) {
     GX2Invalidate(GX2_INVALIDATE_MODE_CPU_SHADER,cemu_gfx.fetch_prog,fsize);
     GX2InitSampler(&cemu_gfx.sampler,GX2_TEX_CLAMP_MODE_CLAMP,GX2_TEX_XY_FILTER_MODE_LINEAR);
 
-    if(!cemu_init_quad_verts(&cemu_gfx.verts[0],tv->width,tv->height,WIDTH,HEIGHT) ||
-       !cemu_init_quad_verts(&cemu_gfx.verts[1],drc->width,drc->height,WIDTH,HEIGHT) ||
-       !cemu_init_quad_verts(&cemu_gfx.verts[2],tv->width,tv->height,400u,240u) ||
-       !cemu_init_quad_verts(&cemu_gfx.verts[3],drc->width,drc->height,320u,240u))return false;
+    if(!cemu_init_quad_verts(&cemu_gfx.verts[0],tv->width,tv->height,WIDTH,HEIGHT,false) ||
+       !cemu_init_quad_verts(&cemu_gfx.verts[1],drc->width,drc->height,WIDTH,HEIGHT,false) ||
+       !cemu_init_quad_verts(&cemu_gfx.verts[2],tv->width,tv->height,400u,240u,false) ||
+       !cemu_init_quad_verts(&cemu_gfx.verts[3],drc->width,drc->height,320u,240u,false))return false;
     static const unsigned tw[3]={WIDTH,400u,320u},th[3]={HEIGHT,240u,240u};
     for(unsigned i=0;i<3u;++i)
         for(unsigned s=0;s<2u;++s)
@@ -279,7 +400,7 @@ bool ctr_diagnostic_display_init(void) {
     ready=true;dirty=true;return true;
 }
 
-#ifndef CTR_GAME_CEMU_TEST
+#if !defined(CTR_GAME_CEMU_TEST) && !defined(CTR_GAME_TEST)
 static bool configure_plans(unsigned top_width,unsigned top_height,unsigned bottom_width,unsigned bottom_height) {
     const unsigned widths[]={top_width,bottom_width},heights[]={top_height,bottom_height};
     for(unsigned i=0;i<2;++i) {
@@ -306,16 +427,16 @@ static bool present(void) {
 bool ctr_diagnostic_display_draw(void) {
     if(!ready)return false;
     if(guest_mode) {
-#ifndef CTR_GAME_CEMU_TEST
+#if !defined(CTR_GAME_CEMU_TEST) && !defined(CTR_GAME_TEST)
         if(!configure_plans(WIDTH,HEIGHT,WIDTH,HEIGHT))return false;
 #endif
         guest_mode=false;dirty=true;
     }
-#ifdef CTR_GAME_CEMU_TEST
+#if defined(CTR_GAME_CEMU_TEST) || defined(CTR_GAME_TEST)
     if(!dirty && presented)return true;
 #endif
     if(dirty) {
-#ifndef CTR_GAME_CEMU_TEST
+#if !defined(CTR_GAME_CEMU_TEST) && !defined(CTR_GAME_TEST)
         if(presented)GX2DrawDone();
 #endif
         for(unsigned i=0;i<WIDTH*HEIGHT;++i)pixels[i]=UINT32_C(0x102238ff);
@@ -324,7 +445,7 @@ bool ctr_diagnostic_display_draw(void) {
         for(unsigned i=0;i<ROWS;++i)
             ctr_draw_text(pixels,WIDTH,HEIGHT,8,34+i*16,rows[i],UINT32_C(0xffffffff));
         ctr_draw_text(pixels,WIDTH,HEIGHT,8,HEIGHT-14,footer,UINT32_C(0x74ceffff));
-#ifdef CTR_GAME_CEMU_TEST
+#if defined(CTR_GAME_CEMU_TEST) || defined(CTR_GAME_TEST)
         cemu_upload_rgba(0,pixels,WIDTH,HEIGHT);
 #else
         for(unsigned i=0;i<2;++i) {
@@ -336,18 +457,33 @@ bool ctr_diagnostic_display_draw(void) {
 #endif
         dirty=false;
     }
-#ifdef CTR_GAME_CEMU_TEST
-    return cemu_present(false);
+#if defined(CTR_GAME_CEMU_TEST) || defined(CTR_GAME_TEST)
+    cemu_gfx.gpu_scanout=false;
+    return cemu_present(false,NULL,NULL);
 #else
     return present();
 #endif
 }
+#if defined(CTR_GAME_CEMU_TEST) || defined(CTR_GAME_TEST)
+bool ctr_diagnostic_display_scanout(const ctr_diagnostic_scanout *top_texture,const ctr_diagnostic_scanout *bottom_texture,
+                                    const uint32_t *top,const uint32_t *bottom) {
+    if(!ready || (!top_texture && !bottom_texture) || !cemu_init_scanout_shader() ||
+       (top_texture?!cemu_init_scanout_target(0):!top) ||
+       (bottom_texture?!cemu_init_scanout_target(1):!bottom))return false;
+    if(!top_texture)cemu_upload_rgba(1,top,400u,240u);
+    if(!bottom_texture)cemu_upload_rgba(2,bottom,320u,240u);
+    cemu_gfx.gpu_scanout=true;guest_mode=true;
+    return cemu_present(true,top_texture,bottom_texture);
+}
+#endif
 bool ctr_diagnostic_display_guest(const uint32_t *top,const uint32_t *bottom) {
-#ifdef CTR_GAME_CEMU_TEST
+#if defined(CTR_GAME_CEMU_TEST) || defined(CTR_GAME_TEST)
     if(!ready || !top || !bottom)return false;
-    cemu_upload_rgba(1,top,400u,240u);
-    cemu_upload_rgba(2,bottom,320u,240u);
-    guest_mode=true;return cemu_present(true);
+    bool top_changed=cemu_upload_rgba(1,top,400u,240u);
+    bool bottom_changed=cemu_upload_rgba(2,bottom,320u,240u);
+    bool redraw=top_changed || bottom_changed || !guest_mode || !presented || cemu_gfx.gpu_scanout;
+    cemu_gfx.gpu_scanout=false;guest_mode=true;
+    return !redraw || cemu_present(true,NULL,NULL);
 #else
     if(!ready || !top || !bottom || !configure_plans(400,240,320,240))return false;
     if(presented)GX2DrawDone();
@@ -369,14 +505,24 @@ bool ctr_diagnostic_display_touch(uint32_t x,uint32_t y,uint16_t *guest_x,uint16
 
 void ctr_diagnostic_display_invalidate(void) {
     dirty=true;
+#if defined(CTR_GAME_CEMU_TEST) || defined(CTR_GAME_TEST)
+    cemu_gfx.scanout_generation[0]=0;
+    cemu_gfx.scanout_generation[1]=0;
+    presented=false;
+#endif
 }
 
 void ctr_diagnostic_display_close(bool foreground) {
     if(initialized && foreground)GX2DrawDone();
-#ifdef CTR_GAME_CEMU_TEST
+#if defined(CTR_GAME_CEMU_TEST) || defined(CTR_GAME_TEST)
     if(cemu_gfx.vs_prog)MEMFreeToDefaultHeap(cemu_gfx.vs_prog);
     if(cemu_gfx.ps_prog)MEMFreeToDefaultHeap(cemu_gfx.ps_prog);
     if(cemu_gfx.fetch_prog)MEMFreeToDefaultHeap(cemu_gfx.fetch_prog);
+    if(cemu_gfx.scanout_shader.program)MEMFreeToDefaultHeap(cemu_gfx.scanout_shader.program);
+    for(unsigned i=0;i<2u;++i) {
+        if(cemu_gfx.scanout_quad[i])MEMFreeToDefaultHeap(cemu_gfx.scanout_quad[i]);
+        if(cemu_gfx.scanout_target[i].surface.image)MEMFreeToDefaultHeap(cemu_gfx.scanout_target[i].surface.image);
+    }
     for(unsigned i=0;i<4u;++i)if(cemu_gfx.verts[i])MEMFreeToDefaultHeap(cemu_gfx.verts[i]);
     for(unsigned i=0;i<3u;++i)
         for(unsigned s=0;s<2u;++s)

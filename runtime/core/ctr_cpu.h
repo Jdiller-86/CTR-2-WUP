@@ -82,6 +82,8 @@ typedef enum {
 /* Register arguments are architectural word indices; m=32 means compare zero. */
 ctr_cpu_result ctr_cpu_vfp(ctr_cpu *cpu,ctr_vfp_operation op,unsigned d,unsigned n,unsigned m,bool wide,uint32_t opcode);
 ctr_cpu_result ctr_cpu_vfp_multiple(ctr_cpu *cpu,unsigned base,unsigned first,unsigned words,bool before,bool writeback,bool load,uint32_t opcode);
+/* Scalar data opcodes only. The caller owns predication and the instruction PC. */
+bool ctr_vfp_arm_data(uint32_t vfp[32],uint32_t *fpscr,uint32_t opcode,uint32_t *fault_detail);
 /* Interpreter-only ARM VFP decode. Original AOT calls decoded helpers above. */
 ctr_cpu_result ctr_cpu_vfp_arm(ctr_cpu *cpu,uint32_t opcode);
 void ctr_cpu_barrier(void);

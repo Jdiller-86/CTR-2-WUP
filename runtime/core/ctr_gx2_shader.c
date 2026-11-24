@@ -22,12 +22,14 @@
 #define LATTE_LOG_IEEE 0x63u
 #define LATTE_RECIP_IEEE 0x66u
 #define LATTE_RECIPSQRT_IEEE 0x69u
-#define LATTE_FLT_TO_INT 0x6bu
+#define LATTE_FLT_TO_INT_TRUNC 0x6eu
 #define LATTE_INT_TO_FLT 0x6cu
 #define LATTE_UINT_TO_FLT 0x6du
 #define LATTE_ZERO 248u
 #define LATTE_ONE 249u
 #define LATTE_ALU_CLAUSE_WORDS 128u
+/* CF POP_COUNT is in word1 bits 0..2. Restore the outer execution mask. */
+#define LATTE_CF_POP_ONE UINT32_C(0x87000001)
 
 static bool span(const void *p,size_t n) {
     return p && n<=UINTPTR_MAX-(uintptr_t)p;
@@ -82,6 +84,16 @@ static ctr_gx2_shader_result source(const ctr_shader_program *p,
     }
     return CTR_GX2_SHADER_OK;
 }
+static ctr_gx2_shader_result export_uv_pairs(ctr_gx2_shader *out,unsigned seen) {
+    static const unsigned uv_semantics[3]={12u,14u,22u};
+    for(unsigned unit=0;unit<3u;++unit) {
+        unsigned pair=3u<<uv_semantics[unit],present=seen&pair;
+        if(present && present!=pair)return CTR_GX2_SHADER_UNDEFINED;
+        if(present)out->texcoord_mask|=(uint8_t)(1u<<unit);
+    }
+    out->texcoord0=(out->texcoord_mask&1u)!=0;
+    return CTR_GX2_SHADER_OK;
+}
 static ctr_gx2_shader_result exports(ctr_gx2_shader *out,uint16_t mask,
                                      const uint32_t *maps,unsigned total,
                                      const uint8_t written[16]) {
@@ -104,14 +116,7 @@ static ctr_gx2_shader_result exports(ctr_gx2_shader *out,uint16_t mask,
         }
     }
     if((seen&UINT32_C(0x0f0f))!=UINT32_C(0x0f0f))return CTR_GX2_SHADER_UNDEFINED;
-    static const unsigned uv_semantics[3]={12u,14u,22u};
-    for(unsigned unit=0;unit<3u;++unit) {
-        unsigned pair=3u<<uv_semantics[unit],present=seen&pair;
-        if(present && present!=pair)return CTR_GX2_SHADER_UNDEFINED;
-        if(present)out->texcoord_mask|=(uint8_t)(1u<<unit);
-    }
-    out->texcoord0=(out->texcoord_mask&1u)!=0;
-    return CTR_GX2_SHADER_OK;
+    return export_uv_pairs(out,seen);
 }
 static ctr_gx2_shader_result compile(const ctr_shader_program *p,uint16_t mask,
                                      const uint32_t *maps,unsigned total,
@@ -438,7 +443,7 @@ static ctr_gx2_shader_result game_walk(game_ctx *g,unsigned pc,unsigned end_pc,u
                 if(!game_flush_alu(g,false))return CTR_GX2_SHADER_LIMIT;
                 unsigned pop_cf=g->cf_count++;
                 if(!game_emit_cf(g,jump_cf,pop_cf,UINT32_C(0x85000000)))return CTR_GX2_SHADER_LIMIT;
-                if(!game_emit_cf(g,pop_cf,pop_cf+1u,UINT32_C(0x87080000)))return CTR_GX2_SHADER_LIMIT;
+                if(!game_emit_cf(g,pop_cf,pop_cf+1u,LATTE_CF_POP_ONE))return CTR_GX2_SHADER_LIMIT;
             }
             continue;
         }
@@ -488,7 +493,7 @@ static ctr_gx2_shader_result game_walk(game_ctx *g,unsigned pc,unsigned end_pc,u
             {
                 unsigned pop_cf=g->cf_count++;
                 if(!game_emit_cf(g,jump_cf,pop_cf,UINT32_C(0x85000000)))return CTR_GX2_SHADER_LIMIT;
-                if(!game_emit_cf(g,pop_cf,pop_cf+1u,UINT32_C(0x87080000)))return CTR_GX2_SHADER_LIMIT;
+                if(!game_emit_cf(g,pop_cf,pop_cf+1u,LATTE_CF_POP_ONE))return CTR_GX2_SHADER_LIMIT;
             }
             if(op==0x28u && join>target) {
                 if(!alu_at(g->out,CTR_GX2_SHADER_GAME_ALU_OFFSET,LATTE_SETE,cond_gpr,cond_ch,false,LATTE_ZERO,0,51u,3u))
@@ -507,7 +512,7 @@ static ctr_gx2_shader_result game_walk(game_ctx *g,unsigned pc,unsigned end_pc,u
                 if(!game_flush_alu(g,false))return CTR_GX2_SHADER_LIMIT;
                 unsigned pop2_cf=g->cf_count++;
                 if(!game_emit_cf(g,jump2_cf,pop2_cf,UINT32_C(0x85000000)))return CTR_GX2_SHADER_LIMIT;
-                if(!game_emit_cf(g,pop2_cf,pop2_cf+1u,UINT32_C(0x87080000)))return CTR_GX2_SHADER_LIMIT;
+                if(!game_emit_cf(g,pop2_cf,pop2_cf+1u,LATTE_CF_POP_ONE))return CTR_GX2_SHADER_LIMIT;
             }
             pc=join;
             continue;
@@ -545,7 +550,7 @@ static ctr_gx2_shader_result game_walk(game_ctx *g,unsigned pc,unsigned end_pc,u
         unsigned lanes=pattern&15u;
         if(op==0x12u)lanes&=12u;
         if(cmp)lanes=12u;
-        unsigned read_lanes=dot && lanes?(op==1u?14u:15u):lanes;
+        unsigned read_lanes=(dot && lanes)?(op==1u?14u:15u):recip?(lanes?8u:0u):lanes;
         unsigned op_count=mad?3u:(op==0x13u || op==0x12u || recip)?1u:2u;
         unsigned rel_operand=(mad || inverted)?1u:0u;
         if(rel_idx==3u && sources[rel_operand]>=32u) {
@@ -555,6 +560,9 @@ static ctr_gx2_shader_result game_walk(game_ctx *g,unsigned pc,unsigned end_pc,u
             rel_idx=0u;
         }
         if(rel_idx && sources[rel_operand]>=32u) {
+            unsigned in_clause=(g->out->alu_instructions-g->clause_start)%LATTE_ALU_CLAUSE_WORDS;
+            if(in_clause+1u+op_count*4u>LATTE_ALU_CLAUSE_WORDS && !game_flush_alu(g,false))
+                return CTR_GX2_SHADER_LIMIT;
             if(!alu_raw(g->out,CTR_GX2_SHADER_GAME_ALU_OFFSET,
                         52u|((rel_idx-1u)<<10),LATTE_MOVA_INT<<7))return CTR_GX2_SHADER_LIMIT;
         }
@@ -591,7 +599,7 @@ static ctr_gx2_shader_result game_walk(game_ctx *g,unsigned pc,unsigned end_pc,u
         }
         if(op==0x12u) {
             for(unsigned lane=0;lane<2u;++lane)if(lanes&(8u>>lane)) {
-                if(!alu_at(g->out,CTR_GX2_SHADER_GAME_ALU_OFFSET,LATTE_FLT_TO_INT,49u,lane,false,0,0,52u,lane))
+                if(!alu_at(g->out,CTR_GX2_SHADER_GAME_ALU_OFFSET,LATTE_FLT_TO_INT_TRUNC,49u,lane,false,0,0,52u,lane))
                     return CTR_GX2_SHADER_LIMIT;
             }
             continue;
@@ -642,8 +650,12 @@ static ctr_gx2_shader_result compile_game(const ctr_shader_program *p,const ctr_
         unsigned op=(opt->int_signed_mask&(1u<<v))?LATTE_INT_TO_FLT:
                     ((opt->int_unsigned_mask&(1u<<v))?LATTE_UINT_TO_FLT:0u);
         if(!op)continue;
-        for(unsigned lane=0;lane<4u;++lane)
+        unsigned comps=(opt->int_components[v] && opt->int_components[v]<=4u)?opt->int_components[v]:4u;
+        for(unsigned lane=0;lane<comps;++lane)
             if(!alu_at(out,CTR_GX2_SHADER_GAME_ALU_OFFSET,op,1u+v,lane,false,0,0,1u+v,lane))
+                return CTR_GX2_SHADER_LIMIT;
+        for(unsigned lane=comps;lane<4u;++lane)
+            if(!alu_at(out,CTR_GX2_SHADER_GAME_ALU_OFFSET,LATTE_MOV,(lane==3u)?LATTE_ONE:LATTE_ZERO,0,false,0,0,1u+v,lane))
                 return CTR_GX2_SHADER_LIMIT;
     }
     bool ended=false;
@@ -680,13 +692,8 @@ static ctr_gx2_shader_result compile_game(const ctr_shader_program *p,const ctr_
     if((seen&UINT32_C(0x000f))!=UINT32_C(0x000f))return CTR_GX2_SHADER_UNDEFINED;
     if(opt->light_active && ((seen&0xf0u)!=0xf0u || (opt->light_needs_view && (seen&UINT32_C(0x1c0000))!=UINT32_C(0x1c0000))))
         return CTR_GX2_SHADER_UNDEFINED;
-    static const unsigned uv_semantics[3]={12u,14u,22u};
-    for(unsigned unit=0;unit<3u;++unit) {
-        unsigned pair=3u<<uv_semantics[unit],present=seen&pair;
-        if(present && present!=pair)return CTR_GX2_SHADER_UNDEFINED;
-        if(present)out->texcoord_mask|=(uint8_t)(1u<<unit);
-    }
-    out->texcoord0=(out->texcoord_mask&1u)!=0;
+    r=export_uv_pairs(out,seen);
+    if(r!=CTR_GX2_SHADER_OK)return r;
     out->light_active=opt->light_active;
     out->light_needs_view=opt->light_needs_view;
     if(g.has_relative) {

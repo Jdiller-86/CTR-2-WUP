@@ -19,6 +19,8 @@ typedef struct {
     ctr_texture_cache *owner;
     void *owned;
     unsigned slot;
+    /* A nonzero identity names this immutable decoded image process-wide. */
+    uint32_t identity;
 } ctr_texture_cache_lease;
 typedef struct {
     uint64_t lookups,hits,misses,decodes,evictions,rejections;
@@ -43,6 +45,9 @@ bool ctr_texture_cache_destroy(ctr_texture_cache *cache);
 ctr_texture_cache_result ctr_texture_cache_acquire(ctr_texture_cache *cache,
     const uint8_t *source,size_t source_bytes,unsigned format,unsigned width,
     unsigned height,ctr_texture_cache_lease *lease);
+ctr_texture_cache_result ctr_texture_cache_acquire_keyed(ctr_texture_cache *cache,
+    const uint8_t *source,size_t source_bytes,unsigned format,unsigned width,
+    unsigned height,uint64_t version,ctr_texture_cache_lease *lease);
 void ctr_texture_cache_release(ctr_texture_cache_lease *lease);
 /* Invalid/aliased output is unchanged; counters saturate without wrapping. */
 void ctr_texture_cache_statistics_get(const ctr_texture_cache *cache,

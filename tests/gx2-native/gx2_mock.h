@@ -27,7 +27,9 @@ typedef unsigned GX2ClearFlags;
 enum { GX2_CLEAR_FLAGS_DEPTH=1u, GX2_CLEAR_FLAGS_BOTH=3u };
 struct GX2ContextState { uint32_t marker; };
 typedef struct {
-    unsigned dim,width,height,depth,mipLevels,format,aa,use,imageSize;
+    unsigned dim,width,height,depth,mipLevels,format,aa;
+    union { unsigned use,resourceFlags; };
+    unsigned imageSize;
     void *image,*mipmaps;unsigned mipmapSize,tileMode,alignment,pitch,mipLevelOffset[13];
 } GX2Surface;
 typedef struct { GX2Surface surface;unsigned viewNumSlices; } GX2ColorBuffer;
@@ -71,6 +73,7 @@ enum {
     GX2_SURFACE_FORMAT_UNORM_R16=5,GX2_SURFACE_FORMAT_UNORM_R24_X8=0x11,
     GX2_SURFACE_FORMAT_FLOAT_R32=0x80e,
     GX2_AA_MODE1X=0,GX2_SURFACE_USE_TEXTURE=1,GX2_SURFACE_USE_COLOR_BUFFER=2,GX2_SURFACE_USE_DEPTH_BUFFER=4,
+    GX2R_RESOURCE_USAGE_GPU_READ=1<<13,GX2R_RESOURCE_USAGE_GPU_WRITE=1<<14,
     GX2_TILE_MODE_TILED_2D_THIN1=4,GX2_TILE_MODE_LINEAR_ALIGNED=1,GX2_TILE_MODE_LINEAR_SPECIAL=16,
     GX2_INVALIDATE_MODE_CPU_TEXTURE=66,GX2_INVALIDATE_MODE_COLOR_BUFFER=16,GX2_INVALIDATE_MODE_DEPTH_BUFFER=32,
     GX2_INVALIDATE_MODE_CPU_SHADER=72,GX2_INVALIDATE_MODE_CPU_ATTRIBUTE_BUFFER=65,

@@ -12,9 +12,8 @@
 #include "diagnostic_audio.h"
 #include "diagnostic_display.h"
 #include "guest_slice.h"
-#ifdef CTR_GAME_CEMU_TEST
+#include "ctr_guest_pica.h"
 #include "gx2_scene.h"
-#endif
 #include "native_audio_stream.h"
 #include "report_storage.h"
 #include "test_lifecycle_wiiu.h"
@@ -32,10 +31,8 @@
 #include <sys/stat.h>
 
 static ctr_guest guest;
-#ifdef CTR_GAME_CEMU_TEST
 static ctr_wiiu_gx2_scene gx2_scene;
 static ctr_scene_backend gx2_backend;
-#endif
 static ctr_fs_volume savedata,sdmc;
 static ctr_romfs_file romfs;
 #if CTR_GAME_HAS_MII_ROMFS
@@ -48,6 +45,7 @@ static ctr_diagnostic_audio audio;
 static ctr_native_stream stream;
 static ctr_dsp_stream converter;
 static uint32_t top[400u*240u],bottom[320u*240u];
+static ctr_gsp_pixel_cache screen_cache[2];
 static int16_t dsp_pcm[CTR_DSP_FRAME_SAMPLES*2],pcm[CTR_NATIVE_STREAM_FRAMES*2];
 static size_t pcm_frames;
 static uint64_t session,clock_ns,last_status_us,frames;
@@ -158,19 +156,20 @@ static bool start_guest(void) {
     ctr_guest_image image=ctr_game_image;image.code=code;
     opened=ctr_guest_open(&guest,&image,NULL,0);free(code);
     if(!opened || !ctr_recomp_attach(&guest,true))return false;
+    ctr_recomp_enable_runfast(&guest);
 #ifdef CTR_GAME_CEMU_TEST
     guest.gsp.clock_us=slice_clock;
 #endif
     if(CTR_GAME_READONLY_VRAM && !ctr_gsp_open_vram(&guest))return false;
     guest.gsp.pica_round_f24=true;
-#ifdef CTR_GAME_CEMU_TEST
     ctr_wiiu_gx2_scene_init(&gx2_scene,ctr_diagnostic_display_context());
+#ifdef CTR_GAME_CEMU_TEST
     gx2_scene.cemu_readback=true;
+#endif
     gx2_scene.batch_transformed=true;
     gx2_backend=ctr_wiiu_gx2_scene_backend_direct(&gx2_scene);
     ctr_guest_set_scene_backend(&guest,&gx2_backend);
     guest.gsp.pica_depth_hint=ctr_wiiu_gx2_scene_set_depth_keep;
-#endif
     guest.dsp_firmware=&ctr_game_dsp_firmware;
     guest.cpu.log=trace;guest.debug=debug;
     if(!ctr_apt_configure(&guest))return false;
@@ -201,6 +200,8 @@ static bool pump_audio(void) {
             if(!ctr_dsp_stream_push(&converter,dsp_pcm,CTR_DSP_FRAME_SAMPLES))return false;
             progress=true;
         }
+        else if(ctr_dsp_stream_space(&converter)<CTR_DSP_FRAME_SAMPLES && ctr_dsp_read(&guest,dsp_pcm,CTR_DSP_FRAME_SAMPLES*2))
+            progress=true;
         if(ctr_native_stream_space(&stream)) {
             size_t count;
             if(!ctr_dsp_stream_pull(&converter,pcm+pcm_frames*2,CTR_NATIVE_STREAM_FRAMES-pcm_frames,&count))return false;
@@ -298,13 +299,9 @@ static void cleanup(void *unused) {
     ctr_romfs_file_close(&mii_romfs);
 #endif
     ctr_romfs_file_close(&romfs);
-#ifdef CTR_GAME_CEMU_TEST
     ctr_wiiu_gx2_scene_abort(&gx2_scene);
-#endif
     ctr_diagnostic_display_close(foreground);
-#ifdef CTR_GAME_CEMU_TEST
     ctr_wiiu_gx2_scene_after_shutdown(&gx2_scene);
-#endif
     ctr_test_report_close(&report);
 }
 static const ctr_exit_ops exit_ops={cleanup,clear_callbacks,ctr_procui_request_menu,ctr_procui_messages,
@@ -355,7 +352,7 @@ int main(void) {
     startup_checkpoint("guest_load_end");
     if(!failure && !status_report("running"))fail("Private runtime log failed");
     uint64_t previous_us=slice_clock(NULL),last_status_draw_us=0;clock_ns=1;
-    uint64_t presented_vblank=0,presented_swaps[2]={0,0};
+    uint64_t presented_swaps[2]={0,0};
     bool exit_observed=false,previous_picture=false;
     const char *shown_failure=NULL;
     VPADStatus pad={0};
@@ -368,9 +365,9 @@ int main(void) {
         if(status==CTR_PROC_RELEASE) {
             ctr_diagnostic_audio_end(&audio,ctr_native_stream_release,&stream);
             if(save_ready && savedata.dirty && !ctr_fs_snapshot_save(CTR_GAME_DATA_ROOT "/save.snapshot",&savedata))fail("Save publication failed");
-#ifdef CTR_GAME_CEMU_TEST
+            if(opened && (!ctr_guest_pica_flush_color(&guest) || !ctr_guest_scanout_flush(&guest)))
+                fail("Pending GPU color publication failed");
             ctr_wiiu_gx2_scene_abort(&gx2_scene);
-#endif
             status_report("background");ctr_report_storage_close(&storage);ctr_procui_release(NULL);
         }
         bool previous_foreground=foreground;foreground=status==CTR_PROC_FOREGROUND;
@@ -378,28 +375,26 @@ int main(void) {
         if(!foreground) { ctr_procui_wait(NULL);continue; }
         if(!previous_foreground) {
             delta=0;last_status_draw_us=0;previous_picture=false;ctr_diagnostic_display_invalidate();
-#ifdef CTR_GAME_CEMU_TEST
             gx2_scene.restore_context=ctr_diagnostic_display_context();
-#endif
             if(!failure && !open_audio())fail("Audio reacquisition failed");
         }
-#ifdef CTR_GAME_CEMU_TEST
         /* Service each pending display deadline before crossing it. Limit
          * catch-up after a host stall to one guest frame per pass. */
-        uint64_t elapsed_ns=delta>CTR_GSP_FRAME_NS/1000u?CTR_GSP_FRAME_NS:delta*1000u;
+        bool behind_realtime=delta>CTR_GSP_FRAME_NS/1000u;
+        uint64_t elapsed_ns=behind_realtime?CTR_GSP_FRAME_NS:delta*1000u;
         if(guest.gsp.registered && guest.gsp.right) {
             uint64_t deadline=guest.gsp.next_vblank_ns;
             uint64_t until=deadline>clock_ns?deadline-clock_ns:0u;
             if(elapsed_ns>until)elapsed_ns=until;
         }
         clock_ns+=elapsed_ns;
-#else
-        clock_ns+=delta*1000u;
-#endif
-        VPADStatus sample={0};VPADReadError error;
+        VPADStatus samples[16];VPADReadError error;
         pad.trigger=pad.release=0;
-        int count=VPADRead(VPAD_CHAN_0,&sample,1,&error);
-        if(count>0 && error==VPAD_READ_SUCCESS)pad=sample;
+        int count=VPADRead(VPAD_CHAN_0,samples,16,&error);
+        if(count>0 && error==VPAD_READ_SUCCESS) {
+            pad=samples[0];
+            for(int i=1;i<count;++i)pad.trigger|=samples[i].trigger;
+        }
         /* Cemu can return a successful empty poll before the next sample. */
         else if(error!=VPAD_READ_SUCCESS && error!=VPAD_READ_NO_SAMPLES)memset(&pad,0,sizeof(pad));
         if(count>0 && error==VPAD_READ_SUCCESS && (pad.trigger&VPAD_BUTTON_MINUS) &&
@@ -409,7 +404,7 @@ int main(void) {
             /* Match the host replay's guest-time input cadence and retain
              * short controller presses between those samples. */
             pending_buttons|=pad.trigger;
-            if(!guest.hid.published || clock_ns-guest.hid.last_ns>=UINT64_C(17000000)) {
+            if(!guest.hid.published || clock_ns-guest.hid.last_ns>=UINT64_C(16000000)) {
                 VPADStatus guest_pad=pad;
                 guest_pad.hold|=pending_buttons;
                 pending_buttons=0;
@@ -419,7 +414,7 @@ int main(void) {
             if(!update_input(&pad))fail("Guest input publication failed");
 #endif
             if(!failure) {
-                const ctr_slice_policy policy={10000,32,200000,12000};
+                const ctr_slice_policy policy={10000,32,200000,25000};
                 ctr_slice_report slice=ctr_guest_slice(&policy,slice_clock,execute,NULL);
                 guest_exec_us+=slice.elapsed_us;
                 if(guest.state==CTR_GUEST_FAULTED) {
@@ -433,15 +428,20 @@ int main(void) {
             }
         }
         bool picture=!failure && opened && !guest.gsp.black && guest.gsp.active[0] && guest.gsp.active[1];
-        if(picture && (!previous_picture || presented_vblank!=guest.gsp.vblanks ||
+        if(picture && (!previous_picture ||
            presented_swaps[0]!=guest.gsp.swaps[0] || presented_swaps[1]!=guest.gsp.swaps[1])) {
             uint64_t presentation_start=slice_clock(NULL);
-            if(ctr_gsp_pixels(&guest,0,top,400u*240u)!=CTR_MEM_OK ||
-               ctr_gsp_pixels(&guest,1,bottom,320u*240u)!=CTR_MEM_OK ||
-               !ctr_diagnostic_display_guest(top,bottom)) {
+            const void *top_scanout=ctr_wiiu_gx2_scene_scanout_texture(&gx2_scene,ctr_guest_scanout_screen(&guest,0));
+            const void *bottom_scanout=ctr_wiiu_gx2_scene_scanout_texture(&gx2_scene,ctr_guest_scanout_screen(&guest,1));
+            bool drawn=(top_scanout || bottom_scanout) &&
+                (top_scanout || ctr_gsp_pixels_cached(&guest,0,top,400u*240u,&screen_cache[0])==CTR_MEM_OK) &&
+                (bottom_scanout || ctr_gsp_pixels_cached(&guest,1,bottom,320u*240u,&screen_cache[1])==CTR_MEM_OK) &&
+                ctr_diagnostic_display_scanout(top_scanout,bottom_scanout,top,bottom);
+            if(!drawn && (ctr_gsp_pixels_cached(&guest,0,top,400u*240u,&screen_cache[0])!=CTR_MEM_OK ||
+               ctr_gsp_pixels_cached(&guest,1,bottom,320u*240u,&screen_cache[1])!=CTR_MEM_OK ||
+               !ctr_diagnostic_display_guest(top,bottom))) {
                 fail("Guest display presentation failed");picture=false;
             } else {
-                presented_vblank=guest.gsp.vblanks;
                 presented_swaps[0]=guest.gsp.swaps[0];presented_swaps[1]=guest.gsp.swaps[1];++frames;
             }
             presentation_us+=slice_clock(NULL)-presentation_start;
@@ -461,12 +461,8 @@ int main(void) {
         if(now-last_status_us>=5000000u) {
             last_status_us=now;if(!status_report(failure?"stopped":"progress"))fail("Private runtime log failed");
         }
-#ifdef CTR_GAME_CEMU_TEST
-        if(guest.state==CTR_GUEST_WAITING || guest.state==CTR_GUEST_SLEEPING)
+        if(!behind_realtime && (guest.state==CTR_GUEST_WAITING || guest.state==CTR_GUEST_SLEEPING))
             OSSleepTicks(OSMillisecondsToTicks(1));
-#else
-        OSSleepTicks(OSMillisecondsToTicks(1));
-#endif
     }
     if(!ctr_test_complete_exit(&lifecycle,exit_observed,&exit_ops,NULL))failure="Exit transition failed";
     ctr_report_storage_close(&storage);return failure?1:0;

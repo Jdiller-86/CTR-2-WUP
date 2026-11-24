@@ -5,6 +5,7 @@
 #include "ctr_heap.h"
 #include "ctr_kernel.h"
 #include "ctr_sha256.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -58,6 +59,7 @@ struct ctr_guest_dsp {
     voice voices[CTR_DSP_CHANNELS];int32_t master,aux_volume[AUX_BUSES];bool aux_enabled[AUX_BUSES];
     int16_t output[CTR_DSP_OUTPUT_FRAMES][CTR_DSP_FRAME_SAMPLES*2];
     unsigned first,count;
+    uint64_t validated_mapping_version;
 };
 static uint32_t le(const uint8_t *p,unsigned n) { uint32_t v=0;for(unsigned i=0;i<n;++i)v|=(uint32_t)p[i]<<(8*i);return v; }
 static int16_t signed_half(uint32_t value) { return (int16_t)(value<32768u?(int32_t)value:(int32_t)value-65536); }
@@ -83,6 +85,14 @@ static bool fail(ctr_guest *g,uint32_t detail,ctr_mem_result memory) {
     g->fault_detail=detail;g->cpu.memory_fault=memory;g->state=CTR_GUEST_FAULTED;
     ctr_cpu_stop(&g->cpu,g->fault,detail);return false;
 }
+static bool dsp_reject(ctr_guest *g,unsigned c,const char *reason,uint32_t a,uint32_t b) {
+    if(g->debug) {
+        char buf[96];
+        snprintf(buf,sizeof(buf),"DSP_REJECT ch=%u %s a=%08x b=%08x",c,reason,a,b);
+        g->debug(g->debug_context,buf);
+    }
+    return fail(g,c,CTR_MEM_OK);
+}
 static bool range(ctr_guest *g,uint32_t address,uint32_t size,unsigned rights) {
     ctr_mem_result r=ctr_memory_check_range(&g->memory,address,size,rights);
     return r==CTR_MEM_OK || fail(g,address,r);
@@ -99,7 +109,7 @@ static bool guest_alias(const ctr_guest *g,uint32_t address,uint32_t size,uint32
 }
 /* Physical pointers must still name the same live linear owner after splits,
  * frees and reallocations. No source pointer is retained across a guest entry. */
-static bool source(ctr_guest *g,uint32_t physical,uint32_t bytes,uint32_t *address) {
+static bool source(ctr_guest *g,uint32_t physical,uint32_t bytes,uint32_t *address,const uint8_t **contiguous) {
     if(physical<0x20000000u || (uint64_t)physical+bytes>0x28000000u || (physical&1u))return fail(g,physical,CTR_MEM_UNMAPPED);
     uint32_t at=CTR_LINEAR_BASE+physical-0x20000000u;
     const ctr_guest_allocation *owner=NULL;
@@ -110,13 +120,33 @@ static bool source(ctr_guest *g,uint32_t physical,uint32_t bytes,uint32_t *addre
     if(!owner)return fail(g,physical,CTR_MEM_UNMAPPED);
     if(!range(g,at,bytes,CTR_MEM_READ))return false;
     uint64_t cursor=at,end=cursor+bytes;
+    const uint8_t *direct=NULL;
     while(cursor<end) {
         const ctr_mapping *m=NULL;
         for(size_t i=0;i<g->memory.count;++i)if(cursor>=g->memory.maps[i].base && cursor<(uint64_t)g->memory.maps[i].base+g->memory.maps[i].size)m=&g->memory.maps[i];
         if(!m || m->storage+(size_t)(cursor-m->base)!=owner->storage+(size_t)(cursor-owner->base))return fail(g,physical,CTR_MEM_OVERLAP);
-        uint64_t next=(uint64_t)m->base+m->size;cursor=next<end?next:end;
+        uint64_t next=(uint64_t)m->base+m->size;
+        if(cursor==at && next>=end)direct=m->storage+(at-m->base);
+        cursor=next<end?next:end;
     }
+    if(contiguous)*contiguous=direct;
     *address=at;return true;
+}
+
+/* A DSP frame mixes without running guest code. Revalidate on the first read
+ * of each buffer in a frame, keeping split mappings on the checked read path. */
+typedef struct {
+    uint32_t physical,bytes,address;const uint8_t *direct;
+    size_t decoded_first;
+    unsigned decoded_count;
+    int16_t decoded[14],history1,history2;
+} sample_source;
+static bool sample_address(ctr_guest *g,const buffer *b,sample_source *view) {
+    if(view->physical && view->physical==b->address && view->bytes==b->bytes)return true;
+    if(!source(g,b->address,b->bytes,&view->address,&view->direct))return false;
+    view->physical=b->address;view->bytes=b->bytes;
+    view->decoded_count=0;
+    return true;
 }
 /* Exact binary32 -> signed Q15, nearest ties positive. No host float/endianness. */
 static bool gain(uint32_t bits,int32_t *out) {
@@ -132,6 +162,12 @@ static bool gain(uint32_t bits,int32_t *out) {
     *out=negative?-(int32_t)magnitude:(int32_t)magnitude;return true;
 }
 static int64_t rounded(int64_t v) { v+=16384;return v>=0?v/32768:-((-v+32767)/32768); }
+/* Both factors are bounded to 16-bit magnitude. Sign-extend the
+ * shifted 17-bit result to round ties toward positive infinity. */
+static int32_t voice_gain(int32_t sample,int32_t gain) {
+    uint32_t value=(uint32_t)(sample*gain+16384)>>15;
+    return (int32_t)(value^UINT32_C(0x10000))-INT32_C(0x10000);
+}
 static int16_t clipped(int64_t v) { return (int16_t)(v>32767?32767:v<-32768?-32768:v); }
 static int32_t filter_sample(voice *v,int32_t sample) {
     if(v->mono_enabled) {
@@ -156,35 +192,47 @@ static bool rate(uint32_t bits,bool verified_component,uint64_t *step) {
     *step=(uint64_t)((bits&0x7fffffu)|0x800000u)<<((bits>>23)-118u);
     return true;
 }
-static bool sample_at(ctr_guest *g,const buffer *b,sample_format format,uint32_t position,int32_t *out) {
-    uint32_t address,sample;
+static bool sample_at(ctr_guest *g,const buffer *b,sample_format format,uint32_t position,
+                      sample_source *view,int32_t *out) {
+    uint32_t sample;
     unsigned width=format==PCM8?1u:2u;
-    if(!source(g,b->address,b->bytes,&address))return false;
-    if(ctr_memory_read(&g->memory,address+position*width,width,CTR_MEM_READ,&sample)!=CTR_MEM_OK)
-        return fail(g,address,CTR_MEM_UNMAPPED);
+    if(!sample_address(g,b,view))return false;
+    if(view->direct && position<b->count)sample=le(view->direct+position*width,width);
+    else if(ctr_memory_read(&g->memory,view->address+position*width,width,CTR_MEM_READ,&sample)!=CTR_MEM_OK)
+        return fail(g,view->address,CTR_MEM_UNMAPPED);
     *out=signed_half(width==1u?sample<<8:sample);return true;
 }
-static bool adpcm_sample(ctr_guest *g,const int16_t *coefficients,buffer *b,uint32_t position,int32_t *out) {
+static bool adpcm_sample(ctr_guest *g,const int16_t *coefficients,buffer *b,uint32_t position,
+                         sample_source *view,int32_t *out) {
     if(position>=b->count || b->decoder.sample>position+1u)return fail(g,b->address,CTR_MEM_OK);
     if(b->decoder.sample==position+1u) { *out=b->decoder.history1;return true; }
-    uint32_t address;
-    if(!source(g,b->address,b->bytes,&address))return false;
-    /* Advance history through skipped source samples. A frame-local copy also
-     * handles the final partial frame without retaining a guest host pointer. */
+    if(!sample_address(g,b,view))return false;
+    /* Decode each encoded frame once per mix where its predictor history still
+     * matches. Lookahead can reuse samples without advancing the live buffer. */
     while(b->decoder.sample<=position) {
-        unsigned within=(unsigned)(b->decoder.sample%14u),count=14u-within;
-        unsigned needed=position-(unsigned)b->decoder.sample+1u;
-        if(count>needed)count=needed;
-        uint32_t frame_at=address+(uint32_t)(b->decoder.sample/14u)*8u;
-        unsigned bytes=2u+(within+count-1u)/2u;
-        uint8_t encoded[8];int16_t samples[14];
-        if(ctr_memory_read_bytes(&g->memory,frame_at,encoded,bytes)!=CTR_MEM_OK)
-            return fail(g,frame_at,CTR_MEM_UNMAPPED);
-        CtrDspAdpcmState state=b->decoder;state.sample=within;
-        if(ctr_dsp_adpcm_decode(encoded,bytes,coefficients,&state,samples,14,count)!=CTR_DSP_ADPCM_OK)
-            return fail(g,frame_at,CTR_MEM_OK);
-        b->decoder.sample+=count;
-        b->decoder.history1=state.history1;b->decoder.history2=state.history2;
+        size_t sample=b->decoder.sample,offset=sample-view->decoded_first;
+        if(offset>=view->decoded_count ||
+           b->decoder.history1!=(offset?view->decoded[offset-1u]:view->history1) ||
+           b->decoder.history2!=(offset>1u?view->decoded[offset-2u]:offset?view->history1:view->history2)) {
+            unsigned within=(unsigned)(sample%14u),count=14u-within;
+            if(count>b->count-sample)count=(unsigned)(b->count-sample);
+            uint32_t frame_offset=(uint32_t)(sample/14u)*8u,frame_at=view->address+frame_offset;
+            unsigned bytes=2u+(within+count-1u)/2u;
+            uint8_t encoded[8];
+            const uint8_t *input=view->direct?view->direct+frame_offset:encoded;
+            if(!view->direct && ctr_memory_read_bytes(&g->memory,frame_at,encoded,bytes)!=CTR_MEM_OK)
+                return fail(g,frame_at,CTR_MEM_UNMAPPED);
+            CtrDspAdpcmState state=b->decoder;state.sample=within;
+            if(ctr_dsp_adpcm_decode(input,bytes,coefficients,&state,view->decoded,14,count)!=CTR_DSP_ADPCM_OK)
+                return fail(g,frame_at,CTR_MEM_OK);
+            view->decoded_first=sample;view->decoded_count=count;
+            view->history1=b->decoder.history1;view->history2=b->decoder.history2;
+        }
+        size_t end=(size_t)position-view->decoded_first+1u;
+        if(end>view->decoded_count)end=view->decoded_count;
+        b->decoder.sample=view->decoded_first+end;
+        b->decoder.history1=view->decoded[end-1u];
+        b->decoder.history2=end>1u?view->decoded[end-2u]:view->history1;
     }
     *out=b->decoder.history1;return true;
 }
@@ -192,10 +240,11 @@ static CtrDspAdpcmState adpcm_start(const buffer *next,const buffer *previous) {
     if(!next->continue_history)return next->initial;
     return (CtrDspAdpcmState){0,previous->decoder.history1,previous->decoder.history2};
 }
-static bool voice_sample(ctr_guest *g,voice *v,int32_t *out) {
+static bool voice_sample(ctr_guest *g,voice *v,sample_source views[2],int32_t *out) {
     buffer *b=&v->current;
     bool adpcm=v->format==ADPCM;
-    bool sampled=adpcm?adpcm_sample(g,v->coefficients,b,b->position,out):sample_at(g,b,v->format,b->position,out);
+    bool sampled=adpcm?adpcm_sample(g,v->coefficients,b,b->position,&views[0],out):
+        sample_at(g,b,v->format,b->position,&views[0],out);
     if(!sampled)return false;
     if(v->interpolation!=1 || !v->phase)return true;
     const buffer *next=b;uint32_t position=b->position+1;
@@ -205,11 +254,20 @@ static bool voice_sample(ctr_guest *g,voice *v,int32_t *out) {
         else return true; /* Hold the last sample for its fractional tail. */
     }
     int32_t following;
+    sample_source *view=&views[next!=b];
     if(adpcm) {
-        buffer ahead=*next;
-        if(!position)ahead.decoder=adpcm_start(next,b);
-        if(!adpcm_sample(g,v->coefficients,&ahead,position,&following))return false;
-    } else if(!sample_at(g,next,v->format,position,&following))return false;
+        size_t offset=(size_t)position-view->decoded_first;
+        if(next==b && position && view->physical==b->address && view->bytes==b->bytes &&
+           offset<view->decoded_count &&
+           b->decoder.history1==(offset?view->decoded[offset-1u]:view->history1) &&
+           b->decoder.history2==(offset>1u?view->decoded[offset-2u]:offset?view->history1:view->history2)) {
+            following=view->decoded[offset];
+        } else {
+            buffer ahead=*next;
+            if(!position)ahead.decoder=adpcm_start(next,b);
+            if(!adpcm_sample(g,v->coefficients,&ahead,position,view,&following))return false;
+        }
+    } else if(!sample_at(g,next,v->format,position,view,&following))return false;
     int64_t value=(int64_t)*out*(int64_t)(UINT64_C(0x100000000)-v->phase)+
                   (int64_t)following*v->phase+INT64_C(0x80000000);
     *out=(int32_t)(value>=0?value/INT64_C(0x100000000):
@@ -228,7 +286,7 @@ static bool decode_buffer(ctr_guest *g,const uint8_t *p,bool initial,sample_form
        (adpcm && !history && !continue_history) || (format==PCM16 && history))
         return fail(g,address,CTR_MEM_OK);
     uint32_t bytes=adpcm?(count-1)/14*8+2+(count-1)%14/2:count*(format==PCM8?1u:2u);
-    uint32_t ignored;if(!source(g,address,bytes,&ignored))return false;
+    uint32_t ignored;if(!source(g,address,bytes,&ignored,NULL))return false;
     unsigned allocation=CTR_GUEST_MAX_ALLOCATIONS;
     for(unsigned i=0;i<CTR_GUEST_MAX_ALLOCATIONS;++i) {
         const ctr_guest_allocation *a=&g->allocations[i];
@@ -277,17 +335,27 @@ static bool frame(ctr_guest *g) {
     unsigned span=d->verified_component?COMPONENT_SPAN:FRAME_SPAN;
     /* Memory mappings are caller-editable in the public API. Require the exact
      * original backing, including every command/status/capture byte. */
-    for(unsigned bank=0;bank<2;++bank) {
-        if(!range(g,CTR_DSP_RAM+bank*BANK,span,CTR_MEM_READ|CTR_MEM_WRITE))return false;
-        for(unsigned i=0;i<span;i+=4096) {
-            bool found=false;uint32_t address=CTR_DSP_RAM+bank*BANK+i;
-            for(size_t j=0;j<g->memory.count;++j) {
-                const ctr_mapping *m=&g->memory.maps[j];
-                if(address>=m->base && (uint64_t)address+4096<=(uint64_t)m->base+m->size &&
-                   m->storage+(address-m->base)==g->storage[7]+bank*BANK+i)found=true;
+    if(g->memory.resource_mapping_version==UINT64_MAX || !d->validated_mapping_version ||
+       d->validated_mapping_version!=g->memory.resource_mapping_version) {
+        for(unsigned bank=0;bank<2;++bank) {
+            if(!range(g,CTR_DSP_RAM+bank*BANK,span,CTR_MEM_READ|CTR_MEM_WRITE))return false;
+            for(unsigned i=0;i<span;) {
+                unsigned covered=0;uint32_t address=CTR_DSP_RAM+bank*BANK+i;
+                for(size_t j=0;j<g->memory.count;++j) {
+                    const ctr_mapping *m=&g->memory.maps[j];
+                    uint64_t end=(uint64_t)m->base+m->size;
+                    if(address>=m->base && (uint64_t)address+4096u<=end &&
+                       m->storage+(address-m->base)==g->storage[7]+bank*BANK+i) {
+                        /* Backing identity is constant across consecutive pages of this mapping. */
+                        covered=end-address>=span-i?span-i:(unsigned)(end-address)&~4095u;
+                        break;
+                    }
+                }
+                if(!covered)return fail(g,address,CTR_MEM_OVERLAP);
+                i+=covered;
             }
-            if(!found)return fail(g,address,CTR_MEM_OVERLAP);
         }
+        d->validated_mapping_version=g->memory.resource_mapping_version;
     }
     const uint8_t *ram=g->storage[7]+offset;
     if(le(ram,2)!=d->counter)return fail(g,CTR_DSP_RAM+offset,CTR_MEM_OK);
@@ -321,22 +389,22 @@ static bool frame(ctr_guest *g) {
     const uint32_t channel_flags=ALLOWED|(d->verified_component?0x01800000u:0u);
     for(unsigned c=0;c<CTR_DSP_CHANNELS;++c) {
         const uint8_t *p=ram+CHANNEL+c*STRIDE;uint32_t flags=le(p,4);voice *v=&voices[c];
-        if(flags&~channel_flags)return fail(g,c,CTR_MEM_OK);
+        if(flags&~channel_flags)return dsp_reject(g,c,"flags",flags,channel_flags);
         if(flags&0x20000000u) { memset(v,0,sizeof(*v));v->gain[0]=v->gain[1]=32768;v->step=UINT64_C(0x100000000); }
         if(flags&0x10000000u) { v->sync=(uint16_t)le(p+0xa2,2);v->current=(buffer){0};v->head=v->count=0;v->last=0;v->phase=0; }
         if(flags&4u) {
-            if(v->current.sequence && v->format==ADPCM)return fail(g,c,CTR_MEM_OK);
+            if(v->current.sequence && v->format==ADPCM)return dsp_reject(g,c,"coeff_active",flags,v->current.sequence);
             for(unsigned i=0;i<16;++i)v->coefficients[i]=signed_half(le(ram+COEFFICIENTS+c*32+i*2,2));
         }
-        if((flags&0x40000u) && !rate(le(p+0x34,4),d->verified_component,&v->step))return fail(g,c,CTR_MEM_OK);
+        if((flags&0x40000u) && !rate(le(p+0x34,4),d->verified_component,&v->step))return dsp_reject(g,c,"rate",le(p+0x34,4),flags);
         if(flags&0x20000u) {
-            if(p[0x38]>2 || p[0x39]>2)return fail(g,c,CTR_MEM_OK);
+            if(p[0x38]>2 || p[0x39]>2)return dsp_reject(g,c,"interp",p[0x38],p[0x39]);
             v->interpolation=p[0x38];
             if(d->verified_component && !v->interpolation)v->interpolation=1;
         }
         if(flags&0x400000u) {
             unsigned filter=le(p+0x3a,2);
-            if(filter>(d->verified_component?3u:0u))return fail(g,c,CTR_MEM_OK);
+            if(filter>(d->verified_component?3u:0u))return dsp_reject(g,c,"filter",filter,flags);
             v->mono_enabled=(filter&1u)!=0;
             v->biquad_enabled=(filter&2u)!=0;
             if(!v->mono_enabled)v->mono_output=0;
@@ -351,80 +419,84 @@ static bool frame(ctr_guest *g) {
             v->biquad_configured=true;
         }
         if((v->mono_enabled && !v->mono_configured) || (v->biquad_enabled && !v->biquad_configured))
-            return fail(g,c,CTR_MEM_OK);
+            return dsp_reject(g,c,"filter_cfg",v->mono_enabled|(v->biquad_enabled<<1),flags);
         if(flags&0xe000000u) {
             for(unsigned i=0;i<12;++i) {
-                int32_t value;if(!gain(le(p+4+i*4,4),&value))return fail(g,c,CTR_MEM_OK);
+                int32_t value;if(!gain(le(p+4+i*4,4),&value))return dsp_reject(g,c,"gain_nan",i,le(p+4+i*4,4));
                 if(i<2) {
                     if(!d->verified_component || (flags&0x02000000u))v->gain[i]=value;
                 } else if(d->verified_component && i>=AUX_LANES) {
                     unsigned bus=i/AUX_LANES-1u;
                     if(flags&(0x04000000u<<bus))v->aux_gain[bus][i%AUX_LANES]=value;
-                } else if(value)return fail(g,c,CTR_MEM_OK);
+                } else if(value)return dsp_reject(g,c,"gain_lane",i,(uint32_t)value);
             }
         }
-        if(flags&0x10000u) { if(le(p+0xa0,2)>1)return fail(g,c,CTR_MEM_OK);v->playing=le(p+0xa0,2)!=0; }
+        if(flags&0x10000u) { if(le(p+0xa0,2)>1)return dsp_reject(g,c,"playing",le(p+0xa0,2),flags);v->playing=le(p+0xa0,2)!=0; }
         if(flags&0x40200010u) {
             unsigned format=le(p+0xb4,2);
             /* This verified component also supplies bit 4 with mono ADPCM.
                The channel count and codec occupy bits 0 through 3. */
             if(d->verified_component && format==0x19u)format=9u;
             if((flags&0x40200010u)!=0x40200010u || (format!=5 && format!=9 &&
-               !(d->verified_component && format==1)))return fail(g,c,CTR_MEM_OK);
+               !(d->verified_component && format==1)))return dsp_reject(g,c,"format",format,flags);
             v->format=format==9?ADPCM:format==1?PCM8:PCM16;
             if(!decode_buffer(g,p+0xac,true,v->format,&v->current))return false;
             v->count=v->head=v->next_slot=0;v->phase=0;add(&stats.queued,1);
         }
         if(flags&0x80000u) {
-            unsigned mask=le(p+0x4a,2);if((mask && !v->current.sequence) || (mask&~15u))return fail(g,c,CTR_MEM_OK);
+            unsigned mask=le(p+0x4a,2);if((mask && !v->current.sequence) || (mask&~15u))return dsp_reject(g,c,"qmask",mask,v->current.sequence);
             for(unsigned slots=0;mask && slots<4;++slots) {
                 unsigned i=v->next_slot;
-                if(!(mask&(1u<<i)))return fail(g,c,CTR_MEM_OK);
+                if(!(mask&(1u<<i)))return dsp_reject(g,c,"qslot",mask,i);
                 mask&=~(1u<<i);v->next_slot=(i+1)%4;
-                if(v->count==4)return fail(g,c,CTR_MEM_OK);
+                if(v->count==4)return dsp_reject(g,c,"qfull",v->count,i);
                 buffer b;if(!decode_buffer(g,p+0x4c+i*20,false,v->format,&b))return false;
-                if(b.sequence==v->current.sequence)return fail(g,c,CTR_MEM_OK);
-                for(unsigned j=0;j<v->count;++j)if(v->queued[(v->head+j)%4].sequence==b.sequence)return fail(g,c,CTR_MEM_OK);
+                if(b.sequence==v->current.sequence)return dsp_reject(g,c,"qseq_cur",b.sequence,i);
+                for(unsigned j=0;j<v->count;++j)if(v->queued[(v->head+j)%4].sequence==b.sequence)return dsp_reject(g,c,"qseq_dup",b.sequence,j);
                 v->queued[(v->head+v->count)%4]=b;++v->count;add(&stats.queued,1);
             }
         }
         /* Keep the original probe's polyphase mode at unity rate. The verified
          * component profile explicitly selects linear resampling. */
         if(v->current.sequence && (!v->step || (!v->interpolation &&
-           (v->step!=UINT64_C(0x100000000) || v->phase))))return fail(g,c,CTR_MEM_OK);
+           (v->step!=UINT64_C(0x100000000) || v->phase))))return dsp_reject(g,c,"step_interp",v->interpolation,(uint32_t)(v->step>>32));
         if(!d->verified_component && v->current.sequence && v->format==ADPCM &&
            (v->step!=UINT64_C(0x100000000) || v->phase))
-            return fail(g,c,CTR_MEM_OK);
+            return dsp_reject(g,c,"adpcm_rate",v->format,(uint32_t)(v->step>>32));
     }
-    int64_t mix[CTR_DSP_FRAME_SAMPLES*2]={0};uint8_t status[CTR_DSP_CHANNELS*12]={0},capture[CTR_DSP_FRAME_SAMPLES*4];
+    /* At most 24 voice contributions of magnitude 32768 per lane. */
+    int32_t mix[CTR_DSP_FRAME_SAMPLES*2]={0};uint8_t status[CTR_DSP_CHANNELS*12]={0},capture[CTR_DSP_FRAME_SAMPLES*4];
     int32_t aux_send[AUX_BUSES][AUX_LANES][CTR_DSP_FRAME_SAMPLES]={0};
     for(unsigned c=0;c<CTR_DSP_CHANNELS;++c) {
         voice *v=&voices[c];
-        unsigned sends_aux=0;
-        for(unsigned bus=0;bus<AUX_BUSES;++bus)
-            for(unsigned lane=0;lane<AUX_LANES;++lane)if(v->aux_gain[bus][lane])sends_aux|=1u<<bus;
-        for(unsigned i=0;i<CTR_DSP_FRAME_SAMPLES && v->playing && v->current.sequence;++i) {
-            buffer *b=&v->current;int32_t s;
-            if(!voice_sample(g,v,&s))return false;
-            s=filter_sample(v,s);
-            for(unsigned lane=0;lane<2;++lane)mix[i*2+lane]+=rounded((int64_t)s*v->gain[lane]);
-            if(sends_aux)for(unsigned bus=0;bus<AUX_BUSES;++bus)if(sends_aux&(1u<<bus))
-                for(unsigned lane=0;lane<AUX_LANES;++lane)
-                    aux_send[bus][lane][i]+=(int32_t)rounded((int64_t)s*v->aux_gain[bus][lane]);
-            uint64_t phase=v->phase+v->step;v->phase=(uint32_t)phase;
-            unsigned advance=(unsigned)(phase>>32);
-            while(advance-- && b->sequence)if(++b->position==b->count) {
-                if(b->looping) { b->position=0;b->decoder=b->initial;add(&stats.loops,1); }
-                else {
-                    v->last=b->sequence;add(&stats.completed,1);
-                    if(v->count) {
-                        const buffer *next=&v->queued[v->head];
-                        /* Faster rates can cross the boundary with unread source samples. */
-                        if(next->continue_history && !adpcm_sample(g,v->coefficients,b,b->count-1u,&s))return false;
-                        CtrDspAdpcmState start=adpcm_start(next,b);
-                        *b=*next;b->decoder=start;v->head=(v->head+1)%4;--v->count;
+        if(v->playing && v->current.sequence) {
+            sample_source views[2]={{0}};
+            unsigned sends_aux=0;
+            for(unsigned bus=0;bus<AUX_BUSES;++bus)
+                for(unsigned lane=0;lane<AUX_LANES;++lane)if(v->aux_gain[bus][lane])sends_aux|=1u<<bus;
+            for(unsigned i=0;i<CTR_DSP_FRAME_SAMPLES && v->playing && v->current.sequence;++i) {
+                buffer *b=&v->current;int32_t s;
+                if(!voice_sample(g,v,views,&s))return false;
+                s=filter_sample(v,s);
+                for(unsigned lane=0;lane<2;++lane)mix[i*2+lane]+=voice_gain(s,v->gain[lane]);
+                if(sends_aux)for(unsigned bus=0;bus<AUX_BUSES;++bus)if(sends_aux&(1u<<bus))
+                    for(unsigned lane=0;lane<AUX_LANES;++lane)
+                        aux_send[bus][lane][i]+=voice_gain(s,v->aux_gain[bus][lane]);
+                uint64_t phase=v->phase+v->step;v->phase=(uint32_t)phase;
+                unsigned advance=(unsigned)(phase>>32);
+                while(advance-- && b->sequence)if(++b->position==b->count) {
+                    if(b->looping) { b->position=0;b->decoder=b->initial;add(&stats.loops,1); }
+                    else {
+                        v->last=b->sequence;add(&stats.completed,1);
+                        if(v->count) {
+                            const buffer *next=&v->queued[v->head];
+                            /* Faster rates can cross the boundary with unread source samples. */
+                            if(next->continue_history && !adpcm_sample(g,v->coefficients,b,b->count-1u,&views[0],&s))return false;
+                            CtrDspAdpcmState start=adpcm_start(next,b);
+                            *b=*next;b->decoder=start;v->head=(v->head+1)%4;--v->count;
+                        }
+                        else { *b=(buffer){0};v->playing=false;v->phase=0; }
                     }
-                    else { *b=(buffer){0};v->playing=false;v->phase=0; }
                 }
             }
         }
@@ -434,7 +506,7 @@ static bool frame(ctr_guest *g) {
     int16_t pcm[CTR_DSP_FRAME_SAMPLES*2];
     for(unsigned i=0;i<CTR_DSP_FRAME_SAMPLES;++i)for(unsigned lane=0;lane<2;++lane) {
         unsigned sample=i*2+lane;
-        int64_t mixed=rounded(mix[sample]*master);
+        int64_t mixed=rounded((int64_t)mix[sample]*master);
         for(unsigned bus=0;bus<AUX_BUSES;++bus) {
             int64_t auxiliary=(int64_t)aux_send[bus][lane][i]+aux_send[bus][lane+2u][i];
             if(aux_enabled[bus]) {

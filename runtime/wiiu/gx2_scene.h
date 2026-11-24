@@ -67,7 +67,11 @@ typedef struct {
     bool direct_keep_depth;
     void *direct_pool;
     uint64_t direct_shader_hits,direct_shader_compiles,direct_depth_skips;
+    void *scanout;
 } ctr_wiiu_gx2_scene;
+
+/* Returns an opaque ctr_diagnostic_scanout for the display compositor. */
+const void *ctr_wiiu_gx2_scene_scanout_texture(const ctr_wiiu_gx2_scene *scene,unsigned slot);
 
 /* The caller supplies the native renderer's active WHB context. Synchronous
  * callbacks restore it before returning. Legacy callbacks receive original

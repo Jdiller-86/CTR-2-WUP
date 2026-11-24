@@ -143,21 +143,29 @@ static void guest_adpcm(void) {
         if(!frame)CHECK(ctr_guest_run(g,1000000,5000000,false)==CTR_GUEST_WAITING);
     }
     closed(g);
-    /* Each queued buffer supplies its own history; completion drops its pin. */
-    g=opened();uint32_t base=adpcm_voice(g);
-    write_at(g,base,read_at(g,base)|0x80000);write_at(g,base+0xb0,14u<<16);
-    write_at(g,base+0xbc,(1u<<16)|1);
-    CHECK(ctr_memory_write(&g->memory,base+0x4a,2,1)==CTR_MEM_OK);
-    uint32_t queued=base+0x4c;
-    write_at(g,queued,0x00082000);write_at(g,queued+4,14u<<16);
-    write_at(g,queued+8,0xfff60001); // header 1, history -10
-    write_at(g,queued+12,0x10000);write_at(g,queued+16,3);
+    /* Short final frames contribute only their declared samples on every loop. */
+    g=opened();uint32_t partial=adpcm_voice(g);
+    write_at(g,partial+0xb0,15u<<16);
     CHECK(ctr_dsp_poll(g,5000000) && ctr_dsp_read(g,other,320));
-    for(unsigned i=0;i<160;++i)CHECK(other[i*2]==(i<14?(int)i+11:i<28?((int)i-14)*2-8:0));
-    CHECK(g->allocations[0].pins==1);closed(g);
+    for(unsigned i=0;i<160;++i)CHECK(other[i*2]==(int)(i%15u<14u?11u+i%15u:26u));
+    closed(g);
+    /* A queued buffer uses its own history even when it reuses encoded bytes. */
+    for(unsigned same_source=0;same_source<2;++same_source) {
+        g=opened();uint32_t base=adpcm_voice(g);
+        write_at(g,base,read_at(g,base)|0x80000);write_at(g,base+0xb0,14u<<16);
+        write_at(g,base+0xbc,(1u<<16)|1);
+        CHECK(ctr_memory_write(&g->memory,base+0x4a,2,1)==CTR_MEM_OK);
+        uint32_t queued=base+0x4c;
+        write_at(g,queued,same_source?0x00002000:0x00082000);write_at(g,queued+4,14u<<16);
+        write_at(g,queued+8,same_source?0xfff60000:0xfff60001);
+        write_at(g,queued+12,0x10000);write_at(g,queued+16,3);
+        CHECK(ctr_dsp_poll(g,5000000) && ctr_dsp_read(g,other,320));
+        for(unsigned i=0;i<160;++i)CHECK(other[i*2]==(i<14?(int)i+11:i<28?((int)i-13)*(same_source?1:2)-10:0));
+        CHECK(g->allocations[0].pins==1);closed(g);
+    }
     /* A malformed later ADPCM header cannot publish a partial mixed frame. */
     for(unsigned kind=0;kind<4;++kind) {
-        g=opened();base=adpcm_voice(g);
+        g=opened();uint32_t base=adpcm_voice(g);
         if(kind==0)CHECK(ctr_memory_write(&g->memory,0x14000008,1,0x80)==CTR_MEM_OK);
         if(kind==1)write_at(g,base+0xbc,(1u<<16)|2); // missing explicit history
         if(kind==2)write_at(g,base+0xb4,0x10009); // index differs from source header
@@ -169,7 +177,7 @@ static void guest_adpcm(void) {
     }
 }
 static void atomic_failures(void) {
-    for(unsigned kind=0;kind<14;++kind) {
+    for(unsigned kind=0;kind<15;++kind) {
         ctr_guest *g=opened();
         if(kind==0)write_at(g,CTR_DSP_RAM+0x100+23*0xc0,0x80000000); // late channel unsupported
         if(kind==1)write_at(g,CTR_DSP_RAM+0x100+0x34,0x7fc00000); // NaN rate
@@ -185,10 +193,16 @@ static void atomic_failures(void) {
         if(kind==11)write_at(g,CTR_DSP_RAM+0x100+0x34,0x40800001); // above 4
         if(kind==12)write_at(g,CTR_DSP_RAM+0x100+0x34,0xbf800000); // negative
         if(kind==13)write_at(g,CTR_DSP_RAM+0x100+0x34,0x3f000000); // variable polyphase unsupported
+        if(kind==14) {
+            /* The next frame must revalidate a buffer sampled by the first. */
+            CHECK(ctr_dsp_poll(g,5000000) && ctr_dsp_read(g,other,320));
+            CHECK(ctr_guest_run(g,1000000,5000000,false)==CTR_GUEST_WAITING);
+            CHECK(ctr_memory_change_range(&g->memory,0x14000000,4096,0,false)==CTR_MEM_OK);
+        }
         uint8_t before[CTR_DSP_RAM_BYTES];memcpy(before,g->storage[7],sizeof(before));ctr_dsp_statistics s;
-        CHECK(!ctr_dsp_poll(g,5000000) && g->state==CTR_GUEST_FAULTED);
+        CHECK(!ctr_dsp_poll(g,kind==14?10000000:5000000) && g->state==CTR_GUEST_FAULTED);
         CHECK(!memcmp(before,g->storage[7],sizeof(before)) && !ctr_dsp_read(g,other,320));
-        CHECK(ctr_dsp_stats(g,&s) && s.frames==0 && s.rejected==1 && s.pending);
+        CHECK(ctr_dsp_stats(g,&s) && s.frames==(kind==14?1u:0u) && s.rejected==1 && s.pending);
         CHECK(s.guest_fault==(uint32_t)g->fault && s.guest_fault_detail==g->fault_detail && s.guest_pc==g->cpu.r[15]);closed(g);
     }
 }

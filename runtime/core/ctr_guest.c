@@ -29,6 +29,13 @@ void ctr_guest_close(ctr_guest *guest) {
     ctr_modules_close(guest);
     ctr_resource_cache_destroy(guest->pica_resources);
     ctr_texture_cache_destroy(guest->pica_textures);
+    free(guest->pica_writes);
+    free(guest->pica_chain_bytes);
+    free(guest->pica_trial);
+    free(guest->pica_color_raw);
+    free(guest->pica_color_pixels);
+    free(guest->pica_depth_raw);
+    free(guest->pica_depth_pixels);
     free(guest->gsp.pica_scene);
     for(unsigned i=0;i<2;++i)if(guest->fs_volumes[i] && guest->fs_volumes[i]->mounts)--guest->fs_volumes[i]->mounts;
     if(guest->fs_romfs && guest->fs_romfs->mounts)--guest->fs_romfs->mounts;
@@ -114,7 +121,7 @@ bool ctr_guest_open(ctr_guest *g,const ctr_guest_image *image,const ctr_block *b
     g->cpu.tls_address=CTR_GUEST_TLS_BASE;
     g->threads[0]=(ctr_guest_thread){.active=true,.references=1,.id=1,.priority=0x30,
         .stack_allocation=CTR_GUEST_MAX_ALLOCATIONS,.state=CTR_GUEST_READY,.tls_address=CTR_GUEST_TLS_BASE};
-    g->next_thread_id=2;g->quantum_left=CTR_GUEST_THREAD_QUANTUM;
+    g->next_thread_id=2;g->thread_quantum=CTR_GUEST_THREAD_QUANTUM;g->quantum_left=g->thread_quantum;
     g->configuration=(ctr_guest_configuration){1,1,0}; /* Explicit diagnostic defaults: USA, English, Old 3DS. */
     g->ndm.default_mask=9u; /* CEC and Friends are the default daemon selection. */
     return true;
@@ -349,18 +356,31 @@ ctr_guest_state ctr_guest_run(ctr_guest *g,uint64_t budget,uint64_t now_ns,bool 
     uint64_t start=g->cpu.instructions;
     while (g->cpu.instructions-start<budget) {
         uint64_t remaining=budget-(g->cpu.instructions-start);
-        if(g->threads_enabled && remaining>g->quantum_left)remaining=g->quantum_left;
+        bool batch=translated && g->threads_enabled && g->quantum_uncontended && g->quantum_left &&
+            g->executor_uncontended && remaining>g->quantum_left;
+        if(g->threads_enabled && !batch && remaining>g->quantum_left)remaining=g->quantum_left;
         uint64_t before=g->cpu.instructions;
-        ctr_cpu_result result=translated?(g->executor?g->executor(&g->cpu,g->executor_context,remaining):
+        ctr_cpu_result result=batch?g->executor_uncontended(&g->cpu,g->executor_context,remaining):
+            translated?(g->executor?g->executor(&g->cpu,g->executor_context,remaining):
             ctr_modules_dispatch(g,remaining)):ctr_modules_interpret(g,remaining);
         if(g->threads_enabled) {
             uint64_t charged=g->cpu.instructions-before;
+            if(batch && charged>g->quantum_left) {
+                charged=(charged-g->quantum_left)%g->thread_quantum;
+                g->quantum_left=g->thread_quantum;
+                if(!charged)charged=g->thread_quantum;
+            }
             g->quantum_left=charged>=g->quantum_left?0:g->quantum_left-(unsigned)charged;
         }
         if (result==CTR_CPU_LIMIT) {
             if(!g->threads_enabled)return g->state;
-            if(!ctr_thread_schedule(g,!g->quantum_left))return g->state;
-            if(!g->quantum_left)g->quantum_left=CTR_GUEST_THREAD_QUANTUM;
+            /* At a fixed guest timestamp, only service calls can make a
+             * competing thread runnable. Poll
+             * again before returning or handling an SVC. */
+            bool keep_running=g->quantum_uncontended && g->state==CTR_GUEST_READY &&
+                g->cpu.instructions>before && g->cpu.instructions-start<budget;
+            if(!keep_running && !ctr_thread_schedule(g,!g->quantum_left))return g->state;
+            if(!g->quantum_left)g->quantum_left=g->thread_quantum;
             continue;
         }
         if (result!=CTR_CPU_SVC) {
@@ -371,7 +391,7 @@ ctr_guest_state ctr_guest_run(ctr_guest *g,uint64_t budget,uint64_t now_ns,bool 
         if(g->threads_enabled) {
             bool rotate=g->state!=CTR_GUEST_READY || !g->quantum_left;
             if(!ctr_thread_schedule(g,rotate))return g->state;
-            if(!g->quantum_left)g->quantum_left=CTR_GUEST_THREAD_QUANTUM;
+            if(!g->quantum_left)g->quantum_left=g->thread_quantum;
         } else if (g->state!=CTR_GUEST_READY) return g->state;
     }
     return g->state;

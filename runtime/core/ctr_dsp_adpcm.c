@@ -27,18 +27,31 @@ CtrDspAdpcmResult ctr_dsp_adpcm_decode(const uint8_t *encoded,size_t bytes,
     for(size_t frame=state->sample/14;frame<=last/14;++frame)
         if((encoded[frame*8]>>4)>7)return CTR_DSP_ADPCM_PREDICTOR;
     int16_t h1=state->history1,h2=state->history2;
-    for(size_t i=0;i<samples;++i) {
-        size_t sample=state->sample+i,frame=sample/14*8,within=sample%14;
-        unsigned header=encoded[frame],predictor=header>>4;
-        int nibble=(encoded[frame+1+within/2]>>(within%2?0:4))&15;
-        if(nibble>=8)nibble-=16;
-        int64_t sum=(int64_t)nibble*(INT64_C(1)<<(header&15))*2048+
-            (int64_t)coefficients[predictor*2]*h1+(int64_t)coefficients[predictor*2+1]*h2+1024;
-        /* Explicit floor division avoids implementation-defined negative shifts. */
-        int64_t value=sum>=0?sum/2048:-((-sum+2047)/2048);
-        if(value>INT16_MAX)value=INT16_MAX;
-        if(value<INT16_MIN)value=INT16_MIN;
-        output[i]=(int16_t)value;h2=h1;h1=(int16_t)value;
+    const uint8_t *frame=encoded+(state->sample/14u)*8u;
+    unsigned within=(unsigned)(state->sample%14u);
+    size_t remaining=samples;
+    while(remaining) {
+        unsigned header=*frame,predictor=header>>4;
+        int32_t scale=(int32_t)(1u<<(header&15u));
+        int32_t c1=coefficients[2u*predictor],c2=coefficients[2u*predictor+1u];
+        unsigned count=14u-within;
+        if(count>remaining)count=(unsigned)remaining;
+        remaining-=count;
+        unsigned end=within+count;
+        for(;within<end;++within) {
+            unsigned nibble=(frame[1u+within/2u]>>(within&1u?0u:4u))&15u;
+            int32_t sample=(int32_t)nibble-((nibble&8u)?16:0);
+            int64_t sum=(int64_t)c1*h1+(int64_t)c2*h2+1024;
+            /* An exact multiple of 2048 makes the rounded predictor nonnegative
+             * before shifting. The unbiased quotient and residual fit int32_t. */
+            const int64_t bias=INT64_C(1)<<32;
+            int32_t value=(int32_t)((uint64_t)(sum+bias)>>11)-(INT32_C(1)<<21)+sample*scale;
+            if(value>INT16_MAX)value=INT16_MAX;
+            if(value<INT16_MIN)value=INT16_MIN;
+            *output++=(int16_t)value;h2=h1;h1=(int16_t)value;
+        }
+        within=0;
+        if(remaining)frame+=8u;
     }
     state->sample+=samples;state->history1=h1;state->history2=h2;
     return CTR_DSP_ADPCM_OK;

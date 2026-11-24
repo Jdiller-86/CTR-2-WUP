@@ -22,7 +22,10 @@ static void parity(void) {
         CHECK(!memcmp(a.cpu.r,b.cpu.r,sizeof(a.cpu.r)));
         CHECK(a.cpu.cpsr==b.cpu.cpsr);
         CHECK(a.svc_count==b.svc_count);
-        for(unsigned i=0;i<5;++i)CHECK(!memcmp(a.storage[i],b.storage[i],a.storage_size[i]));
+        for(unsigned i=0;i<5;++i) {
+            CHECK(a.storage_size[i]==b.storage_size[i]);
+            if(a.storage_size[i])CHECK(!memcmp(a.storage[i],b.storage[i],a.storage_size[i]));
+        }
         CHECK(ctr_frame_count(&a,&count));
     }
     CHECK(count==2);CHECK(a.cpu.fallback_instructions==0);
@@ -47,10 +50,28 @@ static void faults(void) {
     g.cpu.r[15]=0x10006c;g.cpu.r[4]=CTR_FRAME_TOP+1;g.cpu.r[0]=0x12345678;
     CHECK(ctr_guest_run(&g,1,0,true)==CTR_GUEST_READY && g.cpu.instructions==1 && g.cpu.r[15]==0x100070);
     uint32_t data;CHECK(ctr_memory_read_data(&g.memory,CTR_FRAME_TOP+1,4,&data)==CTR_MEM_OK && data==0x12345678);
+    uint64_t warmed_code=g.memory.code_generation;
+    CHECK(ctr_memory_change_range(&g.memory,CTR_FRAME_TOP+1,4,CTR_MEM_READ,false)==CTR_MEM_OK);
+    CHECK(g.memory.code_generation==warmed_code);
+    g.cpu.r[15]=0x10006c;g.cpu.r[4]=CTR_FRAME_TOP+1;g.cpu.r[0]=0;
+    CHECK(ctr_guest_run(&g,1,0,true)==CTR_GUEST_FAULTED && g.fault==CTR_CPU_MEMORY_FAULT);
+    CHECK(g.cpu.r[15]==0x10006c && g.cpu.memory_fault==CTR_MEM_PERMISSION && g.cpu.instructions==2);
+    CHECK(ctr_memory_read_data(&g.memory,CTR_FRAME_TOP+1,4,&data)==CTR_MEM_OK && data==0x12345678);
     ctr_guest_close(&g);CHECK(ctr_frame_open(&g));
     ++g.memory.code_generation;
     CHECK(ctr_guest_run(&g,128,0,true)==CTR_GUEST_FAULTED);
     CHECK(g.fault==CTR_CPU_CODE_INVALIDATED);CHECK(g.cpu.instructions==0);
+    ctr_guest_close(&g);
+    CHECK(ctr_frame_open(&g));
+    CHECK(ctr_guest_run(&g,1,0,true)==CTR_GUEST_READY && g.cpu.instructions==1);
+    uint8_t unrelated[4]={0};
+    uint64_t code_generation=g.memory.code_generation;
+    CHECK(ctr_memory_map(&g.memory,0x09000000,sizeof(unrelated),CTR_MEM_READ,unrelated,sizeof(unrelated))==CTR_MEM_OK);
+    CHECK(g.memory.code_generation==code_generation);
+    CHECK(ctr_guest_run(&g,1,1,true)==CTR_GUEST_READY && g.cpu.instructions==2);
+    CHECK(ctr_memory_change_range(&g.memory,0x100000,4096,CTR_MEM_READ,false)==CTR_MEM_OK);
+    CHECK(ctr_guest_run(&g,1,2,true)==CTR_GUEST_FAULTED && g.fault==CTR_CPU_CODE_INVALIDATED);
+    CHECK(g.cpu.instructions==2);
     ctr_guest_close(&g);
     CHECK(ctr_guest_open(&g,&ctr_frame_image,NULL,0));g.storage[0][0]^=1;
     CHECK(!ctr_recomp_attach(&g,false));CHECK(g.executor==NULL);ctr_guest_close(&g);

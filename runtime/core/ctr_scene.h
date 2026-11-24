@@ -64,7 +64,7 @@ typedef struct {
      * and index offsets are relative to this address. */
     uint32_t base_address;
     const void *bytes;size_t size;
-    /* Optional stable owned snapshots. A texture, or a game vertex or index
+    /* Optional spans stable for the replay. A texture, or a game vertex or index
      * read, must fit wholly in one span. Physical spans cannot overlap.
      * At most 32 extra spans (96 for the game software path) and 4 MiB total. */
     const ctr_scene_resource_span *textures;
@@ -107,7 +107,16 @@ typedef struct {
     unsigned input[3],flags,alpha,bump_unit;
     bool active,needs_view,absolute[3],clamp_highlights,reconstruct_normal;
 } ctr_scene_light;
-enum { CTR_SCENE_BACKEND_DEPTH_FOG=1u, CTR_SCENE_BACKEND_DIRECT=2u };
+enum {
+    CTR_SCENE_BACKEND_DEPTH_FOG=1u,
+    CTR_SCENE_BACKEND_DIRECT=2u,
+    /* Callbacks do not reenter the guest or change its memory or mappings. */
+    CTR_SCENE_BACKEND_STABLE_INPUTS=4u,
+    /* A direct end can replace the color seed in place. Failure changes neither target; depth stays private. */
+    CTR_SCENE_BACKEND_IN_PLACE_END=8u,
+    CTR_SCENE_BACKEND_DEFER_COLOR=16u,
+    CTR_SCENE_BACKEND_REUSE_COLOR=32u
+};
 /* Optional synchronous renderer. All commands, resources and software pixels
  * are validated before begin. begin initializes private scratch from initial;
  * draw receives original inputs, complete current PICA/shader state and an
@@ -132,7 +141,29 @@ typedef struct ctr_scene_gpu_draw {
     const ctr_scene_sampler *samplers;
     unsigned texture_mask;
     const ctr_scene_light *light;
+    /* Optional live decoded-image leases corresponding to the samplers. */
+    const ctr_texture_cache_lease (*texture_leases)[CTR_SCENE_MAX_MIP_LEVELS];
+    /* Optional game TEV program decoded from this draw's state and samplers.
+     * It is borrowed for this callback only. */
+    const ctr_tev_program *validated_tev;
 } ctr_scene_gpu_draw;
+/* Opt-in direct color transaction. A rejected list must preserve the prior
+ * pending color. Resolve restores that seed before software fallback. */
+typedef struct ctr_scene_scanout_state ctr_scene_scanout_state;
+typedef struct {
+    ctr_scene_scanout_state *(*state)(void *context,bool create);
+    bool (*lend)(void *context,unsigned slot);
+    bool (*read)(void *context,unsigned slot,const ctr_scene_surface *surface);
+    void (*discard_source)(void *context);
+} ctr_scene_scanout;
+
+typedef struct {
+    bool (*begin)(void *context,const ctr_scene_surface *initial,
+                  const ctr_scene_depth_surface *depth,bool reuse_pending);
+    bool (*end)(void *context);
+    bool (*resolve)(void *context,const ctr_scene_surface *readback);
+    const ctr_scene_scanout *scanout;
+} ctr_scene_deferred_color;
 typedef struct ctr_scene_backend {
     void *context;
     bool (*begin)(void *context,const ctr_scene_surface *initial);
@@ -170,6 +201,7 @@ typedef struct ctr_scene_backend {
                             const ctr_scene_sampler samplers[CTR_SCENE_TEXTURE_UNITS],
                             unsigned texture_mask,const ctr_scene_light *light);
     bool (*draw_gpu)(void *context,const ctr_scene_gpu_draw *draw);
+    const ctr_scene_deferred_color *deferred_color;
 } ctr_scene_backend;
 typedef struct {
     ctr_scene_result result;
@@ -178,7 +210,7 @@ typedef struct {
     ctr_vertex_result vertex_result;
     ctr_shader_result shader_result;
     ctr_scene_backend_stage backend_stage;
-    bool backend_fallback;
+    bool backend_fallback,color_deferred;
 } ctr_scene_report;
 
 void ctr_scene_init(ctr_scene_state *state);
@@ -273,5 +305,13 @@ ctr_scene_result ctr_scene_execute_targets_format_cached(ctr_scene_state *state,
                                                          unsigned color_format,const ctr_scene_depth_surface *depth,
                                                          const ctr_scene_backend *backend,ctr_texture_cache *cache,
                                                          ctr_scene_report *report);
+/* Guest adapter only. Writes must be the complete inspected output for these
+ * same immutable command bytes. The adapter retains both buffers through replay. */
+ctr_scene_result ctr_scene_execute_guest_writes(ctr_scene_state *state,const void *commands,size_t command_bytes,
+                                               const ctr_pica_write *writes,size_t count,
+                                               const ctr_scene_resources *resources,const ctr_scene_surface *surface,
+                                               uint32_t color_address,unsigned color_format,const ctr_scene_depth_surface *depth,
+                                               const ctr_scene_backend *backend,ctr_texture_cache *cache,
+                                               ctr_scene_report *report);
 const char *ctr_scene_result_name(ctr_scene_result result);
 #endif
