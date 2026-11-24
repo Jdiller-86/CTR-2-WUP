@@ -140,7 +140,7 @@ typedef struct {
     GX2DepthBuffer depth_target;
     unsigned width,height,depth_format;
     bool has_depth;
-    bool color_resolved,color_pending;
+    bool color_resolved,color_pending,deferred_pending;
     bool color_flipped;
     void *vs_arena;
     GX2VertexShader vs[DIRECT_VS_SLOTS];

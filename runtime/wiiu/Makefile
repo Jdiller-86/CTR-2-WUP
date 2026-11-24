@@ -218,6 +218,7 @@ $(BUILD)/identity: identity-force | $(BUILD)
 $(BUILD)/code%.o $(BUILD)/entries.o: CFLAGS += -g0
 ifeq ($(GAME_TEST),1)
 $(BUILD)/ctr_shader.o: CFLAGS += -O3
+$(BUILD)/ctr_recomp.o $(BUILD)/ctr_vfp.o $(BUILD)/ctr_memory.o $(BUILD)/ctr_guest_pica.o $(BUILD)/ctr_dsp.o $(BUILD)/ctr_dsp_adpcm.o $(BUILD)/gx2_direct.o: CFLAGS += -O3
 endif
 $(BUILD)/%.o: %.c $(CTR_RUNTIME_MANIFEST) Makefile $(BUILD)/identity | $(BUILD)
 	"$(CC)" $(CFLAGS) -MMD -MP -c "$<" -o "$@"

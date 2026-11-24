@@ -142,13 +142,14 @@ static bool wait_for_gx2(ctr_wiiu_gx2_scene *s) {
         ++s->wait_failures;s->quarantined=true;s->result=CTR_WIIU_GX2_SCENE_WAIT;
         return false;
     }
+    if(s->direct_pool)((direct_pool_state *)s->direct_pool)->deferred_pending=false;
+    if(s->texture_cache)
+        for(unsigned i=0;i<s->texture_cache->slots;++i)s->texture_cache->entries[i].submitted=false;
     s->quarantined=false;return true;
 }
 bool ctr_gx2_retire(ctr_wiiu_gx2_scene *s,scene_private *p) {
-    if(!p->pending)return true;
+    if(!p->pending && !(s->direct_pool && ((direct_pool_state *)s->direct_pool)->deferred_pending))return true;
     if(!wait_for_gx2(s))return false;
-    if(p->used_uploads && s->texture_cache)
-        for(unsigned i=0;i<s->texture_cache->slots;++i)s->texture_cache->entries[i].submitted=false;
     p->used_uploads=0;
     p->pending=false;return true;
 }
@@ -184,7 +185,10 @@ void ctr_wiiu_gx2_scene_abort(ctr_wiiu_gx2_scene *s) {
     if(p) {
         if(!restore(s) || !retire(s,p))return;
         release(s,p);
-    } else ctr_gx2_direct_pool_destroy(s);
+    } else {
+        if(s->direct_pool && ((direct_pool_state *)s->direct_pool)->deferred_pending)(void)wait_for_gx2(s);
+        ctr_gx2_direct_pool_destroy(s);
+    }
     texture_cache_destroy(s);
 }
 void ctr_wiiu_gx2_scene_after_shutdown(ctr_wiiu_gx2_scene *s) {
@@ -1403,7 +1407,8 @@ static bool upload_textures(ctr_wiiu_gx2_scene *s,scene_private *p,
                 texture_image next;
                 if(!texture_layout(&next,&sources[unit]))return fail(s,CTR_WIIU_GX2_SCENE_LAYOUT);
                 entry=texture_slot(s,next.bytes);
-                if(!entry && (!s->cemu_readback || s->direct_hardware) && p->used_uploads) {
+                if(!entry && (!s->cemu_readback || s->direct_hardware) &&
+                   (p->used_uploads || (s->direct_pool && ((direct_pool_state *)s->direct_pool)->deferred_pending))) {
                     if(!retire(s,p))return false;
                     entry=texture_slot(s,next.bytes);
                 }
@@ -2516,7 +2521,9 @@ bool ctr_gx2_end_deferred_color(void *context) {
     direct_pool_state *pool=s->direct_pool;
     if(!p || !pool || s->quarantined)return false;
     queue_restore(s);
-    if(!retire(s,p))return false;
+    if(p->pending) {
+        pool->deferred_pending=true;
+    }
     if(p->target.surface.image==pool->color_candidate.surface.image) {
         pool->color_candidate=pool->target;
         pool->target=p->target;
