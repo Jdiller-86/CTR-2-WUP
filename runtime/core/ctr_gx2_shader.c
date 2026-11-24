@@ -22,7 +22,7 @@
 #define LATTE_LOG_IEEE 0x63u
 #define LATTE_RECIP_IEEE 0x66u
 #define LATTE_RECIPSQRT_IEEE 0x69u
-#define LATTE_FLT_TO_INT 0x6bu
+#define LATTE_FLT_TO_INT_TRUNC 0x6eu
 #define LATTE_INT_TO_FLT 0x6cu
 #define LATTE_UINT_TO_FLT 0x6du
 #define LATTE_ZERO 248u
@@ -560,6 +560,9 @@ static ctr_gx2_shader_result game_walk(game_ctx *g,unsigned pc,unsigned end_pc,u
             rel_idx=0u;
         }
         if(rel_idx && sources[rel_operand]>=32u) {
+            unsigned in_clause=(g->out->alu_instructions-g->clause_start)%LATTE_ALU_CLAUSE_WORDS;
+            if(in_clause+1u+op_count*4u>LATTE_ALU_CLAUSE_WORDS && !game_flush_alu(g,false))
+                return CTR_GX2_SHADER_LIMIT;
             if(!alu_raw(g->out,CTR_GX2_SHADER_GAME_ALU_OFFSET,
                         52u|((rel_idx-1u)<<10),LATTE_MOVA_INT<<7))return CTR_GX2_SHADER_LIMIT;
         }
@@ -596,7 +599,7 @@ static ctr_gx2_shader_result game_walk(game_ctx *g,unsigned pc,unsigned end_pc,u
         }
         if(op==0x12u) {
             for(unsigned lane=0;lane<2u;++lane)if(lanes&(8u>>lane)) {
-                if(!alu_at(g->out,CTR_GX2_SHADER_GAME_ALU_OFFSET,LATTE_FLT_TO_INT,49u,lane,false,0,0,52u,lane))
+                if(!alu_at(g->out,CTR_GX2_SHADER_GAME_ALU_OFFSET,LATTE_FLT_TO_INT_TRUNC,49u,lane,false,0,0,52u,lane))
                     return CTR_GX2_SHADER_LIMIT;
             }
             continue;

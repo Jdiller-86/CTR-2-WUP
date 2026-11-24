@@ -479,11 +479,42 @@ static void game_profile_shader(void) {
     }
     CHECK(saw_int2 && saw_one_w && saw_load_r49x && saw_rcp);
 }
+static void mova_clause_and_trunc(void) {
+    init();
+    p.descriptors[0]=0x0e4fu;p.descriptor_defined[0]=1;
+    p.uniform_defined[0]=15;
+    unsigned pc=0;
+    for(unsigned i=0;i<7;++i) { p.code[pc]=mov(16,0,0);p.code_defined[pc++]=1; }
+    p.code[pc]=UINT32_C(0x48000000);p.code_defined[pc++]=1; /* MOVA v0 */
+    p.code[pc]=UINT32_C(0x4c000000)|(0u<<21)|((32u+0u)<<12)|(1u<<19);p.code_defined[pc++]=1; /* MOV o0, c0[a0.x] */
+    p.code[pc]=UINT32_C(0x88000000);p.code_defined[pc++]=1;
+    ctr_gx2_shader_game_options opt={0};
+    opt.output_mask=1u;opt.output_count=1u;opt.output_maps[0]=0x03020100u;
+    CHECK(ctr_gx2_shader_compile_game(&p,&opt,&out)==CTR_GX2_SHADER_OK);
+    bool saw_trunc=false,saw_mova_int=false,saw_rel=false;
+    unsigned mova_clause=UINT32_MAX,clause=0;
+    for(unsigned i=8u;i<CTR_GX2_SHADER_GAME_ALU_OFFSET;i+=8u) {
+        uint32_t w0=get32(out.program+i),w1=get32(out.program+i+4u);
+        if((w1&UINT32_C(0xfc000000))!=UINT32_C(0xa0000000))continue;
+        unsigned start=(w0-(CTR_GX2_SHADER_GAME_ALU_OFFSET/8u)),count=((w1>>18)&127u)+1u;
+        for(unsigned k=0;k<count;++k) {
+            const uint8_t *ins=out.program+CTR_GX2_SHADER_GAME_ALU_OFFSET+(start+k)*8u;
+            uint32_t aw0=get32(ins),aw1=get32(ins+4u);
+            unsigned op=(aw1>>7)&0x7ffu;
+            if(op==0x6eu)saw_trunc=true;
+            if(op==24u) { saw_mova_int=true;mova_clause=clause; }
+            if(aw0&(1u<<9)) { saw_rel=true;CHECK(mova_clause==clause); }
+        }
+        ++clause;
+    }
+    CHECK(saw_trunc && saw_mova_int && saw_rel);
+}
 int main(void) {
     original_shader();inputs_uniforms_and_dependencies();swizzles_and_masks();semantic_maps();
     texture_coordinate_exports();texture_coordinate_sets();uniform_revalidation();bounds_and_failures();
     call_and_dot_product();
     boolean_branch();
     game_profile_shader();
+    mova_clause_and_trunc();
     printf("gx2 shader PASS: %u assertions\n",assertions);return 0;
 }
